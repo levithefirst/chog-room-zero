@@ -4,7 +4,7 @@ Source of truth for every agent. Rules: `docs/RULES.md`. Edit this file only in 
 Last verified: 2026-10-11 by grokbot.
 
 ## Snapshot (EVIDENCE)
-- Repo: `levithefirst/chog-room-zero` (private). `git ls-remote origin` on 2026-10-11 returned no refs: the remote is empty. GitHub lists a push at 2026-10-07 13:56 UTC but no branch or commit exists. Unexplained.
+- Repo: `levithefirst/chog-room-zero` (private). Branches and PRs: `gh pr list`.
 - Default/base branch: `setup/skill-system` (LOCKED, owner 2026-10-11: no `main`). PRs target it. Never merge without the owner.
 - Project start date, deadline, hackathon name and rules: UNKNOWN. Current project day: UNKNOWN. Do not guess it.
 - Claude Code in the build environment: 2.1.296.
@@ -45,13 +45,19 @@ Last verified: 2026-10-11 by grokbot.
 - Raw text of the GrokBot audit (only the owner's summary was available).
 
 ## Implemented features (EVIDENCE)
-- P0-1 scaffold only (no gameplay), branch `grokbot/p0-1-project-scaffold` @ `382518b`: PixiJS 8.22.0 renders a dark canvas with one static circle. Headless Chrome (swiftshader) on `vite preview`: `<canvas>` in DOM, screenshot shows the circle centred.
+- P0-1 scaffold (PR #2, awaiting review): PixiJS 8.22.0 dark canvas + one circle.
+- P0-2 PC movement (stacked PR, branch `grokbot/p0-2-pc-movement`): WASD -> normalized move vector; sim accel 52.5, cap 4.2 u/s, decel 70, reverse x1.5, stop epsilon 0.01. No aiming, firing, HUD, touch, collision.
 
-## Automated test results
-2026-10-11 @ `382518b`, Node 20.19.2 / npm 9.2.0: `npm ci` exit 0 (EBADENGINE warn: vitest 5 wants Node >=22.12); `npm run typecheck` exit 0; `npm test` 3/3 pass; `npm run build` exit 0 (main chunk 248 kB, 73 kB gzip); `npm run dev` curl `/` HTTP 200 with `#app` + `/src/main.ts`.
+## Automated test results (EVIDENCE)
+2026-10-11, Node 22.23.3 / npm 10.9.9 (`~/.local/node22`): `npm ci` exit 0, no engine warnings; `npm run typecheck` exit 0; `npm test` 17/17 pass (2 files: 8 movement behaviours, key mapping, fixedSteps); `npm run build` exit 0. P0-1 code re-run on Node 22 first: all exit 0, 3/3.
+
+## Browser smoke test (EVIDENCE, headless Chrome swiftshader, CDP)
+`npm run dev` curl `/` HTTP 200. Canvas 800x363 initialised. D+S held 0.6 s moved the circle (400,181)->(484,265) px (expected ~85). Console: only favicon.ico 404. Screenshots on box: `/workspace/shots/p0-2-{before,after}.png`.
 
 ## Manual playtest results
-None. Record as: `date | device | build hash | tester | gate | answers | verdict`.
+- Phone load: NOT PERFORMED, BLOCKED on owner devices (steps in `docs/DEV.md`).
+- Movement feel: NOT JUDGED. Needs owner PC playtest (questions in `docs/DEV.md`).
+Record as: `date | device | build hash | tester | gate | answers | verdict`.
 
 ## Gates (details and criteria: `docs/GATES.md`)
 Core Feel Gate: BLOCKED (nothing built). It needs G1, G2, G3, G4, G6, G7 PASS, G8 baseline recorded, and the owner's playtest on both phones.
@@ -72,18 +78,20 @@ Core Feel Gate: BLOCKED (nothing built). It needs G1, G2, G3, G4, G6, G7 PASS, G
 | G12 Final game feel | not started | yes | |
 
 ## Current task
+S1 (claude, skill system): CLOSED, owner-approved 2026-10-11; it is the default branch content.
+
 | Id | Owner | Branch | Files | Done when | Status |
 |---|---|---|---|---|---|
-| S1 | claude | setup/skill-system | `CLAUDE.md`, `GROKBOT.md`, `.claude/**`, `docs/**` | owner review | CLOSED (owner-approved 2026-10-11; work is the default branch content) |
-| P0-1 | grokbot | grokbot/p0-1-project-scaffold | `package.json`, `package-lock.json`, `tsconfig.json`, `vite.config.ts`, `index.html`, `.gitignore`, `docs/DEV.md`, `src/main.ts`, `src/config/tuning.ts`, `src/sim/sim.ts`, `src/render/render.ts`, `src/input/input.ts`, `tests/sim.test.ts`, `docs/STATE.md` (handoff), `docs/HANDOFFS.md` (append) | `npm ci`, `npm run typecheck`, `npm test`, `npm run build` exit 0; dev serves a PixiJS canvas with one static shape; PR open; no gameplay code | done, awaiting owner review (approved 2026-10-11 21:17 WAT) |
+| P0-1 | grokbot | grokbot/p0-1-project-scaffold | `package.json`, `package-lock.json`, `tsconfig.json`, `vite.config.ts`, `index.html`, `.gitignore`, `docs/DEV.md`, `src/main.ts`, `src/config/tuning.ts`, `src/sim/sim.ts`, `src/render/render.ts`, `src/input/input.ts`, `tests/sim.test.ts`, `docs/STATE.md` (handoff), `docs/HANDOFFS.md` (append) | `npm ci`, `npm run typecheck`, `npm test`, `npm run build` exit 0; dev serves a PixiJS canvas with one static shape; PR open; no gameplay code | done, awaiting owner review/merge, PR #2 (approved 2026-10-11 21:17 WAT) |
+| P0-2 | grokbot | grokbot/p0-2-pc-movement (stacked on P0-1; PR base `grokbot/p0-1-project-scaffold`) | `src/input/input.ts`, `src/sim/sim.ts`, `src/config/tuning.ts`, `src/render/render.ts`, `src/main.ts`, `tests/sim.test.ts`, `tests/input.test.ts`, `package.json` + `package-lock.json` (engines fix only), `docs/DEV.md`, `docs/STATE.md` (handoff), `docs/HANDOFFS.md` (append) | WASD-only movement (accel, cap, decel to exact stop, turn rate); 8 sim behaviours + key mapping tested; Node 22 ci/typecheck/test/build pass; browser smoke shows motion; no aiming/firing/HUD/mobile | done, awaiting owner review, stacked PR (base `grokbot/p0-1-project-scaffold`; approved owner 2026-10-11 21:23 WAT) |
 
 Note: dev commands go in `docs/DEV.md`, not `README.md`, because README.md lives on the unmerged S2 PR (avoids a cross-PR conflict).
 
 ## Next smallest task (PROPOSED, needs owner OK)
-P0-2: PC movement only (WASD, acceleration/turn/stop per `docs/design/feel-and-controls.md`, no aiming or firing). Files: `src/input/input.ts`, `src/sim/sim.ts`, `src/config/tuning.ts`, `src/render/render.ts`, `src/main.ts`, `tests/sim.test.ts`.
+P0-3: PC mouse aim only (aim angle from mouse into the shared input struct, marker shows facing; no firing). Files: `src/input/input.ts`, `src/sim/sim.ts`, `src/config/tuning.ts`, `src/render/render.ts`, `src/main.ts`, `tests/input.test.ts`, `tests/sim.test.ts`.
 
 ## Scope and freeze
 Out-of-scope list: LOCKED item 12. Feature freeze after Day 11 (day count starts when the owner records a start date here). Cut list so far: none. Cut order: `docs/design/schedule.md`.
 
 ## Handoffs
-Latest: H2 (2026-10-11, grokbot -> owner, P0-1). Full history: `docs/HANDOFFS.md`.
+Latest: H3 (2026-10-11, grokbot -> owner, P0-2). Full history: `docs/HANDOFFS.md`.

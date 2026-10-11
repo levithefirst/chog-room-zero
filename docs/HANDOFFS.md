@@ -27,3 +27,16 @@ Not verified    : phone load (Pixel 7 / iPhone 13); run under Node >=22.12 (box 
 Locked decisions touched : added LOCKED 15 (TS, Vite, PixiJS, Vitest) and default branch setup/skill-system, approved by owner 2026-10-11 21:17 WAT; S1 closed by owner
 Next smallest task : P0-2 PC movement only. Files: src/input/input.ts, src/sim/sim.ts, src/config/tuning.ts, src/render/render.ts, src/main.ts, tests/sim.test.ts
 ```
+
+```
+HANDOFF H3  2026-10-11  grokbot -> owner
+Branch @ commit : grokbot/p0-2-pc-movement @ aac0bb4b71bd64b741bbc2d4707439e635b9f90f   pushed: yes
+Task            : P0-2 PC WASD movement (stacked on P0-1 PR #2); plus P0-1 gaps: Node 22 validation, engines range fix, phone steps
+Files changed   : src/input/input.ts, src/sim/sim.ts, src/config/tuning.ts, src/render/render.ts, src/main.ts, tests/sim.test.ts, tests/input.test.ts, package.json, package-lock.json, docs/DEV.md, docs/STATE.md, docs/HANDOFFS.md
+Tests run       : Node 22.23.3: npm ci -> exit 0; npm run typecheck -> exit 0; npm test -> 17/17 passed; npm run build -> exit 0; npm run dev + curl / -> HTTP 200; headless Chrome CDP: canvas 800x363, D+S 0.6 s moved circle (400,181)->(484,265), console only favicon.ico 404
+Known failures  : none (favicon.ico 404 in console, cosmetic; index.html not on card)
+Blockers        : phone check BLOCKED on owner devices
+Not verified    : phone load (Pixel 7 / iPhone 13); movement feel (owner PC playtest); real-GPU browser; render interpolation not implemented (marker updates per frame at sim positions)
+Locked decisions touched : none
+Next smallest task : P0-3 PC mouse aim only. Files: src/input/input.ts, src/sim/sim.ts, src/config/tuning.ts, src/render/render.ts, src/main.ts, tests/input.test.ts, tests/sim.test.ts
+```
