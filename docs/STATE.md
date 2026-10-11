@@ -5,7 +5,7 @@ Last verified: 2026-10-11 by claude.
 
 ## Snapshot (EVIDENCE)
 - Repo: `levithefirst/chog-room-zero` (private). `git ls-remote origin` on 2026-10-11 returned no refs: the remote is empty. GitHub lists a push at 2026-10-07 13:56 UTC but no branch or commit exists. Unexplained.
-- This branch: `setup/skill-system`. Base: none (first commit in the repo).
+- Default/base branch: `setup/skill-system` (LOCKED, owner 2026-10-11: no `main`). PRs target it. Never merge without the owner.
 - Project start date, deadline, hackathon name and rules: UNKNOWN. Current project day: UNKNOWN. Do not guess it.
 - Claude Code in the build environment: 2.1.296.
 
@@ -24,9 +24,10 @@ Last verified: 2026-10-11 by claude.
 12. Out of scope: Railway worker, multiplayer, custom contract, paid inference, $CHOG economy, second map, second ability, loot chests, gear grid, clans, season pass.
 13. Every added system names an equal or larger cut.
 14. No scheduled or background jobs without explicit owner approval.
+15. Scaffold stack: TypeScript, Vite, PixiJS v8, Vitest (owner, 2026-10-11 21:17 WAT).
 
 ## PROPOSALS (need owner approval before they count)
-- Stack: TypeScript, Vite, PixiJS, custom sim, Vercel, Neon, viem lazy loaded, GitHub (owner called it a starting proposal).
+- Stack remainder: Vercel, Neon, viem lazy loaded. Not installed. (TS/Vite/PixiJS/Vitest now LOCKED item 15.)
 - Win condition: extraction (exit opens about 45 s). Not locked.
 - Quiet walk (stick pressure on mobile, Shift on PC) as the loud/quiet choice.
 - Vision shape (forward cone plus small circle), sound radii, all numbers in `docs/design/*`.
@@ -73,10 +74,10 @@ Core Feel Gate: BLOCKED (nothing built). It needs G1, G2, G3, G4, G6, G7 PASS, G
 ## Current task
 | Id | Owner | Branch | Files | Done when | Status |
 |---|---|---|---|---|---|
-| S1 | claude | setup/skill-system | `CLAUDE.md`, `GROKBOT.md`, `.claude/**`, `docs/**` | owner reviews the branch and merges or requests changes | ready for owner review |
+| S1 | claude | setup/skill-system | `CLAUDE.md`, `GROKBOT.md`, `.claude/**`, `docs/**` | owner review | CLOSED (owner-approved 2026-10-11; work is the default branch content) |
+| P0-1 | grokbot | grokbot/p0-1-project-scaffold | `package.json`, `package-lock.json`, `tsconfig.json`, `vite.config.ts`, `index.html`, `.gitignore`, `docs/DEV.md`, `src/main.ts`, `src/config/tuning.ts`, `src/sim/sim.ts`, `src/render/render.ts`, `src/input/input.ts`, `tests/sim.test.ts`, `docs/STATE.md` (handoff), `docs/HANDOFFS.md` (append) | `npm ci`, `npm run typecheck`, `npm test`, `npm run build` exit 0; dev serves a PixiJS canvas with one static shape; PR open; no gameplay code | approved, in progress (owner 2026-10-11 21:17 WAT) |
 
-## Next smallest task (PROPOSED, not started, needs owner OK and an assigned agent)
-P0-1: scaffold the project and nothing else. Files: `package.json`, `tsconfig.json`, `vite.config.ts`, `index.html`, `src/main.ts`, `src/tuning.ts`. Done when: `npm run build` succeeds and a blank canvas loads on a phone. Needs the owner to confirm the stack proposal first. No game features.
+Note: dev commands go in `docs/DEV.md`, not `README.md`, because README.md lives on the unmerged S2 PR (avoids a cross-PR conflict).
 
 ## Scope and freeze
 Out-of-scope list: LOCKED item 12. Feature freeze after Day 11 (day count starts when the owner records a start date here). Cut list so far: none. Cut order: `docs/design/schedule.md`.
