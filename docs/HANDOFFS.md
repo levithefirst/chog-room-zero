@@ -14,3 +14,16 @@ Not verified    : fresh Claude Code session discovery (see final report); GrokBo
 Locked decisions touched : none. Items previously treated as settled (3 rooms, Canvas 2D default, Shift quiet walk, extraction, feel numbers) were moved to PROPOSAL because the owner's brief did not lock them; "3 rooms" conflicts with the locked "no second map" and was dropped.
 Next smallest task : P0-1 scaffold (see STATE), after the owner approves the stack
 ```
+
+```
+HANDOFF H2  2026-10-11  grokbot -> owner
+Branch @ commit : grokbot/p0-1-project-scaffold @ 382518b68ff1d9ab597b9bd3fe2167bf4437c6c0   pushed: yes
+Task            : P0-1 project scaffold (TS + Vite + PixiJS v8 + Vitest, one static shape). No gameplay.
+Files changed   : package.json, package-lock.json, tsconfig.json, vite.config.ts, index.html, .gitignore, docs/DEV.md, src/main.ts, src/config/tuning.ts, src/sim/sim.ts, src/render/render.ts, src/input/input.ts, tests/sim.test.ts, docs/STATE.md, docs/HANDOFFS.md
+Tests run       : npm ci -> exit 0 (EBADENGINE warning, Node 20.19.2 < vitest 5 requirement 22.12); npm run typecheck -> exit 0; npm test -> 3/3 passed; npm run build -> exit 0; npm run dev + curl / -> HTTP 200, #app and /src/main.ts present; headless Chrome on vite preview -> <canvas> present, screenshot shows centred circle
+Known failures  : none
+Blockers        : none
+Not verified    : phone load (Pixel 7 / iPhone 13); run under Node >=22.12 (box has 20.19.2; engines field set to >=22.12); real-GPU browser (only swiftshader); README.md not touched (lives on S2 PR #1), commands are in docs/DEV.md
+Locked decisions touched : added LOCKED 15 (TS, Vite, PixiJS, Vitest) and default branch setup/skill-system, approved by owner 2026-10-11 21:17 WAT; S1 closed by owner
+Next smallest task : P0-2 PC movement only. Files: src/input/input.ts, src/sim/sim.ts, src/config/tuning.ts, src/render/render.ts, src/main.ts, tests/sim.test.ts
+```
