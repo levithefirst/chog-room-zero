@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\"; echo '== CHOG SESSION START =='; echo \"branch: $(git branch --show-current 2>&1)\"; git log -1 --oneline 2>&1; git status -sb 2>&1 | head -15; echo '== docs/STATE.md =='; cat docs/STATE.md 2>&1; echo '== Next: follow docs/RULES.md section 1, load chog-director =='"
+          }
+        ]
+      }
+    ]
+  }
+}
