@@ -4,7 +4,7 @@ Source of truth for every agent. Rules: `docs/RULES.md`. Edit this file only in 
 Last verified: 2026-10-11 by grokbot.
 
 ## Snapshot (EVIDENCE)
-- Repo: `levithefirst/chog-room-zero` (private). `git ls-remote origin` on 2026-10-11 returned no refs: the remote is empty. GitHub lists a push at 2026-10-07 13:56 UTC but no branch or commit exists. Unexplained.
+- Repo: `levithefirst/chog-room-zero` (private). Branches and PRs: `gh pr list`.
 - Default/base branch: `setup/skill-system` (LOCKED, owner 2026-10-11: no `main`). PRs target it. Never merge without the owner.
 - Project start date, deadline, hackathon name and rules: UNKNOWN. Current project day: UNKNOWN. Do not guess it.
 - Claude Code in the build environment: 2.1.296.
@@ -49,10 +49,10 @@ Last verified: 2026-10-11 by grokbot.
 - P0-2 PC movement (stacked PR, branch `grokbot/p0-2-pc-movement`): WASD -> normalized move vector; sim accel 52.5, cap 4.2 u/s, decel 70, reverse x1.5, stop epsilon 0.01. No aiming, firing, HUD, touch, collision.
 
 ## Automated test results (EVIDENCE)
-2026-10-11, Node 22.23.3 / npm 10.9.9 (`~/.local/node22`): `npm ci` exit 0, no engine warnings; `npm run typecheck` exit 0; `npm test` 17/17 pass (2 files: 8 movement behaviours, key mapping, fixedSteps); `npm run build` exit 0. P0-1 code also re-run under Node 22 before P0-2 changes: all exit 0, 3/3 tests.
+2026-10-11, Node 22.23.3 / npm 10.9.9 (`~/.local/node22`): `npm ci` exit 0, no engine warnings; `npm run typecheck` exit 0; `npm test` 17/17 pass (2 files: 8 movement behaviours, key mapping, fixedSteps); `npm run build` exit 0. P0-1 code re-run on Node 22 first: all exit 0, 3/3.
 
 ## Browser smoke test (EVIDENCE, headless Chrome swiftshader, CDP)
-`npm run dev` curl `/` HTTP 200. Canvas 800x363 initialised. Holding D+S for 0.6 s moved the circle (400,181) -> (484,265) px, matching expected ~85 px. Console: only a favicon.ico 404 (no favicon; harmless). Screenshots on box: `/workspace/shots/p0-2-{before,after}.png`.
+`npm run dev` curl `/` HTTP 200. Canvas 800x363 initialised. D+S held 0.6 s moved the circle (400,181)->(484,265) px (expected ~85). Console: only favicon.ico 404. Screenshots on box: `/workspace/shots/p0-2-{before,after}.png`.
 
 ## Manual playtest results
 - Phone load: NOT PERFORMED, BLOCKED on owner devices (steps in `docs/DEV.md`).
@@ -78,9 +78,10 @@ Core Feel Gate: BLOCKED (nothing built). It needs G1, G2, G3, G4, G6, G7 PASS, G
 | G12 Final game feel | not started | yes | |
 
 ## Current task
+S1 (claude, skill system): CLOSED, owner-approved 2026-10-11; it is the default branch content.
+
 | Id | Owner | Branch | Files | Done when | Status |
 |---|---|---|---|---|---|
-| S1 | claude | setup/skill-system | `CLAUDE.md`, `GROKBOT.md`, `.claude/**`, `docs/**` | owner review | CLOSED (owner-approved 2026-10-11; work is the default branch content) |
 | P0-1 | grokbot | grokbot/p0-1-project-scaffold | `package.json`, `package-lock.json`, `tsconfig.json`, `vite.config.ts`, `index.html`, `.gitignore`, `docs/DEV.md`, `src/main.ts`, `src/config/tuning.ts`, `src/sim/sim.ts`, `src/render/render.ts`, `src/input/input.ts`, `tests/sim.test.ts`, `docs/STATE.md` (handoff), `docs/HANDOFFS.md` (append) | `npm ci`, `npm run typecheck`, `npm test`, `npm run build` exit 0; dev serves a PixiJS canvas with one static shape; PR open; no gameplay code | done, awaiting owner review/merge, PR #2 (approved 2026-10-11 21:17 WAT) |
 | P0-2 | grokbot | grokbot/p0-2-pc-movement (stacked on P0-1; PR base `grokbot/p0-1-project-scaffold`) | `src/input/input.ts`, `src/sim/sim.ts`, `src/config/tuning.ts`, `src/render/render.ts`, `src/main.ts`, `tests/sim.test.ts`, `tests/input.test.ts`, `package.json` + `package-lock.json` (engines fix only), `docs/DEV.md`, `docs/STATE.md` (handoff), `docs/HANDOFFS.md` (append) | WASD-only movement (accel, cap, decel to exact stop, turn rate); 8 sim behaviours + key mapping tested; Node 22 ci/typecheck/test/build pass; browser smoke shows motion; no aiming/firing/HUD/mobile | done, awaiting owner review, stacked PR (base `grokbot/p0-1-project-scaffold`; approved owner 2026-10-11 21:23 WAT) |
 
