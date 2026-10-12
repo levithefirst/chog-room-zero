@@ -74,9 +74,11 @@ export function createInput(el: HTMLElement): Input {
   let action = false;
   let pauseQueued = false;
   let lastAim = 0;
-  let fireBlocked = false;
   // Pointers currently down anywhere on the page (window capture, so menu presses on the overlay count too).
   const pointersDown = new Set<number>();
+  // Pointers that were down when play began (the menu press itself). Only these are swallowed, until released;
+  // any other pointer (a new touch, a move thumb already resting on the glass) works at once (RC-3).
+  const blocked = new Set<number>();
   const left: Stick = { active: false, id: -1, baseX: 0, baseY: 0, x: 0, y: 0 };
   const right: Stick = { active: false, id: -1, baseX: 0, baseY: 0, x: 0, y: 0 };
 
@@ -135,7 +137,8 @@ export function createInput(el: HTMLElement): Input {
       right.active = false;
       // Only a press that is still down (e.g. the Resume press itself) is swallowed. If everything was already
       // released (Deploy -> loading -> play, Esc resume), the next press fires normally.
-      fireBlocked = pointersDown.size > 0;
+      blocked.clear();
+      for (const id of pointersDown) blocked.add(id);
     },
     takeAction() {
       const a = action;
@@ -171,7 +174,7 @@ export function createInput(el: HTMLElement): Input {
   const clear = () => {
     held.clear();
     pointersDown.clear(); // a release we never saw (blur, tab switch) must not block the next press
-    fireBlocked = false;
+    blocked.clear();
     firing = false;
     left.active = right.active = false;
   };
@@ -184,11 +187,11 @@ export function createInput(el: HTMLElement): Input {
       inp.mode = 'touch';
       const s = e.clientX < window.innerWidth / 2 ? left : right;
       if (s.active) return;
-      if (s === right && fireBlocked) return; // the aim/fire thumb waits for a fresh touch after a menu
+      if (s === right && blocked.has(e.pointerId)) return; // the menu touch never becomes the aim/fire thumb
       Object.assign(s, { active: true, id: e.pointerId, baseX: e.clientX, baseY: e.clientY, x: e.clientX, y: e.clientY });
     } else {
       inp.mode = 'pc';
-      if (e.button === 0 && !fireBlocked) firing = fireLatched = true;
+      if (e.button === 0 && !blocked.has(e.pointerId)) firing = fireLatched = true;
     }
     e.preventDefault();
   };
@@ -220,7 +223,7 @@ export function createInput(el: HTMLElement): Input {
   const track = (e: PointerEvent) => { pointersDown.add(e.pointerId); };
   const pup = (e: PointerEvent) => {
     pointersDown.delete(e.pointerId);
-    fireBlocked = false; // released: the next press may fire
+    blocked.delete(e.pointerId); // released: the next press may fire
     if (e.pointerType !== 'touch') {
       if (e.button === 0) firing = false;
       return;
