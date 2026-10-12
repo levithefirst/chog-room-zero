@@ -38,3 +38,26 @@ Dev flags: `?mockChog=1234` binds a mock Chog (not a real ownership check). `?de
 2. Phone on the same Wi-Fi, open that URL, turn to landscape, tap to enter. Tap the speaker icon to check audio (the choice is remembered).
 3. Left thumb anywhere on the left half: move (half push creeps). Right thumb on the right half: aim; push past the inner ring to fire. Ability and Reload buttons sit at the right edge; pause and mute top-right.
 4. Report: device, browser, smooth or stuttering, sticks comfortable, sound works after the first tap, text readable, anything cut off by the notch.
+
+## RC-1 run, controls, features (the README lives on the S2 branch; this is the RC copy)
+Run (Node 22): `npm ci && npm run dev`, then open http://localhost:5173. Production build: `npm run build && npm run preview`.
+
+Controls:
+- **PC:** WASD move · Shift creep · mouse aim · hold left click fire · R reload · Space ability · Esc/P pause · 1-4 pick a hero · Enter/Space confirm.
+- **Phone (landscape):** left thumb moves (a half push creeps) · right thumb aims, push past the ring to fire · Ability and Reload buttons · pause and mute top-right.
+
+Features: one map (Room Zero), 4 heroes (Kettle rifle/Patch, Mop SMG/Slip, Brick shotgun/Slab, Wick marksman/Ping), 5 bots that see, hear and investigate. The rule set:
+- One reveal rule.
+- Bots only shoot from within your sight range.
+- First-launch How to play (re-open it from the title).
+- Results: time, kills, accuracy, damage dealt and taken.
+- Personal bests per hero and overall, saved on this device only.
+- NFT DEMO traits: no wallet, no ownership check.
+
+Checks:
+- `npm test`: unit + sim tests, including rc-fairness, rc-death, rc-snag, rc-victory, rc-records, rc-nft-demo.
+- `node tools/rc-e2e.mjs <url> out.json`: onboarding, DEMO badges, death screen (keyboard + touch), victory + personal best persistence, browser fairness, 844x390/667x375 fit, console errors.
+- `node tools/p1ft-e2e.mjs <url> out.json`: regression checks.
+- `VICTORY_OUT=f.json npx vitest run tests/rc-victory.test.ts`: per-hero autopilot win table.
+
+Known limitations: see docs/RELEASE.md.
