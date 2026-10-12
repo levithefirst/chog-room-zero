@@ -4,7 +4,8 @@
 - **RC SHA:** the final commit of PR "RC-1: Chogathon release candidate". The SHA is recorded in the PR body, /workspace/reports/rc-acceptance.md and rc-ade-brief.md. This file can't contain its own commit hash.
 - **RC-2 (targeted follow-up, owner task 2026-10-12 12:53 WAT):** commits after 6759d1f on the same branch/PR #9. The RC SHA is the PR head, recorded in /workspace/reports/rc2-ade-retest.md. Changes: resume/menu press never fires, ring-hint e2e setup, perception test timeout, debug-only autoplay, preview check tools.
 - **RC-3 (release hardening, owner task 2026-10-12 "final finish-line"):** branch `ccr-e7fadb8f-qtochk`, based on `grokbot/rc-1` @ 43f5a5d (PR #9 head). The candidate SHA and its verified preview URL are in `docs/STATE.md` (RC-3 row) and handoff H11. Changes: only the menu press is swallowed after a menu (a resting move thumb no longer eats the first shot); the RC-1 Resume shot root cause pinned by a test; results accuracy per bullet (the shotgun read 369%); ring-hint e2e runs in a real desktop tab; README and submission draft.
-- **Production:** still 969de1c. This RC is a preview only.
+- **RC-4 (cross-device, owner task 2026-10-12 "final fix, cross-device QA and playable release"):** same branch. Tablets play in portrait; phones in portrait get a turn-sideways screen that keeps the run (paused, with hero and hostiles left); every orientation flip releases held input; a portrait tablet sees the whole map height instead of void. `tools/rc4-matrix.mjs` covers 12 viewports. The candidate SHA, its preview URL and the production state are in `docs/STATE.md` (RC-4 row) and handoff H12.
+- **Production:** see `docs/STATE.md`. Before RC-4 it served 969de1c (the P1 MVP).
 
 ## What is in RC-1
 - **Fairness:** a bot may only fire at, or damage, you from inside your own sight range (hero vision incl. sidegrade) with line of sight. The shooter is ringed on every hit, along with the damage arc.
@@ -16,7 +17,9 @@
 - **Polish:** Space confirms menus; audio master limiter.
 
 ## Known limitations
-- **Physical devices:** Pixel 7 and iPhone 13 are UNVERIFIED. All mobile checks are headless emulation.
+- **Physical devices:** Pixel 7, iPhone 13 and any tablet are UNVERIFIED. All phone and tablet checks are headless Chrome emulation (touch events, viewport, DPR); real Safari/iOS address-bar and rotation behaviour is not covered.
+- **Phone portrait:** not playable by design (turn-sideways screen). At 22 u across, a 390 px portrait would draw the player as a ~7 px dot with flank shooters off screen.
+- **Tutorial pill timing under load:** the p1ft-e2e pill check (fades by 7.5 s of wall time) failed once at load average ~8.6 and passed 2/2 idle: the pill counts frame time (capped 0.1 s per frame), so a starved frame rate keeps it longer. Not changed.
 - **Real NFT verification:** DEFERRED. Chain, contract, ownership method and metadata are UNKNOWN. The DEMO traits don't match any Chog art or metadata.
 - **Chogathon gate:** the rules require the NFT to be essential. Today a Chog changes play style (sidegrade) and tracks device history, but the game plays fully without one. This is a judging risk.
 - **Personal bests:** localStorage only. Lost if site data is cleared, and not shared across devices.
