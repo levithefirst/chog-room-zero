@@ -6,12 +6,21 @@ const port = 9400 + Math.floor(Math.random() * 50);
 const chrome = spawn('google-chrome', ['--headless=new', '--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', `--remote-debugging-port=${port}`, 'about:blank'], { stdio: 'ignore' });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms)); let t;
 for (let i = 0; i < 50 && !t; i++) { await sleep(200); try { t = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find((x) => x.type === 'page'); } catch {} }
-const ws = new WebSocket(t.webSocketDebuggerUrl); await new Promise((r) => (ws.onopen = r));
-let id = 0; const P = new Map(); const errors = [];
-ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.id && P.has(m.id)) { P.get(m.id)(m.result ?? m.error); P.delete(m.id); }
-  if (m.method === 'Runtime.exceptionThrown') errors.push(m.params.exceptionDetails.exception?.description ?? m.params.exceptionDetails.text);
-  if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') errors.push(m.params.args.map((a) => a.value ?? a.description).join(' ')); };
+let ws; let id = 0; const P = new Map(); const errors = [];
+async function attach(target) {
+  ws = new WebSocket(target.webSocketDebuggerUrl); await new Promise((r) => (ws.onopen = r));
+  ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.id && P.has(m.id)) { P.get(m.id)(m.result ?? m.error); P.delete(m.id); }
+    if (m.method === 'Runtime.exceptionThrown') errors.push(m.params.exceptionDetails.exception?.description ?? m.params.exceptionDetails.text);
+    if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') errors.push(m.params.args.map((a) => a.value ?? a.description).join(' ')); };
+}
+await attach(t);
 const cmd = (method, params = {}) => new Promise((r) => { const i = ++id; P.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
+// A new tab. Touch emulation, once on, keeps (pointer: coarse) true for the life of a tab whatever CDP resets
+// (RC-3, measured): the game then boots in touch mode. Sections that need a desktop pointer start here.
+async function freshTab() {
+  const nt = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' })).json();
+  ws.close(); await attach(nt); await cmd('Runtime.enable');
+}
 const ev = async (e) => { const r = await cmd('Runtime.evaluate', { expression: e, returnByValue: true, awaitPromise: true }); return r.result?.value; };
 await cmd('Runtime.enable');
 const results = []; const check = (name, pass, data) => { results.push({ name, pass: !!pass, data }); console.log((pass ? 'PASS ' : 'FAIL ') + name, JSON.stringify(data)); };
@@ -75,12 +84,16 @@ await cmd('Page.captureScreenshot', { format: 'png' }).then((s) => fs.writeFileS
 // Setup (RC-2, ADE rc1-code-check.md section 5): step 3 left 844x390 touch emulation on, so input.ts ran in touch mode and
 // rewrote the aim to 0 (east) every tick, overriding p.facing=PI and putting the bot in the cone (seen, so no ring).
 // Reset to a desktop pointer and aim west with a real mouse move, so the player faces away from the bot.
-await view(1280, 720, false); await open(); await play();
+// RC-3: view(..., false) alone left (pointer: coarse) true, so the game still booted in touch mode and pinned the aim
+// east (the bot then sat near the cone edge: pass or fail by timing). A fresh tab really is desktop; the precondition
+// below proves it (desktop input mode, player facing west when the ring setup starts). Assertion unchanged.
+await freshTab(); await view(1280, 720, false); await open(); await play();
 const faceWest = () => cmd('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 20, y: 360 });
 await faceWest();
 const pill1 = await ev(`getComputedStyle(document.getElementById('hint')).opacity`);
 await sleep(7500);
 const pill2 = await ev(`getComputedStyle(document.getElementById('hint')).opacity`);
+const ringPre = await ev(`({coarse:matchMedia('(pointer: coarse)').matches,touchMode:document.body.classList.contains('touch'),facing:+__chog.world.actors[0].facing.toFixed(2)})`);
 const ringSet = await ev(`(async()=>{const w=__chog.world,p=w.actors[0];p.hp=1e9;p.x=8.5;p.y=2.5;p.facing=Math.PI;
   for(const o of w.actors.slice(2)){o.x=o.y=-40} const b=w.actors[1];b.x=11.5;b.y=4.5; const br=w.brains.get(1); br.state='investigate'; br.lastKnown={x:11.5,y:1.5};br.goal=null;br.timer=0;
   const t0=w.tick; for(let i=0;i<300&&w.tick-t0<600&&localStorage.getItem('chog.hint.rings')!=='1';i++)await new Promise(r=>setTimeout(r,100));
@@ -89,6 +102,7 @@ await open('&nooverlay', false); await play(); await faceWest(); await sleep(750
 const ring2 = await ev(`(async()=>{const w=__chog.world,p=w.actors[0];p.hp=1e9;p.x=8.5;p.y=2.5;p.facing=Math.PI;for(const o of w.actors.slice(2)){o.x=o.y=-40} const b=w.actors[1];b.x=11.5;b.y=4.5;const br=w.brains.get(1); br.state='investigate'; br.lastKnown={x:11.5,y:1.5};br.goal=null;br.timer=0;
   const t1=w.tick; for(let i=0;i<300&&w.tick-t1<240;i++)await new Promise(r=>setTimeout(r,100));return {text:document.getElementById('hint').textContent.slice(0,40),opacity:getComputedStyle(document.getElementById('hint')).opacity}})()`);
 check('Tutorial pill shows on the first run, fades by ~6 s; second run no tutorial', +pill1 > 0.9 && +pill2 < 0.1, { atStart: pill1, after7_5s: pill2 });
+check('Ring hint setup precondition: desktop pointer, PC input mode, player facing west (away from the bot)', !ringPre.coarse && !ringPre.touchMode && Math.abs(Math.abs(ringPre.facing) - Math.PI) < 0.3, ringPre);
 check('Ring hint shows once on the first heard ring, persisted; not shown again after reload', ringSet.persisted === '1' && /Gold rings/.test(ringSet.hint) && !(+ring2.opacity > 0.5 && /Gold rings/.test(ring2.text)), { first: ringSet, afterReload: ring2 });
 
 // 5. HUD layout at 844x390 and 667x375 (with the tutorial pill visible): no panel overlaps, all inside the viewport.
