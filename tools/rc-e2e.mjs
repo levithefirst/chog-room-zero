@@ -157,7 +157,7 @@ await cmd('Page.navigate', { url: `${base}/?debug&nooverlay` }); await sleep(300
 const titlePb = await ev(`document.getElementById('titlepb')?.textContent`);
 const recs = await ev(`JSON.parse(localStorage.getItem('chog-room-zero:records:v1'))`);
 check('Victory: Room cleared; results show Chog, time, kills, accuracy, damage dealt/taken; personal best NEW, saved on this device only, persists on the title after reload (guest)',
-  res.h2 === 'Room cleared' && ['Chog', 'Time', 'Hostiles down', 'Hits / shots', 'Damage dealt / taken'].every((x) => res.rows.includes(x)) && /NEW/.test(res.pb) && /saved on this device only/.test(res.pb) && /Best clear \d+:\d\d/.test(titlePb) && recs?.overall?.wins === 1,
+  res.h2 === 'Room cleared' && ['Chog', 'Time', 'Hostiles down', 'Hits / bullets', 'Damage dealt / taken'].every((x) => res.rows.includes(x)) && /NEW/.test(res.pb) && /saved on this device only/.test(res.pb) && /Best clear \d+:\d\d/.test(titlePb) && recs?.overall?.wins === 1,
   { res, titlePb, recs: recs?.overall });
 
 // 6. Fairness in the browser: a Wick bot 11 m away in clear line of sight never damages a Brick player (sight 7.5 m).

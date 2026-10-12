@@ -305,7 +305,8 @@ async function start() {
   function showResults() {
     const won = world.outcome === 'won';
     const p = player(world);
-    const accPct = p.shots ? Math.round((p.hits / p.shots) * 100) : 0;
+    // Per bullet, so a shotgun's 8 pellets per shot can never read above 100% (RC-3: Brick showed 59/16).
+    const accPct = p.bullets ? Math.round((p.hits / p.bullets) * 100) : 0;
     const left = world.actors.filter((a) => a.team === 'bot' && a.alive).length;
     const k = world.playerKill;
     const why = !won && k ? `<p class="bad">${esc(world.actors[k.killerId].name)} got you with a ${esc(k.weapon.toLowerCase())}, ${Math.hypot(k.fromX - p.x, k.fromY - p.y).toFixed(0)} m ${compass(k.fromX - p.x, k.fromY - p.y)}.</p>` : '<p class="good">Every hostile is down.</p>';
@@ -317,7 +318,7 @@ async function start() {
       <table class="stats"><tr><td>Chog</td><td>${esc(heroById(heroId).name)}${identity.kind === 'bound' ? ` · <span class="demo">DEMO</span> #${esc(identity.tokenId!)}` : ''}</td></tr>
       <tr><td>Time</td><td>${fmtTime(Math.round(playTime))}</td></tr>
       <tr><td>Hostiles down</td><td>${p.kills} / ${world.actors.length - 1}${won ? '' : ` (${left} left)`}</td></tr>
-      <tr><td>Hits / shots</td><td>${p.hits} / ${p.shots} · ${accPct}%</td></tr>
+      <tr><td>Hits / bullets</td><td>${p.hits} / ${p.bullets} · ${accPct}%</td></tr>
       <tr><td>Damage dealt / taken</td><td>${Math.round(p.damageDealt)} / ${Math.round(p.damageTaken)}</td></tr></table>${hist}
       <div class="btns"><button class="btn primary" data-go="restart">Again</button><button class="btn" data-go="quit">Change Chog</button></div>`);
   }

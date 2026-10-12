@@ -58,7 +58,11 @@ export interface Actor {
   lastSpread: number;
   lastHitTick: number;
   lastHitFrom: Vec2 | null;
+  /** Trigger pulls. */
   shots: number;
+  /** Bullets fired: shots x pellets (the shotgun fires 8 per shot). Accuracy is hits / bullets. */
+  bullets: number;
+  /** Bullets that hit an actor. */
   hits: number;
   kills: number;
   damageDealt: number;
@@ -186,7 +190,7 @@ function makeActor(id: number, team: Team, name: string, hero: HeroDef, sg: Side
     hp: hero.maxHp, maxHp: hero.maxHp, armor: hero.maxArmor, maxArmor: Math.max(hero.maxArmor, 50), alive: true,
     ammo: weapon.magazine, reserve: weapon.reserve, cooldown: 0, reloadLeft: 0, abilityCd: 0, dashLeft: 0, dashX: 0, dashY: 0,
     revealLeft: 0, stepAcc: 0, hitFlash: 0, muzzle: 0, deadFor: 0, lastSpread: weapon.spreadDeg, lastHitTick: -999, lastHitFrom: null,
-    shots: 0, hits: 0, kills: 0, damageDealt: 0, damageTaken: 0,
+    shots: 0, bullets: 0, hits: 0, kills: 0, damageDealt: 0, damageTaken: 0,
   };
 }
 
@@ -385,6 +389,7 @@ function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
     }
     a.ammo--;
     a.shots++;
+    a.bullets += W.pellets;
     a.cooldown = W.fireInterval;
     a.muzzle = TUNING.render.muzzleFlash;
     emit(w, 'shot', a.x, a.y, TUNING.sound.shot, a, W.sound);
