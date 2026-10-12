@@ -11,6 +11,7 @@ import { canSee } from './sim/vision';
 import { nextPhase, simRuns, type MatchEvent, type Phase } from './sim/match';
 import { TUNING } from './config/tuning';
 import { HEROES, heroById } from './config/heroes';
+import { heroForKey } from './ui/heroKeys';
 import { WEAPONS } from './config/weapons';
 import { adapterFromUrl, resolveIdentity, GUEST, type Identity } from './nft/identity';
 import { recordRun, type TokenHistory } from './nft/history';
@@ -180,6 +181,16 @@ async function start() {
       <div class="btns"><button class="btn" data-go="quit">Back</button><button class="btn primary" data-go="pick">Deploy</button></div>`);
   }
 
+  function selectHero(id: string) {
+    heroId = id;
+    try {
+      localStorage.setItem(HERO_KEY, heroId);
+    } catch {
+      /* ignore */
+    }
+    for (const el of overlay.querySelectorAll<HTMLElement>('.hero')) el.classList.toggle('sel', el.dataset.hero === id);
+  }
+
   function showLoading() {
     card(`<div class="kicker">Deploying ${esc(heroById(heroId).name)}</div><h2>Room Zero</h2><div class="loadbar"><i></i></div>`);
     // Build the world (and bake the map if needed) after the loading card has painted.
@@ -226,13 +237,7 @@ async function start() {
     const t = e.target as HTMLElement;
     const hero = t.closest('[data-hero]') as HTMLElement | null;
     if (hero) {
-      heroId = hero.dataset.hero!;
-      try {
-        localStorage.setItem(HERO_KEY, heroId);
-      } catch {
-        /* ignore */
-      }
-      for (const el of overlay.querySelectorAll('.hero')) el.classList.toggle('sel', el === hero);
+      selectHero(hero.dataset.hero!);
       // A second tap on the selected card deploys.
       if (hero.dataset.armed) go('pick');
       for (const el of overlay.querySelectorAll<HTMLElement>('.hero')) delete el.dataset.armed;
@@ -286,6 +291,13 @@ async function start() {
   window.addEventListener('keydown', (e) => {
     if (!e.repeat) summaryGate.press(performance.now());
   }, { capture: true });
+  // Hero select: 1-4 pick the matching card (CHOG-UI-001). Enter deploys (existing handler).
+  window.addEventListener('keydown', (e) => {
+    if (phase !== 'select' || e.repeat) return;
+    const id = heroForKey(e, HEROES);
+    if (!id) return;
+    selectHero(id);
+  });
 
   function spark(x: number, y: number, n: number, hostile: boolean) {
     for (const s of fx.sparks) {
