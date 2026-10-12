@@ -198,5 +198,7 @@ describe('no omniscience across seeded matches', () => {
     expect(checked).toBeGreaterThan(100);
     expect(counts.seen).toBeGreaterThan(0);
     expect(counts.heard).toBeGreaterThan(0);
-  });
+  // RC-2 (ADE rc1-code-check): explicit timeout. 8 seeds x 75 s of full sim (36k steps) with a line-of-sight check per acquisition
+  // is deterministic and CPU-bound: 3.8 s on an idle box, 6.2-6.6 s on a loaded one, which tripped the 5 s default. Coverage unchanged.
+  }, 30000);
 });

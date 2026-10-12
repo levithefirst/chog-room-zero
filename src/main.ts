@@ -1,9 +1,10 @@
 import { createRenderer, createFx, COVER_FLASH_SECONDS } from './render/render';
 import { createInput } from './input/input';
-import { createSummaryGate } from './input/gate';
+import { createSummaryGate, overlayInputAllowed } from './input/gate';
 import { createAudio } from './audio/audio';
 import { fixedSteps } from './sim/sim';
-import { createWorld, hears, player, stepWorld, type World } from './sim/world';
+import { createWorld, hears, player, stepWorld, IDLE_INPUT, type World } from './sim/world';
+import { ROOM_ZERO } from './config/map';
 import { sightClear, walkable } from './sim/level';
 import { clampMarker } from './render/visibility';
 import { muzzleFlashSeen } from './sim/vision';
@@ -17,6 +18,11 @@ import { coverBoxAt } from './sim/cover';
 import { WEAPONS } from './config/weapons';
 import { adapterFromUrl, resolveIdentity, GUEST, type Identity } from './nft/identity';
 import { recordRun, type TokenHistory } from './nft/history';
+import { boundIdentity } from './nft/identity';
+import { DEMO_COPY, TRAIT_INFO, isTokenId, sampleTokens, traitsFor } from './nft/traits';
+import { fmtTime, loadRecords, recordBest, type Records } from './ui/records';
+import { SIDEGRADES } from './sim/operators';
+import { createAutopilot, type Autopilot } from './debug/autopilot';
 
 const $ = (id: string) => document.getElementById(id)!;
 const root = $('app');
@@ -25,6 +31,10 @@ const hint = $('hint');
 // ?debug shows the bot perception overlay; add &nooverlay to keep the debug hook without it.
 const DEBUG_OVERLAY = location.search.includes('debug') && !location.search.includes('nooverlay');
 const HERO_KEY = 'chog.hero';
+// SCRIPTED autopilot (debug only): ?debug&autoplay=<seed>[&hero=<id>] drives in-match input from src/debug/autopilot.ts
+// through the normal game loop. Menus still need real clicks/keys. Never active without ?debug.
+const QS = new URLSearchParams(location.search);
+const AUTOPLAY_SEED = QS.has('debug') && QS.get('autoplay') !== null ? Number(QS.get('autoplay')) || 1 : null;
 
 function compass(dx: number, dy: number): string {
   const names = ['east', 'south-east', 'south', 'south-west', 'west', 'north-west', 'north', 'north-east'];
@@ -44,11 +54,30 @@ async function start() {
   const renderer = await createRenderer(root);
   const input = createInput(root);
   const audio = createAudio();
-  const { identity: id, note } = await resolveIdentity(adapterFromUrl(location.search)).catch(() => ({ identity: GUEST, note: 'Playing as guest.' }));
-  const identity: Identity = id;
+  const resolved = await resolveIdentity(adapterFromUrl(location.search)).catch(() => ({ identity: GUEST, note: 'Playing as guest.' }));
+  let identity: Identity = resolved.identity;
+  const DEMO_KEY = 'chog.demoToken';
+  // NFT DEMO (RC-1): a token number picked on the DEMO screen binds DEMO traits. No wallet, no ownership check.
+  if (identity.kind === 'guest') {
+    try { const t = localStorage.getItem(DEMO_KEY); if (t && isTokenId(t)) identity = boundIdentity(t, 'mock'); } catch { /* ignore */ }
+  }
+  function setDemo(token: string | null) {
+    identity = token ? boundIdentity(token, 'mock') : GUEST;
+    try { if (token) localStorage.setItem(DEMO_KEY, token); else localStorage.removeItem(DEMO_KEY); } catch { /* ignore */ }
+  }
+  const demoChip = () => identity.kind === 'bound'
+    ? `<span class="demo">DEMO</span> Chog #${esc(identity.tokenId!)} · ${esc(identity.sidegrade.name)}`
+    : 'Guest';
+  // Onboarding: shown once on first launch, re-openable from the title.
+  const ONBOARD_KEY = 'chog.onboarded';
+  let titleView: 'main' | 'howto' | 'demo' = (() => { try { return localStorage.getItem(ONBOARD_KEY) === '1' ? 'main' : 'howto'; } catch { return 'main'; } })();
+  let records: Records = loadRecords(localStorage);
+  let lastRun: { newBest: { time: boolean; kills: boolean } } | null = null;
 
   let phase: Phase = 'title';
   let heroId = (() => {
+    const forced = AUTOPLAY_SEED !== null ? QS.get('hero') : null;
+    if (forced && HEROES.some((x) => x.id === forced)) return forced;
     try {
       const h = localStorage.getItem(HERO_KEY);
       return h && HEROES.some((x) => x.id === h) ? h : HEROES[0].id;
@@ -57,6 +86,7 @@ async function start() {
     }
   })();
   let runIndex = 0;
+  let autopilot: Autopilot | null = null;
   let world: World = createWorld({ seed: TUNING.seed, hero: heroId, sidegrade: identity.sidegrade });
   let acc = 0;
   let recapLeft = 0;
@@ -64,6 +94,7 @@ async function start() {
   let history: TokenHistory | null = null;
   let toastLeft = 0;
   const fx = createFx();
+  const debugStats = { blockedCues: 0 };
   renderer.reset(world);
 
   const mute = $('mute') as HTMLButtonElement;
@@ -138,14 +169,17 @@ async function start() {
   // Restart from the summary needs a fresh press after a short lock (CHOG-FLOW-001).
   const summaryGate = createSummaryGate();
   let resumeSkip = false;
+  let resultsAt = 0;
   function go(e: MatchEvent) {
-    if (phase === 'results' && e === 'restart' && !summaryGate.canRestart()) return;
+    // Post-death protection: nothing on the summary (any button, key or tap) acts until the gate opens.
+    if (phase === 'results' && !summaryGate.canRestart()) return;
     const next = nextPhase(phase, e);
     if (next === phase) return;
     const from = phase;
     phase = next;
     if (next === 'results') {
-      summaryGate.open(performance.now());
+      resultsAt = performance.now();
+      summaryGate.open(resultsAt);
       input.takeAction();
     }
     // Resuming never replays the paused time: no catch-up burst of sim steps.
@@ -153,6 +187,8 @@ async function start() {
       acc = 0;
       resumeSkip = true;
     }
+    // The click/tap/key that left a menu must never also fire (RC-2): fire needs release-then-press.
+    if (next === 'play') input.holdFireUntilRelease();
     audio.play('ui', 0, 0, 1, false, true);
     render();
   }
@@ -175,13 +211,44 @@ async function start() {
     overlay.innerHTML = `<div class="card">${html}</div>`;
   }
 
+  function closeHowto() {
+    titleView = 'main';
+    try { localStorage.setItem(ONBOARD_KEY, '1'); } catch { /* ignore */ }
+  }
+
   function showTitle() {
-    card(`<div class="kicker">Basement level · lights out</div>
+    if (titleView === 'howto') return showHowto();
+    if (titleView === 'demo') return showDemo();
+    const o = records.overall;
+    card(`<div class="kicker">Chog squad · basement level · lights out</div>
       <h1>CHOG <em>/</em> ROOM ZERO</h1>
       <p style="margin-top:14px">Five hostiles somewhere below. You see only what your lamp touches. Everyone hears everything.</p>
-      <div class="btns"><button class="btn primary" data-go="start">Enter</button></div>
-      <div class="mock">${esc(identity.kind === 'bound' ? `${identity.label} · ${identity.sidegrade.name} sidegrade${identity.source === 'mock' ? ' · mock NFT' : ''}` : 'Guest')}</div>
-      <p style="font-size:13px">${esc(note)}</p>`);
+      <div class="btns"><button class="btn primary" data-go="start">Enter</button><button class="btn" data-act="howto">How to play</button><button class="btn" data-act="demo">Chog <span class="demo">DEMO</span></button></div>
+      <div class="mock" id="idchip">${demoChip()}</div>
+      <p class="pb" id="titlepb">Best clear ${fmtTime(o.bestWinSeconds)} · most kills ${o.mostKills} · ${o.runs} runs <span>· saved on this device only</span></p>`);
+  }
+
+  function showHowto() {
+    card(`<div class="kicker">How to play</div><h2>Clear Room Zero</h2>
+      <table class="howto">
+      <tr><td>Move</td><td>${input.mode === 'touch' ? 'Left thumb' : 'WASD'}</td></tr>
+      <tr><td>Aim / shoot</td><td>${input.mode === 'touch' ? 'Right thumb; push past the ring to fire' : 'Mouse; hold left click'}</td></tr>
+      <tr><td>Creep (quiet)</td><td>${input.mode === 'touch' ? 'Half push on the left stick' : 'Hold Shift'}</td></tr>
+      <tr><td>Ability</td><td>${input.mode === 'touch' ? 'Ability button' : 'Space'} · reload ${input.mode === 'touch' ? 'button' : 'R'}</td></tr>
+      <tr><td>Gold rings</td><td>A noise you heard, not saw. Running is loud; enemies hear you too.</td></tr>
+      <tr><td>Win</td><td>Down all five hostiles. Bots only shoot from inside your sight range.</td></tr></table>
+      <div class="btns"><button class="btn primary" data-act="howto-close">Got it</button></div>`);
+  }
+
+  function showDemo() {
+    const rows = SIDEGRADES.map((sg) => { const t = TRAIT_INFO[sg.id]; return `<tr><td><b>${esc(t.name)}</b></td><td>${esc(t.effect)}</td><td>${esc(t.counterplay)}</td></tr>`; }).join('');
+    const picks = sampleTokens().map((t) => `<button class="btn" data-demo="${t}">#${t} · ${esc(traitsFor(t).sidegrade.name)}</button>`).join('');
+    card(`<div class="kicker"><span class="demo">DEMO</span> Chog traits</div><h2>Try a Chog</h2>
+      <p class="democopy">${esc(DEMO_COPY)} Anyone can play; a Chog changes how you play, never how strong you are.</p>
+      <table class="traits"><tr><th>Trait</th><th>Effect</th><th>Counterplay</th></tr>${rows}</table>
+      <p style="font-size:13px">Token # maps to a trait (hash of the number, mod 4) and a cosmetic marking colour. Health, armour, damage and speed never change.</p>
+      <div class="btns">${picks}<button class="btn" data-demo="">Play as guest</button></div>
+      <div class="btns"><button class="btn primary" data-act="demo-close">Back</button></div>`);
   }
 
   function statBar(label: string, v: number) {
@@ -198,7 +265,7 @@ async function start() {
         <div class="wp">${esc(w.name)}</div>
         <div class="ab">${esc(h.ability.name)} <span>· ${esc(h.ability.text)}</span></div></button>`;
     }).join('');
-    card(`<h2>Pick a Chog</h2><div class="heroes">${cards}</div>
+    card(`<h2>Pick a Chog</h2><div class="mock" id="selchip">${demoChip()}</div><div class="heroes">${cards}</div>
       <div class="btns"><button class="btn" data-go="quit">Back</button><button class="btn primary" data-go="pick">Deploy</button></div>`);
   }
 
@@ -242,20 +309,42 @@ async function start() {
     const left = world.actors.filter((a) => a.team === 'bot' && a.alive).length;
     const k = world.playerKill;
     const why = !won && k ? `<p class="bad">${esc(world.actors[k.killerId].name)} got you with a ${esc(k.weapon.toLowerCase())}, ${Math.hypot(k.fromX - p.x, k.fromY - p.y).toFixed(0)} m ${compass(k.fromX - p.x, k.fromY - p.y)}.</p>` : '<p class="good">Every hostile is down.</p>';
-    const hist = history
-      ? `<p style="font-size:14px">${esc(identity.label)} on this device: ${history.runs} runs, ${history.wins} cleared, ${history.kills} kills.</p>`
-      : '<p style="font-size:14px">Guest run. Nothing was saved.</p>';
+    const hb = records.heroes[heroId] ?? { bestWinSeconds: null, mostKills: 0, runs: 0, wins: 0 };
+    const nb = lastRun?.newBest;
+    const hist = `<p class="pb" id="resultpb">${esc(heroById(heroId).name)} best clear ${fmtTime(hb.bestWinSeconds)}${nb?.time ? ' <b>NEW</b>' : ''} · most kills ${hb.mostKills}${nb?.kills ? ' <b>NEW</b>' : ''} · overall best ${fmtTime(records.overall.bestWinSeconds)} <span>· saved on this device only</span></p>`
+      + (history ? `<p style="font-size:13px"><span class="demo">DEMO</span> Chog #${esc(history.tokenId)} on this device: ${history.runs} runs, ${history.wins} cleared, ${history.kills} kills. No ownership checked.</p>` : '');
     card(`<div class="kicker">${esc(heroById(heroId).name)} · ${esc(p.weapon.name)}</div><h2 class="${won ? 'good' : 'bad'}">${won ? 'Room cleared' : 'Run over'}</h2>${why}
-      <table class="stats"><tr><td>Time</td><td>${Math.round(playTime)} s</td></tr>
+      <table class="stats"><tr><td>Chog</td><td>${esc(heroById(heroId).name)}${identity.kind === 'bound' ? ` · <span class="demo">DEMO</span> #${esc(identity.tokenId!)}` : ''}</td></tr>
+      <tr><td>Time</td><td>${fmtTime(Math.round(playTime))}</td></tr>
       <tr><td>Hostiles down</td><td>${p.kills} / ${world.actors.length - 1}${won ? '' : ` (${left} left)`}</td></tr>
       <tr><td>Hits / shots</td><td>${p.hits} / ${p.shots} · ${accPct}%</td></tr>
-      <tr><td>Damage dealt</td><td>${Math.round(p.damageDealt)}</td></tr></table>${hist}
+      <tr><td>Damage dealt / taken</td><td>${Math.round(p.damageDealt)} / ${Math.round(p.damageTaken)}</td></tr></table>${hist}
       <div class="btns"><button class="btn primary" data-go="restart">Again</button><button class="btn" data-go="quit">Change Chog</button></div>`);
   }
 
   overlay.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'touch') input.mode = 'touch';
+    if (!overlayInputAllowed(phase, summaryGate)) return;
     const t = e.target as HTMLElement;
+    const act = t.closest('[data-act]') as HTMLElement | null;
+    if (act) {
+      e.preventDefault();
+      const a = act.dataset.act;
+      if (a === 'howto') titleView = 'howto';
+      else if (a === 'howto-close') closeHowto();
+      else if (a === 'demo') titleView = 'demo';
+      else if (a === 'demo-close') titleView = 'main';
+      render();
+      return;
+    }
+    const demo = t.closest('[data-demo]') as HTMLElement | null;
+    if (demo) {
+      e.preventDefault();
+      setDemo(demo.dataset.demo || null);
+      titleView = 'main';
+      render();
+      return;
+    }
     const hero = t.closest('[data-hero]') as HTMLElement | null;
     if (hero) {
       selectHero(hero.dataset.hero!);
@@ -268,6 +357,7 @@ async function start() {
     const b = t.closest('[data-go]') as HTMLElement | null;
     if (b) {
       e.preventDefault();
+      e.stopPropagation(); // a menu press is consumed here and never reaches the game input
       go(b.dataset.go as MatchEvent);
     }
   });
@@ -275,6 +365,7 @@ async function start() {
   function beginWorld() {
     runIndex++;
     world = createWorld({ seed: TUNING.seed + runIndex, hero: heroId, sidegrade: identity.sidegrade });
+    autopilot = AUTOPLAY_SEED !== null ? createAutopilot(AUTOPLAY_SEED + runIndex) : null;
     renderer.reset(world);
     fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = 0;
     for (const s of fx.sparks) s.age = 1;
@@ -283,7 +374,7 @@ async function start() {
     playTime = 0;
     history = null;
     const h = heroById(heroId);
-    $('hero').textContent = `${h.name} · ${identity.kind === 'bound' ? `${identity.sidegrade.name}${identity.source === 'mock' ? ' (mock)' : ''}` : 'Guest'}`;
+    $('hero').innerHTML = `${esc(h.name)} · ${identity.kind === 'bound' ? `<span class="demo">DEMO</span> #${esc(identity.tokenId!)} ${esc(identity.sidegrade.name)}` : 'Guest'}`;
     $('wname').textContent = world.actors[0].weapon.name;
     $('abl').innerHTML = `${esc(h.ability.name)}<small class="keyhint">Space</small>`;
     $('pips').innerHTML = world.actors.slice(1).map(() => '<i></i>').join('');
@@ -296,6 +387,9 @@ async function start() {
   function endRun(won: boolean) {
     const p = player(world);
     history = recordRun(localStorage, identity.tokenId, { won, seconds: Math.round(playTime), kills: p.kills, shots: p.shots, hits: p.hits, at: new Date().toISOString() });
+    const r = recordBest(localStorage, { hero: heroId, won, seconds: Math.round(playTime), kills: p.kills });
+    records = r.records;
+    lastRun = { newBest: r.newBest };
   }
 
   render();
@@ -320,7 +414,7 @@ async function start() {
   }, { capture: true });
   // Hero select: 1-4 pick the matching card (CHOG-UI-001). Enter deploys (existing handler).
   window.addEventListener('keydown', (e) => {
-    if (phase !== 'select' || e.repeat) return;
+    if (phase !== 'select' || e.repeat) return; // keys 1-4 never act on the summary
     const id = heroForKey(e, HEROES);
     if (!id) return;
     selectHero(id);
@@ -350,6 +444,7 @@ async function start() {
         fx.threats[s.sourceId] = TUNING.perception.flashSeconds;
       const heard = own || hears(world.level, p.x, p.y, s);
       if (!heard) continue;
+      if (s.type === 'impact' && s.blocked) debugStats.blockedCues++;
       audio.play(s.type === 'impact' && s.blocked ? 'blocked' : s.type, dx, dy, s.radius, !own && !sightClear(world.level, p.x, p.y, s.x, s.y), own, s.weapon);
       if (s.type === 'impact') {
         fx.impacts.push({ x: s.x, y: s.y, age: 0, blocked: s.blocked });
@@ -378,6 +473,9 @@ async function start() {
       if (h.target === 0) {
         fx.shake = TUNING.render.shakeSeconds;
         fx.damageArcs.push({ ang: Math.atan2(h.fromY - p.y, h.fromX - p.x), age: 0 });
+        // Fairness rule: every hit comes from within your sight range with line of sight, so the shooter is
+        // always shown (ringed) for the reveal window, even when it stands outside the lamp cone.
+        fx.threats[h.by] = TUNING.perception.flashSeconds;
         audio.play('hurt', 0, 0, 1, false, true);
         ($('hurt') as HTMLElement).style.opacity = '1';
         setTimeout(() => (($('hurt') as HTMLElement).style.opacity = '0'), 90);
@@ -391,7 +489,9 @@ async function start() {
   const hook = { fps: 0 } as { fps: number } & Record<string, unknown>;
   if (import.meta.env.DEV || location.search.includes('debug')) {
     Object.defineProperties(hook, { world: { get: () => world }, phase: { get: () => phase } });
-    Object.assign(hook, { renderer, go, setHero: (h: string) => (heroId = h), fx });
+    Object.assign(hook, { renderer, go, setHero: (h: string) => (heroId = h), fx, records: () => records, identity: () => identity, resultsAt: () => resultsAt, autoplay: AUTOPLAY_SEED, hero: () => heroId, stats: debugStats,
+      // Debug lab: the bundled sim, so headless checks can run sim sweeps against the exact deployed code.
+      lab: { createWorld, stepWorld, IDLE_INPUT, ROOM_ZERO, HEROES } });
     (window as unknown as { __chog: unknown }).__chog = hook;
   }
 
@@ -424,7 +524,7 @@ async function start() {
       // Only consume input on frames that step the sim, so a latched tap is never lost on a 0-step frame.
       const inp = r.steps > 0 ? input.read(ps.x, ps.y) : null;
       for (let i = 0; inp && i < r.steps && world.outcome === 'playing'; i++) {
-        stepWorld(world, inp);
+        stepWorld(world, autopilot ? autopilot.next(world) : inp);
         inp.reload = false;
         inp.ability = false;
         // A tap fires exactly once: after the first step, firing follows the real button state.
@@ -446,7 +546,8 @@ async function start() {
       recapLeft -= dt;
       if (recapLeft <= 0) go('recapDone');
     } else if (action) {
-      if (phase === 'title') go('start');
+      if (phase === 'title' && titleView !== 'main') { if (titleView === 'howto') closeHowto(); else titleView = 'main'; render(); }
+      else if (phase === 'title') go('start');
       else if (phase === 'select') go('pick');
       else if (phase === 'results') go('restart');
     }

@@ -50,7 +50,7 @@ export async function resolveIdentity(adapter: OwnershipAdapter | null, timeoutM
     ]);
     const id = tokens.find((t) => /^\d{1,10}$/.test(t));
     if (!id) return { identity: GUEST, note: 'No Chog found. Playing as guest.' };
-    return { identity: boundIdentity(id, adapter.name), note: `Bound Chog #${id}${adapter.name === 'mock' ? ' (dev mock, not a real ownership check)' : ''}.` };
+    return { identity: boundIdentity(id, adapter.name), note: `Bound Chog #${id}${adapter.name === 'mock' ? ' (DEMO: no wallet connected, no ownership checked)' : ''}.` };
   } catch (e) {
     return { identity: GUEST, note: `Ownership check failed (${(e as Error).message}). Playing as guest.` };
   }

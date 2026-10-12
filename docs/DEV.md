@@ -38,3 +38,39 @@ Dev flags: `?mockChog=1234` binds a mock Chog (not a real ownership check). `?de
 2. Phone on the same Wi-Fi, open that URL, turn to landscape, tap to enter. Tap the speaker icon to check audio (the choice is remembered).
 3. Left thumb anywhere on the left half: move (half push creeps). Right thumb on the right half: aim; push past the inner ring to fire. Ability and Reload buttons sit at the right edge; pause and mute top-right.
 4. Report: device, browser, smooth or stuttering, sticks comfortable, sound works after the first tap, text readable, anything cut off by the notch.
+
+## RC-1 run, controls, features (the README lives on the S2 branch; this is the RC copy)
+Run (Node 22): `npm ci && npm run dev`, then open http://localhost:5173. Production build: `npm run build && npm run preview`.
+
+Controls:
+- **PC:** WASD move · Shift creep · mouse aim · hold left click fire · R reload · Space ability · Esc/P pause · 1-4 pick a hero · Enter/Space confirm.
+- **Phone (landscape):** left thumb moves (a half push creeps) · right thumb aims, push past the ring to fire · Ability and Reload buttons · pause and mute top-right.
+
+Features: one map (Room Zero), 4 heroes (Kettle rifle/Patch, Mop SMG/Slip, Brick shotgun/Slab, Wick marksman/Ping), 5 bots that see, hear and investigate. The rule set:
+- One reveal rule.
+- Bots only shoot from within your sight range.
+- First-launch How to play (re-open it from the title).
+- Results: time, kills, accuracy, damage dealt and taken.
+- Personal bests per hero and overall, saved on this device only.
+- NFT DEMO traits: no wallet, no ownership check.
+
+Checks:
+- `npm test`: unit + sim tests, including rc-fairness, rc-death, rc-snag, rc-victory, rc-records, rc-nft-demo.
+- `node tools/rc-e2e.mjs <url> out.json`: onboarding, DEMO badges, death screen (keyboard + touch), victory + personal best persistence, browser fairness, 844x390/667x375 fit, console errors.
+- `node tools/p1ft-e2e.mjs <url> out.json`: regression checks.
+- `VICTORY_OUT=f.json npx vitest run tests/rc-victory.test.ts`: per-hero autopilot win table.
+
+Known limitations: see docs/RELEASE.md.
+
+## RC-2: scripted victory rerun and preview checks
+- **Autoplay (debug only, SCRIPTED):** `?debug&nooverlay&autoplay=<seed>&hero=<kettle|mop|brick|wick>`. The in-match input comes
+  from `src/debug/autopilot.ts`, the same autopilot `tests/rc-victory.test.ts` uses. It plays the normal match against the normal bots:
+  no bot deletion, no damage or health changes. Menus still need real clicks or keys. Each "Again" uses seed + run index.
+  The autopilot has full map knowledge and no reaction delay, so its win rate overstates a human's (ADE rc1-code-check). Human wins stay UNVERIFIED.
+- **Browser rerun:** `node tools/rc-autoplay.mjs <baseUrl> <out.json> [maxAttempts=30] [heroes=kettle,mop,brick,wick]`. It clears
+  localStorage once, then for each hero clicks Enter/Deploy, waits for results, clicks Again after the 0.75 s gate until a win, then
+  reloads and reads the saved personal best from storage and the title.
+- **Preview checks:** `node tools/rc2-preview-checks.mjs <baseUrl> <out.json>` (`ONLY=A,C1,B,C2` to pick sections): A is the door-stall sweep on the
+  bundled sim (`__chog.lab`), C1 is Wick vs Brick on the bundled sim, B is the live blocked-shot flash/spark/cue (screenshot next to the JSON),
+  and C2 is a live Brick match audit (every hit from within sight range, shooter revealed).
+- **Ring hint repeat:** `node tools/p1ft-ring-repeat.mjs <baseUrl> 20 <out.json>` runs p1ft-e2e section 4 verbatim N times from the leaked touch state.

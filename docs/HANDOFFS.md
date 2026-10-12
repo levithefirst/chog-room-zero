@@ -101,3 +101,21 @@ Not changed     : VIS-002 (QA: by design), perception/reveal rule (reviewed, mat
 Not verified    : real phones, real GPU, feel, audio by ear
 Locked decisions touched : none. No dependency added
 Next smallest task : ADE retest (/workspace/reports/p1ft-ade-retest.md)
+
+HANDOFF H9  2026-10-12  grokbot -> owner, ADE
+Branch @ commit : grokbot/rc-1 (from 498f8b5; PR base grokbot/p1-follow-through); final SHA in the PR and /workspace/reports/rc-ade-brief.md   pushed: yes
+Task            : MASTER EXECUTION PROMPT, Chogathon release candidate (owner task, chat 2026-10-12 08:47 WAT)
+Fixes           : ADE blockers 1-4 (fairness range rule; all post-death input gated; personal bests; NFT DEMO labelling) + door (11,13) moved off a wall + corner-vertex wedge + difficulty retune with evidence + onboarding + results stats + Space confirms + audio limiter
+Tests run       : Node 22.23.3: npm ci 0, typecheck 0, npm test 255/255 (27 files), build 0; tools/rc-e2e.mjs + tools/p1ft-e2e.mjs on the final build (results in /workspace/reports/rc-acceptance.md)
+Not verified    : physical phones, feel, difficulty with humans, audio by ear, real NFT ownership (DEFERRED)
+Locked decisions touched : guest personal bests are device-local records, not token history (owner brief); DEMO screen reachable from the title (owner brief). No dependency added
+Next smallest task : ADE retest of the preview per /workspace/reports/rc-ade-brief.md
+
+HANDOFF H10  2026-10-12  grokbot -> owner, ADE
+Branch @ commit : grokbot/rc-1 (PR #9, commits after 6759d1f; no force-push). Final SHA + preview in /workspace/reports/rc2-ade-retest.md   pushed: yes
+Task            : RC-2 targeted follow-up (owner task, chat 2026-10-12 12:53 WAT; scope frozen)
+Fixes           : a menu press never fires (fire is held only while that press is still down; the first click after Deploy fires); ring-hint e2e setup (desktop mode, sim-tick waits; assertion unchanged); explicit 30 s timeout for the perception audit; debug-only ?autoplay
+Tests run       : npm test (counts/timing in rc2-ade-retest.md); rc-e2e, p1ft ring x20, rc2-preview-checks, rc-autoplay on the preview
+Not verified    : physical phones; human wins; resume-fire root cause (not reproducible in headless Chrome; fixed defensively)
+Locked decisions touched : none. No dependency added
+Next smallest task : ADE retest per /workspace/reports/rc2-ade-retest.md

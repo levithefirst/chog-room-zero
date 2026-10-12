@@ -145,8 +145,16 @@ export function cornerAssistDir(
     const d = Math.hypot(dx, dy);
     if (d === 0 || d > r + 0.02) continue;
     const nx = dx / d, ny = dy / d;
+    if (Math.abs(nx) > 0.01 && Math.abs(ny) > 0.01) {
+      // Vertex contact (RC-1 snag sweep): pushing almost straight into a box corner leaves no tangential
+      // motion, a dead wedge on door frames. Slide along the tangent that best follows the stick's main axis.
+      if (-(ux * nx + uy * ny) < 0.94) continue;
+      const ax = Math.abs(ux) >= Math.abs(uy) ? Math.sign(ux) : 0, ay = ax === 0 ? Math.sign(uy) : 0;
+      const t1x = -ny, t1y = nx;
+      const s1 = t1x * ax + t1y * ay;
+      return s1 >= 0 ? { x: t1x, y: t1y } : { x: -t1x, y: -t1y };
+    }
     // Face contact only (axis normal) and pushing into it head-on (within ~40 deg).
-    if (Math.abs(nx) > 0.01 && Math.abs(ny) > 0.01) continue;
     if (-(ux * nx + uy * ny) < 0.766) continue;
     if (ny !== 0) {
       const toLeft = x - (b.x0 - r), toRight = b.x1 + r - x;

@@ -53,6 +53,11 @@ export interface Input {
   /** Is fire physically held right now (vs a latched tap)? */
   fireHeld(): boolean;
   takePause(): boolean;
+  /**
+   * Entering play from a menu (Resume, Deploy, Again): drop any fire in progress and ignore fire until the
+   * pointer is released and pressed again, so the click that closed the menu can never also shoot.
+   */
+  holdFireUntilRelease(): void;
   dispose(): void;
 }
 
@@ -69,6 +74,9 @@ export function createInput(el: HTMLElement): Input {
   let action = false;
   let pauseQueued = false;
   let lastAim = 0;
+  let fireBlocked = false;
+  // Pointers currently down anywhere on the page (window capture, so menu presses on the overlay count too).
+  const pointersDown = new Set<number>();
   const left: Stick = { active: false, id: -1, baseX: 0, baseY: 0, x: 0, y: 0 };
   const right: Stick = { active: false, id: -1, baseX: 0, baseY: 0, x: 0, y: 0 };
 
@@ -121,6 +129,14 @@ export function createInput(el: HTMLElement): Input {
       pauseQueued = false;
       return p;
     },
+    holdFireUntilRelease() {
+      firing = false;
+      fireLatched = false;
+      right.active = false;
+      // Only a press that is still down (e.g. the Resume press itself) is swallowed. If everything was already
+      // released (Deploy -> loading -> play, Esc resume), the next press fires normally.
+      fireBlocked = pointersDown.size > 0;
+    },
     takeAction() {
       const a = action;
       action = false;
@@ -131,6 +147,7 @@ export function createInput(el: HTMLElement): Input {
       window.removeEventListener('keyup', up);
       window.removeEventListener('blur', clear);
       document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('pointerdown', track, true);
       el.removeEventListener('pointerdown', pdown);
       window.removeEventListener('pointermove', pmove);
       window.removeEventListener('pointerup', pup);
@@ -142,7 +159,7 @@ export function createInput(el: HTMLElement): Input {
     if (MOVE_CODES.has(e.code)) held.add(e.code);
     if (e.code === 'KeyR') reloadQueued = true;
     // R is reload only; it never restarts a run (CHOG-FLOW-001). Enter confirms menus.
-    if (e.code === 'Enter' && !e.repeat) action = true;
+    if ((e.code === 'Enter' || e.code === 'Space') && !e.repeat) action = true; // Space also confirms menus (consumed and dropped during play)
     if (e.code === 'Escape' || e.code === 'KeyP') pauseQueued = true;
     if (e.code === 'Space' || e.code === 'KeyQ') {
       e.preventDefault();
@@ -153,6 +170,8 @@ export function createInput(el: HTMLElement): Input {
   const up = (e: KeyboardEvent) => void held.delete(e.code);
   const clear = () => {
     held.clear();
+    pointersDown.clear(); // a release we never saw (blur, tab switch) must not block the next press
+    fireBlocked = false;
     firing = false;
     left.active = right.active = false;
   };
@@ -165,10 +184,11 @@ export function createInput(el: HTMLElement): Input {
       inp.mode = 'touch';
       const s = e.clientX < window.innerWidth / 2 ? left : right;
       if (s.active) return;
+      if (s === right && fireBlocked) return; // the aim/fire thumb waits for a fresh touch after a menu
       Object.assign(s, { active: true, id: e.pointerId, baseX: e.clientX, baseY: e.clientY, x: e.clientX, y: e.clientY });
     } else {
       inp.mode = 'pc';
-      if (e.button === 0) firing = fireLatched = true;
+      if (e.button === 0 && !fireBlocked) firing = fireLatched = true;
     }
     e.preventDefault();
   };
@@ -197,7 +217,10 @@ export function createInput(el: HTMLElement): Input {
       }
     }
   };
+  const track = (e: PointerEvent) => { pointersDown.add(e.pointerId); };
   const pup = (e: PointerEvent) => {
+    pointersDown.delete(e.pointerId);
+    fireBlocked = false; // released: the next press may fire
     if (e.pointerType !== 'touch') {
       if (e.button === 0) firing = false;
       return;
@@ -209,6 +232,7 @@ export function createInput(el: HTMLElement): Input {
   window.addEventListener('keyup', up);
   window.addEventListener('blur', clear);
   document.addEventListener('visibilitychange', onVis);
+  window.addEventListener('pointerdown', track, true);
   el.addEventListener('pointerdown', pdown);
   window.addEventListener('pointermove', pmove);
   window.addEventListener('pointerup', pup);

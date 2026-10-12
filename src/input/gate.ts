@@ -30,3 +30,11 @@ export function createSummaryGate(lockMs = SUMMARY_LOCK_MS): SummaryGate {
     },
   };
 }
+
+/**
+ * RC-1 (PR7-FLOW-003): EVERY input on the end-of-run screen (Again, Change Chog, any button or card, Enter/Space,
+ * keys 1-4, touch) is ignored until the gate opens: 0.75 s lock, then a fresh press. Other phases are not gated.
+ */
+export function overlayInputAllowed(phase: string, gate: SummaryGate): boolean {
+  return phase !== 'results' && phase !== 'recap' ? true : phase === 'results' && gate.canRestart();
+}

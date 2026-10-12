@@ -62,6 +62,7 @@ export interface Actor {
   hits: number;
   kills: number;
   damageDealt: number;
+  damageTaken: number;
 }
 
 export interface Bullet {
@@ -185,7 +186,7 @@ function makeActor(id: number, team: Team, name: string, hero: HeroDef, sg: Side
     hp: hero.maxHp, maxHp: hero.maxHp, armor: hero.maxArmor, maxArmor: Math.max(hero.maxArmor, 50), alive: true,
     ammo: weapon.magazine, reserve: weapon.reserve, cooldown: 0, reloadLeft: 0, abilityCd: 0, dashLeft: 0, dashX: 0, dashY: 0,
     revealLeft: 0, stepAcc: 0, hitFlash: 0, muzzle: 0, deadFor: 0, lastSpread: weapon.spreadDeg, lastHitTick: -999, lastHitFrom: null,
-    shots: 0, hits: 0, kills: 0, damageDealt: 0,
+    shots: 0, hits: 0, kills: 0, damageDealt: 0, damageTaken: 0,
   };
 }
 
@@ -217,6 +218,15 @@ export function createWorld(opts: WorldOptions = {}): World {
 
 export function player(w: World): Actor {
   return w.actors[0];
+}
+
+/**
+ * Fairness rule (RC-1, docs/design/bots.md): a bot may only damage the player from a spot the player could see,
+ * i.e. within the PLAYER's effective sight distance (hero vision incl. NFT sidegrade) with wall line of sight.
+ * A Wick bot's 12 m sight is its own; it must close to the player's range before it can shoot or hit.
+ */
+export function playerSightRange(w: World): number {
+  return w.actors[0].view.range;
 }
 
 export function viewOf(a: Actor): ViewShape {
@@ -398,6 +408,8 @@ function stepBullets(w: World, dt: number): void {
       // No friendly fire, either team (CHOG-AI-002): a bullet passes through the shooter's teammates, so every
       // hostile elimination is a player kill and "Hostiles down" always equals the player's kills.
       if (!a.alive || a.id === b.owner || a.team === team) continue;
+      // Damage range cap: a bot bullet fired from beyond the player's sight distance never hurts the player.
+      if (team === 'bot' && a.team === 'player' && Math.hypot(b.ox - a.x, b.oy - a.y) > playerSightRange(w)) continue;
       const t = segmentCircleT(b.x, b.y, nx, ny, a.x, a.y, r);
       if (t >= 0 && t < bestT) {
         bestT = t;
@@ -430,7 +442,7 @@ function stepBullets(w: World, dt: number): void {
 }
 
 function damage(w: World, t: Actor, by: Actor, b: Bullet, hx: number, hy: number): void {
-  const raw = damageAt(b.weapon, Math.hypot(hx - b.ox, hy - b.oy));
+  const raw = damageAt(b.weapon, Math.hypot(hx - b.ox, hy - b.oy)) * (by.team === 'bot' ? TUNING.bots.damageMul : 1);
   const m = mitigate(t.armor, raw, b.weapon.armorPen);
   t.armor -= m.armor;
   t.hp -= m.hp;
@@ -441,6 +453,7 @@ function damage(w: World, t: Actor, by: Actor, b: Bullet, hx: number, hy: number
   t.vy += b.dy * TUNING.combat.knockback;
   by.hits++;
   by.damageDealt += raw;
+  t.damageTaken += m.hp + m.armor;
   const killed = t.hp <= 0;
   w.hits.push({ target: t.id, by: by.id, x: hx, y: hy, fromX: b.ox, fromY: b.oy, hpDamage: m.hp, armorDamage: m.armor, killed });
   emit(w, 'hit', hx, hy, TUNING.sound.impact, by);

@@ -56,6 +56,13 @@ export function cell(a: string, b: string, d: number, strafe: boolean, n: number
 }
 
 const N = 200;
+// Weapon duels measure the weapons at parity: the RC-1 bot difficulty multiplier is switched off here.
+import { beforeAll, afterAll } from 'vitest';
+import { TUNING as T_DUEL } from '../src/config/tuning';
+let savedMul = 1;
+beforeAll(() => { savedMul = T_DUEL.bots.damageMul; (T_DUEL.bots as { damageMul: number }).damageMul = 1; });
+afterAll(() => { (T_DUEL.bots as { damageMul: number }).damageMul = savedMul; });
+
 describe('weapon duels (real sim, N=200 per cell, Wilson 95% CI)', () => {
   it("ADE 4 u test: Brick shotgun vs Wick marksman at 4 u, stationary: shotgun wins (CI lower bound > 50%)", () => {
     const c = cell('brick', 'wick', 4, false, N);

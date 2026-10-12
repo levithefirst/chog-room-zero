@@ -5,7 +5,7 @@ import type { BotSpawn } from '../config/map';
 import { angleDiff } from './geom';
 import { findPath, shotClear, sightClear } from './level';
 import { canSee, muzzleFlashSeen } from './vision';
-import { hears, player, rand, revealed, viewOf, type Actor, type ActorInput, type World } from './world';
+import { hears, player, playerSightRange, rand, revealed, viewOf, type Actor, type ActorInput, type World } from './world';
 
 const DEG = Math.PI / 180;
 
@@ -370,7 +370,8 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
       const toP = Math.atan2(p.y - a.y, p.x - a.x);
       out.aim = toP + br.aimOffset * err;
       // Hold the angle: stand still and shoot, only when the shot is not blocked by cover.
-      const range = a.weapon.falloffEnd + 2;
+      // Fire gate (fairness rule): never beyond the player's own sight distance, whatever this bot can see.
+      const range = Math.min(a.weapon.falloffEnd + 2, playerSightRange(w) - 0.25);
       // Attack tokens: at most N bots shoot at once; the rest flank (flankers) or hold the angle.
       if (!token(w, a, true)) {
         if (br.flanker) {

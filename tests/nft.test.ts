@@ -30,12 +30,12 @@ describe('identity adapter fallback', () => {
     expect((await resolveIdentity(mockAdapter([]))).identity.kind).toBe('guest');
     expect((await resolveIdentity(mockAdapter(['abc']))).identity.kind).toBe('guest');
   });
-  it('mock token -> bound identity labelled as a mock', async () => {
+  it('mock token -> bound identity labelled DEMO (no wallet, no ownership check)', async () => {
     const r = await resolveIdentity(adapterFromUrl('?mockChog=42'));
     expect(r.identity.kind).toBe('bound');
     expect(r.identity.tokenId).toBe('42');
     expect(r.identity.source).toBe('mock');
-    expect(r.note).toMatch(/not a real ownership check/);
+    expect(r.note).toMatch(/DEMO: no wallet connected, no ownership checked/);
   });
   it('chain config is an unfilled placeholder (UNKNOWN, never guessed)', () => {
     expect(NFT_CONFIG.chainId).toBeNull();
