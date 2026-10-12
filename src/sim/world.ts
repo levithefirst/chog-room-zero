@@ -219,6 +219,15 @@ export function player(w: World): Actor {
   return w.actors[0];
 }
 
+/**
+ * Fairness rule (RC-1, docs/design/bots.md): a bot may only damage the player from a spot the player could see,
+ * i.e. within the PLAYER's effective sight distance (hero vision incl. NFT sidegrade) with wall line of sight.
+ * A Wick bot's 12 m sight is its own; it must close to the player's range before it can shoot or hit.
+ */
+export function playerSightRange(w: World): number {
+  return w.actors[0].view.range;
+}
+
 export function viewOf(a: Actor): ViewShape {
   return a.view;
 }
@@ -398,6 +407,8 @@ function stepBullets(w: World, dt: number): void {
       // No friendly fire, either team (CHOG-AI-002): a bullet passes through the shooter's teammates, so every
       // hostile elimination is a player kill and "Hostiles down" always equals the player's kills.
       if (!a.alive || a.id === b.owner || a.team === team) continue;
+      // Damage range cap: a bot bullet fired from beyond the player's sight distance never hurts the player.
+      if (team === 'bot' && a.team === 'player' && Math.hypot(b.ox - a.x, b.oy - a.y) > playerSightRange(w)) continue;
       const t = segmentCircleT(b.x, b.y, nx, ny, a.x, a.y, r);
       if (t >= 0 && t < bestT) {
         bestT = t;

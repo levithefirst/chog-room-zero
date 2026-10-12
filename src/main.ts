@@ -378,6 +378,9 @@ async function start() {
       if (h.target === 0) {
         fx.shake = TUNING.render.shakeSeconds;
         fx.damageArcs.push({ ang: Math.atan2(h.fromY - p.y, h.fromX - p.x), age: 0 });
+        // Fairness rule: every hit comes from within your sight range with line of sight, so the shooter is
+        // always shown (ringed) for the reveal window, even when it stands outside the lamp cone.
+        fx.threats[h.by] = TUNING.perception.flashSeconds;
         audio.play('hurt', 0, 0, 1, false, true);
         ($('hurt') as HTMLElement).style.opacity = '1';
         setTimeout(() => (($('hurt') as HTMLElement).style.opacity = '0'), 90);

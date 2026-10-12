@@ -60,3 +60,6 @@ still silent; gunfire LOS flash outside the cone, occluded gunfire not revealed,
 seeded range, no shot before the delay; attack-token cap; no omniscience over a full match.
 
 Kill accounting (CHOG-AI-002, P1FT): no friendly fire for either team. Bullets pass through the shooter's teammates, so bots never eliminate each other and "Hostiles down" = player kills = eliminations. Tests: tests/p1ft-crossfire.test.ts.
+
+## Fairness rule (RC-1)
+A bot may only fire at, or damage, the player from a spot the player could see: within the player's effective sight distance (hero `vision.range` times the NFT sidegrade `rangeMul`) and with wall line of sight. A bot's own sight (Wick 12 m) never extends its attack range. Enforced twice: a fire gate in `bots.ts` (range = min(weapon reach, player sight - 0.25 m) plus `shotClear`) and a damage cap in `world.ts stepBullets` (a bot bullet whose origin is beyond the player's sight distance never damages the player). Walls are unchanged and nothing is revealed through walls. Every hit shows the damage arc toward the shooter and rings the shooter for the 0.7 s reveal window. Tests: `tests/rc-fairness.test.ts` (10 seeded long-range Wick encounters).
