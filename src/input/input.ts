@@ -75,6 +75,8 @@ export function createInput(el: HTMLElement): Input {
   let pauseQueued = false;
   let lastAim = 0;
   let fireBlocked = false;
+  // Pointers currently down anywhere on the page (window capture, so menu presses on the overlay count too).
+  const pointersDown = new Set<number>();
   const left: Stick = { active: false, id: -1, baseX: 0, baseY: 0, x: 0, y: 0 };
   const right: Stick = { active: false, id: -1, baseX: 0, baseY: 0, x: 0, y: 0 };
 
@@ -131,7 +133,9 @@ export function createInput(el: HTMLElement): Input {
       firing = false;
       fireLatched = false;
       right.active = false;
-      fireBlocked = true;
+      // Only a press that is still down (e.g. the Resume press itself) is swallowed. If everything was already
+      // released (Deploy -> loading -> play, Esc resume), the next press fires normally.
+      fireBlocked = pointersDown.size > 0;
     },
     takeAction() {
       const a = action;
@@ -143,6 +147,7 @@ export function createInput(el: HTMLElement): Input {
       window.removeEventListener('keyup', up);
       window.removeEventListener('blur', clear);
       document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('pointerdown', track, true);
       el.removeEventListener('pointerdown', pdown);
       window.removeEventListener('pointermove', pmove);
       window.removeEventListener('pointerup', pup);
@@ -165,6 +170,8 @@ export function createInput(el: HTMLElement): Input {
   const up = (e: KeyboardEvent) => void held.delete(e.code);
   const clear = () => {
     held.clear();
+    pointersDown.clear(); // a release we never saw (blur, tab switch) must not block the next press
+    fireBlocked = false;
     firing = false;
     left.active = right.active = false;
   };
@@ -210,7 +217,9 @@ export function createInput(el: HTMLElement): Input {
       }
     }
   };
+  const track = (e: PointerEvent) => { pointersDown.add(e.pointerId); };
   const pup = (e: PointerEvent) => {
+    pointersDown.delete(e.pointerId);
     fireBlocked = false; // released: the next press may fire
     if (e.pointerType !== 'touch') {
       if (e.button === 0) firing = false;
@@ -223,6 +232,7 @@ export function createInput(el: HTMLElement): Input {
   window.addEventListener('keyup', up);
   window.addEventListener('blur', clear);
   document.addEventListener('visibilitychange', onVis);
+  window.addEventListener('pointerdown', track, true);
   el.addEventListener('pointerdown', pdown);
   window.addEventListener('pointermove', pmove);
   window.addEventListener('pointerup', pup);

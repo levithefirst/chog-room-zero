@@ -43,7 +43,16 @@ await click('[data-act="howto-close"]'); await sleep(200);
 
 // 1b. RC-2: clicking Resume never fires; fire works after release + a fresh press.
 {
-  await ev(`__chog.go('start')`); await ev(`__chog.go('pick')`); await waitPhase('play'); await sleep(400); await ev(parkBots);
+  await ev(`__chog.go('start')`); await sleep(300);
+  // Real Deploy click (released before the match loads): the very first press in the match must fire.
+  const dp = await ev(`(()=>{const b=document.querySelector('[data-go="pick"]').getBoundingClientRect();return [b.left+b.width/2,b.top+b.height/2]})()`);
+  await cmd('Input.dispatchMouseEvent', { type: 'mousePressed', x: dp[0], y: dp[1], button: 'left', buttons: 1, clickCount: 1 });
+  await cmd('Input.dispatchMouseEvent', { type: 'mouseReleased', x: dp[0], y: dp[1], button: 'left', clickCount: 1 });
+  await waitPhase('play'); await sleep(400); await ev(parkBots);
+  await cmd('Input.dispatchMouseEvent', { type: 'mousePressed', x: 900, y: 360, button: 'left', buttons: 1, clickCount: 1 }); await sleep(250);
+  await cmd('Input.dispatchMouseEvent', { type: 'mouseReleased', x: 900, y: 360, button: 'left', clickCount: 1 }); await sleep(200);
+  const firstPress = await ev('__chog.world.actors[0].shots');
+  check('RC-2 after a real Deploy click, the first press in the match fires (no swallowed click)', firstPress > 0, { shots: firstPress });
   const rows = [];
   for (const hold of [80, 500]) {
     await ev(`__chog.go('pause')`); await sleep(350);

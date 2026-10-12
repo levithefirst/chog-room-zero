@@ -15,6 +15,7 @@ describe('RC-2 resume never fires', () => {
     const { createInput } = await import('../src/input/input');
     const el = new EventTarget() as unknown as HTMLElement;
     const inp = createInput(el);
+    W().dispatchEvent(ev('pointerdown')); // window capture sees the press first
     el.dispatchEvent(ev('pointerdown')); // the Resume press, if it ever reaches the game input
     inp.holdFireUntilRelease(); // go('resume')
     expect(inp.read(640, 360).firing).toBe(false);
@@ -25,8 +26,9 @@ describe('RC-2 resume never fires', () => {
     const { createInput } = await import('../src/input/input');
     const el = new EventTarget() as unknown as HTMLElement;
     const inp = createInput(el);
-    inp.holdFireUntilRelease();
-    el.dispatchEvent(ev('pointerdown'));
+    W().dispatchEvent(ev('pointerdown')); // the Resume press on the overlay (window capture)
+    inp.holdFireUntilRelease(); // go('resume') from the overlay pointerdown handler
+    el.dispatchEvent(ev('pointerdown')); // same press reaching the game late
     expect(inp.read(640, 360).firing).toBe(false);
     W().dispatchEvent(ev('pointerup'));
     el.dispatchEvent(ev('pointerdown')); // fresh press
@@ -37,6 +39,7 @@ describe('RC-2 resume never fires', () => {
     const { createInput } = await import('../src/input/input');
     const el = new EventTarget() as unknown as HTMLElement;
     const inp = createInput(el);
+    W().dispatchEvent(ev('pointerdown', { pointerType: 'touch', clientX: 1000, pointerId: 7 }));
     inp.holdFireUntilRelease();
     el.dispatchEvent(ev('pointerdown', { pointerType: 'touch', clientX: 1000, pointerId: 7 }));
     expect(inp.right.active).toBe(false);
@@ -45,6 +48,18 @@ describe('RC-2 resume never fires', () => {
     W().dispatchEvent(ev('pointerup', { pointerType: 'touch', pointerId: 7 }));
     el.dispatchEvent(ev('pointerdown', { pointerType: 'touch', clientX: 1000, pointerId: 9 }));
     expect(inp.right.active).toBe(true);
+    inp.dispose();
+  });
+  it('nothing held when play starts (Deploy -> loading -> play, Esc resume): the very next press fires', async () => {
+    const { createInput } = await import('../src/input/input');
+    const el = new EventTarget() as unknown as HTMLElement;
+    const inp = createInput(el);
+    W().dispatchEvent(ev('pointerdown')); // Deploy click...
+    W().dispatchEvent(ev('pointerup')); // ...released before the match loads
+    inp.holdFireUntilRelease(); // go('loaded') -> play
+    W().dispatchEvent(ev('pointerdown'));
+    el.dispatchEvent(ev('pointerdown'));
+    expect(inp.read(640, 360).firing).toBe(true);
     inp.dispose();
   });
 });
