@@ -1,97 +1,47 @@
 # Chog: Room Zero - shared state
 
-Source of truth for every agent. Rules: `docs/RULES.md`. Edit this file only in a handoff commit. Keep it under 8,000 characters (the session hook cuts off near 10,000); move old rows to `docs/HANDOFFS.md` or `docs/PLAYTESTS.md`.
-Last verified: 2026-10-11 by grokbot.
+Source of truth for every agent. Rules: `docs/RULES.md`. Edit only in a handoff commit. Keep under 8,000 characters; move old rows to `docs/HANDOFFS.md`.
+Last verified: 2026-10-12 by grokbot.
 
 ## Snapshot (EVIDENCE)
-- Repo: `levithefirst/chog-room-zero` (private). Branches and PRs: `gh pr list`.
-- Default/base branch: `setup/skill-system` (LOCKED, owner 2026-10-11: no `main`). PRs target it. Never merge without the owner.
-- Project start date, deadline, hackathon name and rules: UNKNOWN. Current project day: UNKNOWN. Do not guess it.
-- Claude Code in the build environment: 2.1.296.
+- Repo `levithefirst/chog-room-zero` (private). Default/base branch `setup/skill-system` (LOCKED, owner 2026-10-11: no `main`). Never merge without the owner.
+- Open PRs, stacked: #1 S2 README; #2 P0-1 scaffold; #3 P0-2 movement (base P0-1); P1 MVP (base P0-2). Merge in order.
+- Project start date, deadline, hackathon rules: UNKNOWN. Current day: UNKNOWN.
 
-## LOCKED (owner decided; source: owner brief, 2026-10-07 and 2026-10-11)
-1. Dark top-down tactical survival shooter, about 90 s rooms, mobile and PC, original IP, nothing copied from Bullet Echo.
-2. 14 day window. Playable prototype by Day 7. Feature freeze after Day 11. Days 12 to 14: fixes, mobile QA, recording, submission.
-3. Target $0 spend, $20 hard cap, spend only for a real blocker with owner approval.
-4. Controls: mobile landscape, left thumb move, right thumb aim and fire outside the deadzone (stops inside it), ability button in right-thumb reach, no auto-fire on sight. PC: WASD, mouse aim, left click fire, Space ability.
-5. Test devices: Pixel 7 and iPhone 13.
-6. Projectiles travel visibly. Hitscan forbidden. Walls block bullets and vision. Real occlusion from wall geometry.
+## LOCKED (owner; 2026-10-07, 2026-10-11, 2026-10-12)
+1. Dark top-down tactical survival shooter, ~90 s rooms, mobile and PC, original IP, nothing from Bullet Echo.
+2. 14 days. Playable by Day 7. Freeze after Day 11. Days 12-14 fixes, QA, submission.
+3. $0 target, $20 hard cap, owner approval per spend.
+4. Controls: mobile landscape, left thumb move, right thumb aim and fire outside deadzone, ability in right-thumb reach, no auto-fire. PC: WASD, mouse aim, left click fire, Space ability.
+5. Test devices: Pixel 7, iPhone 13.
+6. Projectiles travel visibly, no hitscan. Walls block bullets and vision via real occlusion.
 7. Movement has deliberate acceleration, turning, stopping.
-8. Bots: patrol, investigate sound, detect, pursue, attack, reposition, disengage, lose target; use cover, hold angles, break line of sight; never just rush.
-9. Anyone can play. Guest runs are disposable, no persistent history. Binding a Genesis NFT gives persistent identity and token history. Traits are fair sidegrades, never flat damage, health, or speed. Removal test applies, including persistence.
-10. No NFT, wallet, or database work until the Core Feel Gate passes (both phones).
-11. Bots, not real-time multiplayer. No custom contract. No $CHOG dependency. Wallet never required to play.
+8. Bots: patrol, investigate, detect, pursue, attack, reposition, disengage, lose target; cover, angles, break LOS; never just rush.
+9. Anyone can play. Guest runs save nothing. Bound Genesis NFT = persistent identity + token history. Sidegrades only, never flat damage, health, or speed. Removal test applies.
+10. ~~No NFT/wallet/DB work before the Core Feel Gate.~~ Changed by owner mandate 2026-10-12 02:56 WAT: NFT layer authorized now. Built as interface + mock only; no wallet, chain, or DB code.
+11. Bots, no multiplayer, no custom contract, no $CHOG dependency, wallet never required.
 12. Out of scope: Railway worker, multiplayer, custom contract, paid inference, $CHOG economy, second map, second ability, loot chests, gear grid, clans, season pass.
 13. Every added system names an equal or larger cut.
-14. No scheduled or background jobs without explicit owner approval.
-15. Scaffold stack: TypeScript, Vite, PixiJS v8, Vitest (owner, 2026-10-11 21:17 WAT).
+14. No scheduled or background jobs without owner approval.
+15. Stack: TypeScript, Vite, PixiJS v8, Vitest (owner 2026-10-11 21:17 WAT).
+16. Win condition: eliminate all bots (owner mandate 2026-10-12 02:56 WAT).
 
-## PROPOSALS (need owner approval before they count)
-- Stack remainder: Vercel, Neon, viem lazy loaded. Not installed. (TS/Vite/PixiJS/Vitest now LOCKED item 15.)
-- Win condition: extraction (exit opens about 45 s). Not locked.
-- Quiet walk (stick pressure on mobile, Shift on PC) as the loud/quiet choice.
-- Vision shape (forward cone plus small circle), sound radii, all numbers in `docs/design/*`.
-- Sound made in code (WebAudio) instead of recorded files.
-- Operator set of about 6 to 9, built from metadata traits or a token-ID function.
-- Leaderboard and replay verification (first in the cut order).
-- Handoff and branch rules in `docs/RULES.md` sections 4 and 5, and the 12 gate criteria in `docs/GATES.md`.
+## PROPOSALS (not approved)
+- Vercel, Neon, viem: not installed. viem waits for a real ownership read (contract UNKNOWN).
+- All tuning numbers, the art direction (`docs/design/art-direction.md`), the map layout, the four sidegrades, quiet walk (Shift / half stick).
+- Mandate example "faster move, smaller mag" was not used: it breaks LOCKED 9 (no speed edge). Sidegrades trade vision shape or weapon rhythm.
 
-## UNKNOWN (verify before use; never guess)
-- Chog Genesis: chain, contract address, token standard, ownership read method, metadata and traits, art rights.
-- Whether the owner has a Pixel 7 and iPhone 13 available.
-- Hackathon name, deadline, rules, judging criteria.
-- Whether the enemy in Prototype 0 shoots back; where the vision cone points when the right stick is idle; body turn rate.
-- Relation of the public repo `levithefirst/chog-acc` to this game (not inspected).
-- Raw text of the GrokBot audit (only the owner's summary was available).
-
-## Implemented features (EVIDENCE)
-- P0-1 scaffold (PR #2, awaiting review): PixiJS 8.22.0 dark canvas + one circle.
-- P0-2 PC movement (stacked PR, branch `grokbot/p0-2-pc-movement`): WASD -> normalized move vector; sim accel 52.5, cap 4.2 u/s, decel 70, reverse x1.5, stop epsilon 0.01. No aiming, firing, HUD, touch, collision.
-
-## Automated test results (EVIDENCE)
-2026-10-11, Node 22.23.3 / npm 10.9.9 (`~/.local/node22`): `npm ci` exit 0, no engine warnings; `npm run typecheck` exit 0; `npm test` 17/17 pass (2 files: 8 movement behaviours, key mapping, fixedSteps); `npm run build` exit 0. P0-1 code re-run on Node 22 first: all exit 0, 3/3.
-
-## Browser smoke test (EVIDENCE, headless Chrome swiftshader, CDP)
-`npm run dev` curl `/` HTTP 200. Canvas 800x363 initialised. D+S held 0.6 s moved the circle (400,181)->(484,265) px (expected ~85). Console: only favicon.ico 404. Screenshots on box: `/workspace/shots/p0-2-{before,after}.png`.
-
-## Manual playtest results
-- Phone load: NOT PERFORMED, BLOCKED on owner devices (steps in `docs/DEV.md`).
-- Movement feel: NOT JUDGED. Needs owner PC playtest (questions in `docs/DEV.md`).
-Record as: `date | device | build hash | tester | gate | answers | verdict`.
-
-## Gates (details and criteria: `docs/GATES.md`)
-Core Feel Gate: BLOCKED (nothing built). It needs G1, G2, G3, G4, G6, G7 PASS, G8 baseline recorded, and the owner's playtest on both phones.
-
-| Gate | Status | Human playtest needed | Evidence |
-|---|---|---|---|
-| G1 Movement | not started | yes | |
-| G2 Combat | not started | yes | |
-| G3 Vision | not started | yes | |
-| G4 Audio | not started | yes | |
-| G5 Bots | not started | yes | |
-| G6 Mobile controls | not started | yes | |
-| G7 PC controls | not started | yes | |
-| G8 Performance | not started | partial | |
-| G9 UX | not started | yes | |
-| G10 NFT integration | blocked by Core Feel Gate | yes | |
-| G11 Visual consistency | not started | yes | |
-| G12 Final game feel | not started | yes | |
+## UNKNOWN (never guess)
+- Chog Genesis chain, contract, standard, ownership method, metadata, art rights.
+- Owner access to Pixel 7 / iPhone 13. Hackathon name, deadline, rules.
+- One ability (LOCKED 4 mentions Space): not designed or built.
 
 ## Current task
-S1 (claude, skill system): CLOSED, owner-approved 2026-10-11; it is the default branch content.
+S1, P0-1, P0-2: see HANDOFFS H1-H3 (P0-1, P0-2 done, PRs open).
 
 | Id | Owner | Branch | Files | Done when | Status |
 |---|---|---|---|---|---|
-| P0-1 | grokbot | grokbot/p0-1-project-scaffold | `package.json`, `package-lock.json`, `tsconfig.json`, `vite.config.ts`, `index.html`, `.gitignore`, `docs/DEV.md`, `src/main.ts`, `src/config/tuning.ts`, `src/sim/sim.ts`, `src/render/render.ts`, `src/input/input.ts`, `tests/sim.test.ts`, `docs/STATE.md` (handoff), `docs/HANDOFFS.md` (append) | `npm ci`, `npm run typecheck`, `npm test`, `npm run build` exit 0; dev serves a PixiJS canvas with one static shape; PR open; no gameplay code | done, awaiting owner review/merge, PR #2 (approved 2026-10-11 21:17 WAT) |
-| P0-2 | grokbot | grokbot/p0-2-pc-movement (stacked on P0-1; PR base `grokbot/p0-1-project-scaffold`) | `src/input/input.ts`, `src/sim/sim.ts`, `src/config/tuning.ts`, `src/render/render.ts`, `src/main.ts`, `tests/sim.test.ts`, `tests/input.test.ts`, `package.json` + `package-lock.json` (engines fix only), `docs/DEV.md`, `docs/STATE.md` (handoff), `docs/HANDOFFS.md` (append) | WASD-only movement (accel, cap, decel to exact stop, turn rate); 8 sim behaviours + key mapping tested; Node 22 ci/typecheck/test/build pass; browser smoke shows motion; no aiming/firing/HUD/mobile | done, awaiting owner review, stacked PR (base `grokbot/p0-1-project-scaffold`; approved owner 2026-10-11 21:23 WAT) |
-
-Note: dev commands go in `docs/DEV.md`, not `README.md`, because README.md lives on the unmerged S2 PR (avoids a cross-PR conflict).
-
-## Next smallest task (PROPOSED, needs owner OK)
-P0-3: PC mouse aim only (aim angle from mouse into the shared input struct, marker shows facing; no firing). Files: `src/input/input.ts`, `src/sim/sim.ts`, `src/config/tuning.ts`, `src/render/render.ts`, `src/main.ts`, `tests/input.test.ts`, `tests/sim.test.ts`.
-
-## Scope and freeze
-Out-of-scope list: LOCKED item 12. Feature freeze after Day 11 (day count starts when the owner records a start date here). Cut list so far: none. Cut order: `docs/design/schedule.md`.
+| P1 | grokbot | grokbot/p1-mvp (base `grokbot/p0-2-pc-movement`) | `src/**`, `tests/**`, `index.html`, `public/favicon.svg`, `docs/design/art-direction.md`, `docs/DEV.md`, `docs/STATE.md`, `docs/HANDOFFS.md` | full MVP per owner mandate; Node 22 ci/typecheck/test/build pass; scripted browser run | approved, in progress (owner mandate 2026-10-12 02:56 WAT) |
 
 ## Handoffs
-Latest: H3 (2026-10-11, grokbot -> owner, P0-2). Full history: `docs/HANDOFFS.md`.
+Latest: H3. History: `docs/HANDOFFS.md`.
