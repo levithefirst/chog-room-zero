@@ -36,12 +36,18 @@ for (const hero of heroArg.split(',')) {
   for (let a = 1; a <= +maxArg; a++) {
     if (!(await waitPhase(['play'], 15000))) { attempts.push({ attempt: a, error: 'never reached play' }); break; }
     const t0 = Date.now();
-    const end = await waitPhase(['results'], 400000);
+    // Same cap as tests/helpers/autopilot.ts: 300 s of sim time without an outcome counts as a non-win (stalled autopilot).
+    let end = null;
+    for (const t1 = Date.now(); Date.now() - t1 < 900000;) { const st = await ev('[__chog.phase,__chog.world.tick]'); if (st[0] === 'results') { end = 'results'; break; } if (st[1] >= 300 * 60) { end = 'timeout'; break; } await sleep(500); }
     const s = await ev(`(()=>{const w=__chog.world,p=w.actors[0];return {outcome:w.outcome,hero:p.hero.id,kills:p.kills,shots:p.shots,hits:p.hits,simSeconds:Math.round(w.tick/60),botsAlive:w.actors.filter(b=>b.team==='bot'&&b.alive).length,botsTotal:w.actors.length-1,time:[...document.querySelectorAll('table.stats tr')].find(r=>r.cells[0].textContent==='Time')?.cells[1].textContent}})()`);
     attempts.push({ attempt: a, ...s, wallSeconds: Math.round((Date.now() - t0) / 1000), ended: end });
     console.log(hero, JSON.stringify(attempts.at(-1)));
     if (s.outcome === 'won') { won = s; won.pb = await ev(`document.getElementById('resultpb')?.textContent`); break; }
-    await sleep(1000); // past the 0.75 s summary gate, then a fresh real click
+    if (end !== 'results') { // stalled or wall-capped: pause with a real Esc key, then a real click on Restart
+      await cmd('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+      await cmd('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+      await waitPhase(['pause'], 5000); await sleep(400);
+    } else await sleep(1000); // past the 0.75 s summary gate, then a fresh real click
     await click('[data-go="restart"]');
   }
   // Persistence: reload the page; the title and storage must show this hero's best.

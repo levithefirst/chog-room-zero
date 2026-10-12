@@ -50,8 +50,9 @@ await click('[data-act="howto-close"]'); await sleep(200);
   await cmd('Input.dispatchMouseEvent', { type: 'mouseReleased', x: dp[0], y: dp[1], button: 'left', clickCount: 1 });
   await waitPhase('play'); await sleep(400); await ev(parkBots);
   await cmd('Input.dispatchMouseEvent', { type: 'mousePressed', x: 900, y: 360, button: 'left', buttons: 1, clickCount: 1 }); await sleep(250);
-  await cmd('Input.dispatchMouseEvent', { type: 'mouseReleased', x: 900, y: 360, button: 'left', clickCount: 1 }); await sleep(200);
-  const firstPress = await ev('__chog.world.actors[0].shots');
+  await cmd('Input.dispatchMouseEvent', { type: 'mouseReleased', x: 900, y: 360, button: 'left', clickCount: 1 });
+  // Wait in sim time (30 ticks), not wall time: on a loaded box the page can run far fewer frames than 200 ms suggests.
+  const firstPress = await ev(`(async()=>{const w=__chog.world,t0=w.tick;for(let i=0;i<200&&w.tick-t0<30;i++)await new Promise(r=>setTimeout(r,50));return w.actors[0].shots})()`);
   check('RC-2 after a real Deploy click, the first press in the match fires (no swallowed click)', firstPress > 0, { shots: firstPress });
   const rows = [];
   for (const hold of [80, 500]) {
