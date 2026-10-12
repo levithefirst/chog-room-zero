@@ -1,13 +1,13 @@
 # Chog: Room Zero - shared state
 
 Source of truth for every agent. Rules: `docs/RULES.md`. Edit only in a handoff commit. Keep under 8,000 characters; move old rows to `docs/HANDOFFS.md`.
-Last verified: 2026-10-12 by grokbot (P2).
+Last verified: 2026-10-12 by claude (RC-3).
 
 ## Snapshot (EVIDENCE)
 - Repo `levithefirst/chog-room-zero` (private). Default/base branch `setup/skill-system` (LOCKED, owner 2026-10-11: no `main`). Never merge without the owner.
-- Open PRs, stacked: #1 S2; #2 P0-1; #3 P0-2; #4 P1 MVP; P2 benchmark overhaul (base `grokbot/p1-mvp`). Merge in order.
+- Open PRs, stacked: #1 S2; #2 P0-1; #3 P0-2; #4 P1 MVP; #5 P2; #6 P0F; #7 P1F; #8 P1FT; #9 RC-1/RC-2 (head 43f5a5d). RC-3 is branch `ccr-e7fadb8f-qtochk` on top of #9 (no PR yet). Merge in order. #1 adds a skill-system README.md; RC-3 adds the game README.md (conflict to resolve at merge: keep the game README).
 - Vercel project `chog-room-zero`: preview deploys only by grokbot (protection off, owner 2026-10-12). One accidental production deploy from P1 exists; untouched.
-- Project start date, deadline, hackathon rules: UNKNOWN.
+- Hackathon: Chogathon 2026 (chogathon.chog.xyz, read 2026-10-12 from a 2026-10-11 cache). Deliverables and weights in `docs/SUBMISSION.md`. Judges gate on "the Chog NFT must be essential". Deadline: UNKNOWN (the page says both Oct 11 13:00 UTC and Oct 9 15:00 UTC). Project start date: UNKNOWN.
 
 ## LOCKED (owner; 2026-10-07, 2026-10-11, 2026-10-12)
 1. Dark top-down tactical survival shooter, ~90 s rooms, mobile and PC, original IP. Bullet Echo is a benchmark only (P2 mandate): nothing copied.
@@ -33,7 +33,7 @@ Last verified: 2026-10-12 by grokbot (P2).
 
 ## UNKNOWN (never guess)
 - Chog Genesis chain, contract, standard, ownership method, metadata, art rights.
-- Owner access to Pixel 7 / iPhone 13. Hackathon name, deadline, rules.
+- Owner access to Pixel 7 / iPhone 13. Chogathon submission deadline.
 
 ## Implemented (EVIDENCE: branch `grokbot/p2-benchmark-overhaul`, see H5 for SHA)
 - Benchmark doc with cited facts vs assumptions, checklist, gap audit.
@@ -46,11 +46,11 @@ Last verified: 2026-10-12 by grokbot (P2).
 - HUD: health/armour bars + numbers, weapon, ammo/reserve, reload ring, ability cooldown button, hostiles + pips, persisted mute, pause, safe-area insets, portrait prompt. Damage arc, hurt flash, low-HP vignette, hit/kill marks, toasts.
 - Fonts: Barlow Condensed + IBM Plex Mono (OFL) in `public/fonts/`.
 
-## Automated tests (EVIDENCE, Node 22)
-See H5: ci, typecheck, 97 tests in 9 files, build. Headless Chrome 1280x720 + 844x390 touch + portrait: all states reached, console errors none. Sim 0.07 ms/step with 21 actors (Node).
+## Automated tests (EVIDENCE, Node 22.22, 4 cores; RC-3, bundle index-BasVRbXf.js)
+`npx vitest run` 264/264 (30 files) x3, 15-17 s, no other workload. Headless Chrome on the local build of the same bundle: rc-e2e 11/11, rc3-input-probe 6/6, p1ft-e2e 12/12, ring hint 20/20 (heavy load), rc2-preview-checks A/B/C1/C2 pass, rc-autoplay SCRIPTED win for all 4 heroes (Mop seed override). Details: H11.
 
 ## Not performed (needs the owner)
-- Pixel 7 / iPhone 13 run, real-GPU FPS, feel, fairness, audio by ear.
+- Pixel 7 / iPhone 13 run, real-GPU FPS, feel, fairness, audio by ear, a human win, the demo video, live-preview browser checks (this container cannot reach *.vercel.app).
 
 ## Gates
 Core Feel Gate: BLOCKED on owner playtests. G10 interface + mock only (BLOCKER: verified chain, contract, ownership method).
@@ -58,15 +58,10 @@ Core Feel Gate: BLOCKED on owner playtests. G10 interface + mock only (BLOCKER: 
 ## Current task
 | Id | Owner | Branch | Files | Done when | Status |
 |---|---|---|---|---|---|
-| P1 | grokbot | grokbot/p1-mvp | see H4 | MVP | done, awaiting owner review |
-| P2 | grokbot | grokbot/p2-benchmark-overhaul (base `grokbot/p1-mvp`) | `src/**`, `tests/**`, `index.html`, `public/fonts/**`, `docs/design/{benchmark,art-direction}.md`, `docs/DEV.md`, `tools/browser-run.mjs`, `docs/STATE.md`, `docs/HANDOFFS.md` | benchmark overhaul phases A-F per owner mandate "COMPLETE BULLET ECHO BENCHMARK OVERHAUL" (chat, 2026-10-12 04:09 WAT); Node 22 ci/typecheck/test/build; browser run; preview deploy | done, awaiting owner review and playtest |
-| P0F | grokbot | grokbot/p0-bugfix-sprint (base `grokbot/p2-benchmark-overhaul`) | `src/main.ts`, `src/input/{input,gate}.ts`, `src/render/{render,visibility}.ts`, `tests/p0fix*.test.ts`, `tools/p0fix-run.mjs`, `docs/STATE.md`, `docs/HANDOFFS.md` | P0 bug-fix sprint per owner task (chat, 2026-10-12 05:28 WAT) on ADE QA report: CHOG-VIS-001, FLOW-001, INPUT-001, HUD-001, FLOW-002 (+blur); rifle investigation; preview deploy | done, awaiting owner review |
-| P1F | grokbot | grokbot/p1-fairness-readability (base `grokbot/p0-bugfix-sprint`) | `src/sim/{bots,world,level,vision,geom,cover}.ts`, `src/render/{render,lightmesh,bake,visibility}.ts`, `src/config/{tuning,weapons}.ts`, `src/main.ts`, `index.html`, `tests/{perception,p1f-combat,ttk,world}.test.ts`, `tools/p1f-shots.mjs`, `docs/design/{bots,cover,weapons-ttk}.md`, `docs/STATE.md`, `docs/HANDOFFS.md` | P1 fairness and readability sprint (owner task, chat 2026-10-12 05:50 WAT): one reveal rule, perception spec + tests, readability, snag/slab/cover/TTK, perf, preview | done, awaiting owner review |
-| P1FT | grokbot | grokbot/p1-follow-through (base `grokbot/p1-fairness-readability`) | `src/main.ts`, `src/ui/{heroKeys,orientation}.ts`, `src/render/{labels,camera,render}.ts`, `src/sim/{world,bots,cover}.ts`, `src/config/{map,tuning,weapons}.ts`, `src/audio/audio.ts`, `tests/p1ft-*.test.ts`, `tools/p1ft-{e2e,shots}.mjs`, `docs/design/{bots,cover,weapons-ttk}.md`, `docs/{DEV,STATE,HANDOFFS}.md` | P1 follow-through (owner task, chat 2026-10-12 07:29 WAT): UI-001, AI-002, AI-001, HUD-002, DES-001, debug labels, MAP-001, shotgun duels, blocked feedback, rotation | done, awaiting owner review |
-| RC-1 | grokbot | grokbot/rc-1 (base `grokbot/p1-follow-through`) | `src/sim/{world,bots,geom}.ts`, `src/config/{map,tuning}.ts`, `src/input/{gate,input}.ts`, `src/main.ts`, `index.html`, `src/ui/records.ts`, `src/nft/{traits,identity}.ts`, `src/audio/audio.ts`, `tests/rc-*.test.ts`, `tests/helpers/autopilot.ts`, `tools/rc-e2e.mjs`, `docs/design/{bots,nft}.md`, `docs/{DEV,RELEASE,STATE,HANDOFFS}.md` | Chogathon release candidate (owner task, chat 2026-10-12 08:47 WAT): fairness range rule, death-screen gate, snags, difficulty, onboarding, results, personal bests, NFT DEMO | done, awaiting owner + ADE review |
+| RC-3 | claude | ccr-e7fadb8f-qtochk (from 43f5a5d) | `src/input/input.ts`, `src/sim/world.ts`, `src/main.ts`, `tests/rc3-*.test.ts`, `tools/{rc3-input-probe,p1ft-e2e,p1ft-ring-repeat,rc-autoplay,rc-e2e}.mjs`, `README.md`, `docs/{SUBMISSION,RELEASE,STATE,HANDOFFS}.md` | Final release hardening (owner prompt 2026-10-12): resume/first-shot, ring e2e, suite, death screen, scripted victory + bests, fairness, preview, submission docs | done; candidate = branch head at H11, preview = its Vercel git preview (SHA + URL in the owner reply); awaiting owner + ADE |
 
-P2-F1: owner plays the preview on PC, Pixel 7, iPhone 13; grokbot fixes the top 3 reported issues.
+Done rows P1-RC-2 moved to `docs/HANDOFFS.md` (H11 trim note).
+
 
 ## Handoffs
-Latest: H7 (2026-10-12, grokbot -> owner, P1 fairness and readability sprint). History: `docs/HANDOFFS.md`.
-| RC-2 | grokbot | grokbot/rc-1 (PR #9) | `src/input/input.ts`, `src/main.ts`, `src/debug/autopilot.ts`, `tests/rc2-resume.test.ts`, `tests/perception.test.ts`, `tests/helpers/autopilot.ts`, `tools/{rc-e2e,p1ft-e2e,p1ft-ring-repeat,rc-autoplay,rc2-preview-checks}.mjs`, `docs/{DEV,RELEASE,STATE,HANDOFFS}.md` | Targeted RC-1 follow-up (owner task 2026-10-12 12:53 WAT): resume click fire, ring e2e setup, suite timing, preview checks, scripted victory, Wick vs Brick | done, awaiting owner + ADE retest (/workspace/reports/rc2-ade-retest.md) |
+Latest: H11 (2026-10-12, claude -> owner, ADE; RC-3). History: `docs/HANDOFFS.md`.
