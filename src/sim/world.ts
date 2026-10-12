@@ -441,7 +441,7 @@ function stepBullets(w: World, dt: number): void {
 }
 
 function damage(w: World, t: Actor, by: Actor, b: Bullet, hx: number, hy: number): void {
-  const raw = damageAt(b.weapon, Math.hypot(hx - b.ox, hy - b.oy));
+  const raw = damageAt(b.weapon, Math.hypot(hx - b.ox, hy - b.oy)) * (by.team === 'bot' ? TUNING.bots.damageMul : 1);
   const m = mitigate(t.armor, raw, b.weapon.armorPen);
   t.armor -= m.armor;
   t.hp -= m.hp;

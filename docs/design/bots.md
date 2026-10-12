@@ -63,3 +63,14 @@ Kill accounting (CHOG-AI-002, P1FT): no friendly fire for either team. Bullets p
 
 ## Fairness rule (RC-1)
 A bot may only fire at, or damage, the player from a spot the player could see: within the player's effective sight distance (hero `vision.range` times the NFT sidegrade `rangeMul`) and with wall line of sight. A bot's own sight (Wick 12 m) never extends its attack range. Enforced twice: a fire gate in `bots.ts` (range = min(weapon reach, player sight - 0.25 m) plus `shotClear`) and a damage cap in `world.ts stepBullets` (a bot bullet whose origin is beyond the player's sight distance never damages the player). Walls are unchanged and nothing is revealed through walls. Every hit shows the damage arc toward the shooter and rings the shooter for the 0.7 s reveal window. Tests: `tests/rc-fairness.test.ts` (10 seeded long-range Wick encounters).
+
+## Difficulty (RC-1, evidence)
+Bots carry the hero weapons and health, so a 1v5 at parity was close to unwinnable. ADE never reached victory by hand. The scripted player (`tests/helpers/autopilot.ts`) only shoots what its own cone shows, with human aim error, and uses no ability tricks. Wins per 20 seeds at the old tuning: Kettle 8, Mop 0, Brick 0, Wick 1.
+
+Lever sweep, wins over 4 heroes x 20 seeds (40 seeds for the last row):
+- Aim 14 deg, settle 2.5 s, reaction 0.45-0.75 s or 1 attack token on their own: +0 to 2 wins. These are minor levers.
+- Bot healing off: worse (bots stay in the fight).
+- Dropping one bot: large gain (Kettle 15/20), but it changes the map design and the "five hostiles" premise.
+- Chosen: aim 12 deg settling over 2 s, reaction 0.40-0.65 s, bot damage x0.6 (`TUNING.bots.damageMul`). Over 40 seeds: Kettle 25, Mop 5, Brick 5, Wick 6. Win times 26-78 s.
+
+The bots stay dangerous: the scripted player still loses most runs as Mop, Brick and Wick. A human using doors, slabs and Ping should do better. Not verified by hand. `tests/rc-victory.test.ts` requires at least 2 wins in 40 for every hero. Weapon duels run at damage parity.

@@ -93,11 +93,11 @@ export const TUNING = {
   bots: {
     // Seconds of sight before committing. 0.45 s: you can slip past an edge.
     reactionTime: 0.45,
-    // Aim error starts at 9 deg and settles over 1.2 s. Misses first, then tightens.
-    aimErrorDeg: 9,
+    // Aim error starts at 12 deg and settles over 2 s. Misses first, then tightens (RC-1 difficulty, below).
+    aimErrorDeg: 12,
     // A bot stuck >1 s re-plans around the blocked tile this many times per goal before giving up (CHOG-AI-001).
     stuckRepaths: 4,
-    aimSettleSeconds: 1.2,
+    aimSettleSeconds: 2,
     fireToleranceDeg: 6,
     // 300 deg/s turn: you can see it swing toward you.
     turnRateDegPerSec: 300,
@@ -109,6 +109,10 @@ export const TUNING = {
     // Go for a health pickup within this distance when hurt.
     healthSeekRange: 14,
     patrolQuiet: true,
+    // RC-1 difficulty (evidence: tests/rc-victory.test.ts, docs/design/bots.md). Bots carry the same weapons and
+    // health as the heroes, so 1v5 at parity was ~unwinnable (scripted player won 9/80 runs, ADE never reached
+    // victory). Bots now deal 60% damage, aim 12 deg settling over 2 s, and react in 0.40-0.65 s.
+    damageMul: 0.6,
   },
 
   // Perception rules shared by the player and the bots (docs/design/bots.md). One source of truth.
@@ -116,8 +120,8 @@ export const TUNING = {
     // A muzzle flash with clear wall line of sight reveals the shooter for this long, at any range, both sides.
     flashSeconds: 0.7,
     // Reaction delay before a bot fires at what it sees: seeded per acquisition, uniform in [min, max].
-    reactionMin: 0.25,
-    reactionMax: 0.45,
+    reactionMin: 0.4,
+    reactionMax: 0.65,
     // Being shot gives a direction only: a guess along the incoming ray, this many degrees off at most,
     // at 60%..140% of the true distance.
     shotDirErrorDeg: 20,
