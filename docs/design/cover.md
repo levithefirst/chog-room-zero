@@ -9,7 +9,8 @@ uses it; `tests/p1f-combat.test.ts` checks it. Sight ignores half cover: you alw
 | Crate | no | yes | yes | passes (fires over it) | passes |
 | Brick slab | no | yes | yes | passes | passes |
 
-Legibility: a bullet stopped by a crate or slab emits an impact flagged `blocked`; the client draws a bright
+Legibility: a bullet stopped by a crate or slab emits an impact flagged `blocked`; the client plays a distinct
+"blocked" knock (not the concrete grit), flashes the cover piece's outline for 0.18 s, and draws a bright
 "blocked" spark (7 sparks + a cool-white ring) instead of the small wall puff, so "my shots did nothing" reads as
 "the crate took it". Movement: corner assist (`movement.cornerAssist` 0.9 u) slides you around a box edge you are
 nearly past instead of stopping dead (CHOG-MAP-001).

@@ -1,4 +1,4 @@
-import { createRenderer, createFx } from './render/render';
+import { createRenderer, createFx, COVER_FLASH_SECONDS } from './render/render';
 import { createInput } from './input/input';
 import { createSummaryGate } from './input/gate';
 import { createAudio } from './audio/audio';
@@ -11,6 +11,9 @@ import { canSee } from './sim/vision';
 import { nextPhase, simRuns, type MatchEvent, type Phase } from './sim/match';
 import { TUNING } from './config/tuning';
 import { HEROES, heroById } from './config/heroes';
+import { heroForKey } from './ui/heroKeys';
+import { rotatePromptShown, ROTATE_QUERY } from './ui/orientation';
+import { coverBoxAt } from './sim/cover';
 import { WEAPONS } from './config/weapons';
 import { adapterFromUrl, resolveIdentity, GUEST, type Identity } from './nft/identity';
 import { recordRun, type TokenHistory } from './nft/history';
@@ -107,6 +110,25 @@ async function start() {
     showHint('Gold rings: a noise you <b>heard</b>, not saw. Enemies hear you too: running is loud, creeping is quiet.', 6);
   }
 
+  // HUD panel rects for label avoidance (CHOG-HUD-002). Measured from the DOM, so safe-area insets count; cached
+  // and refreshed on resize/orientation change and every 30 frames (cheap) so layout changes are picked up.
+  const HUD_IDS = ['vitals', 'foes', 'sys', 'weapon', 'ability', 'reload'];
+  let hudCache: { x: number; y: number; w: number; h: number }[] = [];
+  let hudAge = 1e9;
+  window.addEventListener('resize', () => (hudAge = 1e9));
+  function hudRects() {
+    if (++hudAge < 30) return hudCache;
+    hudAge = 0;
+    hudCache = [];
+    for (const id of HUD_IDS) {
+      const el = document.getElementById(id);
+      if (!el || el.offsetParent === null) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width && r.height) hudCache.push({ x: r.left, y: r.top, w: r.width, h: r.height });
+    }
+    return hudCache;
+  }
+
   function toast(text: string) {
     $('toast').textContent = text;
     toastLeft = 1.4;
@@ -180,6 +202,16 @@ async function start() {
       <div class="btns"><button class="btn" data-go="quit">Back</button><button class="btn primary" data-go="pick">Deploy</button></div>`);
   }
 
+  function selectHero(id: string) {
+    heroId = id;
+    try {
+      localStorage.setItem(HERO_KEY, heroId);
+    } catch {
+      /* ignore */
+    }
+    for (const el of overlay.querySelectorAll<HTMLElement>('.hero')) el.classList.toggle('sel', el.dataset.hero === id);
+  }
+
   function showLoading() {
     card(`<div class="kicker">Deploying ${esc(heroById(heroId).name)}</div><h2>Room Zero</h2><div class="loadbar"><i></i></div>`);
     // Build the world (and bake the map if needed) after the loading card has painted.
@@ -226,13 +258,7 @@ async function start() {
     const t = e.target as HTMLElement;
     const hero = t.closest('[data-hero]') as HTMLElement | null;
     if (hero) {
-      heroId = hero.dataset.hero!;
-      try {
-        localStorage.setItem(HERO_KEY, heroId);
-      } catch {
-        /* ignore */
-      }
-      for (const el of overlay.querySelectorAll('.hero')) el.classList.toggle('sel', el === hero);
+      selectHero(hero.dataset.hero!);
       // A second tap on the selected card deploys.
       if (hero.dataset.armed) go('pick');
       for (const el of overlay.querySelectorAll<HTMLElement>('.hero')) delete el.dataset.armed;
@@ -277,6 +303,12 @@ async function start() {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && phase === 'play') go('pause');
   });
+  // Rotating to portrait covers the game with the rotate prompt: pause, so the sim never runs unseen.
+  const checkRotate = () => {
+    if (phase === 'play' && rotatePromptShown(window.innerWidth, window.innerHeight)) go('pause');
+  };
+  window.addEventListener('resize', checkRotate);
+  window.matchMedia?.(ROTATE_QUERY).addEventListener?.('change', checkRotate);
   // Losing window focus (alt-tab, notification shade, another window) pauses too.
   window.addEventListener('blur', () => {
     if (phase === 'play') go('pause');
@@ -286,6 +318,13 @@ async function start() {
   window.addEventListener('keydown', (e) => {
     if (!e.repeat) summaryGate.press(performance.now());
   }, { capture: true });
+  // Hero select: 1-4 pick the matching card (CHOG-UI-001). Enter deploys (existing handler).
+  window.addEventListener('keydown', (e) => {
+    if (phase !== 'select' || e.repeat) return;
+    const id = heroForKey(e, HEROES);
+    if (!id) return;
+    selectHero(id);
+  });
 
   function spark(x: number, y: number, n: number, hostile: boolean) {
     for (const s of fx.sparks) {
@@ -311,10 +350,15 @@ async function start() {
         fx.threats[s.sourceId] = TUNING.perception.flashSeconds;
       const heard = own || hears(world.level, p.x, p.y, s);
       if (!heard) continue;
-      audio.play(s.type, dx, dy, s.radius, !own && !sightClear(world.level, p.x, p.y, s.x, s.y), own, s.weapon);
+      audio.play(s.type === 'impact' && s.blocked ? 'blocked' : s.type, dx, dy, s.radius, !own && !sightClear(world.level, p.x, p.y, s.x, s.y), own, s.weapon);
       if (s.type === 'impact') {
         fx.impacts.push({ x: s.x, y: s.y, age: 0, blocked: s.blocked });
         spark(s.x, s.y, s.blocked ? 7 : 3, false);
+        // Blocked by half cover: the crate/slab outline flashes briefly so the cover reads as what stopped it.
+        if (s.blocked) {
+          const box = coverBoxAt(world.level.coverBoxes, s.x, s.y);
+          if (box) fx.coverFlashes.push({ box, age: 0 });
+        }
       }
       if (own && s.type === 'pickup') toast('Picked up');
       if (own || s.team !== 'bot') continue;
@@ -421,6 +465,8 @@ async function start() {
     }
     fx.markers = fx.markers.filter((m) => m.age < m.life);
     fx.impacts = fx.impacts.filter((m) => m.age < 0.25);
+    for (const c of fx.coverFlashes) c.age += dt;
+    fx.coverFlashes = fx.coverFlashes.filter((c) => c.age < COVER_FLASH_SECONDS);
     fx.hitMarks = fx.hitMarks.filter((m) => m.age < 0.2);
     fx.damageArcs = fx.damageArcs.filter((m) => m.age < TUNING.render.damageArcSeconds);
     fx.pings = fx.pings.filter((m) => m.age < 0.7);
@@ -432,7 +478,7 @@ async function start() {
     }
     $('toast').style.opacity = toastLeft > 0 ? '1' : '0';
 
-    renderer.draw(world, fx, input, dt, { recap: phase === 'recap' || (phase === 'results' && world.outcome === 'dead'), marking: identity.marking, showSticks: phase === 'play' && input.mode === 'touch', playing: phase === 'play', debug: DEBUG_OVERLAY });
+    renderer.draw(world, fx, input, dt, { recap: phase === 'recap' || (phase === 'results' && world.outcome === 'dead'), marking: identity.marking, showSticks: phase === 'play' && input.mode === 'touch', playing: phase === 'play', debug: DEBUG_OVERLAY, hud: hudRects() });
 
     // HUD: only touch the DOM when a value changed.
     const p = player(world);

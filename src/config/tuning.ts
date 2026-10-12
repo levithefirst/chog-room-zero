@@ -95,6 +95,8 @@ export const TUNING = {
     reactionTime: 0.45,
     // Aim error starts at 9 deg and settles over 1.2 s. Misses first, then tightens.
     aimErrorDeg: 9,
+    // A bot stuck >1 s re-plans around the blocked tile this many times per goal before giving up (CHOG-AI-001).
+    stuckRepaths: 4,
     aimSettleSeconds: 1.2,
     fireToleranceDeg: 6,
     // 300 deg/s turn: you can see it swing toward you.
@@ -139,8 +141,12 @@ export const TUNING = {
     maxResolution: 1.5,
     viewWidthUnits: 22,
     minViewHeightUnits: 11,
+    // Camera (CHOG-DES-001, src/render/camera.ts): position follows player + lead over cameraSmoothing s; the lead
+    // eases toward facing x lookahead over leadSmoothing s. Lookahead 2 -> 1.5 u (~52 px at 844x390, was ~70-90):
+    // still shows more of where you aim, without the off-centre feel ADE noted.
     cameraSmoothing: 0.12,
-    lookahead: 2,
+    leadSmoothing: 0.5,
+    lookahead: 1.5,
     // Map bake resolution in px per u. 32: sharp on phones, 1.3 MB texture.
     bakePpu: 32,
     hitFlash: 0.06,

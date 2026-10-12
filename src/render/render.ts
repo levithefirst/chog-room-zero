@@ -5,6 +5,8 @@
 // -> screen-space UI.
 import { Application, Container, Graphics, Sprite, Text } from 'pixi.js';
 import { TUNING } from '../config/tuning';
+import { placeLabel, stackLabels, type Rect } from './labels';
+import { createCamera, stepCamera } from './camera';
 import { WALL, walkable, type Level } from '../sim/level';
 import { pointInPolygon } from '../sim/geom';
 import { visibilityPolygon } from '../sim/vision';
@@ -61,6 +63,8 @@ export interface Spark {
 export interface Fx {
   markers: Marker[];
   impacts: { x: number; y: number; age: number; blocked?: boolean }[];
+  /** Cover pieces that just stopped a bullet: outline flash (COVER_FLASH_SECONDS). */
+  coverFlashes: { box: { x0: number; y0: number; x1: number; y1: number }; age: number }[];
   hitMarks: { x: number; y: number; age: number; kill: boolean }[];
   shake: number;
   corpses: { x: number; y: number; hostile: boolean }[];
@@ -74,7 +78,7 @@ export interface Fx {
 
 export function createFx(): Fx {
   return {
-    markers: [], impacts: [], hitMarks: [], shake: 0, corpses: [], damageArcs: [], pings: [], threats: [],
+    markers: [], impacts: [], coverFlashes: [], hitMarks: [], shake: 0, corpses: [], damageArcs: [], pings: [], threats: [],
     sparks: Array.from({ length: R.maxSparks }, () => ({ x: 0, y: 0, vx: 0, vy: 0, age: 1, hostile: false })),
   };
 }
@@ -86,6 +90,8 @@ export interface DrawOpts {
   playing: boolean;
   /** ?debug perception overlay. */
   debug?: boolean;
+  /** HUD panel rects in screen (CSS) px; pickup labels avoid them (CHOG-HUD-002). */
+  hud?: readonly Rect[];
 }
 
 export interface Renderer {
@@ -99,6 +105,8 @@ export interface Renderer {
   /** Hostiles drawn this frame only because they just shot at the player. */
   flashBots(): number;
 }
+
+export const COVER_FLASH_SECONDS = 0.18;
 
 export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
   const app = new Application();
@@ -139,6 +147,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
   let explored: Uint8Array;
   let exploredDirty = true;
   let camX = 0, camY = 0, ppu = 40;
+  let cam = createCamera(0, 0);
   const poly: number[] = [];
   const lightParams: LightParams = { x: 0, y: 0, facing: 0, range: 1, coneRad: 1, nearRadius: TUNING.vision.nearRadius, edgeRad: TUNING.vision.softEdgeDeg * DEG };
   const debugTexts: Text[] = [];
@@ -272,6 +281,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
   function drawDebug(w: World) {
     debugG.clear();
     let i = 0;
+    const placed: { x: number; y: number }[] = [];
     for (const a of w.actors) {
       if (a.team !== 'bot' || !a.alive) continue;
       const br = w.brains.get(a.id) as Brain;
@@ -295,18 +305,27 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       t.visible = true;
       t.text = `${a.name} ${br.state}${token ? ' [T]' : ''}\n${br.source ?? '-'} s${Math.round(br.suspicion * 100)}`;
       t.position.set(a.x, a.y - 1.05);
+      placed.push({ x: a.x, y: a.y - 1.05 });
       i++;
     }
+    // Bots standing together: stack their labels instead of overprinting (2 lines ~0.6 u tall, ~2.4 u wide).
+    const ys = stackLabels(placed, 2.4, 0.62);
+    for (let k = 0; k < placed.length; k++) debugTexts[k].position.y = ys[k];
     for (; i < debugTexts.length; i++) debugTexts[i].visible = false;
   }
 
-  function drawPickups(w: World) {
+  function drawPickups(w: World, hud: readonly Rect[]) {
     props.clear();
     w.pickups.forEach((p, i) => {
       const lbl = pickupLabels[i];
       const known = explored[Math.floor(p.y) * level.w + Math.floor(p.x)];
       lbl.visible = !!known;
       if (!known) return;
+      // Keep the label out from under HUD panels: below by default, above if blocked, hidden if both are.
+      const sx = world.position.x + p.x * ppu, sy = world.position.y + p.y * ppu;
+      const pl = placeLabel(sx, sy, lbl.width * ppu, lbl.height * ppu, 0.38 * ppu, hud);
+      lbl.visible = pl.visible;
+      lbl.position.set(p.x, p.y + (pl.y - sy) / ppu);
       const col = p.kind === 'health' ? P.heal : p.kind === 'armor' ? P.armor : P.ammo;
       if (!p.active) {
         circle(props, p.x, p.y, 0.32).stroke({ width: 0.04, color: col, alpha: 0.35 });
@@ -358,6 +377,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       explored = new Uint8Array(level.w * level.h);
       exploredDirty = true;
       const p = player(w);
+      cam = createCamera(p.x, p.y);
       camX = p.x;
       camY = p.y;
       // Labels are reused across restarts (destroying a bound Text texture warns in Pixi).
@@ -383,11 +403,9 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       const p = player(w);
       const sw = app.screen.width, sh = app.screen.height;
       ppu = Math.min(sw / R.viewWidthUnits, sh / R.minViewHeightUnits);
-      const tx = p.x + Math.cos(p.facing) * R.lookahead;
-      const ty = p.y + Math.sin(p.facing) * R.lookahead;
-      const k = 1 - Math.exp(-dt / R.cameraSmoothing);
-      camX += (tx - camX) * k;
-      camY += (ty - camY) * k;
+      stepCamera(cam, p.x, p.y, p.facing, dt, R);
+      camX = cam.x;
+      camY = cam.y;
       let sx = 0, sy = 0;
       if (fx.shake > 0) {
         const s = (R.shakePx * fx.shake) / R.shakeSeconds;
@@ -412,7 +430,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
           drawFog();
         }
       }
-      drawPickups(w);
+      drawPickups(w, opts.hud ?? []);
 
       // Heard markers: rings, never a body. Corpses stay as decals.
       marks.clear();
@@ -480,6 +498,10 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       for (const s of fx.sparks) {
         if (s.age >= 1 || !pointInPolygon(s.x, s.y, poly)) continue;
         fxG.moveTo(s.x, s.y).lineTo(s.x - s.vx * 0.03, s.y - s.vy * 0.03).stroke({ width: 0.04, color: s.hostile ? P.hostile : P.signal, alpha: 1 - s.age });
+      }
+      for (const cf of fx.coverFlashes) {
+        const b = cf.box, al = Math.max(0, 1 - cf.age / COVER_FLASH_SECONDS);
+        fxG.rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0).stroke({ width: 0.07, color: 0xe8f1ff, alpha: 0.85 * al });
       }
       for (const im of fx.impacts) {
         if (!pointInPolygon(im.x, im.y, poly)) continue;

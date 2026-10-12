@@ -90,3 +90,14 @@ Known failures  : none in automated checks
 Not verified    : real phones, real GPU, feel, bot fairness by hand, audio by ear
 Locked decisions touched : none. No dependency added
 Next smallest task : ADE physical-device pass (/workspace/reports/p1f-followup-plan.md)
+
+HANDOFF H8  2026-10-12  grokbot -> owner
+Branch @ commit : grokbot/p1-follow-through (from 0f3d56f; PR base grokbot/p1-fairness-readability); SHA in the PR   pushed: yes
+Task            : P1 fairness and readability follow-through (owner task, chat 2026-10-12 07:29 WAT)
+Fixes (one commit each) : UI-001 number keys select heroes; AI-002 no friendly fire (hostiles down = player eliminations); AI-001 progress-based stuck detection + cumulative repath avoid list; HUD-002 pickup labels avoid HUD panels; DES-001 camera lead smoothed (spawn offset 39.6 -> 3.6 px); debug labels stacked; MAP-001 spawn crates 1 tile west (south door unpinned, no new sight lines); shotgun 12x7 -> 14x8 spread 7.5 (wins the ADE 4 u test vs rifle 71.5%, CI 64.9-77.3); blocked shots spark + clank + cover flash; rotation pauses with a prompt
+Tests run       : Node 22.23.3: npm ci, typecheck, npm test, build all 0; tools/p1ft-e2e.mjs 11/11 (before build 7/11); tools/p1ft-shots.mjs console errors none
+Profile (headless swiftshader, RELATIVE): fps equal within noise; draw median 0.5 ms both builds. Dark map luminance unchanged; no defect
+Not changed     : VIS-002 (QA: by design), perception/reveal rule (reviewed, matches spec)
+Not verified    : real phones, real GPU, feel, audio by ear
+Locked decisions touched : none. No dependency added
+Next smallest task : ADE retest (/workspace/reports/p1ft-ade-retest.md)

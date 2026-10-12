@@ -393,8 +393,11 @@ function stepBullets(w: World, dt: number): void {
     const onCover = blockedByCover;
     let bestT = wallT >= 0 ? wallT : 2;
     let target: Actor | null = null;
+    const team = w.actors[b.owner].team;
     for (const a of w.actors) {
-      if (!a.alive || a.id === b.owner) continue;
+      // No friendly fire, either team (CHOG-AI-002): a bullet passes through the shooter's teammates, so every
+      // hostile elimination is a player kill and "Hostiles down" always equals the player's kills.
+      if (!a.alive || a.id === b.owner || a.team === team) continue;
       const t = segmentCircleT(b.x, b.y, nx, ny, a.x, a.y, r);
       if (t >= 0 && t < bestT) {
         bestT = t;
@@ -514,7 +517,11 @@ export function revealed(w: World, viewer: Actor): Actor[] {
 }
 
 /** Advance one fixed step with the player's input. Bots decide their own input from what they perceive. */
-export function stepWorld(w: World, playerInput: ActorInput, dt: number = TUNING.simStepSeconds): void {
+export function stepWorld(
+  w: World, playerInput: ActorInput, dt: number = TUNING.simStepSeconds,
+  /** Test harness only (duel scenarios): script a bot's input instead of its brain. Return null to let it think. */
+  botInput?: (a: Actor) => ActorInput | null,
+): void {
   w.prevSounds = w.sounds;
   w.sounds = [];
   w.hits = [];
@@ -523,7 +530,7 @@ export function stepWorld(w: World, playerInput: ActorInput, dt: number = TUNING
       a.deadFor += dt;
       continue;
     }
-    const inp = a.team === 'player' ? playerInput : botThink(w, a, w.brains.get(a.id)!, dt);
+    const inp = a.team === 'player' ? playerInput : (botInput?.(a) ?? botThink(w, a, w.brains.get(a.id)!, dt));
     applyInput(w, a, inp, dt);
   }
   stepBullets(w, dt);
