@@ -3,7 +3,8 @@ import { createInput } from './input/input';
 import { createSummaryGate, overlayInputAllowed } from './input/gate';
 import { createAudio } from './audio/audio';
 import { fixedSteps } from './sim/sim';
-import { createWorld, hears, player, stepWorld, type World } from './sim/world';
+import { createWorld, hears, player, stepWorld, IDLE_INPUT, type World } from './sim/world';
+import { ROOM_ZERO } from './config/map';
 import { sightClear, walkable } from './sim/level';
 import { clampMarker } from './render/visibility';
 import { muzzleFlashSeen } from './sim/vision';
@@ -21,6 +22,7 @@ import { boundIdentity } from './nft/identity';
 import { DEMO_COPY, TRAIT_INFO, isTokenId, sampleTokens, traitsFor } from './nft/traits';
 import { fmtTime, loadRecords, recordBest, type Records } from './ui/records';
 import { SIDEGRADES } from './sim/operators';
+import { createAutopilot, type Autopilot } from './debug/autopilot';
 
 const $ = (id: string) => document.getElementById(id)!;
 const root = $('app');
@@ -29,6 +31,10 @@ const hint = $('hint');
 // ?debug shows the bot perception overlay; add &nooverlay to keep the debug hook without it.
 const DEBUG_OVERLAY = location.search.includes('debug') && !location.search.includes('nooverlay');
 const HERO_KEY = 'chog.hero';
+// SCRIPTED autopilot (debug only): ?debug&autoplay=<seed>[&hero=<id>] drives in-match input from src/debug/autopilot.ts
+// through the normal game loop. Menus still need real clicks/keys. Never active without ?debug.
+const QS = new URLSearchParams(location.search);
+const AUTOPLAY_SEED = QS.has('debug') && QS.get('autoplay') !== null ? Number(QS.get('autoplay')) || 1 : null;
 
 function compass(dx: number, dy: number): string {
   const names = ['east', 'south-east', 'south', 'south-west', 'west', 'north-west', 'north', 'north-east'];
@@ -70,6 +76,8 @@ async function start() {
 
   let phase: Phase = 'title';
   let heroId = (() => {
+    const forced = AUTOPLAY_SEED !== null ? QS.get('hero') : null;
+    if (forced && HEROES.some((x) => x.id === forced)) return forced;
     try {
       const h = localStorage.getItem(HERO_KEY);
       return h && HEROES.some((x) => x.id === h) ? h : HEROES[0].id;
@@ -78,6 +86,7 @@ async function start() {
     }
   })();
   let runIndex = 0;
+  let autopilot: Autopilot | null = null;
   let world: World = createWorld({ seed: TUNING.seed, hero: heroId, sidegrade: identity.sidegrade });
   let acc = 0;
   let recapLeft = 0;
@@ -85,6 +94,7 @@ async function start() {
   let history: TokenHistory | null = null;
   let toastLeft = 0;
   const fx = createFx();
+  const debugStats = { blockedCues: 0 };
   renderer.reset(world);
 
   const mute = $('mute') as HTMLButtonElement;
@@ -355,6 +365,7 @@ async function start() {
   function beginWorld() {
     runIndex++;
     world = createWorld({ seed: TUNING.seed + runIndex, hero: heroId, sidegrade: identity.sidegrade });
+    autopilot = AUTOPLAY_SEED !== null ? createAutopilot(AUTOPLAY_SEED + runIndex) : null;
     renderer.reset(world);
     fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = 0;
     for (const s of fx.sparks) s.age = 1;
@@ -433,6 +444,7 @@ async function start() {
         fx.threats[s.sourceId] = TUNING.perception.flashSeconds;
       const heard = own || hears(world.level, p.x, p.y, s);
       if (!heard) continue;
+      if (s.type === 'impact' && s.blocked) debugStats.blockedCues++;
       audio.play(s.type === 'impact' && s.blocked ? 'blocked' : s.type, dx, dy, s.radius, !own && !sightClear(world.level, p.x, p.y, s.x, s.y), own, s.weapon);
       if (s.type === 'impact') {
         fx.impacts.push({ x: s.x, y: s.y, age: 0, blocked: s.blocked });
@@ -477,7 +489,9 @@ async function start() {
   const hook = { fps: 0 } as { fps: number } & Record<string, unknown>;
   if (import.meta.env.DEV || location.search.includes('debug')) {
     Object.defineProperties(hook, { world: { get: () => world }, phase: { get: () => phase } });
-    Object.assign(hook, { renderer, go, setHero: (h: string) => (heroId = h), fx, records: () => records, identity: () => identity, resultsAt: () => resultsAt });
+    Object.assign(hook, { renderer, go, setHero: (h: string) => (heroId = h), fx, records: () => records, identity: () => identity, resultsAt: () => resultsAt, autoplay: AUTOPLAY_SEED, hero: () => heroId, stats: debugStats,
+      // Debug lab: the bundled sim, so headless checks can run sim sweeps against the exact deployed code.
+      lab: { createWorld, stepWorld, IDLE_INPUT, ROOM_ZERO, HEROES } });
     (window as unknown as { __chog: unknown }).__chog = hook;
   }
 
@@ -510,7 +524,7 @@ async function start() {
       // Only consume input on frames that step the sim, so a latched tap is never lost on a 0-step frame.
       const inp = r.steps > 0 ? input.read(ps.x, ps.y) : null;
       for (let i = 0; inp && i < r.steps && world.outcome === 'playing'; i++) {
-        stepWorld(world, inp);
+        stepWorld(world, autopilot ? autopilot.next(world) : inp);
         inp.reload = false;
         inp.ability = false;
         // A tap fires exactly once: after the first step, firing follows the real button state.
