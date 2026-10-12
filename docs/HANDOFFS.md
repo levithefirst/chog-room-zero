@@ -54,3 +54,14 @@ Locked decisions touched : LOCKED 10 changed by owner mandate (NFT layer allowed
 Next smallest task : P1-F1 owner playtest on PC and both phones, then fix the top 3 reported issues. Files decided by the reports
 ```
 STATE trim note (H4): the gate table (all "not started") and the P0-1/P0-2 evidence rows were removed from STATE; P0 evidence is in H2 and H3 above.
+
+HANDOFF H5  2026-10-12  grokbot -> owner
+Branch @ commit : grokbot/p2-benchmark-overhaul @ 5204ddfb83f5dc9a813e7169ea46852e9c1066b0 (implementation; this handoff is the next commit)   pushed: yes
+Task            : P2 benchmark overhaul, phases A-F, under owner mandate "COMPLETE BULLET ECHO BENCHMARK OVERHAUL" (chat, 2026-10-12 04:09 WAT). PR base grokbot/p1-mvp
+Files changed   : index.html, public/fonts/* (4 woff2 + 2 OFL licences), src/config/{tuning,map,heroes,weapons}.ts, src/sim/{world,bots,level,operators,match}.ts, src/render/{render,bake}.ts, src/input/input.ts, src/audio/audio.ts, src/main.ts, src/nft/identity.ts, tests/{world,bots,operators,nft,combat,pickups-abilities,heroes-match}.test.ts, tools/browser-run.mjs, docs/design/{benchmark,art-direction}.md, docs/DEV.md, docs/STATE.md, docs/HANDOFFS.md
+Tests run       : Node 22.23.3: npm ci -> 0; npm run typecheck -> 0; npm test -> 97/97 (9 files); npm run build -> 0. node tools/browser-run.mjs on vite preview ?debug: 1280x720 and 844x390 touch + 390x844 portrait, 23 screenshots /workspace/shots/p2-*.png, every state reached, console errors/warnings none
+Known failures  : none in automated checks. Defects listed in the P2 PR
+Blockers        : phone run and real-GPU FPS (owner devices); NFT chain adapter (contract UNKNOWN)
+Not verified    : feel, fairness, balance, run length, audio by ear, phone performance
+Locked decisions touched : LOCKED 1 and 12 amended by the P2 mandate (benchmark allowed, nothing copied; replaced map, heroes with one ability each, pickups). LOCKED 9 clarified: heroes may differ in speed/HP/armour, NFT sidegrades never do. No dependency added
+Next smallest task : P2-F1 owner plays the preview on PC, Pixel 7, iPhone 13; grokbot fixes the top 3 reported issues
