@@ -41,7 +41,7 @@ S1, P0-1, P0-2: see HANDOFFS H1-H3 (P0-1, P0-2 done, PRs open).
 
 | Id | Owner | Branch | Files | Done when | Status |
 |---|---|---|---|---|---|
-| P1 | grokbot | grokbot/p1-mvp (base `grokbot/p0-2-pc-movement`) | `src/**`, `tests/**`, `index.html`, `public/favicon.svg`, `docs/design/art-direction.md`, `docs/DEV.md`, `docs/STATE.md`, `docs/HANDOFFS.md` | full MVP per owner mandate; Node 22 ci/typecheck/test/build pass; scripted browser run | approved, in progress (owner mandate 2026-10-12 02:56 WAT) |
+| P1 | grokbot | grokbot/p1-mvp (base `grokbot/p0-2-pc-movement`) | `src/**`, `tests/**`, `index.html`, `public/favicon.svg`, `docs/design/art-direction.md`, `docs/DEV.md`, `tools/browser-run.mjs`, `docs/STATE.md`, `docs/HANDOFFS.md` | full MVP per owner mandate; Node 22 ci/typecheck/test/build pass; scripted browser run | approved, in progress (owner mandate 2026-10-12 02:56 WAT) |
 
 ## Handoffs
 Latest: H3. History: `docs/HANDOFFS.md`.

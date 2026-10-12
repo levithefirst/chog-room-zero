@@ -2,16 +2,64 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#07080a" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Chog: Room Zero</title>
     <style>
-      html, body { margin: 0; height: 100%; background: #0b0d10; overflow: hidden; }
-      #app { width: 100%; height: 100%; }
-      canvas { display: block; touch-action: none; }
+      /* Numbers use a monospace face so ammo and health never jitter as they change. */
+      :root { --ink: #e8e1d0; --dim: #8a8478; --hostile: #c4532c; --signal: #f2d98a; --bg: #07080a;
+        --mono: "Iosevka", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+      html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; color: var(--ink);
+        font-family: var(--mono); -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+      #app { position: fixed; inset: 0; }
+      canvas { display: block; touch-action: none; cursor: none; }
+      .layer { position: fixed; inset: 0; pointer-events: none; }
+      #vignette { box-shadow: inset 0 0 18vmin 6vmin rgba(196, 83, 44, 0.55); opacity: 0; transition: opacity 120ms linear; }
+      #hud { font-size: 13px; letter-spacing: 0.04em; padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+      #hud > * { position: absolute; }
+      #hp { left: max(16px, env(safe-area-inset-left)); bottom: max(14px, env(safe-area-inset-bottom)); }
+      #hpbar { width: 140px; height: 4px; background: #2b2a27; margin-top: 5px; }
+      #hpfill { height: 100%; background: var(--ink); width: 100%; }
+      #ammo { right: max(16px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); text-align: right; font-size: 20px; }
+      #ammo small { display: block; font-size: 11px; color: var(--dim); }
+      #left { left: 50%; top: max(10px, env(safe-area-inset-top)); transform: translateX(-50%); color: var(--dim); }
+      #op { left: max(16px, env(safe-area-inset-left)); top: max(10px, env(safe-area-inset-top)); color: var(--dim); }
+      #mute { right: max(16px, env(safe-area-inset-right)); top: max(6px, env(safe-area-inset-top)); pointer-events: auto;
+        background: none; border: 1px solid #2b2a27; color: var(--dim); font: inherit; padding: 6px 10px; min-width: 48px; min-height: 32px; }
+      #reload { right: max(18px, env(safe-area-inset-right)); bottom: 64px; pointer-events: auto; display: none;
+        width: 56px; height: 56px; border-radius: 50%; border: 1px solid #4a4740; background: rgba(7, 8, 10, 0.5); color: var(--ink); font: inherit; font-size: 11px; }
+      body.touch #reload { display: block; }
+      #hint { left: 50%; bottom: 18%; transform: translateX(-50%); text-align: center; color: var(--ink); opacity: 0;
+        transition: opacity 900ms ease; font-size: 13px; line-height: 1.8; white-space: nowrap; }
+      #overlay { display: flex; align-items: center; justify-content: center; background: rgba(7, 8, 10, 0.72); pointer-events: auto; }
+      #overlay.hidden { display: none; }
+      #overlay.clear { background: transparent; pointer-events: none; align-items: flex-start; padding-top: 14vh; }
+      .card { max-width: 30em; padding: 0 24px; line-height: 1.6; }
+      .card h1 { font-size: 30px; letter-spacing: 0.18em; font-weight: 600; margin: 0 0 4px; }
+      .card h2 { font-size: 18px; letter-spacing: 0.12em; font-weight: 600; margin: 0 0 10px; }
+      .card p { margin: 6px 0; color: var(--dim); }
+      .card .go { color: var(--ink); margin-top: 18px; }
+      .card .bad { color: var(--hostile); }
+      .card table { border-collapse: collapse; margin: 10px 0; }
+      .card td { padding: 1px 18px 1px 0; color: var(--dim); }
+      .card td + td { color: var(--ink); }
+      @media (max-height: 420px) { .card h1 { font-size: 22px; } .card { font-size: 12px; line-height: 1.45; } }
     </style>
   </head>
   <body>
     <div id="app"></div>
+    <div id="vignette" class="layer"></div>
+    <div id="hud" class="layer">
+      <div id="op"></div>
+      <div id="left"></div>
+      <div id="hp">HP <span id="hpn">100</span><div id="hpbar"><div id="hpfill"></div></div></div>
+      <div id="ammo"></div>
+      <button id="mute" type="button">Sound on</button>
+      <button id="reload" type="button">Reload</button>
+      <div id="hint"></div>
+    </div>
+    <div id="overlay" class="layer"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
