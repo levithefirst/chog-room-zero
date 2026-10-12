@@ -16,6 +16,12 @@ Full validation: `npm ci && npm run typecheck && npm test && npm run build`
 Browser run (headless Chrome, screenshots, console errors): start `npm run dev`, then
 `node tools/browser-run.mjs http://localhost:5173/ /tmp/shots [all|desktop|phone]` (writes `p2-*.png`).
 
+P1 follow-through checks (Node 22; build first, then `npx vite preview --port 4331`):
+- `npx vitest run tests/p1ft-duels.test.ts` duel tables (N=200 per cell, Wilson 95% CI; writes nothing unless `DUEL_OUT=<file>`)
+- `npx vitest run tests/p1ft-map-eval.test.ts` spawn-crate evaluation (old vs shipped layout)
+- `node tools/p1ft-e2e.mjs http://localhost:4331 /tmp/e2e.json` headless checks (key select, slab nav, HUD labels, tutorial, touches, rotation, background)
+- `node tools/p1ft-shots.mjs http://localhost:4331 p1ft-after` screenshots to /workspace/shots
+
 Layout: `src/sim` pure deterministic simulation (no pixi, DOM, or clock): `world.ts` (match step, armour, pickups, abilities), `bots.ts`, `vision.ts`, `level.ts` (map, collision, lean rule, A*), `match.ts` (flow table), `geom.ts`, `operators.ts` (NFT sidegrades). `src/render` PixiJS (`bake.ts` one-time map bake, `render.ts` per frame). `src/input` keyboard, mouse, touch. `src/audio` WebAudio synthesis. `src/nft` identity adapters and token history. `src/config` tuning, map, heroes, weapons. Add a hero: one entry in `src/config/heroes.ts`.
 
 Dev flags: `?mockChog=1234` binds a mock Chog (not a real ownership check). `?debug` exposes `window.__chog` in a production build.
