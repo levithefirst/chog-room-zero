@@ -58,3 +58,5 @@ sonar green, memory grey), and its cone edges.
 Tests (`tests/perception.test.ts`): vision visible / hidden behind wall; hearing running heard, creeping not heard,
 still silent; gunfire LOS flash outside the cone, occluded gunfire not revealed, direction-only shot; reaction
 seeded range, no shot before the delay; attack-token cap; no omniscience over a full match.
+
+Kill accounting (CHOG-AI-002, P1FT): no friendly fire for either team. Bullets pass through the shooter's teammates, so bots never eliminate each other and "Hostiles down" = player kills = eliminations. Tests: tests/p1ft-crossfire.test.ts.

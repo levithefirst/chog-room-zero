@@ -393,8 +393,11 @@ function stepBullets(w: World, dt: number): void {
     const onCover = blockedByCover;
     let bestT = wallT >= 0 ? wallT : 2;
     let target: Actor | null = null;
+    const team = w.actors[b.owner].team;
     for (const a of w.actors) {
-      if (!a.alive || a.id === b.owner) continue;
+      // No friendly fire, either team (CHOG-AI-002): a bullet passes through the shooter's teammates, so every
+      // hostile elimination is a player kill and "Hostiles down" always equals the player's kills.
+      if (!a.alive || a.id === b.owner || a.team === team) continue;
       const t = segmentCircleT(b.x, b.y, nx, ny, a.x, a.y, r);
       if (t >= 0 && t < bestT) {
         bestT = t;
