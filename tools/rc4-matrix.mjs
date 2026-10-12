@@ -137,8 +137,10 @@ for (const V of VIEWPORTS.filter((v) => !only.length || only.some((o) => v.name.
         await ticks(5);
         const LL = await layout();
         const ps = await ev(`(()=>{const p=__chog.world.actors[0];return __chog.renderer.toScreen(p.x,p.y)})()`);
-        await mouse('mouseMoved', ps.x - 200, ps.y); await ticks(6);
-        const f = await P0('p.facing');
+        // Aim 200 px west, or east if that would leave the window (the portrait camera can put the player near an edge).
+        const west = ps.x > 220;
+        await mouse('mouseMoved', west ? ps.x - 200 : ps.x + 200, ps.y); await ticks(6);
+        const f = await P0('p.facing') + (west ? 0 : Math.PI);
         sizes.push({ w, h, phaseAfterResize: phResize, layoutOk: layoutOk(LL), aimWestOk: angDiff(f, Math.PI) < 0.15, overlaps: LL.overlaps, outside: LL.outside, under: LL.playerUnderHud, canvas: LL.canvas });
       }
       if (V.resize.length) ok('window resize during play: canvas, HUD and mouse aim follow', sizes.every((s) => s.layoutOk && s.aimWestOk), sizes);
