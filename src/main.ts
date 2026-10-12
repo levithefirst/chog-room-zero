@@ -1,6 +1,6 @@
 import { createRenderer, createFx, COVER_FLASH_SECONDS } from './render/render';
 import { createInput } from './input/input';
-import { createSummaryGate } from './input/gate';
+import { createSummaryGate, overlayInputAllowed } from './input/gate';
 import { createAudio } from './audio/audio';
 import { fixedSteps } from './sim/sim';
 import { createWorld, hears, player, stepWorld, type World } from './sim/world';
@@ -139,7 +139,8 @@ async function start() {
   const summaryGate = createSummaryGate();
   let resumeSkip = false;
   function go(e: MatchEvent) {
-    if (phase === 'results' && e === 'restart' && !summaryGate.canRestart()) return;
+    // Post-death protection: nothing on the summary (any button, key or tap) acts until the gate opens.
+    if (phase === 'results' && !summaryGate.canRestart()) return;
     const next = nextPhase(phase, e);
     if (next === phase) return;
     const from = phase;
@@ -255,6 +256,7 @@ async function start() {
 
   overlay.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'touch') input.mode = 'touch';
+    if (!overlayInputAllowed(phase, summaryGate)) return;
     const t = e.target as HTMLElement;
     const hero = t.closest('[data-hero]') as HTMLElement | null;
     if (hero) {
@@ -320,7 +322,7 @@ async function start() {
   }, { capture: true });
   // Hero select: 1-4 pick the matching card (CHOG-UI-001). Enter deploys (existing handler).
   window.addEventListener('keydown', (e) => {
-    if (phase !== 'select' || e.repeat) return;
+    if (phase !== 'select' || e.repeat) return; // keys 1-4 never act on the summary
     const id = heroForKey(e, HEROES);
     if (!id) return;
     selectHero(id);
