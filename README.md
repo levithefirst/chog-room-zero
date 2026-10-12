@@ -2,11 +2,11 @@
 
 A dark top-down tactical shooter for the Chogathon. One basement, five bots, about 90 seconds a run. You see only what your lamp touches; everyone hears everything.
 
-Plays in the browser on PC and on phones held sideways. No wallet or account is needed to play.
+Plays in the browser on desktops and laptops (keyboard and mouse), tablets in either orientation, and phones held sideways (touch). No wallet or account is needed to play.
 
 ## How to test it (5 minutes)
 
-1. Open the preview link in the PR or submission. On a phone, turn it sideways.
+1. Open the game link. On a phone, turn it sideways: in portrait a phone shows a "turn sideways" screen, and turning mid-run pauses the run without losing it (turn back, then Resume). Tablets play in portrait or landscape.
 2. First launch shows **How to play**. Press **Got it**.
 3. Optional: **Chog DEMO** and pick a token number (#1 to #4). This shows how a Chog changes play. It is a demo: no wallet and no ownership check.
 4. **Enter**, pick a hero (keys 1 to 4, or tap a card), then **Deploy**.

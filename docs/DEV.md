@@ -74,3 +74,13 @@ Known limitations: see docs/RELEASE.md.
   bundled sim (`__chog.lab`), C1 is Wick vs Brick on the bundled sim, B is the live blocked-shot flash/spark/cue (screenshot next to the JSON),
   and C2 is a live Brick match audit (every hit from within sight range, shooter revealed).
 - **Ring hint repeat:** `node tools/p1ft-ring-repeat.mjs <baseUrl> 20 <out.json>` runs p1ft-e2e section 4 verbatim N times from the leaked touch state.
+
+## RC-4: cross-device matrix
+- `node tools/rc4-matrix.mjs <baseUrl> <out.json> [shotDir]` (`ONLY=tablet,phone-portrait` to pick): 12 viewports (desktop 1920x1080,
+  1440x900, 1280x720, 1024x768, 2560x1080; tablet 1180x820, 820x1180, 1024x768; phone 844x390, 667x375, 390x844, 375x667), each in a
+  fresh tab with the input that size would use (mouse+keyboard or emulated touch). Real UI flow (How to play, Enter, Deploy), layout
+  (canvas = viewport, HUD panels inside and not overlapping, player on screen), move, aim, fire, reload, ability, pause, resume (no
+  shot), restart; desktop window resizes and focus loss; touch rotation x3 mid-run with a finger held. Console errors and failed requests.
+- Scripted full loop at a touch size: `VIEWPORT=820x1180 TOUCH=1 node tools/rc-autoplay.mjs <baseUrl> <out.json> 30 kettle,mop` (menus by tap).
+- Orientation rule: phones (portrait, under 600 px wide) show the turn-sideways screen and pause the run; tablets play in portrait.
+  `src/ui/orientation.ts` and the `#rotate` media query in `index.html` must match.
