@@ -90,9 +90,9 @@ await sleep(500);
 await ev(openSpot); await mouse('mouseMoved', 1200, 360); await sleep(300);
 const s0 = await ev(`__chog.world.actors[0].shots`);
 let taps = 0;
-for (let i = 0; i < 20; i++) { await ev(`(()=>{const c=document.querySelector('canvas');const o={button:0,pointerType:'mouse',clientX:1200,clientY:360,bubbles:true};c.dispatchEvent(new PointerEvent('pointerdown',o));window.dispatchEvent(new PointerEvent('pointerup',o))})()`); taps++; await ev(`(()=>{const p=__chog.world.actors[0];p.hp=1e9;p.ammo=p.weapon.magazine;p.reloadLeft=0})()`); await sleep(260); }
+for (let i = 0; i < 20; i++) { await ev(`(()=>{const c=document.querySelector('canvas');const o={button:0,pointerType:'mouse',clientX:1200,clientY:360,bubbles:true};c.dispatchEvent(new PointerEvent('pointerdown',o));window.dispatchEvent(new PointerEvent('pointerup',o))})()`); taps++; await ev(`(()=>{const p=__chog.world.actors[0];p.hp=1e9;p.ammo=p.weapon.magazine;p.reloadLeft=0})()`); await sleep(+(process.env.TAPGAP || 260)); }
 const s1 = await ev(`__chog.world.actors[0].shots`);
-check('20 synchronous taps fire 20 shots', s1 - s0 === 20, { taps, shots: s1 - s0, phase: await ev('__chog.phase') });
+check('20 synchronous taps fire 20 shots', s1 - s0 === 20, { taps, shots: s1 - s0, phase: await ev('__chog.phase'), fps: +(await ev('__chog.fps')).toFixed(1), gapMs: +(process.env.TAPGAP || 260) });
 await shot('desktop-play');
 
 // ---- Phone 844x390 touch
