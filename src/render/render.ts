@@ -6,6 +6,7 @@
 import { Application, Container, Graphics, Sprite, Text } from 'pixi.js';
 import { TUNING } from '../config/tuning';
 import { placeLabel, type Rect } from './labels';
+import { createCamera, stepCamera } from './camera';
 import { WALL, walkable, type Level } from '../sim/level';
 import { pointInPolygon } from '../sim/geom';
 import { visibilityPolygon } from '../sim/vision';
@@ -142,6 +143,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
   let explored: Uint8Array;
   let exploredDirty = true;
   let camX = 0, camY = 0, ppu = 40;
+  let cam = createCamera(0, 0);
   const poly: number[] = [];
   const lightParams: LightParams = { x: 0, y: 0, facing: 0, range: 1, coneRad: 1, nearRadius: TUNING.vision.nearRadius, edgeRad: TUNING.vision.softEdgeDeg * DEG };
   const debugTexts: Text[] = [];
@@ -366,6 +368,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       explored = new Uint8Array(level.w * level.h);
       exploredDirty = true;
       const p = player(w);
+      cam = createCamera(p.x, p.y);
       camX = p.x;
       camY = p.y;
       // Labels are reused across restarts (destroying a bound Text texture warns in Pixi).
@@ -391,11 +394,9 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       const p = player(w);
       const sw = app.screen.width, sh = app.screen.height;
       ppu = Math.min(sw / R.viewWidthUnits, sh / R.minViewHeightUnits);
-      const tx = p.x + Math.cos(p.facing) * R.lookahead;
-      const ty = p.y + Math.sin(p.facing) * R.lookahead;
-      const k = 1 - Math.exp(-dt / R.cameraSmoothing);
-      camX += (tx - camX) * k;
-      camY += (ty - camY) * k;
+      stepCamera(cam, p.x, p.y, p.facing, dt, R);
+      camX = cam.x;
+      camY = cam.y;
       let sx = 0, sy = 0;
       if (fx.shake > 0) {
         const s = (R.shakePx * fx.shake) / R.shakeSeconds;
