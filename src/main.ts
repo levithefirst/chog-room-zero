@@ -64,9 +64,11 @@ async function start() {
     mute.setAttribute('aria-label', audio.muted ? 'Unmute sound' : 'Mute sound');
   };
   paintMute();
+  // Audio may only start on a real user activation. Touch grants it on touchend/click, not on touchstart/pointerdown,
+  // so unlock on those events (capture phase, so every tap or key anywhere counts).
+  for (const type of ['pointerup', 'touchend', 'click', 'keydown']) document.addEventListener(type, () => audio.unlock(), { capture: true, passive: true });
   mute.onpointerdown = (e) => {
     e.stopPropagation();
-    audio.unlock();
     audio.muted = !audio.muted;
     paintMute();
   };
@@ -185,7 +187,6 @@ async function start() {
 
   overlay.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'touch') input.mode = 'touch';
-    audio.unlock();
     const t = e.target as HTMLElement;
     const hero = t.closest('[data-hero]') as HTMLElement | null;
     if (hero) {

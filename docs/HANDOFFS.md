@@ -65,3 +65,4 @@ Blockers        : phone run and real-GPU FPS (owner devices); NFT chain adapter 
 Not verified    : feel, fairness, balance, run length, audio by ear, phone performance
 Locked decisions touched : LOCKED 1 and 12 amended by the P2 mandate (benchmark allowed, nothing copied; replaced map, heroes with one ability each, pickups). LOCKED 9 clarified: heroes may differ in speed/HP/armour, NFT sidegrades never do. No dependency added
 Next smallest task : P2-F1 owner plays the preview on PC, Pixel 7, iPhone 13; grokbot fixes the top 3 reported issues
+H5 addendum      : after preview verification, src/main.ts unlocks audio on pointerup/touchend/click/keydown (touch pointerdown is not a user activation, so phone audio could stay blocked; also present in P1). Re-verified: typecheck 0, 97/97, build 0, phone suite console errors none. Final commit = the one carrying this line
