@@ -53,6 +53,11 @@ export interface Input {
   /** Is fire physically held right now (vs a latched tap)? */
   fireHeld(): boolean;
   takePause(): boolean;
+  /**
+   * Entering play from a menu (Resume, Deploy, Again): drop any fire in progress and ignore fire until the
+   * pointer is released and pressed again, so the click that closed the menu can never also shoot.
+   */
+  holdFireUntilRelease(): void;
   dispose(): void;
 }
 
@@ -69,6 +74,7 @@ export function createInput(el: HTMLElement): Input {
   let action = false;
   let pauseQueued = false;
   let lastAim = 0;
+  let fireBlocked = false;
   const left: Stick = { active: false, id: -1, baseX: 0, baseY: 0, x: 0, y: 0 };
   const right: Stick = { active: false, id: -1, baseX: 0, baseY: 0, x: 0, y: 0 };
 
@@ -121,6 +127,12 @@ export function createInput(el: HTMLElement): Input {
       pauseQueued = false;
       return p;
     },
+    holdFireUntilRelease() {
+      firing = false;
+      fireLatched = false;
+      right.active = false;
+      fireBlocked = true;
+    },
     takeAction() {
       const a = action;
       action = false;
@@ -165,10 +177,11 @@ export function createInput(el: HTMLElement): Input {
       inp.mode = 'touch';
       const s = e.clientX < window.innerWidth / 2 ? left : right;
       if (s.active) return;
+      if (s === right && fireBlocked) return; // the aim/fire thumb waits for a fresh touch after a menu
       Object.assign(s, { active: true, id: e.pointerId, baseX: e.clientX, baseY: e.clientY, x: e.clientX, y: e.clientY });
     } else {
       inp.mode = 'pc';
-      if (e.button === 0) firing = fireLatched = true;
+      if (e.button === 0 && !fireBlocked) firing = fireLatched = true;
     }
     e.preventDefault();
   };
@@ -198,6 +211,7 @@ export function createInput(el: HTMLElement): Input {
     }
   };
   const pup = (e: PointerEvent) => {
+    fireBlocked = false; // released: the next press may fire
     if (e.pointerType !== 'touch') {
       if (e.button === 0) firing = false;
       return;

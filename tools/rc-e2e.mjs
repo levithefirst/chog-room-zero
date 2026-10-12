@@ -41,6 +41,30 @@ const obRows = await ev(`[...document.querySelectorAll('table.howto td:first-chi
 check('Onboarding: first launch only, dismissible, re-openable from title, covers move/aim/shoot/creep/ability/rings', ob1 === 'Clear Room Zero' && ob2 && ob3 === 'title' && ob4 === 'Clear Room Zero' && ['Move', 'Aim / shoot', 'Creep (quiet)', 'Ability', 'Gold rings'].every((x) => obRows.includes(x)), { first: ob1, dismissed: ob2, afterReload: ob3, reopened: ob4, rows: obRows });
 await click('[data-act="howto-close"]'); await sleep(200);
 
+// 1b. RC-2: clicking Resume never fires; fire works after release + a fresh press.
+{
+  await ev(`__chog.go('start')`); await ev(`__chog.go('pick')`); await waitPhase('play'); await sleep(400); await ev(parkBots);
+  const rows = [];
+  for (const hold of [80, 500]) {
+    await ev(`__chog.go('pause')`); await sleep(350);
+    const r = await ev(`(()=>{const b=document.querySelector('[data-go="resume"]').getBoundingClientRect();return [b.left+b.width/2,b.top+b.height/2]})()`);
+    const s0 = await ev('__chog.world.actors[0].shots');
+    await cmd('Input.dispatchMouseEvent', { type: 'mouseMoved', x: r[0], y: r[1] });
+    await cmd('Input.dispatchMouseEvent', { type: 'mousePressed', x: r[0], y: r[1], button: 'left', buttons: 1, clickCount: 1 });
+    await sleep(hold);
+    const during = (await ev('__chog.world.actors[0].shots')) - s0;
+    await cmd('Input.dispatchMouseEvent', { type: 'mouseReleased', x: r[0], y: r[1], button: 'left', clickCount: 1 });
+    await sleep(500);
+    const afterResume = (await ev('__chog.world.actors[0].shots')) - s0;
+    await cmd('Input.dispatchMouseEvent', { type: 'mousePressed', x: 900, y: 360, button: 'left', buttons: 1, clickCount: 1 }); await sleep(250);
+    await cmd('Input.dispatchMouseEvent', { type: 'mouseReleased', x: 900, y: 360, button: 'left', clickCount: 1 }); await sleep(200);
+    const afterPress = (await ev('__chog.world.actors[0].shots')) - s0 - afterResume;
+    rows.push({ hold, phase: await phase(), during, afterResume, afterPress });
+  }
+  check('RC-2 Resume click (80 ms and 500 ms holds) fires 0 shots; a fresh press after release fires', rows.every((x) => x.phase === 'play' && x.during === 0 && x.afterResume === 0 && x.afterPress > 0), rows);
+  await ev(`__chog.go('pause')`); await ev(`__chog.go('quit')`); await sleep(300);
+}
+
 // 2. NFT DEMO at every entry point.
 const titleBadge = await ev(`!!document.querySelector('[data-act="demo"] .demo')`);
 await click('[data-act="demo"]'); await sleep(300);

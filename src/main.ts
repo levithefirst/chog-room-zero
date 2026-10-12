@@ -177,6 +177,8 @@ async function start() {
       acc = 0;
       resumeSkip = true;
     }
+    // The click/tap/key that left a menu must never also fire (RC-2): fire needs release-then-press.
+    if (next === 'play') input.holdFireUntilRelease();
     audio.play('ui', 0, 0, 1, false, true);
     render();
   }
@@ -345,6 +347,7 @@ async function start() {
     const b = t.closest('[data-go]') as HTMLElement | null;
     if (b) {
       e.preventDefault();
+      e.stopPropagation(); // a menu press is consumed here and never reaches the game input
       go(b.dataset.go as MatchEvent);
     }
   });
