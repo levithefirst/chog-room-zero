@@ -95,6 +95,8 @@ export const TUNING = {
     reactionTime: 0.45,
     // Aim error starts at 9 deg and settles over 1.2 s. Misses first, then tightens.
     aimErrorDeg: 9,
+    // A bot stuck >1 s re-plans around the blocked tile this many times per goal before giving up (CHOG-AI-001).
+    stuckRepaths: 4,
     aimSettleSeconds: 1.2,
     fireToleranceDeg: 6,
     // 300 deg/s turn: you can see it swing toward you.

@@ -26,6 +26,12 @@ export interface Brain {
   goal: { x: number; y: number } | null;
   path: { x: number; y: number }[];
   stuckTimer: number;
+  /** Re-plans spent on the current goal after getting stuck (CHOG-AI-001). */
+  stuckRepaths: number;
+  /** Tiles found blocked while chasing the current goal (excluded from its re-plans). */
+  avoid: number[];
+  /** Where the current stuck-check window started (progress-based, not velocity-based). */
+  stuckFrom: { x: number; y: number };
   lookBase: number;
   // Debug and tests: what it perceived this tick.
   sawPlayer: boolean;
@@ -62,7 +68,7 @@ export function createBrain(spawn: BotSpawn): Brain {
     state: 'patrol',
     patrol: spawn.patrol.map(([x, y]) => ({ x: x + 0.5, y: y + 0.5 })),
     patrolIndex: 0, flanker: spawn.flanker, timer: 0, seenFor: 0, engagedFor: 0, aimOffset: 0, aimTimer: 0,
-    lastKnown: null, goal: null, path: [], stuckTimer: 0, lookBase: 0, sawPlayer: false, heardAt: null,
+    lastKnown: null, goal: null, path: [], stuckTimer: 0, stuckRepaths: 0, avoid: [], stuckFrom: { x: 0, y: 0 }, lookBase: 0, sawPlayer: false, heardAt: null,
     source: null, suspicion: 0, reaction: TUNING.perception.reactionMax, pathAt: -1e9,
   };
 }
@@ -79,6 +85,8 @@ function setGoal(w: World, a: Actor, br: Brain, gx: number, gy: number): void {
   br.path = findPath(w.level, a.x, a.y, gx, gy);
   br.pathAt = now;
   br.stuckTimer = 0;
+  br.stuckRepaths = 0;
+  br.avoid.length = 0;
 }
 
 /** Record a belief update with its signal. */
@@ -108,7 +116,7 @@ function token(w: World, a: Actor, want: boolean): boolean {
 }
 
 /** Steer along the path. Returns true when the goal is reached (or unreachable). */
-function follow(a: Actor, br: Brain, dt: number): boolean {
+function follow(w: World, a: Actor, br: Brain, dt: number): boolean {
   while (br.path.length && Math.hypot(br.path[0].x - a.x, br.path[0].y - a.y) < 0.3) br.path.shift();
   if (!br.path.length) {
     out.moveX = out.moveY = 0;
@@ -120,8 +128,25 @@ function follow(a: Actor, br: Brain, dt: number): boolean {
   out.moveX = dx / d;
   out.moveY = dy / d;
   out.aim = Math.atan2(dy, dx);
-  br.stuckTimer = Math.hypot(a.vx, a.vy) < 0.3 ? br.stuckTimer + dt : 0;
+  // Stuck = less than 0.25 u of real progress in 1 s. (Velocity alone misses a bot grinding on a box corner,
+  // which keeps a sliding velocity while going nowhere.)
+  if (br.stuckTimer === 0) { br.stuckFrom.x = a.x; br.stuckFrom.y = a.y; }
+  br.stuckTimer += dt;
+  if (br.stuckTimer > 1 && Math.hypot(a.x - br.stuckFrom.x, a.y - br.stuckFrom.y) >= 0.25) br.stuckTimer = 0;
   if (br.stuckTimer > 1) {
+    br.stuckTimer = 0;
+    // Stuck (CHOG-AI-001): something the nav grid does not know is in the way (a body, a slab edge). Re-plan once
+    // with the blocked waypoint's tile excluded; only if that also fails, give up on this goal ("arrive").
+    if (br.goal && br.stuckRepaths < TUNING.bots.stuckRepaths) {
+      br.stuckRepaths++;
+      const l = w.level;
+      br.avoid.push(Math.floor(n.y) * l.w + Math.floor(n.x));
+      for (const i of br.avoid) l.dyn[i]++;
+      br.path = findPath(l, a.x, a.y, br.goal.x, br.goal.y);
+      for (const i of br.avoid) l.dyn[i]--;
+      br.pathAt = w.tick * TUNING.simStepSeconds;
+      if (br.path.length) return false;
+    }
     br.path = [];
     return true;
   }
@@ -277,14 +302,14 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
         break;
       }
       setGoal(w, a, br, hp.x, hp.y);
-      follow(a, br, dt);
+      follow(w, a, br, dt);
       break;
     }
     case 'patrol': {
       out.quiet = B.patrolQuiet;
       const target = br.patrol[br.patrolIndex];
       setGoal(w, a, br, target.x, target.y);
-      if (follow(a, br, dt)) {
+      if (follow(w, a, br, dt)) {
         br.timer += dt;
         out.aim = br.lookBase + Math.sin(br.timer * 1.5) * 0.6;
         if (br.timer > 1.2) {
@@ -299,7 +324,7 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
     case 'search': {
       const t = br.lastKnown!;
       setGoal(w, a, br, t.x, t.y);
-      if (follow(a, br, dt)) {
+      if (follow(w, a, br, dt)) {
         if (br.timer === 0) br.lookBase = a.facing;
         br.timer += dt;
         out.aim = br.lookBase + Math.sin(br.timer * 2.2) * 1.4;
@@ -351,7 +376,7 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
         if (br.flanker) {
           const f = pickFlank(w, a, { x: p.x, y: p.y });
           setGoal(w, a, br, f.x, f.y);
-          follow(a, br, dt);
+          follow(w, a, br, dt);
         }
         out.aim = toP;
         break;
@@ -362,7 +387,7 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
       // Out of range: close in along the path instead of wasting shots.
       if (Math.hypot(p.x - a.x, p.y - a.y) > range) {
         setGoal(w, a, br, p.x, p.y);
-        follow(a, br, dt);
+        follow(w, a, br, dt);
         out.aim = toP;
       }
       if (!out.firing && a.ammo < a.weapon.magazine / 2) out.reload = true;
@@ -376,7 +401,7 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
         if (spot) setGoal(w, a, br, spot.x, spot.y);
         else br.goal = { x: a.x, y: a.y };
       }
-      const arrived = follow(a, br, dt);
+      const arrived = follow(w, a, br, dt);
       if (arrived) {
         br.timer += dt;
         out.aim = Math.atan2(threat.y - a.y, threat.x - a.x);
@@ -400,7 +425,7 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
         const g = br.flanker ? pickFlank(w, a, t) : t;
         setGoal(w, a, br, g.x, g.y);
       }
-      if (follow(a, br, dt)) {
+      if (follow(w, a, br, dt)) {
         br.state = 'search';
         br.goal = null;
         br.timer = 0;
