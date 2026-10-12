@@ -12,7 +12,8 @@ export interface Audio {
 }
 
 // Mix: per-cue level so guns sit on top, feet under, UI quiet.
-const MIX: Partial<Record<CueType, number>> = { step: 0.8, quietStep: 0.8, shot: 0.9, pickup: 0.7, ui: 0.4, hurt: 0.9 };
+// RC-1: the blocked-shot knock sits under gunshots (it fires on every cover hit, often several per burst).
+const MIX: Partial<Record<CueType, number>> = { step: 0.8, quietStep: 0.8, shot: 0.9, pickup: 0.7, ui: 0.4, hurt: 0.9, blocked: 0.6 };
 const MUTE_KEY = 'chog.muted';
 
 // Simultaneous voice cap; extra sounds are dropped (lowest priority first is approximated by arrival).
@@ -22,6 +23,8 @@ export function createAudio(): Audio {
   let ctx: AudioContext | null = null;
   let noise: AudioBuffer | null = null;
   let voices = 0;
+  // Master limiter (RC-1): up to 24 voices can stack in a firefight; a compressor keeps the sum from clipping.
+  let master: AudioNode | null = null;
 
   let muted = false;
   try {
@@ -44,6 +47,10 @@ export function createAudio(): Audio {
     unlock() {
       if (!ctx) {
         ctx = new AudioContext({ latencyHint: 'interactive' });
+        const comp = ctx.createDynamicsCompressor();
+        comp.threshold.value = -10; comp.knee.value = 6; comp.ratio.value = 12; comp.attack.value = 0.003; comp.release.value = 0.15;
+        comp.connect(ctx.destination);
+        master = comp;
         noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
         const d = noise.getChannelData(0);
         // Fixed LCG so the noise texture is the same every session.
@@ -76,7 +83,7 @@ export function createAudio(): Audio {
         out.connect(lp);
         tail = lp;
       }
-      tail.connect(pan).connect(ctx.destination);
+      tail.connect(pan).connect(master ?? ctx.destination);
       voices++;
       const c = ctx;
       const nb = noise;
