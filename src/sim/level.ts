@@ -5,7 +5,7 @@ import { segmentBoxT } from './geom';
 export interface Level {
   w: number;
   h: number;
-  // 0 floor, 1 full wall, 2 half cover
+  // 0 floor, 1 wall, 2 crate, 3 barrier, 4 doorway (floor)
   tiles: Uint8Array;
   // Full walls only: block sight and bullets.
   wallBoxes: Box[];
@@ -17,11 +17,17 @@ export interface Level {
   playerSpawn: { x: number; y: number };
   // Floor tiles next to a wall or cover piece: candidate spots for bots to hold or hide.
   coverSpots: { x: number; y: number }[];
+  pickupSpawns: { kind: 'health' | 'armor' | 'ammo'; x: number; y: number }[];
 }
 
 export const FLOOR = 0;
 export const WALL = 1;
 export const COVER = 2;
+export const BARRIER = 3;
+export const DOOR = 4;
+
+export const walkable = (t: number) => t === FLOOR || t === DOOR;
+export const isCover = (t: number) => t === COVER || t === BARRIER;
 
 function mergeRuns(tiles: Uint8Array, w: number, h: number, kind: number): Box[] {
   // Horizontal runs, then merge identical runs downward. Fewer boxes, same shape.
@@ -77,29 +83,31 @@ export function parseLevel(rows: readonly string[]): Level {
   const w = rows[0].length;
   const tiles = new Uint8Array(w * h);
   let playerSpawn = { x: 1.5, y: 1.5 };
+  const pickupSpawns: Level['pickupSpawns'] = [];
   for (let y = 0; y < h; y++) {
     if (rows[y].length !== w) throw new Error(`Map row ${y} has length ${rows[y].length}, expected ${w}`);
     for (let x = 0; x < w; x++) {
       const ch = rows[y][x];
-      tiles[y * w + x] = ch === '#' ? WALL : ch === 'c' ? COVER : FLOOR;
+      tiles[y * w + x] = ch === '#' ? WALL : ch === 'c' ? COVER : ch === 'b' ? BARRIER : ch === 'd' ? DOOR : FLOOR;
       if (ch === 'P') playerSpawn = { x: x + 0.5, y: y + 0.5 };
+      if (ch === 'h' || ch === 'a' || ch === 'm') pickupSpawns.push({ kind: ch === 'h' ? 'health' : ch === 'a' ? 'armor' : 'ammo', x: x + 0.5, y: y + 0.5 });
     }
   }
   const wallBoxes = mergeRuns(tiles, w, h, WALL);
-  const coverBoxes = mergeRuns(tiles, w, h, COVER);
+  const coverBoxes = [...mergeRuns(tiles, w, h, COVER), ...mergeRuns(tiles, w, h, BARRIER)];
   const coverSpots: { x: number; y: number }[] = [];
   for (let y = 1; y < h - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
       if (tiles[y * w + x] !== FLOOR) continue;
       const n = [tiles[y * w + x - 1], tiles[y * w + x + 1], tiles[(y - 1) * w + x], tiles[(y + 1) * w + x]];
-      if (n.some((t) => t !== FLOOR)) coverSpots.push({ x: x + 0.5, y: y + 0.5 });
+      if (n.some((t) => !walkable(t))) coverSpots.push({ x: x + 0.5, y: y + 0.5 });
     }
   }
   return {
     w, h, tiles, wallBoxes, coverBoxes,
     solidBoxes: [...wallBoxes, ...coverBoxes],
     segments: outline(tiles, w, h),
-    playerSpawn, coverSpots,
+    playerSpawn, coverSpots, pickupSpawns,
   };
 }
 
@@ -118,13 +126,38 @@ export function sightClear(l: Level, ax: number, ay: number, bx: number, by: num
   return true;
 }
 
-/** True when nothing solid (walls or cover) lies between a and b: a clear shot. */
-export function shotClear(l: Level, ax: number, ay: number, bx: number, by: number): boolean {
-  for (const b of l.solidBoxes) {
-    const t = segmentBoxT(ax, ay, bx, by, b);
-    if (t >= 0 && t < 1) return false;
+function boxDist(x: number, y: number, b: Box): number {
+  const dx = Math.max(b.x0 - x, 0, x - b.x1);
+  const dy = Math.max(b.y0 - y, 0, y - b.y1);
+  return Math.hypot(dx, dy);
+}
+
+/**
+ * Half-cover RULE: a crate or barrier stops a bullet unless the bullet was fired from within `lean` u of that
+ * box (the shooter is leaning over it), or the weapon pierces cover. Walls always stop bullets.
+ * Returns the first blocking t in [0,1] for the segment, or -1.
+ */
+export function bulletBlockT(
+  l: Level, ox: number, oy: number, x0: number, y0: number, x1: number, y1: number, pierce: boolean, lean: number,
+): number {
+  let best = -1;
+  for (const b of l.wallBoxes) {
+    const t = segmentBoxT(x0, y0, x1, y1, b);
+    if (t >= 0 && (best < 0 || t < best)) best = t;
   }
-  return true;
+  if (pierce) return best;
+  for (const b of l.coverBoxes) {
+    if (boxDist(ox, oy, b) <= lean) continue;
+    const t = segmentBoxT(x0, y0, x1, y1, b);
+    if (t >= 0 && (best < 0 || t < best)) best = t;
+  }
+  return best;
+}
+
+/** True when a bullet fired from a would reach b under the half-cover rule. */
+export function shotClear(l: Level, ax: number, ay: number, bx: number, by: number, pierce = false, lean = 1.25): boolean {
+  const t = bulletBlockT(l, ax, ay, ax, ay, bx, by, pierce, lean);
+  return t < 0 || t >= 1;
 }
 
 /** A* over walkable tiles, 8-way without cutting corners. Returns tile-centre waypoints, excluding the start. */
@@ -132,7 +165,7 @@ export function findPath(l: Level, sx: number, sy: number, gx: number, gy: numbe
   const w = l.w;
   const start = Math.floor(sy) * w + Math.floor(sx);
   const goal = Math.floor(gy) * w + Math.floor(gx);
-  const walk = (i: number) => l.tiles[i] === FLOOR;
+  const walk = (i: number) => walkable(l.tiles[i]);
   if (!walk(goal)) return [];
   const g = new Float32Array(w * l.h).fill(Infinity);
   const from = new Int32Array(w * l.h).fill(-1);

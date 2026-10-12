@@ -3,11 +3,17 @@
 // Positional: pan by direction, volume by distance within the event's radius, muffled through walls.
 import type { SoundType } from '../sim/world';
 
+export type CueType = SoundType | 'hurt' | 'ui';
+
 export interface Audio {
   unlock(): void;
-  play(type: SoundType, dx: number, dy: number, radius: number, muffled: boolean, own: boolean): void;
+  play(type: CueType, dx: number, dy: number, radius: number, muffled: boolean, own: boolean, weapon?: string): void;
   muted: boolean;
 }
+
+// Mix: per-cue level so guns sit on top, feet under, UI quiet.
+const MIX: Partial<Record<CueType, number>> = { step: 0.8, quietStep: 0.8, shot: 0.9, pickup: 0.7, ui: 0.4, hurt: 0.9 };
+const MUTE_KEY = 'chog.muted';
 
 // Simultaneous voice cap; extra sounds are dropped (lowest priority first is approximated by arrival).
 const MAX_VOICES = 24;
@@ -17,8 +23,24 @@ export function createAudio(): Audio {
   let noise: AudioBuffer | null = null;
   let voices = 0;
 
+  let muted = false;
+  try {
+    muted = localStorage.getItem(MUTE_KEY) === '1';
+  } catch {
+    /* storage blocked: default unmuted */
+  }
   const a: Audio = {
-    muted: false,
+    get muted() {
+      return muted;
+    },
+    set muted(v: boolean) {
+      muted = v;
+      try {
+        localStorage.setItem(MUTE_KEY, v ? '1' : '0');
+      } catch {
+        /* ignore */
+      }
+    },
     unlock() {
       if (!ctx) {
         ctx = new AudioContext({ latencyHint: 'interactive' });
@@ -33,12 +55,12 @@ export function createAudio(): Audio {
       }
       if (ctx.state === 'suspended') void ctx.resume();
     },
-    play(type, dx, dy, radius, muffled, own) {
+    play(type, dx, dy, radius, muffled, own, weapon) {
       if (!ctx || !noise || a.muted || ctx.state !== 'running' || voices >= MAX_VOICES) return;
       const dist = Math.hypot(dx, dy);
       if (!own && dist > radius) return;
       const t = ctx.currentTime;
-      let gain = own ? 1 : Math.pow(1 - dist / radius, 1.3);
+      let gain = (own ? 1 : Math.pow(1 - dist / radius, 1.3)) * (MIX[type] ?? 1) * 0.8;
       if (muffled) gain *= 0.6;
       if (gain < 0.02) return;
 
@@ -88,10 +110,60 @@ export function createAudio(): Audio {
 
       let len = 0.2;
       switch (type) {
-        case 'shot': // dry crack plus a short body: who fired is told by pan and volume
-          burst(0, 0.09, 'bandpass', 1400, 0.8, 0.9);
-          burst(0, 0.03, 'highpass', 4000, 0.5, 0.5);
-          thump(0, 0.12, 110, 45, 0.7);
+        case 'shot': // each gun has its own voice, so you know what is shooting from the dark
+          if (weapon === 'shotgun') {
+            burst(0, 0.22, 'lowpass', 900, 0.7, 1);
+            burst(0, 0.05, 'bandpass', 1800, 0.6, 0.6);
+            thump(0, 0.2, 90, 35, 0.9);
+            burst(0.32, 0.03, 'bandpass', 1500, 3, 0.35);
+            burst(0.42, 0.04, 'bandpass', 1100, 3, 0.35);
+            len = 0.5;
+          } else if (weapon === 'marksman') {
+            burst(0, 0.05, 'highpass', 3500, 0.6, 0.8);
+            burst(0, 0.35, 'bandpass', 700, 0.5, 0.55);
+            thump(0, 0.18, 160, 40, 0.8);
+            len = 0.45;
+          } else if (weapon === 'smg') {
+            burst(0, 0.045, 'bandpass', 2200, 1.1, 0.6);
+            thump(0, 0.05, 140, 70, 0.35);
+            len = 0.08;
+          } else {
+            burst(0, 0.09, 'bandpass', 1400, 0.8, 0.85);
+            burst(0, 0.03, 'highpass', 4000, 0.5, 0.45);
+            thump(0, 0.12, 110, 45, 0.65);
+          }
+          break;
+        case 'pickup': // a latch and a soft rustle
+          burst(0, 0.02, 'bandpass', 2600, 5, 0.5);
+          burst(0.04, 0.12, 'bandpass', 900, 1.2, 0.35);
+          len = 0.2;
+          break;
+        case 'dash': // short air sweep
+          burst(0, 0.16, 'bandpass', 1200, 0.9, 0.45);
+          burst(0.02, 0.1, 'highpass', 3000, 0.5, 0.2);
+          break;
+        case 'sonar': // a low ping with a long ring: it carries, so everyone knows
+          thump(0, 0.6, 620, 560, 0.35);
+          thump(0, 0.9, 310, 300, 0.25);
+          len = 0.95;
+          break;
+        case 'barrier': // a heavy slab set down
+          thump(0, 0.25, 80, 40, 0.9);
+          burst(0, 0.12, 'lowpass', 600, 0.8, 0.6);
+          len = 0.3;
+          break;
+        case 'mend': // a breath of filtered noise rising
+          burst(0, 0.35, 'bandpass', 600, 1.5, 0.3);
+          burst(0.15, 0.3, 'bandpass', 1200, 1.5, 0.25);
+          len = 0.5;
+          break;
+        case 'hurt': // you were hit: close, low, unmistakable
+          thump(0, 0.16, 120, 55, 0.9);
+          burst(0, 0.1, 'lowpass', 420, 1, 0.7);
+          break;
+        case 'ui':
+          burst(0, 0.02, 'bandpass', 1800, 3, 0.4);
+          len = 0.05;
           break;
         case 'step': // run: brighter heel strike
           burst(0, 0.05, 'bandpass', 900, 1.2, 0.35);

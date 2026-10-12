@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createWorld, hears, player, stepWorld, IDLE_INPUT, type ActorInput, type SoundEvent } from '../src/sim/world';
-import { parseLevel, findPath, sightClear, FLOOR, tileAt } from '../src/sim/level';
+import { parseLevel, findPath, sightClear, FLOOR, tileAt, walkable } from '../src/sim/level';
 import { canSee, visibilityPolygon } from '../src/sim/vision';
 import { pointInPolygon } from '../src/sim/geom';
 import { TUNING } from '../src/config/tuning';
@@ -16,23 +16,41 @@ const TEST_MAP = [
   '#..........#',
   '############',
 ];
-const BOT_RIGHT = [{ name: 'T', patrol: [[8, 2]] as [number, number][], flanker: false }];
+const BOT_RIGHT = [{ name: 'T', hero: 'kettle', patrol: [[8, 2]] as [number, number][], flanker: false }];
 const input = (o: Partial<ActorInput>): ActorInput => ({ ...IDLE_INPUT, ...o });
 const DEG = Math.PI / 180;
 
 describe('Room Zero map', () => {
   const l = parseLevel(ROOM_ZERO);
-  it('is 40x24, closed, with spawns and patrol points on floor', () => {
-    expect(l.w).toBe(40);
-    expect(l.h).toBe(24);
+  it('is 44x26, closed, with spawns, pickups and patrol points on walkable floor', () => {
+    expect(l.w).toBe(44);
+    expect(l.h).toBe(26);
     for (let x = 0; x < l.w; x++) expect(tileAt(l, x + 0.5, 0.5)).not.toBe(FLOOR);
     expect(tileAt(l, l.playerSpawn.x, l.playerSpawn.y)).toBe(FLOOR);
-    for (const b of BOT_SPAWNS) for (const [x, y] of b.patrol) expect(tileAt(l, x + 0.5, y + 0.5)).toBe(FLOOR);
+    for (const b of BOT_SPAWNS) for (const [x, y] of b.patrol) expect(walkable(tileAt(l, x + 0.5, y + 0.5)), `${b.name} ${x},${y}`).toBe(true);
+    expect(l.pickupSpawns.filter((p) => p.kind === 'health').length).toBeGreaterThanOrEqual(3);
+    expect(l.pickupSpawns.filter((p) => p.kind === 'armor').length).toBeGreaterThanOrEqual(2);
+    expect(l.pickupSpawns.filter((p) => p.kind === 'ammo').length).toBeGreaterThanOrEqual(2);
+  });
+  it('every walkable tile and every pickup is reachable from the player spawn', () => {
+    const seen = new Uint8Array(l.w * l.h);
+    const q = [Math.floor(l.playerSpawn.y) * l.w + Math.floor(l.playerSpawn.x)];
+    seen[q[0]] = 1;
+    while (q.length) {
+      const i = q.pop()!;
+      for (const n of [i + 1, i - 1, i + l.w, i - l.w]) if (!seen[n] && walkable(l.tiles[n])) { seen[n] = 1; q.push(n); }
+    }
+    for (let i = 0; i < l.tiles.length; i++) if (walkable(l.tiles[i])) expect(seen[i], `tile ${i % l.w},${Math.floor(i / l.w)}`).toBe(1);
+    for (const p of l.pickupSpawns) expect(findPath(l, l.playerSpawn.x, l.playerSpawn.y, p.x, p.y, 8000).length).toBeGreaterThan(0);
+  });
+  it('has chokepoints (doorways) and at least one long sightline of 25+ u', () => {
+    expect(Array.from(l.tiles).filter((t) => t === 4).length).toBeGreaterThanOrEqual(10);
+    expect(sightClear(l, 1.5, 8.5, 42.5, 8.5)).toBe(true);
   });
   it('every bot spawn is reachable from the player spawn', () => {
     for (const b of BOT_SPAWNS) {
       const [x, y] = b.patrol[0];
-      expect(findPath(l, l.playerSpawn.x, l.playerSpawn.y, x + 0.5, y + 0.5, 5000).length).toBeGreaterThan(0);
+      expect(findPath(l, l.playerSpawn.x, l.playerSpawn.y, x + 0.5, y + 0.5, 8000).length).toBeGreaterThan(0);
     }
   });
   it('no single bot spawn sees the player spawn (first contact is earned)', () => {
@@ -67,7 +85,7 @@ describe('projectiles', () => {
     stepWorld(w, input({ aim: Math.PI / 2, firing: true }));
     const b = w.bullets[0];
     const d1 = Math.hypot(b.x - b.ox, b.y - b.oy);
-    expect(d1).toBeCloseTo(TUNING.combat.bulletSpeed * TUNING.simStepSeconds, 5);
+    expect(d1).toBeCloseTo(player(w).weapon.bulletSpeed * TUNING.simStepSeconds, 5);
   });
   it('stop at a wall and make an impact sound there', () => {
     const w = createWorld({ map: TEST_MAP, bots: [] });
@@ -101,7 +119,6 @@ describe('projectiles', () => {
     expect(bot.alive).toBe(false);
     expect(bot.hp).toBe(0);
     expect(p.kills).toBe(1);
-    expect(p.hits).toBe(Math.ceil(TUNING.combat.maxHp / TUNING.combat.damage));
     expect(w.outcome).toBe('won');
   });
   it('player death records the killer and the line of the shot', () => {

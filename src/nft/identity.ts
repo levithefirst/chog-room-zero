@@ -2,7 +2,7 @@
 // The real chain, contract, ownership method, and metadata are UNKNOWN (docs/design/nft.md), so there is no
 // chain adapter yet. BLOCKER: the owner must provide verified chain + contract + ownership read method.
 // Until then: guest always works, and a mock adapter exists for development only (?mockChog=<tokenId>).
-import { DEFAULT_OPERATOR, markingFor, operatorFor, type Operator } from '../sim/operators';
+import { NO_SIDEGRADE, markingFor, operatorFor, type Sidegrade } from '../sim/operators';
 
 /** Placeholders. Never fill these with a guess. */
 export const NFT_CONFIG = {
@@ -14,7 +14,8 @@ export interface Identity {
   kind: 'guest' | 'bound';
   tokenId: string | null;
   label: string;
-  operator: Operator;
+  // A bound token adds one sidegrade on top of whichever hero is picked.
+  sidegrade: Sidegrade;
   marking: number | null;
   // Where the binding came from, shown in the UI so a mock is never mistaken for a real check.
   source: 'guest' | 'mock' | 'chain';
@@ -26,14 +27,14 @@ export interface OwnershipAdapter {
   ownedTokens(): Promise<string[]>;
 }
 
-export const GUEST: Identity = { kind: 'guest', tokenId: null, label: 'Guest', operator: DEFAULT_OPERATOR, marking: null, source: 'guest' };
+export const GUEST: Identity = { kind: 'guest', tokenId: null, label: 'Guest', sidegrade: NO_SIDEGRADE, marking: null, source: 'guest' };
 
 export function mockAdapter(tokenIds: string[]): OwnershipAdapter {
   return { name: 'mock', ownedTokens: async () => tokenIds };
 }
 
 export function boundIdentity(tokenId: string, source: Identity['source']): Identity {
-  return { kind: 'bound', tokenId, label: `Chog #${tokenId}`, operator: operatorFor(tokenId), marking: markingFor(tokenId), source };
+  return { kind: 'bound', tokenId, label: `Chog #${tokenId}`, sidegrade: operatorFor(tokenId), marking: markingFor(tokenId), source };
 }
 
 /**

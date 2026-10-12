@@ -3,63 +3,153 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
-    <meta name="theme-color" content="#07080a" />
+    <meta name="theme-color" content="#0b0c0d" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preload" href="/fonts/barlow-condensed-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/ibm-plex-mono-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
     <title>Chog: Room Zero</title>
     <style>
-      /* Numbers use a monospace face so ammo and health never jitter as they change. */
-      :root { --ink: #e8e1d0; --dim: #8a8478; --hostile: #c4532c; --signal: #f2d98a; --bg: #07080a;
-        --mono: "Iosevka", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+      /* Fonts (SIL OFL 1.1, self-hosted in /fonts): Barlow Condensed for words, IBM Plex Mono for numbers so they never jitter. */
+      @font-face { font-family: "Barlow Cond"; src: url(/fonts/barlow-condensed-latin-500-normal.woff2) format("woff2"); font-weight: 500; font-display: swap; }
+      @font-face { font-family: "Barlow Cond"; src: url(/fonts/barlow-condensed-latin-600-normal.woff2) format("woff2"); font-weight: 600; font-display: swap; }
+      @font-face { font-family: "Plex Mono"; src: url(/fonts/ibm-plex-mono-latin-400-normal.woff2) format("woff2"); font-weight: 400; font-display: swap; }
+      @font-face { font-family: "Plex Mono"; src: url(/fonts/ibm-plex-mono-latin-600-normal.woff2) format("woff2"); font-weight: 600; font-display: swap; }
+      :root { --ink: #ece5d3; --dim: #9a9384; --faint: #5c574e; --hostile: #d0582f; --signal: #f2d98a; --heal: #9fd18b;
+        --armor: #8fb0c8; --panel: rgba(14, 15, 16, 0.78); --line: #3a3832; --bg: #0b0c0d;
+        --sans: "Barlow Cond", "Arial Narrow", sans-serif; --mono: "Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+        --sl: max(14px, env(safe-area-inset-left)); --sr: max(14px, env(safe-area-inset-right));
+        --st: max(10px, env(safe-area-inset-top)); --sb: max(10px, env(safe-area-inset-bottom)); }
       html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; color: var(--ink);
-        font-family: var(--mono); -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+        font-family: var(--sans); font-weight: 500; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
       #app { position: fixed; inset: 0; }
       canvas { display: block; touch-action: none; cursor: none; }
       .layer { position: fixed; inset: 0; pointer-events: none; }
-      #vignette { box-shadow: inset 0 0 18vmin 6vmin rgba(196, 83, 44, 0.55); opacity: 0; transition: opacity 120ms linear; }
-      #hud { font-size: 13px; letter-spacing: 0.04em; padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+      .num { font-family: var(--mono); font-weight: 600; }
+      button { font: inherit; color: inherit; cursor: pointer; }
+      #vignette { box-shadow: inset 0 0 20vmin 7vmin rgba(208, 88, 47, 0.6); opacity: 0; transition: opacity 120ms linear; }
+      #hurt { background: radial-gradient(ellipse at center, transparent 55%, rgba(208, 88, 47, 0.35)); opacity: 0; transition: opacity 250ms ease-out; }
+
+      #hud { opacity: 0; transition: opacity 300ms ease; font-size: 14px; letter-spacing: 0.03em; }
+      #hud.on { opacity: 1; }
       #hud > * { position: absolute; }
-      #hp { left: max(16px, env(safe-area-inset-left)); bottom: max(14px, env(safe-area-inset-bottom)); }
-      #hpbar { width: 140px; height: 4px; background: #2b2a27; margin-top: 5px; }
-      #hpfill { height: 100%; background: var(--ink); width: 100%; }
-      #ammo { right: max(16px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); text-align: right; font-size: 20px; }
-      #ammo small { display: block; font-size: 11px; color: var(--dim); }
-      #left { left: 50%; top: max(10px, env(safe-area-inset-top)); transform: translateX(-50%); color: var(--dim); }
-      #op { left: max(16px, env(safe-area-inset-left)); top: max(10px, env(safe-area-inset-top)); color: var(--dim); }
-      #mute { right: max(16px, env(safe-area-inset-right)); top: max(6px, env(safe-area-inset-top)); pointer-events: auto;
-        background: none; border: 1px solid #2b2a27; color: var(--dim); font: inherit; padding: 6px 10px; min-width: 48px; min-height: 32px; }
-      #reload { right: max(18px, env(safe-area-inset-right)); bottom: 64px; pointer-events: auto; display: none;
-        width: 56px; height: 56px; border-radius: 50%; border: 1px solid #4a4740; background: rgba(7, 8, 10, 0.5); color: var(--ink); font: inherit; font-size: 11px; }
+      .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+      #vitals { left: var(--sl); top: var(--st); padding: 8px 10px; width: 190px; }
+      .bar { position: relative; height: 10px; background: #26251f; border-radius: 2px; overflow: hidden; margin: 3px 0 5px; }
+      .bar > i { position: absolute; inset: 0 auto 0 0; width: 100%; transition: width 120ms linear; }
+      #hpfill { background: var(--ink); } #hpfill.low { background: var(--hostile); }
+      #arfill { background: var(--armor); }
+      #arbar { height: 6px; }
+      .row { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.08em; }
+      .row .num { color: var(--ink); font-size: 15px; letter-spacing: 0; }
+      #hero { font-size: 12px; color: var(--dim); margin-top: 2px; }
+      #foes { left: 50%; top: var(--st); transform: translateX(-50%); padding: 5px 12px; display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.1em; }
+      #pips { display: flex; gap: 4px; }
+      #pips i { width: 9px; height: 9px; background: var(--hostile); clip-path: polygon(50% 0, 100% 100%, 50% 72%, 0 100%); }
+      #pips i.down { background: var(--faint); }
+      #sys { right: var(--sr); top: var(--st); display: flex; gap: 8px; pointer-events: auto; }
+      #sys button { width: 44px; height: 40px; display: grid; place-items: center; padding: 0; }
+      #sys svg { width: 20px; height: 20px; stroke: var(--ink); fill: none; stroke-width: 2; }
+      #weapon { right: var(--sr); bottom: var(--sb); padding: 8px 12px 8px 10px; display: flex; gap: 10px; align-items: center; }
+      #ring { width: 40px; height: 40px; transform: rotate(-90deg); }
+      #ring circle { fill: none; stroke-width: 4; }
+      #ring .track { stroke: #2c2a25; } #ring .fill { stroke: var(--signal); stroke-dasharray: 107; stroke-dashoffset: 107; }
+      #wname { font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.1em; }
+      #ammo { font-size: 26px; line-height: 1; } #ammo small { font-size: 13px; color: var(--dim); }
+      #ammo.empty { color: var(--hostile); }
+      #ability { right: calc(var(--sr) + 200px); bottom: var(--sb); width: 64px; height: 64px; border-radius: 50%; pointer-events: auto; padding: 0;
+        background: conic-gradient(rgba(242, 217, 138, 0.9) var(--cd, 360deg), rgba(40, 38, 33, 0.9) 0); border: none; display: grid; place-items: center; }
+      #ability span { width: 54px; height: 54px; border-radius: 50%; background: #17181a; display: grid; place-items: center; font-size: 13px; line-height: 1.05; text-transform: uppercase; letter-spacing: 0.06em; }
+      #ability.ready span { background: #2a281f; color: var(--signal); }
+      #ability small { display: block; font-size: 10px; color: var(--dim); }
+      #reload { display: none; right: calc(var(--sr) + 8px); bottom: calc(var(--sb) + 76px); width: 58px; height: 58px; border-radius: 50%; pointer-events: auto;
+        background: var(--panel); border: 1px solid var(--line); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
       body.touch #reload { display: block; }
-      #hint { left: 50%; bottom: 18%; transform: translateX(-50%); text-align: center; color: var(--ink); opacity: 0;
-        transition: opacity 900ms ease; font-size: 13px; line-height: 1.8; white-space: nowrap; }
-      #overlay { display: flex; align-items: center; justify-content: center; background: rgba(7, 8, 10, 0.72); pointer-events: auto; }
-      #overlay.hidden { display: none; }
-      #overlay.clear { background: transparent; pointer-events: none; align-items: flex-start; padding-top: 14vh; }
-      .card { max-width: 30em; padding: 0 24px; line-height: 1.6; }
-      .card h1 { font-size: 30px; letter-spacing: 0.18em; font-weight: 600; margin: 0 0 4px; }
-      .card h2 { font-size: 18px; letter-spacing: 0.12em; font-weight: 600; margin: 0 0 10px; }
-      .card p { margin: 6px 0; color: var(--dim); }
-      .card .go { color: var(--ink); margin-top: 18px; }
-      .card .bad { color: var(--hostile); }
-      .card table { border-collapse: collapse; margin: 10px 0; }
-      .card td { padding: 1px 18px 1px 0; color: var(--dim); }
-      .card td + td { color: var(--ink); }
-      @media (max-height: 420px) { .card h1 { font-size: 22px; } .card { font-size: 12px; line-height: 1.45; } }
+      body.touch #ability { right: calc(var(--sr) + 78px); bottom: calc(var(--sb) + 76px); width: 72px; height: 72px; }
+      body.touch #ability span { width: 62px; height: 62px; }
+      body.touch #weapon { right: auto; left: 50%; transform: translateX(-50%); padding: 5px 10px; }
+      body.touch #weapon #ring { width: 30px; height: 30px; }
+      body.touch #ammo { font-size: 20px; }
+      body.touch #ability .keyhint { display: none; }
+      #hint { left: 50%; bottom: 22%; transform: translateX(-50%); text-align: center; opacity: 0; transition: opacity 900ms ease; font-size: 16px; line-height: 1.6; white-space: nowrap; text-shadow: 0 1px 3px #000; }
+      #toast { left: 50%; top: 22%; transform: translateX(-50%); font-size: 18px; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0; transition: opacity 200ms; text-shadow: 0 1px 3px #000; }
+
+      /* Screens: one overlay, one card style, fade + rise transitions. */
+      #overlay { display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at 50% 40%, rgba(20, 21, 22, 0.82), rgba(6, 7, 8, 0.94));
+        pointer-events: auto; opacity: 1; transition: opacity 260ms ease; padding: var(--st) var(--sr) var(--sb) var(--sl); box-sizing: border-box; }
+      #overlay.hidden { opacity: 0; pointer-events: none; }
+      #overlay.clear { background: linear-gradient(rgba(6, 7, 8, 0.6), transparent 45%); pointer-events: none; align-items: flex-start; padding-top: 12vh; }
+      .card { max-width: 760px; width: 100%; padding: 0 20px; box-sizing: border-box; animation: rise 320ms cubic-bezier(.2, .7, .2, 1); text-align: center; }
+      @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+      .card h1 { font-size: 56px; letter-spacing: 0.14em; font-weight: 600; margin: 0; line-height: 1; }
+      .card h1 em { font-style: normal; color: var(--signal); }
+      .card h2 { font-size: 34px; letter-spacing: 0.14em; font-weight: 600; margin: 0 0 8px; text-transform: uppercase; }
+      .card p { margin: 6px auto; color: var(--dim); font-size: 17px; max-width: 34em; }
+      .card .bad { color: var(--hostile); } .card .good { color: var(--heal); }
+      .kicker { font-size: 13px; letter-spacing: 0.3em; color: var(--dim); text-transform: uppercase; margin-bottom: 10px; }
+      .btns { display: flex; gap: 10px; justify-content: center; margin-top: 18px; flex-wrap: wrap; }
+      .btn { min-width: 150px; min-height: 46px; padding: 0 20px; background: #1b1c1d; border: 1px solid var(--line); border-radius: 4px; font-size: 17px; letter-spacing: 0.12em; text-transform: uppercase; }
+      .btn.primary { background: var(--signal); color: #15140f; border-color: var(--signal); font-weight: 600; }
+      .btn:focus-visible, .hero:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+      .heroes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; text-align: left; }
+      .hero { background: #151617; border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; transition: border-color 120ms, transform 120ms; }
+      .hero:hover, .hero.sel { border-color: var(--signal); transform: translateY(-2px); }
+      .hero b { font-size: 24px; letter-spacing: 0.08em; text-transform: uppercase; display: flex; align-items: center; gap: 8px; }
+      .hero b i { width: 14px; height: 14px; border-radius: 50%; background: var(--ink); box-shadow: inset 0 0 0 3px var(--accent); }
+      .hero .role { font-size: 12px; letter-spacing: 0.2em; color: var(--signal); text-transform: uppercase; }
+      .hero p { font-size: 14px; margin: 4px 0 6px; line-height: 1.3; }
+      .stat { display: grid; grid-template-columns: 52px 1fr; align-items: center; gap: 6px; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.08em; margin: 2px 0; }
+      .stat s { display: block; height: 5px; background: #2a2924; text-decoration: none; position: relative; }
+      .stat s::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--v); background: var(--ink); }
+      .hero .ab { font-size: 13px; color: var(--ink); margin-top: 6px; line-height: 1.25; }
+      .hero .ab span { color: var(--dim); }
+      .hero .wp { font-size: 13px; color: var(--ink); margin-top: 4px; }
+      table.stats { margin: 10px auto; border-collapse: collapse; font-size: 17px; }
+      table.stats td { padding: 3px 14px; color: var(--dim); text-align: left; }
+      table.stats td + td { color: var(--ink); font-family: var(--mono); font-weight: 600; text-align: right; }
+      .loadbar { width: 220px; height: 4px; background: #26251f; margin: 16px auto 0; overflow: hidden; }
+      .loadbar i { display: block; height: 100%; width: 40%; background: var(--signal); animation: load 0.9s ease-in-out infinite; }
+      @keyframes load { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+      .mock { display: inline-block; font-size: 12px; letter-spacing: 0.12em; border: 1px solid var(--line); padding: 2px 8px; color: var(--dim); text-transform: uppercase; margin-top: 10px; }
+      @media (max-height: 460px) {
+        .card h1 { font-size: 40px; } .card h2 { font-size: 26px; } .card p { font-size: 15px; }
+        .hero { padding: 6px 8px; } .hero b { font-size: 19px; } .hero p { display: none; } .hero .ab { font-size: 12px; }
+        .heroes { gap: 6px; margin-top: 6px; } .btns { margin-top: 10px; } .btn { min-height: 40px; min-width: 120px; }
+        #vitals { width: 160px; padding: 6px 8px; }
+      }
+      #rotate { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 10; align-items: center; justify-content: center; flex-direction: column; gap: 14px; text-align: center; font-size: 20px; letter-spacing: 0.1em; text-transform: uppercase; }
+      #rotate svg { width: 64px; height: 64px; stroke: var(--signal); fill: none; stroke-width: 2; animation: turn 1.6s ease-in-out infinite; }
+      @keyframes turn { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+      @media (orientation: portrait) and (max-width: 820px) { #rotate { display: flex; } }
     </style>
   </head>
   <body>
     <div id="app"></div>
     <div id="vignette" class="layer"></div>
+    <div id="hurt" class="layer"></div>
     <div id="hud" class="layer">
-      <div id="op"></div>
-      <div id="left"></div>
-      <div id="hp">HP <span id="hpn">100</span><div id="hpbar"><div id="hpfill"></div></div></div>
-      <div id="ammo"></div>
-      <button id="mute" type="button">Sound on</button>
+      <div id="vitals" class="panel">
+        <div class="row"><span>Health</span><span class="num" id="hpn">100</span></div>
+        <div class="bar"><i id="hpfill"></i></div>
+        <div class="row"><span>Armour</span><span class="num" id="arn">0</span></div>
+        <div class="bar" id="arbar"><i id="arfill"></i></div>
+        <div id="hero"></div>
+      </div>
+      <div id="foes" class="panel"><span id="foesn" class="num">5</span><span>hostiles</span><span id="pips"></span></div>
+      <div id="sys">
+        <button id="mute" class="panel" type="button" aria-label="Mute sound"></button>
+        <button id="pause" class="panel" type="button" aria-label="Pause"><svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14" /></svg></button>
+      </div>
+      <div id="weapon" class="panel">
+        <svg id="ring" viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="17" /><circle class="fill" id="ringfill" cx="20" cy="20" r="17" /></svg>
+        <div><div id="wname"></div><div id="ammo" class="num"></div></div>
+      </div>
+      <button id="ability" type="button"><span id="abl"></span></button>
       <button id="reload" type="button">Reload</button>
       <div id="hint"></div>
+      <div id="toast"></div>
     </div>
     <div id="overlay" class="layer"></div>
+    <div id="rotate"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" /><path d="M11 18h2" /></svg>Turn your phone sideways<small style="color:#9a9384;font-size:14px;letter-spacing:.05em;text-transform:none">Room Zero plays in landscape.</small></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

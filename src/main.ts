@@ -1,11 +1,14 @@
-import { createRenderer, type Fx } from './render/render';
+import { createRenderer, createFx } from './render/render';
 import { createInput } from './input/input';
 import { createAudio } from './audio/audio';
 import { fixedSteps } from './sim/sim';
-import { createWorld, hears, player, stepWorld, viewOf, type World } from './sim/world';
+import { createWorld, hears, player, stepWorld, type World } from './sim/world';
 import { sightClear } from './sim/level';
 import { canSee } from './sim/vision';
+import { nextPhase, simRuns, type MatchEvent, type Phase } from './sim/match';
 import { TUNING } from './config/tuning';
+import { HEROES, heroById } from './config/heroes';
+import { WEAPONS } from './config/weapons';
 import { adapterFromUrl, resolveIdentity, GUEST, type Identity } from './nft/identity';
 import { recordRun, type TokenHistory } from './nft/history';
 
@@ -13,8 +16,7 @@ const $ = (id: string) => document.getElementById(id)!;
 const root = $('app');
 const overlay = $('overlay');
 const hint = $('hint');
-
-type Phase = 'title' | 'play' | 'recap' | 'summary';
+const HERO_KEY = 'chog.hero';
 
 function compass(dx: number, dy: number): string {
   const names = ['east', 'south-east', 'south', 'south-west', 'west', 'north-west', 'north', 'north-east'];
@@ -26,7 +28,11 @@ function esc(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 }
 
+const SPEAKER_ON = '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9c1.5 1.5 1.5 4.5 0 6M18.5 6.5c3 3 3 8 0 11"/></svg>';
+const SPEAKER_OFF = '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9l5 6M21 9l-5 6"/></svg>';
+
 async function start() {
+  await Promise.all([document.fonts.load('600 20px "Plex Mono"'), document.fonts.load('600 20px "Barlow Cond"')]).catch(() => undefined);
   const renderer = await createRenderer(root);
   const input = createInput(root);
   const audio = createAudio();
@@ -34,59 +40,121 @@ async function start() {
   const identity: Identity = id;
 
   let phase: Phase = 'title';
+  let heroId = (() => {
+    try {
+      const h = localStorage.getItem(HERO_KEY);
+      return h && HEROES.some((x) => x.id === h) ? h : HEROES[0].id;
+    } catch {
+      return HEROES[0].id;
+    }
+  })();
   let runIndex = 0;
-  let world: World = createWorld({ seed: TUNING.seed, playerOp: identity.operator });
+  let world: World = createWorld({ seed: TUNING.seed, hero: heroId, sidegrade: identity.sidegrade });
   let acc = 0;
   let recapLeft = 0;
   let playTime = 0;
   let history: TokenHistory | null = null;
-  const fx: Fx = { markers: [], impacts: [], hitMarks: [], shake: 0, corpses: [] };
+  let toastLeft = 0;
+  const fx = createFx();
   renderer.reset(world);
 
-  $('op').textContent = identity.kind === 'bound' ? `${identity.label} / ${identity.operator.name}${identity.source === 'mock' ? ' (mock)' : ''}` : 'Guest / Standard';
   const mute = $('mute') as HTMLButtonElement;
-  mute.onclick = () => {
-    audio.muted = !audio.muted;
-    mute.textContent = audio.muted ? 'Sound off' : 'Sound on';
+  const paintMute = () => {
+    mute.innerHTML = audio.muted ? SPEAKER_OFF : SPEAKER_ON;
+    mute.setAttribute('aria-label', audio.muted ? 'Unmute sound' : 'Mute sound');
   };
-  ($('reload') as HTMLButtonElement).onpointerdown = (e) => {
+  paintMute();
+  mute.onpointerdown = (e) => {
+    e.stopPropagation();
+    audio.unlock();
+    audio.muted = !audio.muted;
+    paintMute();
+  };
+  $('pause').onpointerdown = (e) => {
+    e.stopPropagation();
+    if (phase === 'play') go('pause');
+  };
+  $('reload').onpointerdown = (e) => {
     e.stopPropagation();
     input.reload();
   };
+  $('ability').onpointerdown = (e) => {
+    e.stopPropagation();
+    input.ability();
+  };
+
+  function toast(text: string) {
+    $('toast').textContent = text;
+    toastLeft = 1.4;
+  }
+
+  // ---- Flow ----
+  function go(e: MatchEvent) {
+    const next = nextPhase(phase, e);
+    if (next === phase) return;
+    phase = next;
+    audio.play('ui', 0, 0, 1, false, true);
+    render();
+  }
+
+  function render() {
+    $('hud').classList.toggle('on', phase === 'play' || phase === 'pause' || phase === 'recap');
+    switch (phase) {
+      case 'title': return showTitle();
+      case 'select': return showSelect();
+      case 'loading': return showLoading();
+      case 'play': overlay.className = 'layer hidden'; return;
+      case 'pause': return showPause();
+      case 'recap': return showRecap();
+      case 'results': return showResults();
+    }
+  }
+
+  function card(html: string, cls = 'layer') {
+    overlay.className = cls;
+    overlay.innerHTML = `<div class="card">${html}</div>`;
+  }
 
   function showTitle() {
-    overlay.className = 'layer';
-    overlay.innerHTML = `<div class="card">
-      <h1>CHOG: ROOM ZERO</h1>
-      <p>One room. Five hostiles. No light but yours.</p>
-      <p>Walls stop sight and bullets. Running is loud. Shots are louder.</p>
-      <p>${esc(note)}</p>
-      <p class="go">${input.mode === 'touch' ? 'Tap to enter. Turn the phone sideways.' : 'Click to enter.'}</p></div>`;
+    card(`<div class="kicker">Basement level · lights out</div>
+      <h1>CHOG <em>/</em> ROOM ZERO</h1>
+      <p style="margin-top:14px">Five hostiles somewhere below. You see only what your lamp touches. Everyone hears everything.</p>
+      <div class="btns"><button class="btn primary" data-go="start">Enter</button></div>
+      <div class="mock">${esc(identity.kind === 'bound' ? `${identity.label} · ${identity.sidegrade.name} sidegrade${identity.source === 'mock' ? ' · mock NFT' : ''}` : 'Guest')}</div>
+      <p style="font-size:13px">${esc(note)}</p>`);
   }
 
-  function begin() {
-    audio.unlock();
-    runIndex++;
-    world = createWorld({ seed: TUNING.seed + runIndex, playerOp: identity.operator });
-    renderer.reset(world);
-    fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = 0;
-    fx.shake = 0;
-    acc = 0;
-    playTime = 0;
-    history = null;
-    phase = 'play';
-    overlay.className = 'layer hidden';
-    // First-30-seconds teaching: one line of controls that fades out.
-    hint.innerHTML = input.mode === 'touch'
-      ? 'Left thumb moves. Half push creeps.<br>Right thumb aims. Push past the ring to fire.'
-      : 'WASD move. Shift creeps.<br>Mouse aims. Click fires. R reloads.';
-    hint.style.opacity = runIndex === 1 ? '1' : '0';
+  function statBar(label: string, v: number) {
+    return `<div class="stat">${label}<s style="--v:${Math.round(Math.max(0.08, Math.min(1, v)) * 100)}%"></s></div>`;
   }
 
-  function endRun(won: boolean) {
-    const p = player(world);
-    const r = { won, seconds: Math.round(playTime), kills: p.kills, shots: p.shots, hits: p.hits, at: new Date().toISOString() };
-    history = recordRun(localStorage, identity.tokenId, r);
+  function showSelect() {
+    const cards = HEROES.map((h, i) => {
+      const w = WEAPONS[h.weapon];
+      const dps = (w.damage * w.pellets) / w.fireInterval;
+      return `<button class="hero${h.id === heroId ? ' sel' : ''}" data-hero="${h.id}" style="--accent:#${h.accent.toString(16).padStart(6, '0')}">
+        <div class="role">${i + 1} · ${esc(h.role)}</div><b><i></i>${esc(h.name)}</b><p>${esc(h.blurb)}</p>
+        ${statBar('Health', h.maxHp / 120)}${statBar('Armour', h.maxArmor / 50)}${statBar('Speed', (h.speed - 0.8) / 0.32)}${statBar('Sight', h.vision.range / 12)}${statBar('Punch', dps / 170)}
+        <div class="wp">${esc(w.name)}</div>
+        <div class="ab">${esc(h.ability.name)} <span>· ${esc(h.ability.text)}</span></div></button>`;
+    }).join('');
+    card(`<h2>Pick a Chog</h2><div class="heroes">${cards}</div>
+      <div class="btns"><button class="btn" data-go="quit">Back</button><button class="btn primary" data-go="pick">Deploy</button></div>`);
+  }
+
+  function showLoading() {
+    card(`<div class="kicker">Deploying ${esc(heroById(heroId).name)}</div><h2>Room Zero</h2><div class="loadbar"><i></i></div>`);
+    // Build the world (and bake the map if needed) after the loading card has painted.
+    requestAnimationFrame(() => setTimeout(() => {
+      beginWorld();
+      setTimeout(() => go('loaded'), 350);
+    }, 30));
+  }
+
+  function showPause() {
+    card(`<h2>Paused</h2><p>The basement waits.</p>
+      <div class="btns"><button class="btn primary" data-go="resume">Resume</button><button class="btn" data-go="restart">Restart</button><button class="btn" data-go="quit">Quit</button></div>
+      <p style="font-size:13px">${input.mode === 'touch' ? '' : 'Esc or P to resume.'}</p>`);
   }
 
   function showRecap() {
@@ -94,58 +162,129 @@ async function start() {
     const killer = world.actors[k.killerId];
     const p = player(world);
     const d = Math.hypot(k.fromX - p.x, k.fromY - p.y);
-    overlay.className = 'layer clear';
-    overlay.innerHTML = `<div class="card"><h2 class="bad">DOWN</h2><p>Shot by ${esc(killer.name)} from ${d.toFixed(0)} m ${compass(k.fromX - p.x, k.fromY - p.y)}.</p></div>`;
+    card(`<h2 class="bad">Down</h2><p>${esc(killer.name)} (${esc(killer.hero.name)}, ${esc(k.weapon)}) from ${d.toFixed(0)} m ${compass(k.fromX - p.x, k.fromY - p.y)}.</p>`, 'layer clear');
   }
 
-  function showSummary(won: boolean) {
+  function showResults() {
+    const won = world.outcome === 'won';
     const p = player(world);
-    const acc = p.shots ? Math.round((p.hits / p.shots) * 100) : 0;
+    const accPct = p.shots ? Math.round((p.hits / p.shots) * 100) : 0;
     const left = world.actors.filter((a) => a.team === 'bot' && a.alive).length;
     const k = world.playerKill;
-    const why = !won && k ? `<p class="bad">Shot by ${esc(world.actors[k.killerId].name)}, ${Math.hypot(k.fromX - p.x, k.fromY - p.y).toFixed(0)} m ${compass(k.fromX - p.x, k.fromY - p.y)}.</p>` : '';
+    const why = !won && k ? `<p class="bad">${esc(world.actors[k.killerId].name)} got you with a ${esc(k.weapon.toLowerCase())}, ${Math.hypot(k.fromX - p.x, k.fromY - p.y).toFixed(0)} m ${compass(k.fromX - p.x, k.fromY - p.y)}.</p>` : '<p class="good">Every hostile is down.</p>';
     const hist = history
-      ? `<p>${esc(identity.label)} history (this device): ${history.runs} runs, ${history.wins} cleared, ${history.kills} kills${history.bestWinSeconds !== null ? `, best clear ${history.bestWinSeconds} s` : ''}.</p>`
-      : '<p>Guest run. Nothing was saved.</p>';
-    overlay.className = 'layer';
-    overlay.innerHTML = `<div class="card"><h2${won ? '' : ' class="bad"'}>${won ? 'ROOM CLEARED' : 'RUN OVER'}</h2>${why}
-      <table><tr><td>Time</td><td>${Math.round(playTime)} s</td></tr>
-      <tr><td>Hostiles down</td><td>${p.kills} of ${world.actors.length - 1}${won ? '' : `, ${left} left`}</td></tr>
-      <tr><td>Hits / shots</td><td>${p.hits} / ${p.shots} (${acc}%)</td></tr></table>${hist}
-      <p class="go">${input.mode === 'touch' ? 'Tap to go again.' : 'R or click to go again.'}</p></div>`;
+      ? `<p style="font-size:14px">${esc(identity.label)} on this device: ${history.runs} runs, ${history.wins} cleared, ${history.kills} kills.</p>`
+      : '<p style="font-size:14px">Guest run. Nothing was saved.</p>';
+    card(`<div class="kicker">${esc(heroById(heroId).name)} · ${esc(p.weapon.name)}</div><h2 class="${won ? 'good' : 'bad'}">${won ? 'Room cleared' : 'Run over'}</h2>${why}
+      <table class="stats"><tr><td>Time</td><td>${Math.round(playTime)} s</td></tr>
+      <tr><td>Hostiles down</td><td>${p.kills} / ${world.actors.length - 1}${won ? '' : ` (${left} left)`}</td></tr>
+      <tr><td>Hits / shots</td><td>${p.hits} / ${p.shots} · ${accPct}%</td></tr>
+      <tr><td>Damage dealt</td><td>${Math.round(p.damageDealt)}</td></tr></table>${hist}
+      <div class="btns"><button class="btn primary" data-go="restart">Again</button><button class="btn" data-go="quit">Change Chog</button></div>`);
   }
 
   overlay.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
     if (e.pointerType === 'touch') input.mode = 'touch';
-    if (phase === 'title' || phase === 'summary') begin();
+    audio.unlock();
+    const t = e.target as HTMLElement;
+    const hero = t.closest('[data-hero]') as HTMLElement | null;
+    if (hero) {
+      heroId = hero.dataset.hero!;
+      try {
+        localStorage.setItem(HERO_KEY, heroId);
+      } catch {
+        /* ignore */
+      }
+      for (const el of overlay.querySelectorAll('.hero')) el.classList.toggle('sel', el === hero);
+      // A second tap on the selected card deploys.
+      if (hero.dataset.armed) go('pick');
+      for (const el of overlay.querySelectorAll<HTMLElement>('.hero')) delete el.dataset.armed;
+      hero.dataset.armed = '1';
+      return;
+    }
+    const b = t.closest('[data-go]') as HTMLElement | null;
+    if (b) {
+      e.preventDefault();
+      go(b.dataset.go as MatchEvent);
+    }
   });
 
-  showTitle();
+  function beginWorld() {
+    runIndex++;
+    world = createWorld({ seed: TUNING.seed + runIndex, hero: heroId, sidegrade: identity.sidegrade });
+    renderer.reset(world);
+    fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = 0;
+    for (const s of fx.sparks) s.age = 1;
+    fx.shake = 0;
+    acc = 0;
+    playTime = 0;
+    history = null;
+    const h = heroById(heroId);
+    $('hero').textContent = `${h.name} · ${identity.kind === 'bound' ? `${identity.sidegrade.name}${identity.source === 'mock' ? ' (mock)' : ''}` : 'Guest'}`;
+    $('wname').textContent = world.actors[0].weapon.name;
+    $('abl').innerHTML = `${esc(h.ability.name)}<small class="keyhint">Space</small>`;
+    $('pips').innerHTML = world.actors.slice(1).map(() => '<i></i>').join('');
+    hint.innerHTML = input.mode === 'touch'
+      ? 'Left thumb moves, half push creeps. Right thumb aims, push past the ring to fire.'
+      : 'WASD move · Shift creep · Mouse aim · Click fire · R reload · Space ability · Esc pause';
+    hint.style.opacity = runIndex === 1 ? '1' : '0';
+  }
 
-  // Per-step presentation: sounds go to audio and heard markers, hits go to feedback.
+  function endRun(won: boolean) {
+    const p = player(world);
+    history = recordRun(localStorage, identity.tokenId, { won, seconds: Math.round(playTime), kills: p.kills, shots: p.shots, hits: p.hits, at: new Date().toISOString() });
+  }
+
+  render();
+  // Leaving the tab pauses the match: the sim must never run while nobody is watching.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && phase === 'play') go('pause');
+  });
+
+  function spark(x: number, y: number, n: number, hostile: boolean) {
+    for (const s of fx.sparks) {
+      if (n <= 0) break;
+      if (s.age < 1) continue;
+      const a = Math.random() * Math.PI * 2, v = 3 + Math.random() * 5;
+      s.x = x; s.y = y; s.vx = Math.cos(a) * v; s.vy = Math.sin(a) * v; s.age = 0; s.hostile = hostile;
+      n--;
+    }
+  }
+
+  // Per-step presentation: sounds feed audio and heard markers, hits feed feedback.
   function afterStep() {
     const p = player(world);
-    const view = viewOf(p);
+    const view = p.view;
     for (const s of world.sounds) {
       const own = s.sourceId === 0;
       const dx = s.x - p.x, dy = s.y - p.y;
+      if (s.type === 'sonar') fx.pings.push({ x: s.x, y: s.y, age: 0, hostile: !own });
       const heard = own || hears(world.level, p.x, p.y, s);
       if (!heard) continue;
-      audio.play(s.type, dx, dy, s.radius, !own && !sightClear(world.level, p.x, p.y, s.x, s.y), own);
-      if (s.type === 'impact') fx.impacts.push({ x: s.x, y: s.y, age: 0 });
+      audio.play(s.type, dx, dy, s.radius, !own && !sightClear(world.level, p.x, p.y, s.x, s.y), own, s.weapon);
+      if (s.type === 'impact') {
+        fx.impacts.push({ x: s.x, y: s.y, age: 0 });
+        spark(s.x, s.y, 3, false);
+      }
+      if (own && s.type === 'pickup') toast('Picked up');
       if (own || s.team !== 'bot') continue;
       const src = world.actors[s.sourceId];
       if (src.alive && canSee(world.level, p.x, p.y, p.facing, view, src.x, src.y)) continue;
-      // Heard, not seen: mark the rough area. Further away means a looser guess.
       const err = Math.hypot(dx, dy) * 0.08;
-      fx.markers.push({ x: s.x + (Math.random() * 2 - 1) * err, y: s.y + (Math.random() * 2 - 1) * err, age: 0, life: TUNING.sound.markerLife, big: s.type === 'shot' || s.type === 'death' });
+      fx.markers.push({ x: s.x + (Math.random() * 2 - 1) * err, y: s.y + (Math.random() * 2 - 1) * err, age: 0, life: TUNING.sound.markerLife, big: s.type === 'shot' || s.type === 'death' || s.type === 'sonar' });
     }
     for (const h of world.hits) {
-      if (h.by === 0) fx.hitMarks.push({ x: h.x, y: h.y, age: 0, kill: h.killed });
+      if (h.by === 0) {
+        fx.hitMarks.push({ x: h.x, y: h.y, age: 0, kill: h.killed });
+        spark(h.x, h.y, h.killed ? 10 : 4, true);
+        if (h.killed) toast(`${world.actors[h.target].name} down`);
+      }
       if (h.target === 0) {
         fx.shake = TUNING.render.shakeSeconds;
-        fx.markers.push({ x: h.fromX, y: h.fromY, age: 0, life: 1, big: true });
+        fx.damageArcs.push({ ang: Math.atan2(h.fromY - p.y, h.fromX - p.x), age: 0 });
+        audio.play('hurt', 0, 0, 1, false, true);
+        ($('hurt') as HTMLElement).style.opacity = '1';
+        setTimeout(() => (($('hurt') as HTMLElement).style.opacity = '0'), 90);
       }
       if (h.killed) fx.corpses.push({ x: world.actors[h.target].x, y: world.actors[h.target].y, hostile: h.target !== 0 });
     }
@@ -155,13 +294,14 @@ async function start() {
   // Test hook for the scripted browser run. Only in dev builds or with ?debug in the URL.
   const hook = { fps: 0 } as { fps: number } & Record<string, unknown>;
   if (import.meta.env.DEV || location.search.includes('debug')) {
-    Object.defineProperties(hook, {
-      world: { get: () => world },
-      phase: { get: () => phase },
-    });
-    Object.assign(hook, { renderer, begin });
+    Object.defineProperties(hook, { world: { get: () => world }, phase: { get: () => phase } });
+    Object.assign(hook, { renderer, go, setHero: (h: string) => (heroId = h), fx });
     (window as unknown as { __chog: unknown }).__chog = hook;
   }
+
+  const ringFill = $('ringfill') as unknown as SVGCircleElement;
+  const pipsEl = $('pips');
+  let lastHud = '';
 
   renderer.app.ticker.add((ticker) => {
     const dt = Math.min(0.1, ticker.deltaMS / 1000);
@@ -174,8 +314,12 @@ async function start() {
     }
     document.body.classList.toggle('touch', input.mode === 'touch');
     const action = input.takeAction();
+    if (input.takePause()) {
+      if (phase === 'play') go('pause');
+      else if (phase === 'pause') go('resume');
+    }
 
-    if (phase === 'play') {
+    if (simRuns(phase)) {
       const p = player(world);
       const ps = renderer.toScreen(p.x, p.y);
       const inp = input.read(ps.x, ps.y);
@@ -184,49 +328,78 @@ async function start() {
       for (let i = 0; i < r.steps && world.outcome === 'playing'; i++) {
         stepWorld(world, inp);
         inp.reload = false;
+        inp.ability = false;
         afterStep();
         playTime += TUNING.simStepSeconds;
       }
-      if (playTime > 12) hint.style.opacity = '0';
+      if (playTime > 14) hint.style.opacity = '0';
       if (world.outcome === 'dead') {
-        phase = 'recap';
         recapLeft = TUNING.render.deathFreeze;
         endRun(false);
-        showRecap();
+        go('died');
       } else if (world.outcome === 'won') {
-        phase = 'summary';
         endRun(true);
-        showSummary(true);
+        go('won');
       }
     } else if (phase === 'recap') {
+      // The world keeps its death animation going; the sim is frozen for the player.
+      for (const a of world.actors) if (!a.alive) a.deadFor += dt;
       recapLeft -= dt;
-      if (recapLeft <= 0) {
-        phase = 'summary';
-        showSummary(false);
-      }
+      if (recapLeft <= 0) go('recapDone');
     } else if (action) {
-      begin();
+      if (phase === 'title') go('start');
+      else if (phase === 'select') go('pick');
+      else if (phase === 'results') go('restart');
     }
 
-    // Age presentation effects.
     for (const m of fx.markers) m.age += dt;
     for (const m of fx.impacts) m.age += dt;
     for (const m of fx.hitMarks) m.age += dt;
+    for (const m of fx.damageArcs) m.age += dt;
+    for (const m of fx.pings) m.age += dt;
+    for (const s of fx.sparks) {
+      if (s.age >= 1) continue;
+      s.age += dt * 3;
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+    }
     fx.markers = fx.markers.filter((m) => m.age < m.life);
-    fx.impacts = fx.impacts.filter((m) => m.age < 0.12);
-    fx.hitMarks = fx.hitMarks.filter((m) => m.age < 0.15);
+    fx.impacts = fx.impacts.filter((m) => m.age < 0.25);
+    fx.hitMarks = fx.hitMarks.filter((m) => m.age < 0.2);
+    fx.damageArcs = fx.damageArcs.filter((m) => m.age < TUNING.render.damageArcSeconds);
+    fx.pings = fx.pings.filter((m) => m.age < 0.7);
     fx.shake = Math.max(0, fx.shake - dt);
+    toastLeft -= dt;
+    $('toast').style.opacity = toastLeft > 0 ? '1' : '0';
 
-    renderer.draw(world, fx, input, dt, { recap: phase === 'recap' || (phase === 'summary' && world.outcome === 'dead'), marking: identity.marking, showSticks: phase === 'play' && input.mode === 'touch', playing: phase === 'play' });
+    renderer.draw(world, fx, input, dt, { recap: phase === 'recap' || (phase === 'results' && world.outcome === 'dead'), marking: identity.marking, showSticks: phase === 'play' && input.mode === 'touch', playing: phase === 'play' });
 
+    // HUD: only touch the DOM when a value changed.
     const p = player(world);
-    $('hpn').textContent = String(Math.max(0, p.hp));
-    ($('hpfill') as HTMLElement).style.width = `${(p.hp / TUNING.combat.maxHp) * 100}%`;
-    $('ammo').innerHTML = p.reloadLeft > 0 ? `--<small>reloading</small>` : `${p.ammo}<small>of ${p.op.magazine}</small>`;
-    $('left').textContent = `${world.actors.filter((a) => a.team === 'bot' && a.alive).length} hostiles left`;
-    const low = p.alive && p.hp / TUNING.combat.maxHp <= TUNING.render.lowHpShare;
-    ($('vignette') as HTMLElement).style.opacity = low ? String(0.5 + 0.5 * (1 - p.hp / (TUNING.combat.maxHp * TUNING.render.lowHpShare))) : '0';
-    $('hud').style.visibility = phase === 'title' ? 'hidden' : 'visible';
+    const left = world.actors.filter((a) => a.team === 'bot' && a.alive).length;
+    const cdShare = p.abilityCd / p.hero.ability.cooldown;
+    const reloadShare = p.reloadLeft > 0 ? 1 - p.reloadLeft / p.weapon.reloadSeconds : 0;
+    const key = `${Math.ceil(p.hp)}|${Math.ceil(p.armor)}|${p.ammo}|${p.reserve}|${left}|${Math.round(cdShare * 60)}|${Math.round(reloadShare * 40)}`;
+    if (key !== lastHud) {
+      lastHud = key;
+      $('hpn').textContent = String(Math.max(0, Math.ceil(p.hp)));
+      const hpEl = $('hpfill');
+      hpEl.style.width = `${(p.hp / p.maxHp) * 100}%`;
+      hpEl.classList.toggle('low', p.hp / p.maxHp <= TUNING.render.lowHpShare);
+      $('arn').textContent = String(Math.ceil(p.armor));
+      $('arfill').style.width = `${(p.armor / p.maxArmor) * 100}%`;
+      const ammo = $('ammo');
+      ammo.innerHTML = p.reloadLeft > 0 ? `--<small> reloading</small>` : `${p.ammo}<small> / ${p.reserve}</small>`;
+      ammo.classList.toggle('empty', p.ammo === 0 && p.reserve === 0);
+      ringFill.style.strokeDashoffset = String(107 * (1 - (p.reloadLeft > 0 ? reloadShare : p.ammo / p.weapon.magazine)));
+      $('foesn').textContent = String(left);
+      pipsEl.querySelectorAll('i').forEach((el, i) => el.classList.toggle('down', !world.actors[i + 1].alive));
+      const ab = $('ability');
+      ab.style.setProperty('--cd', `${(1 - cdShare) * 360}deg`);
+      ab.classList.toggle('ready', cdShare === 0);
+    }
+    const low = p.alive && p.hp / p.maxHp <= TUNING.render.lowHpShare;
+    $('vignette').style.opacity = low ? String(0.45 + 0.35 * (0.5 + 0.5 * Math.sin(performance.now() / 180))) : '0';
   });
 }
 

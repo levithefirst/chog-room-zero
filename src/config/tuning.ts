@@ -1,127 +1,142 @@
-// Every tunable number lives here. Each comment says what the value should feel like.
-// All values are PROPOSALS to tune by hand on device. Units: 1 u is about 1 metre, time in seconds.
+// Every tunable number lives here (weapons in weapons.ts, heroes in heroes.ts). Each comment says what the
+// value should feel like. All values are PROPOSALS to tune by hand. 1 u is about 1 metre; time in seconds.
 
 export const TUNING = {
   // 1/60 s fixed step: steady, frame-rate independent, deterministic.
   simStepSeconds: 1 / 60,
-  // Catch-up cap per frame: after a hitch the game skips ahead briefly instead of spiralling.
   maxStepsPerFrame: 5,
-  // Simulation seed. Same seed and inputs give the same match.
   seed: 1337,
 
   movement: {
-    // Run speed. 4.2 u/s: brisk tactical jog; the 40 u room takes about 10 s to cross.
+    // Base run speed (heroes scale it). 4.2 u/s: brisk tactical jog. (P0-2, unchanged.)
     maxSpeed: 4.2,
-    // Full speed in ~80 ms: snappy, not floaty. (P0-2 value, unchanged.)
+    // Full speed in ~80 ms, stop in ~60 ms, reversals 1.5x: snappy, planted, deliberate. (P0-2, unchanged.)
     acceleration: 52.5,
-    // Stop from full speed in ~60 ms: plants the feet. (P0-2 value, unchanged.)
     deceleration: 70,
-    // Reversals 1.5x faster than starts: deliberate but not sluggish. (P0-2 value, unchanged.)
     reverseAccelMultiplier: 1.5,
-    // Snap to exactly 0 below this speed: no visible creep.
     stopEpsilon: 0.01,
-    // Quiet walk speed share. 0.55: clearly slower, worth it only when sneaking.
+    // Quiet walk: 55% speed, worth it only when sneaking. Half stick push on mobile.
     quietSpeedScale: 0.55,
-    // Stick push below this share walks quietly on mobile. 0.6: a deliberate half push.
     quietStickThreshold: 0.6,
-    // Body radius. 0.35 u: slips through 1 u doors with a little room to spare.
+    // Body radius 0.35 u: slips through 1 u doors with room to spare.
     radius: 0.35,
-    // Distance travelled per footstep sound. 1.6 u: about 2.6 steps per second at a run.
+    // Distance per footstep sound: about 2.6 steps/s at a run.
     stepDistance: 1.6,
   },
 
   combat: {
-    // Health. 100 with 34 damage: three hits kill. Lethal, but one mistake is survivable.
-    maxHp: 100,
-    damage: 34,
-    // Bullet speed. 30 u/s: visibly travels (about 6 frames across the screen), still lethal.
-    bulletSpeed: 30,
-    // Bullet life. 0.9 s: about 27 u of reach, past the longest sightline.
-    bulletLife: 0.9,
-    // Speed added away from the shooter on hit. 1.2 u/s: a nudge you can read, not a shove.
-    knockback: 1.2,
-    // Extra spread while moving at full run, in degrees. Rewards stopping to shoot.
-    moveSpreadDeg: 3,
+    // Knockback on hit, 1.0 u/s: a readable nudge, not a shove.
+    knockback: 1.0,
+    // Extra spread at full run, degrees. Rewards stopping to shoot.
+    moveSpreadDeg: 2.5,
+    // Armour soaks this share of each hit (before armour-pen) until the armour pool is empty.
+    armorSoak: 0.6,
+    // Lean rule: a shooter within this distance of a half-cover box shoots over it (box ignored).
+    coverLean: 1.25,
+  },
+
+  pickups: {
+    // Health +40, back after 20 s: worth a detour, not a camping spot.
+    health: { amount: 40, respawn: 20 },
+    // Armour +35, back after 25 s.
+    armor: { amount: 35, respawn: 25 },
+    // Ammo: one magazine's worth x2 into reserve, back after 15 s.
+    ammo: { mags: 2, respawn: 15 },
+    // Grab radius 0.7 u: walk over it, no button.
+    radius: 0.7,
+  },
+
+  abilities: {
+    // Slip: 0.18 s at 13 u/s, about 2.3 u. Quiet.
+    dashSeconds: 0.18,
+    dashSpeed: 13,
+    // Ping: 14 u radius, shows hostiles for 2.5 s; the ping itself carries 12 u.
+    sonarRadius: 14,
+    sonarSeconds: 2.5,
+    sonarSound: 12,
+    // Slab: 1.8 x 0.45 u, 1.1 u ahead, lasts 12 s.
+    barrierLength: 1.8,
+    barrierDepth: 0.45,
+    barrierSeconds: 12,
+    // Patch: +35 health.
+    mendAmount: 35,
   },
 
   vision: {
-    // Near circle in u. 1.6: nothing right next to you is ever invisible.
+    // Near circle: nothing right next to you is ever invisible.
     nearRadius: 1.6,
-    // Ray step through the cone in degrees. 1.5: smooth light edge at phone scale.
+    // Ray step through the cone in degrees.
     rayStepDeg: 1.5,
+    // Soft edge: a second, wider cone at lower brightness.
+    softEdgeDeg: 10,
   },
 
   sound: {
-    // Hearing radii in u (how far each sound carries in the open).
+    // Hearing radii in u.
     quietStep: 3,
     runStep: 8,
     shot: 22,
     impact: 10,
     death: 12,
     reload: 4,
-    // A wall between source and listener shrinks the radius to this share. Muffled, not silenced.
+    pickup: 5,
+    ability: 6,
+    // A wall in between shrinks the radius to this share: muffled, not silenced.
     wallFactor: 0.6,
-    // Heard marker life. 1.4 s: long enough to glance at, short enough to stay fresh.
     markerLife: 1.4,
   },
 
   bots: {
-    // Seconds a bot must keep seeing you before it commits. 0.4 s: you can slip past an edge.
-    reactionTime: 0.4,
-    // Starting aim error in degrees, shrinking while it keeps sight. Misses first, then tightens.
+    // Seconds of sight before committing. 0.45 s: you can slip past an edge.
+    reactionTime: 0.45,
+    // Aim error starts at 9 deg and settles over 1.2 s. Misses first, then tightens.
     aimErrorDeg: 9,
     aimSettleSeconds: 1.2,
-    // Fire only when aim is within this many degrees of the target.
     fireToleranceDeg: 6,
-    // Bot body turn rate. 300 deg/s: you can see it swing toward you.
+    // 300 deg/s turn: you can see it swing toward you.
     turnRateDegPerSec: 300,
-    // Bot sight: the same cone and range as the default operator (fairness: no better eyes than yours).
-    sightRange: 9,
-    sightConeDeg: 70,
-    // Seconds searching the last known spot before giving up. Memory expires.
     searchSeconds: 3.5,
-    // Seconds looking around at an investigated sound.
     investigateLookSeconds: 2,
-    // Health share below which a bot breaks line of sight and repositions.
+    // Below this health share a bot breaks line of sight, repositions, or goes for health.
     retreatHpShare: 0.5,
-    // Seconds behind cover before peeking again.
     coverSeconds: 1.6,
-    // Patrol walks quietly; engagements run.
+    // Go for a health pickup within this distance when hurt.
+    healthSeekRange: 14,
     patrolQuiet: true,
   },
 
   render: {
-    // World units visible across the screen width. 22 u: vision range plus room to react.
     viewWidthUnits: 22,
-    // Never show fewer than this many units vertically (phones in landscape).
     minViewHeightUnits: 11,
-    // Camera smoothing time. 0.12 s: follows without lag you can feel.
     cameraSmoothing: 0.12,
-    // Camera lookahead toward aim, in u. 2: see a little more where you point.
     lookahead: 2,
-    // Hit flash length. 0.06 s: about 4 frames, readable, never strobing.
+    // Map bake resolution in px per u. 32: sharp on phones, 1.3 MB texture.
+    bakePpu: 32,
     hitFlash: 0.06,
-    // Muzzle flash length. 0.05 s: tells you who fired.
     muzzleFlash: 0.05,
-    // Damage shake: 3 px for 0.12 s, only when you are hit.
     shakePx: 3,
     shakeSeconds: 0.12,
-    // Death recap freeze before the summary. 1.2 s.
     deathFreeze: 1.2,
-    // Health share that starts the low-health vignette.
-    lowHpShare: 0.4,
+    lowHpShare: 0.35,
+    // Damage-direction arc stays 1 s.
+    damageArcSeconds: 1,
+    deathAnimSeconds: 0.4,
+    // Particle cap for impact sparks.
+    maxSparks: 60,
   },
 
-  // Colours. Six with a gameplay role each (see docs/design/art-direction.md).
   palette: {
-    unknown: 0x07080a,
-    wall: 0x111214,
-    wallEdge: 0x2b2a27,
-    floorLit: 0x3a362f,
-    floorRemembered: 0x1b1b1a,
-    cover: 0x6b6354,
-    player: 0xe8e1d0,
-    hostile: 0xc4532c,
+    // Out-of-sight: the map stays readable but cooler and darker.
+    fogUnexplored: 0x050607,
+    // Team colour (player) and hostile faction.
+    team: 0xe6dfcc,
+    teamDark: 0x2a2620,
+    hostile: 0xc8502b,
+    hostileDark: 0x3a1610,
     signal: 0xf2d98a,
+    hostileTracer: 0xff9a6b,
+    heal: 0x9fd18b,
+    armor: 0x8fb0c8,
+    ammo: 0xd9c27a,
   },
 } as const;

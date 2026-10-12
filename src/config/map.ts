@@ -1,48 +1,66 @@
-// Room Zero, the one handcrafted room. 1 tile = 1 u.
-// '#' full wall (blocks movement, bullets, sight). 'c' half cover (blocks movement and bullets, not sight).
-// '.' floor. 'P' player spawn. 'B' bot spawn (order matches BOT_SPAWNS below).
-// Layout intent: three bands of rooms joined by door gaps, two long east-west sightlines (rows 11 and 19),
-// a loop around the middle, and a dark pocket in the south-east.
+// Room Zero: one handcrafted floor of a service basement. 1 tile = 1 u. 44 x 26.
+// '#' wall (blocks movement, bullets, sight). 'c' crate and 'b' barrier: half cover (block movement;
+// block bullets unless the shooter leans over them, see RULE in docs/design/benchmark.md; never block sight).
+// 'd' doorway (floor with a frame). '.' floor. 'P' player spawn. 'B' bot spawn (order = BOT_SPAWNS).
+// 'h' health, 'a' armour, 'm' ammo pickup spawns.
+// Intent: north offices, a central concourse with a long east-west sightline (rows 8 and 12), three
+// southern rooms with doors as chokepoints, and a loading dock along the south wall as the flank route.
 export const ROOM_ZERO = [
-  '########################################',
-  '#.....#..........#........#............#',
-  '#.....#..........#........#.....B......#',
-  '#..P..#....cc....#...cc...#............#',
-  '#.....#..........#........#....cccc....#',
-  '#................#.....................#',
-  '#.....#..........#........#............#',
-  '###.######.###########.#####.####.######',
-  '#........#.........#.........#.........#',
-  '#........#....B....#....cc...#.........#',
-  '#........#.........#.........#....B....#',
-  '#..cc............................cc....#',
-  '#........#.........#.........#.........#',
-  '#........#..cc.....#.........#.........#',
-  '####.#####.........######.####.......###',
-  '#......#.............#.........#.......#',
-  '#......#.............#.........#.......#',
-  '#..B...#....cccc.....#....B....#.......#',
-  '#......#.............#.........#.......#',
-  '#......................................#',
-  '#......#.............#.........#.......#',
-  '#......#......c......#.........#..cc...#',
-  '#......#.............#.........#.......#',
-  '########################################',
+  '############################################',
+  '#.........#..........#.........#...........#',
+  '#..P......#....h.....#.........#.....B.....#',
+  '#.........d..........d...ccc...d...........#',
+  '#..cc.....#....bb....#.........#...bb......#',
+  '#.........#..........#.........#...........#',
+  '####d######..........#####d#####...........#',
+  '#.........######d#####.........######d######',
+  '#..a.......................m...............#',
+  '#.........#....cc.......cc.........cc..B...#',
+  '#..bb.....d.........#####..................#',
+  '#.........#....cc.......cc.........cc......#',
+  '#..........................h...........a...#',
+  '####d######d########.......########d########',
+  '#..........#.......#..cc...#...............#',
+  '#....B.....#...cc..d.......d...ccc.........#',
+  '#..........#.......#.......#.........B.....#',
+  '#..cc......#.......#####d###...............#',
+  '#..........d...m.......................bb..#',
+  '#......bb..#.......#...........#...........#',
+  '#..........#...B...#....h......#...........#',
+  '#..........#.......#...........d.....a.....#',
+  '#####.d#####.......#############...........#',
+  '#..........................................#',
+  '#....cc.........bb..........cc..........m..#',
+  '############################################',
+];
+
+export type Material = 'tile' | 'concrete' | 'metal' | 'dock';
+
+// Floor material zones, painted in order (later wins). Anything not covered is concrete.
+export const ZONES: { x0: number; y0: number; x1: number; y1: number; mat: Material }[] = [
+  { x0: 1, y0: 1, x1: 10, y1: 6, mat: 'tile' },
+  { x0: 22, y0: 1, x1: 31, y1: 7, mat: 'tile' },
+  { x0: 32, y0: 1, x1: 43, y1: 7, mat: 'metal' },
+  { x0: 1, y0: 14, x1: 11, y1: 22, mat: 'tile' },
+  { x0: 12, y0: 14, x1: 19, y1: 22, mat: 'metal' },
+  { x0: 20, y0: 14, x1: 27, y1: 17, mat: 'tile' },
+  { x0: 32, y0: 14, x1: 43, y1: 22, mat: 'metal' },
+  { x0: 1, y0: 23, x1: 43, y1: 25, mat: 'dock' },
 ];
 
 export interface BotSpawn {
   name: string;
+  hero: string;
   // Patrol points in tile coordinates. First point is the spawn tile.
   patrol: [number, number][];
-  // Flankers take a side route when chasing instead of the straight path.
   flanker: boolean;
 }
 
-// Names are plain and specific to where each bot lives.
+// Bots are named for where they work. Each uses a hero archetype from heroes.ts.
 export const BOT_SPAWNS: BotSpawn[] = [
-  { name: 'Stair', patrol: [[32, 2], [36, 5], [29, 5]], flanker: false },
-  { name: 'Hall', patrol: [[14, 9], [16, 12], [11, 11]], flanker: true },
-  { name: 'Pump', patrol: [[34, 10], [36, 8], [33, 12]], flanker: false },
-  { name: 'Cellar', patrol: [[3, 17], [5, 20], [2, 15]], flanker: true },
-  { name: 'Boiler', patrol: [[26, 17], [28, 20], [23, 15]], flanker: false },
+  { name: 'Stair', hero: 'wick', patrol: [[37, 2], [40, 5], [33, 5]], flanker: false },
+  { name: 'Pump', hero: 'brick', patrol: [[39, 9], [41, 12], [33, 8]], flanker: false },
+  { name: 'Cellar', hero: 'mop', patrol: [[5, 15], [8, 20], [2, 18]], flanker: true },
+  { name: 'Boiler', hero: 'kettle', patrol: [[37, 16], [40, 20], [34, 19]], flanker: false },
+  { name: 'Hatch', hero: 'mop', patrol: [[15, 20], [17, 16], [13, 15]], flanker: true },
 ];
