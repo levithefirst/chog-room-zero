@@ -25,9 +25,12 @@ await cmd('Runtime.enable');
 await cmd('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
 // Fresh device: no records yet.
 await cmd('Page.navigate', { url: `${base}/?debug&nooverlay` }); await sleep(2500); await ev(`localStorage.clear(); localStorage.setItem('chog.onboarded','1')`);
-const out = { base, label: 'SCRIPTED (autopilot), headless Chrome; human wins UNVERIFIED', heroes: [] };
+const out = { base, label: 'SCRIPTED (autopilot), headless Chrome; human wins UNVERIFIED', seedOverrides: process.env.SEEDS ?? null, heroes: [] };
 for (const hero of heroArg.split(',')) {
-  const seed = 1000 + hero.length * 7;
+  // SEEDS=mop:2001 overrides a hero's autopilot seed base (RC-3). Disclose any override with the results: a seed
+  // picked because the sim predicts an early win shows the browser flow works, not how often a hero wins.
+  const over = Object.fromEntries((process.env.SEEDS ?? '').split(',').filter(Boolean).map((x) => x.split(':')));
+  const seed = over[hero] ? +over[hero] : 1000 + hero.length * 7;
   await cmd('Page.navigate', { url: `${base}/?debug&nooverlay&autoplay=${seed}&hero=${hero}` }); await sleep(3000);
   await click('[data-go="start"]'); await sleep(400);
   await click('[data-go="pick"]');
