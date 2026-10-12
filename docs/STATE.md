@@ -1,7 +1,7 @@
 # Chog: Room Zero - shared state
 
 Source of truth for every agent. Rules: `docs/RULES.md`. Edit only in a handoff commit. Keep under 8,000 characters; move old rows to `docs/HANDOFFS.md`.
-Last verified: 2026-10-12 by claude (RC-4).
+Last verified: 2026-10-12 by claude (RC-5).
 
 ## Snapshot (EVIDENCE)
 - Repo `levithefirst/chog-room-zero` (private). Default/base branch `setup/skill-system` (LOCKED, owner 2026-10-11: no `main`). Never merge without the owner.
@@ -13,7 +13,7 @@ Last verified: 2026-10-12 by claude (RC-4).
 1. Dark top-down tactical survival shooter, ~90 s rooms, mobile and PC, original IP. Bullet Echo is a benchmark only (P2 mandate): nothing copied.
 2. 14 days. Playable by Day 7. Freeze after Day 11. Days 12-14 fixes, QA, submission.
 3. $0 target, $20 hard cap, owner approval per spend.
-4. Controls: mobile landscape, left thumb move, right thumb aim and fire outside deadzone, ability in right-thumb reach, no auto-fire. PC: WASD, mouse aim, left click fire, Space ability.
+4. Controls: mobile is portrait-first, landscape also supported (changed by the owner 2026-10-12, "CRITICAL PRODUCT REQUIREMENT CHANGE: PORTRAIT-FIRST MOBILE GAMEPLAY"; was landscape-only). Left thumb move, right thumb aim and fire outside deadzone, ability in right-thumb reach, no auto-fire; with the aim thumb idle you face the way you walk (RC-5). PC: WASD, mouse aim, left click fire, Space ability.
 5. Test devices: Pixel 7, iPhone 13.
 6. Projectiles travel visibly, no hitscan. Walls block bullets and vision via real occlusion.
 7. Movement has deliberate acceleration, turning, stopping.
@@ -46,8 +46,8 @@ Last verified: 2026-10-12 by claude (RC-4).
 - HUD: health/armour bars + numbers, weapon, ammo/reserve, reload ring, ability cooldown button, hostiles + pips, persisted mute, pause, safe-area insets, portrait prompt. Damage arc, hurt flash, low-HP vignette, hit/kill marks, toasts.
 - Fonts: Barlow Condensed + IBM Plex Mono (OFL) in `public/fonts/`.
 
-## Automated tests (EVIDENCE, Node 22.22, 4 cores; RC-4, bundle index-BYEZY6NN.js)
-`npx vitest run` 267/267 (31 files). Headless Chrome (emulated; NOT devices) on the local build of the same bundle: rc4-matrix 12/12 viewports, rc-e2e 11/11, rc3-input-probe 6/6, p1ft-e2e 12/12 idle x2 (11/12 once under load: tutorial pill timing), ring 20/20 (load), rc2-preview-checks 4/4, rc-autoplay SCRIPTED wins: desktop all 4 heroes, 844x390 touch Kettle+Brick, 820x1180 touch Kettle+Mop. Details: H12.
+## Automated tests (EVIDENCE, Node 22.22, 4 cores; RC-5, bundle index-C-ePlzbG.js)
+`npx vitest run` 272/272 (32 files). Headless Chrome (emulated; NOT devices) on the local build of the same bundle: rc4-matrix 12/12 viewports (phones play in portrait; no prompt), rc-e2e 11/11, rc3-input-probe 6/6, p1ft-e2e 12/12 idle x2 (11/12 under load: tutorial pill timing), ring 20/20 (load), rc2-preview-checks 4/4, rc5-touchplay portrait full matches through real touch events (kills, death, results, Again), rc-autoplay SCRIPTED wins: desktop x4 heroes, 390x844 touch Kettle/Mop/Brick, 375x667 touch Kettle/Wick. Details: H13.
 
 ## Not performed (needs the owner)
 - Pixel 7 / iPhone 13 / any real tablet, real-GPU FPS, feel, fairness, audio by ear, a human win, the demo video, scripted browser checks against the live URL (this container cannot reach *.vercel.app; the bundle is matched by hash instead).
@@ -60,9 +60,10 @@ Core Feel Gate: BLOCKED on owner playtests. G10 interface + mock only (BLOCKER: 
 |---|---|---|---|---|---|
 | RC-3 | claude | ccr-e7fadb8f-qtochk | see H11 | release hardening | done (H11) |
 | RC-4 | claude | ccr-e7fadb8f-qtochk (from d14587d) | `index.html`, `src/{main.ts,input/input.ts,ui/orientation.ts,render/{camera,render}.ts}`, `tests/{rc4-orientation,p1ft-ui}.test.ts`, `tools/{rc4-matrix,rc-autoplay}.mjs`, `README.md`, `docs/{DEV,RELEASE,STATE,HANDOFFS}.md` | Cross-device playable release (owner prompt 2026-10-12): desktop, tablet, phone; rotation lifecycle; verified preview; production if the owner approves | done; 0ca9f76 is in production (owner approved); preview chog-room-zero-64rq3bqri-levithefirst-1227s-projects.vercel.app |
+| RC-5 | claude | ccr-e7fadb8f-qtochk (from 2a87ed0) | `index.html`, `src/{main.ts,input/input.ts,ui/orientation.ts,config/tuning.ts,render/{camera,render,visibility}.ts}`, `tests/{rc4-orientation,rc5-touch-facing,p1ft-ui}.test.ts`, `tools/{rc4-matrix,rc5-touchplay,p1ft-e2e,rc3-input-probe}.mjs`, `README.md`, `docs/{DEV,RELEASE,STATE,HANDOFFS}.md` | Portrait-first mobile (owner 2026-10-12) | done; candidate = branch head at H13 (preview in the owner reply); production still 0ca9f76 until the owner authorizes |
 
 Done rows P1-RC-2 moved to `docs/HANDOFFS.md` (H11 trim note).
 
 
 ## Handoffs
-Latest: H12 (2026-10-12, claude -> owner, ADE; RC-4). History: `docs/HANDOFFS.md`.
+Latest: H13 (2026-10-12, claude -> owner, ADE; RC-5). History: `docs/HANDOFFS.md`.
