@@ -60,8 +60,8 @@ const N = 200;
 import { beforeAll, afterAll } from 'vitest';
 import { TUNING as T_DUEL } from '../src/config/tuning';
 let savedMul = 1;
-beforeAll(() => { savedMul = T_DUEL.bots.damageMul; T_DUEL.bots.damageMul = 1; });
-afterAll(() => { T_DUEL.bots.damageMul = savedMul; });
+beforeAll(() => { savedMul = T_DUEL.bots.damageMul; (T_DUEL.bots as { damageMul: number }).damageMul = 1; });
+afterAll(() => { (T_DUEL.bots as { damageMul: number }).damageMul = savedMul; });
 
 describe('weapon duels (real sim, N=200 per cell, Wilson 95% CI)', () => {
   it("ADE 4 u test: Brick shotgun vs Wick marksman at 4 u, stationary: shotgun wins (CI lower bound > 50%)", () => {
