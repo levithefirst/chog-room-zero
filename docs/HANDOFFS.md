@@ -78,3 +78,15 @@ Not fixed (scope) : MAP-001, UI-001 (key 3), AI-001 slab nav, HUD-002, VIS-002, 
 Not verified    : real phones, feel, audio by ear
 Locked decisions touched : none. No dependency added
 Next smallest task : owner playtest of the preview; then P3-1 (light mesh + DPR cap) from /workspace/reports/chog-p3-research.md
+
+HANDOFF H7  2026-10-12  grokbot -> owner
+Branch @ commit : grokbot/p1-fairness-readability (from f5dc785; PR base grokbot/p0-bugfix-sprint); SHA in the PR   pushed: yes
+Task            : P1 gameplay fairness and readability sprint (owner task, chat 2026-10-12 05:50 WAT); inputs ADE QA (/workspace/qa), Bullet Echo archive, P3 report, PR #6 review
+Decisions       : ONE reveal rule: muzzle flash in wall LOS reveals the shooter 0.7 s, any range, both sides; being hit = direction only (bots get the same). Shotgun falloffStart 3->4.5, spread 9->8 (lost the 4 u duel 100% before; docs/design/weapons-ttk.md)
+Files changed   : see the STATE P1F row
+Tests run       : Node 22.23.3: npm ci 0; typecheck 0; npm test 142/142 (14 files); build 0. tools/p1f-shots.mjs before (958ce03) / after: console errors none
+Perf (headless swiftshader, RELATIVE): 844x390 dpr2 11.4 -> 19.7 fps; 1280x720 dpr1 12.4 -> 17.4 fps (light mesh, same pixels); DPR cap 1.5
+Known failures  : none in automated checks
+Not verified    : real phones, real GPU, feel, bot fairness by hand, audio by ear
+Locked decisions touched : none. No dependency added
+Next smallest task : ADE physical-device pass (/workspace/reports/p1f-followup-plan.md)

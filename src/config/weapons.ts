@@ -35,10 +35,11 @@ export const WEAPONS: Record<string, WeaponDef> = {
     fireInterval: 0.11, spreadDeg: 2.5, magazine: 24, reserve: 72, reloadSeconds: 1.8,
     bulletSpeed: 32, bulletLife: 0.7, armorPen: 0.2, piercesCover: false, sound: 'rifle', barrel: 0.8, tracer: 0.07,
   },
-  // Pump shotgun: seven pellets, brutal inside 3 u, weak past 8 u. Rewards corners and doors.
+  // Pump shotgun: seven pellets, brutal inside ~4.5 u, weak past 8 u. Rewards corners and doors.
+  // P1F rebalance (docs/design/weapons-ttk.md): falloffStart 3->4.5, spread 9->8 so it wins the 4 u duel vs marksman.
   shotgun: {
-    id: 'shotgun', name: 'Pump shotgun', damage: 12, pellets: 7, falloffStart: 3, falloffEnd: 8, minDamageMul: 0.2,
-    fireInterval: 0.8, spreadDeg: 9, magazine: 5, reserve: 20, reloadSeconds: 2.2,
+    id: 'shotgun', name: 'Pump shotgun', damage: 12, pellets: 7, falloffStart: 4.5, falloffEnd: 8, minDamageMul: 0.2,
+    fireInterval: 0.8, spreadDeg: 8, magazine: 5, reserve: 20, reloadSeconds: 2.2,
     bulletSpeed: 26, bulletLife: 0.4, armorPen: 0, piercesCover: false, sound: 'shotgun', barrel: 0.65, tracer: 0.05,
   },
   // Marksman: slow, heavy, punches through crates. Punishes anyone who peeks a long lane.

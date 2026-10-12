@@ -186,18 +186,20 @@ export function bakeMap(renderer: PixiRenderer, l: Level): Baked {
   const lit = RenderTexture.create({ width: l.w * ppu, height: l.h * ppu, antialias: true });
   renderer.render({ container: holder, target: lit });
 
-  // Dim: desaturate ~65%, darken to ~44%, cool it slightly. Out of sight but never pitch black.
+  // Dim (remembered / out of the light): cool slate ambient that keeps the value order floor > cover > wall,
+  // so doors, cover and pickups stay legible (docs/design/art-direction.md). Out of sight but never pitch black.
   // Done once on the CPU from the lit pixels (no runtime filter, nothing for Pixi's texture pool to prune).
   const canvas = renderer.extract.canvas({ target: lit }) as HTMLCanvasElement;
   const ctx = canvas.getContext('2d')!;
   const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const d = img.data;
-  const k = 0.44, keep = 0.35;
+  const k = 0.5, keep = 0.3;
   for (let i = 0; i < d.length; i += 4) {
     const L = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-    d[i] = k * 0.92 * (keep * d[i] + (1 - keep) * L);
-    d[i + 1] = k * 0.98 * (keep * d[i + 1] + (1 - keep) * L);
-    d[i + 2] = Math.min(255, k * 1.12 * (keep * d[i + 2] + (1 - keep) * L));
+    // Ambient floor #0E141A + scaled, cooled structure.
+    d[i] = Math.min(255, 14 + k * 0.86 * (keep * d[i] + (1 - keep) * L));
+    d[i + 1] = Math.min(255, 20 + k * 0.97 * (keep * d[i + 1] + (1 - keep) * L));
+    d[i + 2] = Math.min(255, 26 + k * 1.12 * (keep * d[i + 2] + (1 - keep) * L));
   }
   ctx.putImageData(img, 0, 0);
   const dim = Texture.from(canvas);

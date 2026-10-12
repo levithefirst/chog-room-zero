@@ -2,6 +2,7 @@
 import type { ViewShape } from '../sim/vision';
 import { canSee } from '../sim/vision';
 import { sightClear, type Level } from '../sim/level';
+import { TUNING } from '../config/tuning';
 
 export type EnemyDraw = 'body' | 'flash' | 'ping' | null;
 
@@ -10,8 +11,8 @@ export interface Target { id: number; x: number; y: number; alive: boolean }
 
 /**
  * body  = in the player's light (or the killer during the death recap): drawn normally.
- * flash = shot at the player (or fired nearby) with a clear line, but outside the cone: drawn at its real
- *         position for a moment so the player can see who is shooting. Walls still hide it (no wallhack).
+ * flash = its muzzle flash was seen (wall line of sight, any range) outside the cone: drawn at its real
+ *         position for a moment. Walls still hide it (no wallhack). Bots get the same signal (bots.ts).
  * ping  = revealed by a sonar ping: outline only.
  */
 export function enemyDrawMode(
@@ -24,10 +25,8 @@ export function enemyDrawMode(
   return null;
 }
 
-/** Seconds a shooter stays drawn after hitting the player / firing with a clear line within this range. */
-export const THREAT_HIT_SECONDS = 0.9;
-export const THREAT_SHOT_SECONDS = 0.5;
-export const THREAT_SHOT_RANGE = 8;
+/** Seconds a shooter stays drawn after its muzzle flash is seen (single source: TUNING.perception.flashSeconds). */
+export const THREAT_HIT_SECONDS = TUNING.perception.flashSeconds;
 
 /**
  * Keep a presentation marker (heard-sound ring, killer marker) inside playable space.

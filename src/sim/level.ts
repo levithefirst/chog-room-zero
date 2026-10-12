@@ -1,6 +1,7 @@
 // Parses the tile map into collision boxes, sight segments, and a nav grid.
 import type { Box, Segment } from './geom';
 import { segmentBoxT } from './geom';
+import { coverStops } from './cover';
 
 export interface Level {
   w: number;
@@ -12,6 +13,8 @@ export interface Level {
   // Full walls plus cover: block movement and bullets.
   solidBoxes: Box[];
   coverBoxes: Box[];
+  /** Dynamic obstacles (e.g. Brick's slab) per tile, counted; A* treats >0 as blocked. */
+  dyn: Uint8Array;
   // Outline of full walls, for the visibility polygon.
   segments: Segment[];
   playerSpawn: { x: number; y: number };
@@ -104,7 +107,7 @@ export function parseLevel(rows: readonly string[]): Level {
     }
   }
   return {
-    w, h, tiles, wallBoxes, coverBoxes,
+    w, h, tiles, wallBoxes, coverBoxes, dyn: new Uint8Array(w * h),
     solidBoxes: [...wallBoxes, ...coverBoxes],
     segments: outline(tiles, w, h),
     playerSpawn, coverSpots, pickupSpawns,
@@ -137,6 +140,9 @@ function boxDist(x: number, y: number, b: Box): number {
  * box (the shooter is leaning over it), or the weapon pierces cover. Walls always stop bullets.
  * Returns the first blocking t in [0,1] for the segment, or -1.
  */
+/** Set by bulletBlockT: was the returned block a cover box (crate/slab) rather than a wall? */
+export let blockedByCover = false;
+
 export function bulletBlockT(
   l: Level, ox: number, oy: number, x0: number, y0: number, x1: number, y1: number, pierce: boolean, lean: number,
 ): number {
@@ -145,11 +151,12 @@ export function bulletBlockT(
     const t = segmentBoxT(x0, y0, x1, y1, b);
     if (t >= 0 && (best < 0 || t < best)) best = t;
   }
-  if (pierce) return best;
+  blockedByCover = false;
   for (const b of l.coverBoxes) {
-    if (boxDist(ox, oy, b) <= lean) continue;
+    // Crates (static) and slabs (Brick barriers, pushed at runtime) share one rule: cover.ts.
+    if (!coverStops('crate', pierce, boxDist(ox, oy, b) <= lean ? 0 : Infinity)) continue;
     const t = segmentBoxT(x0, y0, x1, y1, b);
-    if (t >= 0 && (best < 0 || t < best)) best = t;
+    if (t >= 0 && (best < 0 || t < best)) { best = t; blockedByCover = true; }
   }
   return best;
 }
@@ -165,7 +172,7 @@ export function findPath(l: Level, sx: number, sy: number, gx: number, gy: numbe
   const w = l.w;
   const start = Math.floor(sy) * w + Math.floor(sx);
   const goal = Math.floor(gy) * w + Math.floor(gx);
-  const walk = (i: number) => walkable(l.tiles[i]);
+  const walk = (i: number) => walkable(l.tiles[i]) && l.dyn[i] === 0;
   if (!walk(goal)) return [];
   const g = new Float32Array(w * l.h).fill(Infinity);
   const from = new Int32Array(w * l.h).fill(-1);
@@ -210,4 +217,14 @@ export function findPath(l: Level, sx: number, sy: number, gx: number, gy: numbe
   const path: { x: number; y: number }[] = [];
   for (let i = goal; i !== start && i >= 0; i = from[i]) path.push({ x: (i % w) + 0.5, y: Math.floor(i / w) + 0.5 });
   return path.reverse();
+}
+
+/** Add (+1) or remove (-1) a dynamic obstacle box to the nav grid: every tile it overlaps (padded by body radius). */
+export function markDynamic(l: Level, b: Box, delta: 1 | -1, pad = 0.3): void {
+  const x0 = Math.max(0, Math.floor(b.x0 - pad)), x1 = Math.min(l.w - 1, Math.floor(b.x1 + pad - 1e-6));
+  const y0 = Math.max(0, Math.floor(b.y0 - pad)), y1 = Math.min(l.h - 1, Math.floor(b.y1 + pad - 1e-6));
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    const i = y * l.w + x;
+    l.dyn[i] = Math.max(0, l.dyn[i] + delta);
+  }
 }

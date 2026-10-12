@@ -61,9 +61,9 @@ Core Feel Gate: BLOCKED on owner playtests. G10 interface + mock only (BLOCKER: 
 | P1 | grokbot | grokbot/p1-mvp | see H4 | MVP | done, awaiting owner review |
 | P2 | grokbot | grokbot/p2-benchmark-overhaul (base `grokbot/p1-mvp`) | `src/**`, `tests/**`, `index.html`, `public/fonts/**`, `docs/design/{benchmark,art-direction}.md`, `docs/DEV.md`, `tools/browser-run.mjs`, `docs/STATE.md`, `docs/HANDOFFS.md` | benchmark overhaul phases A-F per owner mandate "COMPLETE BULLET ECHO BENCHMARK OVERHAUL" (chat, 2026-10-12 04:09 WAT); Node 22 ci/typecheck/test/build; browser run; preview deploy | done, awaiting owner review and playtest |
 | P0F | grokbot | grokbot/p0-bugfix-sprint (base `grokbot/p2-benchmark-overhaul`) | `src/main.ts`, `src/input/{input,gate}.ts`, `src/render/{render,visibility}.ts`, `tests/p0fix*.test.ts`, `tools/p0fix-run.mjs`, `docs/STATE.md`, `docs/HANDOFFS.md` | P0 bug-fix sprint per owner task (chat, 2026-10-12 05:28 WAT) on ADE QA report: CHOG-VIS-001, FLOW-001, INPUT-001, HUD-001, FLOW-002 (+blur); rifle investigation; preview deploy | done, awaiting owner review |
+| P1F | grokbot | grokbot/p1-fairness-readability (base `grokbot/p0-bugfix-sprint`) | `src/sim/{bots,world,level,vision,geom,cover}.ts`, `src/render/{render,lightmesh,bake,visibility}.ts`, `src/config/{tuning,weapons}.ts`, `src/main.ts`, `index.html`, `tests/{perception,p1f-combat,ttk,world}.test.ts`, `tools/p1f-shots.mjs`, `docs/design/{bots,cover,weapons-ttk}.md`, `docs/STATE.md`, `docs/HANDOFFS.md` | P1 fairness and readability sprint (owner task, chat 2026-10-12 05:50 WAT): one reveal rule, perception spec + tests, readability, snag/slab/cover/TTK, perf, preview | done, awaiting owner review |
 
-## Next smallest task (PROPOSED)
 P2-F1: owner plays the preview on PC, Pixel 7, iPhone 13; grokbot fixes the top 3 reported issues.
 
 ## Handoffs
-Latest: H6 (2026-10-12, grokbot -> owner, P0 bug-fix sprint). History: `docs/HANDOFFS.md`.
+Latest: H7 (2026-10-12, grokbot -> owner, P1 fairness and readability sprint). History: `docs/HANDOFFS.md`.

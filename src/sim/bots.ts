@@ -4,7 +4,7 @@ import { TUNING } from '../config/tuning';
 import type { BotSpawn } from '../config/map';
 import { angleDiff } from './geom';
 import { findPath, shotClear, sightClear } from './level';
-import { canSee } from './vision';
+import { canSee, muzzleFlashSeen } from './vision';
 import { hears, player, rand, revealed, viewOf, type Actor, type ActorInput, type World } from './world';
 
 const DEG = Math.PI / 180;
@@ -30,6 +30,31 @@ export interface Brain {
   // Debug and tests: what it perceived this tick.
   sawPlayer: boolean;
   heardAt: { x: number; y: number } | null;
+  /** Where its current belief came from. Bots never learn the player position without one of these. */
+  source: PerceptionSource | null;
+  /** 0..1: how sure it is something is out there; decays to 0 over TUNING.perception.memorySeconds. */
+  suspicion: number;
+  /** Seconds of sight needed before it may fire this acquisition (seeded, per acquisition). */
+  reaction: number;
+  /** Last path request time (s of sim time) for repath throttling. */
+  pathAt: number;
+}
+
+export type PerceptionSource = 'seen' | 'flash' | 'heard' | 'shot' | 'sonar' | 'memory';
+
+/** One acquisition: a bot updated its belief about the player from a signal. Logged for the omniscience test. */
+export interface PerceptionEvent {
+  tick: number;
+  bot: number;
+  source: Exclude<PerceptionSource, 'memory'>;
+  x: number;
+  y: number;
+  /** Evidence snapshot at the moment of learning: observer pose and the true player position. */
+  ox: number;
+  oy: number;
+  ofacing: number;
+  px: number;
+  py: number;
 }
 
 export function createBrain(spawn: BotSpawn): Brain {
@@ -38,6 +63,7 @@ export function createBrain(spawn: BotSpawn): Brain {
     patrol: spawn.patrol.map(([x, y]) => ({ x: x + 0.5, y: y + 0.5 })),
     patrolIndex: 0, flanker: spawn.flanker, timer: 0, seenFor: 0, engagedFor: 0, aimOffset: 0, aimTimer: 0,
     lastKnown: null, goal: null, path: [], stuckTimer: 0, lookBase: 0, sawPlayer: false, heardAt: null,
+    source: null, suspicion: 0, reaction: TUNING.perception.reactionMax, pathAt: -1e9,
   };
 }
 
@@ -45,9 +71,40 @@ const out: ActorInput = { moveX: 0, moveY: 0, quiet: false, aim: 0, firing: fals
 
 function setGoal(w: World, a: Actor, br: Brain, gx: number, gy: number): void {
   if (br.goal && Math.floor(br.goal.x) === Math.floor(gx) && Math.floor(br.goal.y) === Math.floor(gy) && br.path.length) return;
+  // Throttle: a moving target does not trigger A* every tick (P3 audit: 65 calls/s at 6 actors).
+  const P = TUNING.perception;
+  const now = w.tick * TUNING.simStepSeconds;
+  if (br.goal && br.path.length && now - br.pathAt < P.repathSeconds && Math.hypot(br.goal.x - gx, br.goal.y - gy) < P.repathDistance) return;
   br.goal = { x: gx, y: gy };
   br.path = findPath(w.level, a.x, a.y, gx, gy);
+  br.pathAt = now;
   br.stuckTimer = 0;
+}
+
+/** Record a belief update with its signal. */
+function learn(w: World, a: Actor, br: Brain, source: PerceptionEvent['source'], x: number, y: number, suspicion: number): void {
+  br.lastKnown = { x, y };
+  br.source = source;
+  br.suspicion = Math.max(br.suspicion, suspicion);
+  if (w.perceptionLog) {
+    const p = player(w);
+    w.perceptionLog.push({ tick: w.tick, bot: a.id, source, x, y, ox: a.x, oy: a.y, ofacing: a.facing, px: p.x, py: p.y });
+  }
+}
+
+/** Release or take an attack token. Returns whether this bot may shoot the player now. */
+function token(w: World, a: Actor, want: boolean): boolean {
+  const i = w.attackTokens.indexOf(a.id);
+  if (!want) {
+    if (i >= 0) w.attackTokens.splice(i, 1);
+    return false;
+  }
+  if (i >= 0) return true;
+  if (w.attackTokens.length < TUNING.perception.attackTokens) {
+    w.attackTokens.push(a.id);
+    return true;
+  }
+  return false;
 }
 
 /** Steer along the path. Returns true when the goal is reached (or unreachable). */
@@ -112,21 +169,38 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
   out.aim = a.facing;
   out.moveX = out.moveY = 0;
 
-  // Perception: own sight cone, then the sound bus.
+  // Perception (docs/design/bots.md). Every belief about the player comes from a signal, logged by learn().
+  const P = TUNING.perception;
   br.sawPlayer = p.alive && canSee(w.level, a.x, a.y, a.facing, viewOf(a), p.x, p.y);
   br.heardAt = null;
+  br.suspicion = Math.max(0, br.suspicion - dt / P.memorySeconds);
   if (br.sawPlayer) {
+    if (br.seenFor === 0 && br.state !== 'engage') br.reaction = P.reactionMin + rand(w) * (P.reactionMax - P.reactionMin);
     br.seenFor += dt;
-    br.lastKnown = { x: p.x, y: p.y };
+    learn(w, a, br, 'seen', p.x, p.y, 1);
   } else {
     br.seenFor = Math.max(0, br.seenFor - dt * 2);
+    if (br.source === 'seen') br.source = 'memory';
   }
+  let flashed = false;
   for (const s of w.prevSounds) {
-    if (s.team !== 'player' || !hears(w.level, a.x, a.y, s)) continue;
+    if (s.team !== 'player') continue;
+    // Muzzle flash: same rule as the player's (vision.ts muzzleFlashSeen), any range with wall line of sight.
+    if (s.type === 'shot' && !br.sawPlayer && muzzleFlashSeen(w.level, a.x, a.y, s.x, s.y)) {
+      learn(w, a, br, 'flash', s.x, s.y, 0.9);
+      flashed = true;
+      continue;
+    }
+    if (!hears(w.level, a.x, a.y, s)) continue;
     // Heard positions are uncertain: further away means a wider guess.
     const d = Math.hypot(s.x - a.x, s.y - a.y);
-    const err = d * 0.15;
+    const err = d * P.hearErrorShare;
     br.heardAt = { x: s.x + (rand(w) * 2 - 1) * err, y: s.y + (rand(w) * 2 - 1) * err };
+  }
+  if (br.heardAt && !br.sawPlayer && !flashed) learn(w, a, br, 'heard', br.heardAt.x, br.heardAt.y, 0.6);
+  if (br.suspicion === 0 && !br.sawPlayer && br.lastKnown && (br.state === 'patrol')) {
+    br.lastKnown = null;
+    br.source = null;
   }
   const justHit = a.lastHitTick === w.tick - 1 && a.lastHitFrom;
   const hurt = a.hp / a.maxHp < B.retreatHpShare;
@@ -135,12 +209,23 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
   if (br.sawPlayer && br.state !== 'cover' && br.state !== 'engage' && br.state !== 'alert') {
     br.state = 'alert';
   }
-  if (br.state === 'alert' && br.seenFor >= B.reactionTime) {
+  if (flashed && (br.state === 'patrol' || br.state === 'investigate' || br.state === 'search')) {
+    // Saw a flash: turn and go look, like an alert without sight.
+    br.state = 'pursue';
+    br.goal = null;
+  }
+  if (br.state === 'alert' && br.seenFor >= br.reaction) {
     br.state = 'engage';
     br.engagedFor = 0;
   }
   if (justHit && a.lastHitFrom) {
-    br.lastKnown = { x: a.lastHitFrom.x, y: a.lastHitFrom.y };
+    if (!br.sawPlayer) {
+      // Being shot gives a direction, not a position: a guess along the incoming ray.
+      const d = Math.hypot(a.lastHitFrom.x - a.x, a.lastHitFrom.y - a.y);
+      const ang = Math.atan2(a.lastHitFrom.y - a.y, a.lastHitFrom.x - a.x) + (rand(w) * 2 - 1) * P.shotDirErrorDeg * DEG;
+      const r = d * (P.shotRangeMin + rand(w) * (P.shotRangeMax - P.shotRangeMin));
+      learn(w, a, br, 'shot', a.x + Math.cos(ang) * r, a.y + Math.sin(ang) * r, 0.8);
+    }
     if (hurt) {
       br.state = 'cover';
       br.timer = 0;
@@ -175,13 +260,14 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
   }
   // Its own sonar shows the player like it shows bots to the player: a fair, telegraphed reveal.
   if (a.revealLeft > 0 && revealed(w, a).length) {
-    br.lastKnown = { x: p.x, y: p.y };
+    learn(w, a, br, 'sonar', p.x, p.y, 1);
     if (br.state === 'investigate' || br.state === 'search' || br.state === 'patrol') {
       br.state = 'pursue';
       br.goal = null;
     }
   }
 
+  if (br.state !== 'engage' || !a.alive) token(w, a, false);
   switch (br.state) {
     case 'heal': {
       const hp = nearestHealth(w, a);
@@ -260,6 +346,16 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
       out.aim = toP + br.aimOffset * err;
       // Hold the angle: stand still and shoot, only when the shot is not blocked by cover.
       const range = a.weapon.falloffEnd + 2;
+      // Attack tokens: at most N bots shoot at once; the rest flank (flankers) or hold the angle.
+      if (!token(w, a, true)) {
+        if (br.flanker) {
+          const f = pickFlank(w, a, { x: p.x, y: p.y });
+          setGoal(w, a, br, f.x, f.y);
+          follow(a, br, dt);
+        }
+        out.aim = toP;
+        break;
+      }
       out.firing = Math.abs(angleDiff(a.facing, toP)) < B.fireToleranceDeg * DEG + err
         && Math.hypot(p.x - a.x, p.y - a.y) <= range
         && shotClear(w.level, a.x, a.y, p.x, p.y, a.weapon.piercesCover, TUNING.combat.coverLean);
@@ -273,7 +369,8 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
       break;
     }
     case 'cover': {
-      const threat = br.lastKnown ?? { x: p.x, y: p.y };
+      // No belief: assume the threat is ahead of where it was facing (never the true position).
+      const threat = br.lastKnown ?? { x: a.x + Math.cos(a.facing) * 4, y: a.y + Math.sin(a.facing) * 4 };
       if (!br.goal) {
         const spot = pickCover(w, a, threat);
         if (spot) setGoal(w, a, br, spot.x, spot.y);
