@@ -4,13 +4,14 @@
 // actors (hostiles only when the sim says the player can see them) -> effects -> screen-space UI.
 import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import { TUNING } from '../config/tuning';
-import { WALL, type Level } from '../sim/level';
+import { WALL, walkable, type Level } from '../sim/level';
 import { pointInPolygon } from '../sim/geom';
-import { visibilityPolygon, canSee, type ViewShape } from '../sim/vision';
+import { visibilityPolygon, type ViewShape } from '../sim/vision';
 import { player, revealed, type Actor, type World } from '../sim/world';
 import type { Brain } from '../sim/bots';
 import { STICK_RADIUS, AIM_DEADZONE, type Input } from '../input/input';
 import { bakeMap, type Baked } from './bake';
+import { clampMarker, enemyDrawMode } from './visibility';
 
 const P = TUNING.palette;
 const R = TUNING.render;
@@ -63,11 +64,13 @@ export interface Fx {
   sparks: Spark[];
   damageArcs: { ang: number; age: number }[];
   pings: { x: number; y: number; age: number; hostile: boolean }[];
+  // Seconds left that each actor id stays drawn after shooting at the player (see visibility.ts).
+  threats: number[];
 }
 
 export function createFx(): Fx {
   return {
-    markers: [], impacts: [], hitMarks: [], shake: 0, corpses: [], damageArcs: [], pings: [],
+    markers: [], impacts: [], hitMarks: [], shake: 0, corpses: [], damageArcs: [], pings: [], threats: [],
     sparks: Array.from({ length: R.maxSparks }, () => ({ x: 0, y: 0, vx: 0, vy: 0, age: 1, hostile: false })),
   };
 }
@@ -85,6 +88,8 @@ export interface Renderer {
   draw(w: World, fx: Fx, input: Input, dt: number, opts: DrawOpts): void;
   reset(w: World): void;
   visibleBots(): number;
+  /** Hostiles drawn this frame only because they just shot at the player. */
+  flashBots(): number;
 }
 
 function glowTexture(): Texture {
@@ -167,7 +172,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
   const poly: number[] = [];
   const softPoly: number[] = [];
   const softView: ViewShape = { range: 1, coneRad: 1, nearRadius: TUNING.vision.nearRadius };
-  let visBots = 0;
+  let visBots = 0, flashBots = 0;
   let exploreTimer = 0;
   const pickupLabels: Text[] = [];
 
@@ -356,6 +361,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       for (let i = w.pickups.length; i < pickupLabels.length; i++) pickupLabels[i].visible = false;
     },
     visibleBots: () => visBots,
+    flashBots: () => flashBots,
     draw(w, fx, input, dt, opts) {
       const p = player(w);
       const sw = app.screen.width, sh = app.screen.height;
@@ -412,19 +418,28 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
 
       actors.clear();
       visBots = 0;
+      flashBots = 0;
       const rev = revealed(w, p);
       for (const a of w.actors) {
         if (a.team === 'bot') {
           if (!a.alive && a.deadFor > R.deathAnimSeconds) continue;
-          const seen = canSee(level, p.x, p.y, p.facing, view, a.x, a.y) || (opts.recap && w.playerKill?.killerId === a.id);
-          if (!seen) {
-            if (rev.includes(a)) {
-              // Ping reveal: an outline only, so it reads as information, not presence.
-              const pulse = 0.5 + 0.5 * Math.sin(w.tick / 4);
-              circle(actors, a.x, a.y, 0.42).stroke({ width: 0.07, color: P.hostile, alpha: 0.5 + pulse * 0.4 });
-              actors.moveTo(a.x, a.y).lineTo(a.x + Math.cos(a.facing) * 0.7, a.y + Math.sin(a.facing) * 0.7).stroke({ width: 0.06, color: P.hostile, alpha: 0.7 });
-            }
+          const mode = enemyDrawMode(level, p, view, a, {
+            recapKiller: !!opts.recap && w.playerKill?.killerId === a.id,
+            threatLeft: fx.threats[a.id] ?? 0,
+            pinged: rev.includes(a),
+          });
+          if (mode === null) continue;
+          if (mode === 'ping') {
+            // Ping reveal: an outline only, so it reads as information, not presence.
+            const pulse = 0.5 + 0.5 * Math.sin(w.tick / 4);
+            circle(actors, a.x, a.y, 0.42).stroke({ width: 0.07, color: P.hostile, alpha: 0.5 + pulse * 0.4 });
+            actors.moveTo(a.x, a.y).lineTo(a.x + Math.cos(a.facing) * 0.7, a.y + Math.sin(a.facing) * 0.7).stroke({ width: 0.06, color: P.hostile, alpha: 0.7 });
             continue;
+          }
+          if (mode === 'flash') {
+            // Shot at us from outside the light: show the shooter where it really stands, ringed so it reads.
+            flashBots++;
+            circle(actors, a.x, a.y, 0.62).stroke({ width: 0.08, color: P.hostile, alpha: 0.9 });
           }
           if (a.alive) visBots++;
           const br = w.brains.get(a.id) as Brain;
@@ -469,8 +484,10 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       recapG.clear();
       if (opts.recap && w.playerKill) {
         const kk = w.playerKill;
-        recapG.moveTo(kk.fromX, kk.fromY).lineTo(kk.toX, kk.toY).stroke({ width: 0.07, color: P.hostile, alpha: 0.9 });
-        circle(recapG, kk.fromX, kk.fromY, 0.6).stroke({ width: 0.07, color: P.hostile });
+        const killer = w.actors[kk.killerId];
+        const from = clampMarker(level, kk.fromX, kk.fromY, killer.x, killer.y, walkable);
+        recapG.moveTo(from.x, from.y).lineTo(kk.toX, kk.toY).stroke({ width: 0.07, color: P.hostile, alpha: 0.9 });
+        circle(recapG, from.x, from.y, 0.6).stroke({ width: 0.07, color: P.hostile });
       }
 
       // Screen space.
