@@ -72,17 +72,22 @@ check('HUD-002: no visible pickup label overlaps a HUD panel (pickup parked insi
 await cmd('Page.captureScreenshot', { format: 'png' }).then((s) => fs.writeFileSync(outFile.replace(/\.json$/, '-hud002.png'), Buffer.from(s.data, 'base64')));
 
 // 4. Tutorial pill: visible on the first run, gone after ~6 s; ring hint once, persisted across reload.
-await open(); await play();
+// Setup (RC-2, ADE rc1-code-check.md section 5): step 3 left 844x390 touch emulation on, so input.ts ran in touch mode and
+// rewrote the aim to 0 (east) every tick, overriding p.facing=PI and putting the bot in the cone (seen, so no ring).
+// Reset to a desktop pointer and aim west with a real mouse move, so the player faces away from the bot.
+await view(1280, 720, false); await open(); await play();
+const faceWest = () => cmd('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 20, y: 360 });
+await faceWest();
 const pill1 = await ev(`getComputedStyle(document.getElementById('hint')).opacity`);
 await sleep(7500);
 const pill2 = await ev(`getComputedStyle(document.getElementById('hint')).opacity`);
 const ringSet = await ev(`(async()=>{const w=__chog.world,p=w.actors[0];p.hp=1e9;p.x=8.5;p.y=2.5;p.facing=Math.PI;
   for(const o of w.actors.slice(2)){o.x=o.y=-40} const b=w.actors[1];b.x=11.5;b.y=4.5; const br=w.brains.get(1); br.state='investigate'; br.lastKnown={x:11.5,y:1.5};br.goal=null;br.timer=0;
-  for(let i=0;i<60&&localStorage.getItem('chog.hint.rings')!=='1';i++)await new Promise(r=>setTimeout(r,100));
+  const t0=w.tick; for(let i=0;i<300&&w.tick-t0<600&&localStorage.getItem('chog.hint.rings')!=='1';i++)await new Promise(r=>setTimeout(r,100));
   return {persisted:localStorage.getItem('chog.hint.rings'),hint:document.getElementById('hint').textContent.slice(0,40),opacity:getComputedStyle(document.getElementById('hint')).opacity}})()`);
-await open('&nooverlay', false); await play(); await sleep(7500);
+await open('&nooverlay', false); await play(); await faceWest(); await sleep(7500);
 const ring2 = await ev(`(async()=>{const w=__chog.world,p=w.actors[0];p.hp=1e9;p.x=8.5;p.y=2.5;p.facing=Math.PI;for(const o of w.actors.slice(2)){o.x=o.y=-40} const b=w.actors[1];b.x=11.5;b.y=4.5;const br=w.brains.get(1); br.state='investigate'; br.lastKnown={x:11.5,y:1.5};br.goal=null;br.timer=0;
-  await new Promise(r=>setTimeout(r,4000));return {text:document.getElementById('hint').textContent.slice(0,40),opacity:getComputedStyle(document.getElementById('hint')).opacity}})()`);
+  const t1=w.tick; for(let i=0;i<300&&w.tick-t1<240;i++)await new Promise(r=>setTimeout(r,100));return {text:document.getElementById('hint').textContent.slice(0,40),opacity:getComputedStyle(document.getElementById('hint')).opacity}})()`);
 check('Tutorial pill shows on the first run, fades by ~6 s; second run no tutorial', +pill1 > 0.9 && +pill2 < 0.1, { atStart: pill1, after7_5s: pill2 });
 check('Ring hint shows once on the first heard ring, persisted; not shown again after reload', ringSet.persisted === '1' && /Gold rings/.test(ringSet.hint) && !(+ring2.opacity > 0.5 && /Gold rings/.test(ring2.text)), { first: ringSet, afterReload: ring2 });
 
