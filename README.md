@@ -2,11 +2,11 @@
 
 A dark top-down tactical shooter for the Chogathon. One basement, five bots, about 90 seconds a run. You see only what your lamp touches; everyone hears everything.
 
-Plays in the browser on desktops and laptops (keyboard and mouse), tablets in either orientation, and phones held sideways (touch). No wallet or account is needed to play.
+Plays in the browser on desktops and laptops (keyboard and mouse), and on phones and tablets held upright or sideways (touch). No wallet or account is needed to play.
 
 ## How to test it (5 minutes)
 
-1. Open the game link. On a phone, turn it sideways: in portrait a phone shows a "turn sideways" screen, and turning mid-run pauses the run without losing it (turn back, then Resume). Tablets play in portrait or landscape.
+1. Open the game link. On a phone just hold it upright: portrait is the main mobile layout. Landscape works too; turning the phone mid-run pauses the same run (nothing is lost), then Resume.
 2. First launch shows **How to play**. Press **Got it**.
 3. Optional: **Chog DEMO** and pick a token number (#1 to #4). This shows how a Chog changes play. It is a demo: no wallet and no ownership check.
 4. **Enter**, pick a hero (keys 1 to 4, or tap a card), then **Deploy**.
@@ -15,11 +15,11 @@ Plays in the browser on desktops and laptops (keyboard and mouse), tablets in ei
 
 ### Controls
 
-| | PC | Phone (landscape) |
+| | PC | Phone / tablet (portrait or landscape) |
 |---|---|---|
 | Move | WASD | Left thumb |
 | Creep (quiet) | Hold Shift | Half push on the left stick |
-| Aim | Mouse | Right thumb |
+| Aim | Mouse | Right thumb (when it is idle, you face the way you walk) |
 | Fire | Hold left click | Push the right thumb past the ring |
 | Ability | Space | Ability button |
 | Reload | R | Reload button |
@@ -29,6 +29,7 @@ Plays in the browser on desktops and laptops (keyboard and mouse), tablets in ei
 
 - **Bullets travel and walls stop them.** Waist-high crates and slabs stop shots unless the shooter leans over from right behind them (Wick's marksman rifle shoots through crates). A blocked shot sparks, clanks, and the cover outline flashes.
 - **Sound is information.** Gold rings mark a noise you heard but did not see. Running is loud, creeping is quiet, and bots hear you the same way.
+- **Nothing hides past the edge.** A hostile you can see (in your light, by its muzzle flash, or by Ping) but that sits past the screen edge gets a red arrow at the edge, pointing at it.
 - **Fair fights.** A bot only shoots you from inside your own sight range with line of sight, and the shooter is ringed whenever it hits you.
 - **Four heroes, four weapons:** Kettle (rifle, Patch heal), Mop (SMG, Slip dash), Brick (shotgun, Slab cover), Wick (marksman, Ping sonar).
 

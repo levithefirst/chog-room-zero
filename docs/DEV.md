@@ -84,3 +84,10 @@ Known limitations: see docs/RELEASE.md.
 - Scripted full loop at a touch size: `VIEWPORT=820x1180 TOUCH=1 node tools/rc-autoplay.mjs <baseUrl> <out.json> 30 kettle,mop` (menus by tap).
 - Orientation rule: phones (portrait, under 600 px wide) show the turn-sideways screen and pause the run; tablets play in portrait.
   `src/ui/orientation.ts` and the `#rotate` media query in `index.html` must match.
+
+## RC-5: portrait touch play
+- `node tools/rc5-touchplay.mjs <baseUrl> <out.json> [WxH=390x844] [hero] [maxSimSeconds] [shotDir]`: a full match through REAL touch
+  events only (menu taps, left stick, right stick aim + fire, Reload/Ability buttons), with decisions from the debug-only
+  `__chog.suggest()` (the autopilot's intended input, not applied). Then results, Again, and the saved record. SCRIPTED, emulated touch.
+- CDP touch rule: `Input.dispatchTouchEvent` `touchEnd` must carry no points (it ends all). To lift one finger and keep others, send a
+  `touchMove` listing only the fingers that stay.
