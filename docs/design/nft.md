@@ -57,3 +57,22 @@ Never write the guessed answer into code, config, or docs as if it were true.
 
 ## NFT copy and flow
 No "unlock your power" language. No rarity color as a power signal. No mint or marketplace links in the play flow. Do not show the NFT screen before the player has finished a room.
+
+## RC-1 NFT DEMO (built; DEMO only)
+A real wallet and ownership check are DEFERRED: chain, contract and metadata are still UNKNOWN. The DEMO shows how a Chog would change play:
+- **Entry points, all with a DEMO badge:** the title "Chog DEMO" button, a DEMO screen, the title identity chip, the hero select chip, the HUD chip and the results screen.
+- **Copy, shown on screen:** "DEMO: no wallet is connected and no ownership is checked. Traits come only from the token number."
+- **Non-holders:** play as guest (the default, or "Play as guest" on the DEMO screen). `?mockChog=<n>` still binds a DEMO token for testing.
+
+Deterministic mapping (`src/nft/traits.ts`, Option B above): token number, then FNV-1a hash mod 4, then the sidegrade. A second hash mod 5 picks a cosmetic marking colour (Slate, Brass, Lilac, Moss, Clay). The same number always gives the same traits. Sample numbers: #1 Lamp, #2 Wide, #3 Steady, #4 Spray (found by `sampleTokens()`).
+
+| Trait | Effect | Counterplay |
+|---|---|---|
+| Lamp | Sight +22%, cone -28%. Spots enemies down halls first | Come from the side: its flanks are dark. Close fights in rooms favour you |
+| Wide | Cone +40%, sight -17%. Owns rooms and corners | Stay at range down a corridor: it sees little far ahead |
+| Steady | Tighter spread, reload -30%; magazine -30%, fire 12% slower | Push when it reloads |
+| Spray | Magazine +40%, slightly faster fire; looser spread, reload +40% | Fight at range; punish the long reload |
+
+Sidegrades only: health, armour, damage and speed never change (`tests/operators.test.ts`). Seeded duel parity: each sidegrade vs the standard kit (Kettle, slot-swapped, strafing, 3/6/9 u, 80 duels per cell) must win between 25% and 75% (`tests/rc-nft-demo.test.ts`).
+
+The owner's RC-1 brief changes two earlier notes. Guests now keep device-local personal bests; this is not Chog operator history, so the LOCKED guest rule still holds for token history. The DEMO screen is reachable from the title before any room is finished.
