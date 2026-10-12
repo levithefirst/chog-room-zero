@@ -6,7 +6,7 @@ Last verified: 2026-10-12 by claude (RC-4).
 ## Snapshot (EVIDENCE)
 - Repo `levithefirst/chog-room-zero` (private). Default/base branch `setup/skill-system` (LOCKED, owner 2026-10-11: no `main`). Never merge without the owner.
 - Open PRs, stacked: #1 S2; #2 P0-1; #3 P0-2; #4 P1 MVP; #5 P2; #6 P0F; #7 P1F; #8 P1FT; #9 RC-1/RC-2 (head 43f5a5d). RC-3 and RC-4 are branch `ccr-e7fadb8f-qtochk` on top of #9 (no PR yet). Merge in order. #1 adds a skill-system README.md; RC-3 adds the game README.md (conflict to resolve at merge: keep the game README).
-- Vercel project `chog-room-zero` (protection off). Production `chog-room-zero.vercel.app` = `dpl_96e1NN2ggi4XyoXP2WPrHtNJtgGG`, a CLI upload of 969de1c (P1 MVP; 11/11 deployed source files match, bundle index-BGFnHEXD.js), verified 2026-10-12. Promoting the RC-4 candidate needs the owner's yes; current state in the owner reply.
+- Vercel project `chog-room-zero` (protection off). Production `chog-room-zero.vercel.app` = `dpl_98JQWcLkHkKF2iBaiZwc8a2sZ3Lf`, built from 0ca9f76 (RC-4) with target production, serving bundle index-BYEZY6NN.js (= the tested build), verified 2026-10-12 19:02 UTC. Promotion approved by the owner in chat (2026-10-12). Rollback: promote `dpl_96e1NN2ggi4XyoXP2WPrHtNJtgGG` (old P1 MVP, 969de1c). Branch commits after 0ca9f76 are docs only.
 - Hackathon: Chogathon 2026 (chogathon.chog.xyz, read 2026-10-12 from a 2026-10-11 cache). Deliverables and weights in `docs/SUBMISSION.md`. Judges gate on "the Chog NFT must be essential". Deadline: UNKNOWN (the page says both Oct 11 13:00 UTC and Oct 9 15:00 UTC). Project start date: UNKNOWN.
 
 ## LOCKED (owner; 2026-10-07, 2026-10-11, 2026-10-12)
@@ -59,7 +59,7 @@ Core Feel Gate: BLOCKED on owner playtests. G10 interface + mock only (BLOCKER: 
 | Id | Owner | Branch | Files | Done when | Status |
 |---|---|---|---|---|---|
 | RC-3 | claude | ccr-e7fadb8f-qtochk | see H11 | release hardening | done (H11) |
-| RC-4 | claude | ccr-e7fadb8f-qtochk (from d14587d) | `index.html`, `src/{main.ts,input/input.ts,ui/orientation.ts,render/{camera,render}.ts}`, `tests/{rc4-orientation,p1ft-ui}.test.ts`, `tools/{rc4-matrix,rc-autoplay}.mjs`, `README.md`, `docs/{DEV,RELEASE,STATE,HANDOFFS}.md` | Cross-device playable release (owner prompt 2026-10-12): desktop, tablet, phone; rotation lifecycle; verified preview; production if the owner approves | done; candidate = branch head at H12; preview + production state in the owner reply |
+| RC-4 | claude | ccr-e7fadb8f-qtochk (from d14587d) | `index.html`, `src/{main.ts,input/input.ts,ui/orientation.ts,render/{camera,render}.ts}`, `tests/{rc4-orientation,p1ft-ui}.test.ts`, `tools/{rc4-matrix,rc-autoplay}.mjs`, `README.md`, `docs/{DEV,RELEASE,STATE,HANDOFFS}.md` | Cross-device playable release (owner prompt 2026-10-12): desktop, tablet, phone; rotation lifecycle; verified preview; production if the owner approves | done; 0ca9f76 is in production (owner approved); preview chog-room-zero-64rq3bqri-levithefirst-1227s-projects.vercel.app |
 
 Done rows P1-RC-2 moved to `docs/HANDOFFS.md` (H11 trim note).
 
