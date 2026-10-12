@@ -18,7 +18,7 @@ const walk = (w: World, mx: number, my: number, ticks: number, extra = {}) => {
 };
 
 describe('snagging (CHOG-MAP-001, ADE repro: spawn crates between spawn and the south door)', () => {
-  // Room Zero: spawn (3.5,2.5); crates x3..5,y4..5; south door tile x4,y6.
+  // Room Zero: spawn (3.5,2.5); crates x2..4,y4..5 (P1FT moved them 1 tile west); south door tile x4,y6.
   for (const hero of ['kettle', 'brick']) {
     it(`${hero}: holding straight down from spawn slides past the crate instead of stopping dead`, () => {
       const w = solo(hero);
