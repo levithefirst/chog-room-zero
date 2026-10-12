@@ -62,6 +62,7 @@ export interface Actor {
   hits: number;
   kills: number;
   damageDealt: number;
+  damageTaken: number;
 }
 
 export interface Bullet {
@@ -185,7 +186,7 @@ function makeActor(id: number, team: Team, name: string, hero: HeroDef, sg: Side
     hp: hero.maxHp, maxHp: hero.maxHp, armor: hero.maxArmor, maxArmor: Math.max(hero.maxArmor, 50), alive: true,
     ammo: weapon.magazine, reserve: weapon.reserve, cooldown: 0, reloadLeft: 0, abilityCd: 0, dashLeft: 0, dashX: 0, dashY: 0,
     revealLeft: 0, stepAcc: 0, hitFlash: 0, muzzle: 0, deadFor: 0, lastSpread: weapon.spreadDeg, lastHitTick: -999, lastHitFrom: null,
-    shots: 0, hits: 0, kills: 0, damageDealt: 0,
+    shots: 0, hits: 0, kills: 0, damageDealt: 0, damageTaken: 0,
   };
 }
 
@@ -452,6 +453,7 @@ function damage(w: World, t: Actor, by: Actor, b: Bullet, hx: number, hy: number
   t.vy += b.dy * TUNING.combat.knockback;
   by.hits++;
   by.damageDealt += raw;
+  t.damageTaken += m.hp + m.armor;
   const killed = t.hp <= 0;
   w.hits.push({ target: t.id, by: by.id, x: hx, y: hy, fromX: b.ox, fromY: b.oy, hpDamage: m.hp, armorDamage: m.armor, killed });
   emit(w, 'hit', hx, hy, TUNING.sound.impact, by);
