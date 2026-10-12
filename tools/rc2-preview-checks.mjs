@@ -27,8 +27,9 @@ const out = { base };
 await cmd('Page.navigate', { url: `${base}/?debug&nooverlay` }); await sleep(3000);
 await ev(`localStorage.setItem('chog.onboarded','1')`);
 
+const ONLY = process.env.ONLY || 'A,C1,B,C2'; const on = (k) => ONLY.split(',').includes(k);
 // A. door sweep on the bundled sim
-out.doorSweep = await ev(`(()=>{const {createWorld,stepWorld,IDLE_INPUT,ROOM_ZERO,HEROES}=__chog.lab;const doors=[];
+if (on('A')) out.doorSweep = await ev(`(()=>{const {createWorld,stepWorld,IDLE_INPUT,ROOM_ZERO,HEROES}=__chog.lab;const doors=[];
 ROOM_ZERO.forEach((r,y)=>[...r].forEach((c,x)=>{if(c!=='d')return;doors.push({x,y,vertical:ROOM_ZERO[y-1][x]!=='#'&&ROOM_ZERO[y+1][x]!=='#'})}));
 const res={doors:doors.length,heroes:{}};
 for(const h of HEROES){let maxStall=0,trials=0,over=[];
@@ -46,24 +47,30 @@ res.pass=Object.values(res.heroes).every(h=>h.failureCount===0);return res})()`)
 console.log('A door sweep', JSON.stringify(out.doorSweep));
 
 // C1. Wick vs Brick on the bundled sim
-out.wickBrickSim = await ev(`(()=>{const {createWorld,stepWorld,IDLE_INPUT}=__chog.lab;const rows=[];
-for(let seed=1;seed<=12;seed++){const w=createWorld({hero:'brick',bots:['wick'],seed});const p=w.actors[0],b=w.actors[1];
-// Brick holds a spot in the open; Wick starts 11 u away (beyond Brick's 7.5 sight, inside Wick's own range) and is free to move.
-p.x=13.5;p.y=8.5;b.x=p.x+11;b.y=p.y;const R=p.view.range;let beyond=0,hits=0,lastTick=-1,revealedOnHit=0;
-for(let i=0;i<60*30&&p.alive;i++){stepWorld(w,{...IDLE_INPUT,aim:Math.PI});
-if(p.lastHitTick===w.tick&&p.lastHitTick!==lastTick){lastTick=p.lastHitTick;hits++;const d=Math.hypot(p.lastHitFrom.x-p.x,p.lastHitFrom.y-p.y);if(d>R+0.35)beyond++;
-if(w.hits.some(h=>h.target===0&&h.by===b.id))revealedOnHit++}}
-rows.push({seed,hits,beyond,revealedOnHit,playerAlive:p.alive})}
-return {range:createWorld({hero:'brick',bots:[],seed:1}).actors[0].view.range,rows,pass:rows.every(r=>r.beyond===0)}})()`);
+if (on('C1')) out.wickBrickSim = await ev(`(()=>{const {createWorld,stepWorld,IDLE_INPUT}=__chog.lab;const rows=[];
+// Same open hall as tests/rc-fairness.test.ts: Brick (7.5 u sight) vs one Wick bot spawned 8-13 u away (inside Wick's own reach).
+const HALL=['##############################','#............................#','#............................#','#............................#','#P...........................#','#............................#','#............................#','#............................#','##############################'];
+const modes=['still','backpedal','strafe'];
+for(let seed=1;seed<=12;seed++){const dist=8+(seed%6),mode=modes[seed%3];
+const w=createWorld({map:HALL,hero:'brick',seed,bots:[{name:'W',hero:'wick',patrol:[[Math.floor(1.5+dist),4]],flanker:false}]});
+const p=w.actors[0],b=w.actors[1];const R=p.view.range;let beyond=0,hits=0,hitEvents=0,maxDist=0;
+for(let i=0;i<60*14&&p.alive;i++){const t=i/60;stepWorld(w,{...IDLE_INPUT,aim:0,moveX:mode==='backpedal'?-0.5:0,moveY:mode==='strafe'?Math.sin(t*2):0});
+for(const h of w.hits)if(h.target===0){hits++;const d=Math.hypot(h.fromX-p.x,h.fromY-p.y);maxDist=Math.max(maxDist,d);if(d>R+0.35)beyond++;if(h.by===b.id)hitEvents++}}
+rows.push({seed,dist,mode,hits,beyond,maxDist:+maxDist.toFixed(2),hitsAttributedToShooter:hitEvents,playerAlive:p.alive})}
+return {range:7.5,rows,totalHits:rows.reduce((a,r)=>a+r.hits,0),pass:rows.every(r=>r.beyond===0&&r.hitsAttributedToShooter===r.hits)}})()`);
 console.log('C1 wick-brick sim', JSON.stringify(out.wickBrickSim));
 
+if (on('B')) {
 // B. blocked-shot flash, live game, real mouse fire
 await cmd('Page.navigate', { url: `${base}/?debug&nooverlay&hero=kettle` }); await sleep(3000);
 await click('[data-go="start"]'); await sleep(400); await click('[data-go="pick"]'); await waitPhase(['play'], 10000); await sleep(1200);
 const setup = await ev(`(()=>{const w=__chog.world,p=w.actors[0];const box=w.level.coverBoxes[0];
 // Positioning only: stand 2 u west of the first crate, bots parked far away so nothing interferes (none removed).
 const cy=(box.y0+box.y1)/2;p.x=box.x0-2;p.y=cy;for(const b of w.actors.slice(1)){b.x=1.5;b.y=1.5}
-const s=__chog.renderer.toScreen(box.x0+0.3,cy);return {box,screen:s,before:__chog.stats.blockedCues}})()`);
+return {box,cy}})()`);
+await sleep(800); // let the camera follow the repositioned hero before projecting the crate to the screen
+Object.assign(setup, await ev(`({screen:__chog.renderer.toScreen(${setup.box.x0}+0.3,${setup.cy}),before:__chog.stats.blockedCues,ammo:__chog.world.actors[0].ammo,px:__chog.world.actors[0].x})`));
+console.log('B setup', JSON.stringify(setup));
 await mouse('mouseMoved', setup.screen.x, setup.screen.y);
 await sleep(300);
 await mouse('mousePressed', setup.screen.x, setup.screen.y, { buttons: 1, clickCount: 1 });
@@ -76,17 +83,27 @@ const after = await ev(`({cues:__chog.stats.blockedCues,shots:__chog.world.actor
 out.blockedFlash = { ...seen, blockedCues: after.cues - setup.before, playerShots: after.shots, pass: seen.flash && seen.spark && after.cues - setup.before > 0 };
 console.log('B blocked flash', JSON.stringify(out.blockedFlash));
 
+}
+if (on('C2')) {
 // C2. live: Brick player under autopilot; audit every hit taken.
 await cmd('Page.navigate', { url: `${base}/?debug&nooverlay&autoplay=77&hero=brick` }); await sleep(3000);
 await click('[data-go="start"]'); await sleep(400); await click('[data-go="pick"]'); await waitPhase(['play'], 10000);
-await ev(`window.__audit={hits:[],last:-1};window.__auditTimer=setInterval(()=>{const w=__chog.world;if(!w)return;const p=w.actors[0];if(p.lastHitTick!==__audit.last&&p.lastHitFrom){__audit.last=p.lastHitTick;
+await ev(`window.__audit={hits:[],last:-1};window.__auditTimer=setInterval(()=>{const w=__chog.world;if(!w)return;const p=w.actors[0];if(__audit.w!==w){__audit.w=w;__audit.last=p.lastHitTick}if(p.lastHitTick!==__audit.last&&p.lastHitFrom){__audit.last=p.lastHitTick;
 let sh=null,bd=1e9;for(const b of w.actors.slice(1)){const d=Math.hypot(b.x-p.lastHitFrom.x,b.y-p.lastHitFrom.y);if(d<bd){bd=d;sh=b}}
 __audit.hits.push({tick:p.lastHitTick,dist:+Math.hypot(p.lastHitFrom.x-p.x,p.lastHitFrom.y-p.y).toFixed(2),range:p.view.range,shooter:sh.hero.id,shooterId:sh.id,revealed:(__chog.fx.threats[sh.id]||0)>0})}},20)`);
-await waitPhase(['results', 'recap'], 300000);
+// Keep playing (real "Again" clicks) until Wick itself has landed hits, max 6 matches.
+let matches = 0;
+for (; matches < 6; matches++) {
+  await waitPhase(['results'], 400000);
+  if ((await ev(`__audit.hits.filter(x=>x.shooter==='wick').length`)) >= 3) { matches++; break; }
+  await sleep(1000); await click('[data-go="restart"]'); await waitPhase(['play'], 15000);
+}
 out.wickBrickLive = await ev(`(()=>{clearInterval(__auditTimer);const h=__audit.hits;return {hits:h.length,wickHits:h.filter(x=>x.shooter==='wick').length,
-beyond:h.filter(x=>x.dist>x.range+0.35),notRevealed:h.filter(x=>!x.revealed),maxDist:Math.max(0,...h.map(x=>x.dist)),range:h[0]?.range,outcome:__chog.world.outcome}})()`);
-out.wickBrickLive.pass = out.wickBrickLive.beyond.length === 0 && out.wickBrickLive.notRevealed.length === 0;
+beyond:h.filter(x=>x.dist>x.range+0.35),notRevealed:h.filter(x=>!x.revealed),maxDist:Math.max(0,...h.map(x=>x.dist)),wickMaxDist:Math.max(0,...h.filter(x=>x.shooter==='wick').map(x=>x.dist)),range:h[0]?.range}})()`);
+out.wickBrickLive.matches = matches;
+out.wickBrickLive.pass = out.wickBrickLive.wickHits > 0 && out.wickBrickLive.beyond.length === 0 && out.wickBrickLive.notRevealed.length === 0;
 console.log('C2 wick-brick live', JSON.stringify(out.wickBrickLive));
+}
 out.consoleErrors = errors;
 fs.writeFileSync(outFile, JSON.stringify(out, null, 1));
 chrome.kill(); process.exit(0);
