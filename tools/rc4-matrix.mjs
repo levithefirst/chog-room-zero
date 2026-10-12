@@ -43,16 +43,18 @@ async function press(sel, isTouch) { const c = await center(sel); if (!c) return
   return true; }
 const parkBots = `(()=>{for(const b of __chog.world.actors.slice(1)){b.x=b.y=-40;b.vx=b.vy=0}})()`;
 const angDiff = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
-// Layout: canvas fills the viewport; HUD panels visible, inside, not overlapping; player on screen; rotate prompt state.
+// Layout: canvas fills the viewport; HUD panels visible, inside, not overlapping; player on screen and not under any
+// HUD panel (RC-5: the portrait camera keeps it clear of the top and bottom bands).
 const layout = () => ev(`(()=>{const W=innerWidth,H=innerHeight,c=document.querySelector('canvas').getBoundingClientRect(),s=__chog.renderer.app.screen;
   const ids=['vitals','foes','sys','weapon','ability','reload'];const rs=ids.map(i=>{const e=document.getElementById(i);if(!e||e.offsetParent===null)return null;const b=e.getBoundingClientRect();return b.width?{i,x:b.left,y:b.top,r:b.right,b:b.bottom}:null}).filter(Boolean);
   const ov=[];for(let a=0;a<rs.length;a++)for(let k=a+1;k<rs.length;k++){const A=rs[a],B=rs[k];if(A.x<B.r&&B.x<A.r&&A.y<B.b&&B.y<A.b)ov.push(A.i+'/'+B.i)}
-  const p=__chog.world.actors[0],ps=__chog.renderer.toScreen(p.x,p.y);const rot=document.getElementById('rotate');
+  const p=__chog.world.actors[0],ps=__chog.renderer.toScreen(p.x,p.y);const pr={x:ps.x-18,y:ps.y-24,r:ps.x+18,b:ps.y+18};
+  const under=rs.filter(R=>R.x<pr.r&&pr.x<R.r&&R.y<pr.b&&pr.y<R.b).map(R=>R.i);
   return {W,H,canvas:[Math.round(c.width),Math.round(c.height)],screen:[s.width,s.height],panels:rs.map(r=>r.i),overlaps:ov,outside:rs.filter(r=>r.x<0||r.y<0||r.r>W+1||r.b>H+1).map(r=>r.i),
-    player:[Math.round(ps.x),Math.round(ps.y)],playerOnScreen:ps.x>0&&ps.y>0&&ps.x<W&&ps.y<H,rotate:getComputedStyle(rot).display!=='none',rotateText:rot.innerText.replace(/\\s+/g,' ').trim(),touchMode:document.body.classList.contains('touch'),hud:document.getElementById('hud').classList.contains('on')}})()`);
+    player:[Math.round(ps.x),Math.round(ps.y)],playerOnScreen:ps.x>0&&ps.y>0&&ps.x<W&&ps.y<H,playerUnderHud:under,prompt:!!document.getElementById('rotate'),touchMode:document.body.classList.contains('touch'),hud:document.getElementById('hud').classList.contains('on')}})()`);
 // Canvas/screen within 1 px: at DPR 1.5 Pixi reports e.g. 667.33 for a 667 px viewport (device-pixel rounding).
 const near = (a, b) => Math.abs(a - b) < 1;
-const layoutOk = (L) => near(L.canvas[0], L.W) && near(L.canvas[1], L.H) && near(L.screen[0], L.W) && near(L.screen[1], L.H) && L.overlaps.length === 0 && L.outside.length === 0 && L.playerOnScreen && L.hud && L.panels.length >= 5;
+const layoutOk = (L) => near(L.canvas[0], L.W) && near(L.canvas[1], L.H) && near(L.screen[0], L.W) && near(L.screen[1], L.H) && L.overlaps.length === 0 && L.outside.length === 0 && L.playerOnScreen && L.playerUnderHud.length === 0 && !L.prompt && L.hud && L.panels.length >= 5;
 const shot = async (name) => { if (!shotDir) return; const s = await cmd('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(`${shotDir}/rc4-${name}.png`, Buffer.from(s.data, 'base64')); };
 
 const VIEWPORTS = [
@@ -71,7 +73,6 @@ const VIEWPORTS = [
 ];
 const only = (process.env.ONLY ?? '').split(',').filter(Boolean);
 const rows = [];
-const isPhonePortrait = (w, h) => h > w && w < 600;
 
 for (const V of VIEWPORTS.filter((v) => !only.length || only.some((o) => v.name.includes(o)))) {
   const R = { viewport: V.name, input: V.touch ? 'touch (emulated)' : 'keyboard+mouse', checks: {}, notes: [] };
@@ -80,17 +81,12 @@ for (const V of VIEWPORTS.filter((v) => !only.length || only.some((o) => v.name.
     await freshTab(); await view(V.w, V.h, V.touch);
     await cmd('Page.navigate', { url: `${base}/?debug&nooverlay` }); await sleep(2500);
     await ev('localStorage.clear()'); await cmd('Page.navigate', { url: `${base}/?debug&nooverlay` }); await sleep(3000);
-    const portraitPhone = isPhonePortrait(V.w, V.h);
-    const pre = await ev(`({h2:document.querySelector('#overlay h2')?.textContent,rotate:getComputedStyle(document.getElementById('rotate')).display!=='none',rotateText:document.getElementById('rotate').innerText.replace(/\\s+/g,' ').trim()})`);
+    const pre = await ev(`({h2:document.querySelector('#overlay h2')?.textContent,prompt:!!document.getElementById('rotate')})`);
     ok('loads (How to play card)', pre.h2 === 'Clear Room Zero', pre);
-    if (portraitPhone) {
-      ok('phone portrait: rotate prompt shown over the menus', pre.rotate, pre);
-      await shot(`${V.name}-prompt-title`);
-      // Rotate into landscape to play (same tab, same page: nothing reloads).
-      await view(V.h, V.w, true); await sleep(600);
-    } else ok('no rotate prompt at this size', !pre.rotate, pre);
+    ok('no turn-sideways prompt (RC-5: every orientation plays)', !pre.prompt, pre);
+    await shot(`${V.name}-howto`);
     const T = V.touch;
-    let [W, H] = portraitPhone ? [V.h, V.w] : [V.w, V.h]; // the size the run is played at
+    const [W, H] = [V.w, V.h];
     ok('How to play: Got it', await press('[data-act="howto-close"]', T)); await sleep(300);
     ok('Title: Enter', await press('[data-go="start"]', T)); await sleep(400);
     await shot(`${V.name}-select`);
@@ -135,15 +131,17 @@ for (const V of VIEWPORTS.filter((v) => !only.length || only.some((o) => v.name.
     if (!T) {
       const sizes = [];
       for (const [w, h] of V.resize) {
-        await view(w, h, false); await sleep(500); await ticks(5);
+        await view(w, h, false); await sleep(500);
+        const phResize = await phase(); // an orientation flip pauses the run; a same-orientation resize does not
+        if (phResize === 'pause') { await press('[data-go="resume"]', false); await waitPhase('play', 2000); }
+        await ticks(5);
         const LL = await layout();
         const ps = await ev(`(()=>{const p=__chog.world.actors[0];return __chog.renderer.toScreen(p.x,p.y)})()`);
         await mouse('mouseMoved', ps.x - 200, ps.y); await ticks(6);
         const f = await P0('p.facing');
-        sizes.push({ w, h, ph: await phase(), layoutOk: layoutOk(LL) || (LL.rotate && isPhonePortrait(w, h)), rotate: LL.rotate, aimWestOk: angDiff(f, Math.PI) < 0.15, overlaps: LL.overlaps, outside: LL.outside, canvas: LL.canvas });
-        if (await phase() === 'pause') { await press('[data-go="resume"]', false); await waitPhase('play', 2000); }
+        sizes.push({ w, h, phaseAfterResize: phResize, layoutOk: layoutOk(LL), aimWestOk: angDiff(f, Math.PI) < 0.15, overlaps: LL.overlaps, outside: LL.outside, under: LL.playerUnderHud, canvas: LL.canvas });
       }
-      if (V.resize.length) ok('window resize during play: canvas, HUD and mouse aim follow', sizes.every((s) => s.layoutOk && (s.rotate || s.aimWestOk)), sizes);
+      if (V.resize.length) ok('window resize during play: canvas, HUD and mouse aim follow', sizes.every((s) => s.layoutOk && s.aimWestOk), sizes);
       // Focus loss while holding D: pauses, and nothing stays held after resuming.
       await keyDown('KeyD', 'd', 68); await ticks(5);
       await ev(`window.dispatchEvent(new Event('blur'))`); await sleep(200);
@@ -163,11 +161,27 @@ for (const V of VIEWPORTS.filter((v) => !only.length || only.some((o) => v.name.
         await touch('touchStart', [{ x: lx, y: ly, id: 5 }]); await touch('touchMove', [{ x: lx + 50, y: ly, id: 5 }]); await ticks(5);
         [cw, ch] = [ch, cw]; await view(cw, ch, true); await sleep(700);
         const rot = await layout(); const phR = await phase();
-        await shot(`${V.name}-rot${c}-a`);
+        // Play in the new orientation: Resume, move with the left thumb, aim west with the right thumb.
+        let rotPlay = null;
+        if (phR === 'pause') {
+          await press('[data-go="resume"]', true); await waitPhase('play', 2000); await ticks(5);
+          const a0 = await P0('({x:p.x,y:p.y})');
+          const mx = cw * 0.18, my = ch * 0.72;
+          const dy = c % 2 === 0 ? -50 : 50; // north, then south: the spawn room's north wall stops a second push north
+          await touch('touchStart', [{ x: mx, y: my, id: 7 }]); await touch('touchMove', [{ x: mx, y: my + dy, id: 7 }]); await ticks(20); await touch('touchEnd', []); await ticks(10);
+          const a1 = await P0('({x:p.x,y:p.y})');
+          const ax = cw * 0.72, ay = ch * 0.45;
+          await touch('touchStart', [{ x: ax, y: ay, id: 8 }]); await touch('touchMove', [{ x: ax - 50, y: ay, id: 8 }]); await ticks(10);
+          const fr = await P0('p.facing'); await touch('touchEnd', []); await ticks(5);
+          rotPlay = { moved: +Math.hypot(a1.x - a0.x, a1.y - a0.y).toFixed(2), dir: dy < 0 ? 'north' : 'south', rightWay: Math.sign(a1.y - a0.y) === Math.sign(dy), aimWest: angDiff(fr, Math.PI) < 0.15, layoutOk: layoutOk(await layout()) };
+          await shot(`${V.name}-rot${c}-play`);
+        }
+        const hx = cw * 0.18, hy = ch * 0.72;
+        await touch('touchStart', [{ x: hx, y: hy, id: 5 }]); // a finger on the glass as the device turns back
         [cw, ch] = [ch, cw]; await view(cw, ch, true); await sleep(700);
         const back = await layout(); const phB = await phase();
-        const held = { x: lx + 50, y: ly, id: 5 }; // still on the glass, unmoved, in old-orientation coordinates
-        if (phB === 'pause') { const r = await center('[data-go="resume"]'); await touch('touchStart', [held, { x: r[0], y: r[1], id: 91 }]); await touch('touchEnd', [held]); await waitPhase('play', 2000); }
+        const held = { x: Math.min(hx, cw - 2), y: Math.min(hy, ch - 2), id: 5 }; // still on the glass through the turn
+        if (phB === 'pause') { const r = await center('[data-go="resume"]'); await touch('touchStart', [held, { x: r[0], y: r[1], id: 91 }]); await touch('touchMove', [held]); /* lift only the Resume finger: CDP touchEnd must carry no points */ await waitPhase('play', 2000); }
         await ticks(15); const pos0 = await P0('({x:p.x,y:p.y})'); await ticks(30);
         const pos1 = await P0('({x:p.x,y:p.y,speed:Math.hypot(p.vx,p.vy)})');
         await touch('touchEnd', []); await ticks(3);
@@ -175,13 +189,13 @@ for (const V of VIEWPORTS.filter((v) => !only.length || only.some((o) => v.name.
         await touch('touchStart', [{ x: rx, y: ry, id: 6 }]); await touch('touchMove', [{ x: rx - 50, y: ry, id: 6 }]); await ticks(10);
         const fW = await P0('p.facing'); await touch('touchEnd', []); await ticks(5);
         const same = await ev('__chog.world===window.__w1');
-        cycles.push({ cycle: c + 1, rotatedTo: `${rot.W}x${rot.H}`, phaseRotated: phR, promptShown: rot.rotate, promptText: rot.rotate ? rot.rotateText : undefined, rotatedLayoutOk: rot.rotate || layoutOk(rot),
-          backTo: `${back.W}x${back.H}`, phaseBack: phB, backLayoutOk: layoutOk(back), sameRun: same, tickAdvancedWhilePrompt: phR === 'pause' ? 0 : null,
+        cycles.push({ cycle: c + 1, rotatedTo: `${rot.W}x${rot.H}`, phaseRotated: phR, rotatedLayoutOk: layoutOk(rot), rotPlay,
+          backTo: `${back.W}x${back.H}`, phaseBack: phB, backLayoutOk: layoutOk(back), sameRun: same,
           drift: +Math.hypot(pos1.x - pos0.x, pos1.y - pos0.y).toFixed(3), speedAfter: +pos1.speed.toFixed(3), aimWestOk: angDiff(fW, Math.PI) < 0.15, hpKept: before.hp });
       }
-      const expectPrompt = (w, h) => isPhonePortrait(w, h);
-      ok('rotation x3 mid-run (finger held): same run, layout follows, prompt only on phone portrait (game paused behind it), no stuck move, touch aim aligned',
-        cycles.every((c) => c.sameRun && c.backLayoutOk && c.rotatedLayoutOk && c.drift < 0.02 && c.speedAfter < 0.02 && c.aimWestOk && (expectPrompt(...c.rotatedTo.split('x').map(Number)) ? c.promptShown && c.phaseRotated === 'pause' : !c.promptShown)), cycles);
+      ok('rotation x3 mid-run (finger held): each flip pauses the same run, layout follows, play works in the new orientation (move + aim), back again: no stuck move, touch aim aligned',
+        cycles.every((c) => c.sameRun && c.phaseRotated === 'pause' && c.phaseBack === 'pause' && c.rotatedLayoutOk && c.backLayoutOk && c.rotPlay && c.rotPlay.moved > 0.3 && c.rotPlay.rightWay && c.rotPlay.aimWest && c.rotPlay.layoutOk
+          && c.drift < 0.02 && c.speedAfter < 0.02 && c.aimWestOk), cycles);
     }
     ok('console errors: none', errors.length === 0, errors.slice(0, 3));
     ok('failed requests: none', failed.length === 0, failed.slice(0, 3));

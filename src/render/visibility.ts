@@ -38,3 +38,17 @@ export function clampMarker(l: Level, x: number, y: number, fx: number, fy: numb
   if (walk(l.tiles[Math.floor(cy) * l.w + Math.floor(cx)])) return { x: cx, y: cy };
   return { x: Math.min(l.w - 0.5, Math.max(0.5, fx)), y: Math.min(l.h - 0.5, Math.max(0.5, fy)) };
 }
+
+/**
+ * Where the line from the player (ox, oy) to an off-screen target (tx, ty) leaves the rect [x0,x1]x[y0,y1], with the
+ * line's angle, for an edge chevron. Null when the target is inside the rect (it is drawn in place).
+ */
+export function edgeAnchor(ox: number, oy: number, tx: number, ty: number, x0: number, y0: number, x1: number, y1: number): { x: number; y: number; ang: number } | null {
+  if (tx >= x0 && tx <= x1 && ty >= y0 && ty <= y1) return null;
+  const dx = tx - ox, dy = ty - oy;
+  let t = 1;
+  if (dx > 0) t = Math.min(t, (x1 - ox) / dx); else if (dx < 0) t = Math.min(t, (x0 - ox) / dx);
+  if (dy > 0) t = Math.min(t, (y1 - oy) / dy); else if (dy < 0) t = Math.min(t, (y0 - oy) / dy);
+  t = Math.max(0, t);
+  return { x: ox + dx * t, y: oy + dy * t, ang: Math.atan2(dy, dx) };
+}

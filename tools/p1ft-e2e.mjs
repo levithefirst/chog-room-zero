@@ -125,7 +125,8 @@ await T('touchMove', [{ x: 150, y: 330, id: 1 }]); await sleep(60);
 await T('touchStart', [{ x: 150, y: 330, id: 1 }, { x: 650, y: 200, id: 2 }]); await sleep(60);
 await T('touchMove', [{ x: 150, y: 330, id: 1 }, { x: 590, y: 140, id: 2 }]); await sleep(300);
 await T('touchStart', [{ x: 150, y: 330, id: 1 }, { x: 590, y: 140, id: 2 }, { x: ab[0], y: ab[1], id: 3 }]); await sleep(120);
-await T('touchEnd', [{ x: 150, y: 330, id: 1 }, { x: 590, y: 140, id: 2 }]); await sleep(900);
+// Lift only the ability finger: CDP releases a point by omitting it from a touchMove (touchEnd must carry no points).
+await T('touchMove', [{ x: 150, y: 330, id: 1 }, { x: 590, y: 140, id: 2 }]); await sleep(900);
 const st1 = await ev(`(()=>{const p=__chog.world.actors[0];return {x:p.x,y:p.y,f:p.facing,cd:p.abilityCd,shots:p.shots}})()`);
 await T('touchEnd', []); await sleep(600);
 const st2 = await ev(`(()=>{const p=__chog.world.actors[0];return {x:p.x,y:p.y,vx:p.vx,vy:p.vy,shots:p.shots}})()`);

@@ -129,17 +129,30 @@
         .democopy { font-size: 12px !important; padding: 3px 8px; } .pb { font-size: 12px !important; }
         .card h1 { font-size: 34px; }
       }
-      #rotate { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 10; align-items: center; justify-content: center; flex-direction: column; gap: 14px; text-align: center; font-size: 20px; letter-spacing: 0.1em; text-transform: uppercase; }
-      #rotate svg { width: 64px; height: 64px; stroke: var(--signal); fill: none; stroke-width: 2; animation: turn 1.6s ease-in-out infinite; }
-      @keyframes turn { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
-      #rotate b { font-weight: 600; }
-      #rotate small { color: #9a9384; font-size: 14px; letter-spacing: .05em; text-transform: none; max-width: 22em; line-height: 1.4; }
-      #rotate .run { color: var(--ink); font-size: 15px; }
-      #rotate .wide { display: none; }
-      /* A mouse-driven window (desktop) gets window wording; a phone gets turn-it wording. */
-      @media (hover: hover) and (pointer: fine) { #rotate .turn { display: none; } #rotate .wide { display: inline; } }
-      /* Phones only: below 600 px wide in portrait (src/ui/orientation.ts). Tablets play in portrait. */
-      @media (orientation: portrait) and (max-width: 599px) { #rotate { display: flex; } }
+      /* Phones held upright (RC-5, portrait-first mobile). Top band: vitals left, pause/mute and hostiles right. Bottom:
+         ammo centred between the thumbs. Ability and Reload stack on the right edge above the right thumb, so the lower
+         corners stay free for the move and aim sticks. Menus reflow to one narrow column (2x2 hero cards). */
+      @media (orientation: portrait) and (max-width: 599px) {
+        #vitals { width: 136px; padding: 6px 8px; }
+        #vitals .row { font-size: 11px; } #vitals .row .num { font-size: 13px; }
+        #vitals .bar { height: 7px; margin: 2px 0 4px; } #vitals #arbar { height: 5px; }
+        #hero { font-size: 11px; }
+        #foes { left: auto; right: var(--sr); top: calc(var(--st) + 48px); transform: none; padding: 4px 9px; gap: 6px; font-size: 11px; }
+        #hint { top: calc(var(--st) + 96px); max-width: 84vw; }
+        #toast { top: 28%; font-size: 16px; }
+        body.touch #ability { right: var(--sr); bottom: calc(var(--sb) + 22vh); }
+        body.touch #reload { right: calc(var(--sr) + 7px); bottom: calc(var(--sb) + 22vh + 84px); }
+        .card { padding: 0 6px; }
+        .card h1 { font-size: 30px; letter-spacing: 0.08em; }
+        .card h2 { font-size: 24px; }
+        .card p { font-size: 15px; }
+        .kicker { letter-spacing: 0.18em; }
+        .heroes { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+        .hero { padding: 8px; } .hero b { font-size: 19px; } .hero p { display: none; } .hero .ab { font-size: 12px; }
+        .btn { min-width: 0; flex: 1 1 40%; padding: 0 12px; }
+        table.howto, table.traits { font-size: 13px; }
+        table.howto td, table.traits td, table.traits th { padding: 2px 5px; }
+      }
     </style>
   </head>
   <body>
@@ -169,7 +182,6 @@
       <div id="toast"></div>
     </div>
     <div id="overlay" class="layer"></div>
-    <div id="rotate"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" /><path d="M11 18h2" /></svg><b class="turn">Turn your phone sideways</b><b class="wide">Make the window wider</b><small id="rotnote">Room Zero plays in landscape.</small></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

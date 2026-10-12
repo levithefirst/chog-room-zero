@@ -79,6 +79,7 @@ export function createInput(el: HTMLElement): Input {
   let action = false;
   let pauseQueued = false;
   let lastAim = 0;
+  let aimedAt = -1e9; // performance.now() of the last touch aim (right thumb past the ring, or a latched flick)
   // Pointers currently down anywhere on the page (window capture, so menu presses on the overlay count too).
   const pointersDown = new Set<number>();
   // Pointers that were down when play began (the menu press itself). Only these are swallowed, until released;
@@ -109,12 +110,18 @@ export function createInput(el: HTMLElement): Input {
         const push = Math.hypot(m.x, m.y);
         out.quiet = push > 0 && push < TUNING.movement.quietStickThreshold;
         const a = stickVector(right, STICK_RADIUS);
+        const now = performance.now();
         if (Math.hypot(a.x, a.y) > AIM_DEADZONE) {
           lastAim = out.aim = Math.atan2(a.y, a.x);
           out.firing = true;
+          aimedAt = now;
         } else if (fireLatched) {
           lastAim = out.aim = latchAim;
           out.firing = true;
+          aimedAt = now;
+        } else if (push > TUNING.movement.touchFaceMoveMin && now - aimedAt > TUNING.movement.touchAimHoldSeconds * 1000) {
+          // Aim thumb idle: face the way you walk (RC-5). No fire: firing still needs the right thumb past the ring.
+          lastAim = out.aim = Math.atan2(m.y, m.x);
         }
         fireLatched = false;
       }

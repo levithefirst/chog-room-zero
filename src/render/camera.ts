@@ -19,11 +19,23 @@ export function stepCamera(c: Camera, px: number, py: number, facing: number, dt
   c.y += (py + c.ly - c.y) * k;
 }
 
+/** Pixels per world unit: landscape fits 22 u across (min 11 u tall); portrait frames ~15 u across (RC-5). */
+export function viewScale(sw: number, sh: number, T: { viewWidthUnits: number; minViewHeightUnits: number; portraitViewWidthUnits: number; portraitMaxPpu: number }): number {
+  if (sh <= sw) return Math.min(sw / T.viewWidthUnits, sh / T.minViewHeightUnits);
+  return Math.max(sw / T.viewWidthUnits, Math.min(sw / T.portraitViewWidthUnits, T.portraitMaxPpu));
+}
+
 /**
- * Where to draw the view centre on one axis. If the whole map fits on this axis (a tall portrait tablet sees ~29-33 u
- * of a 26 u map), centre the map, so no screen space is spent on void past the edge. Otherwise follow the camera
- * unclamped, as before: in landscape the player stays centred and never slides under the corner HUD panels.
+ * Portrait framing on one axis (RC-5). Show map rather than void past its edge (or centre the map when it fits), but
+ * never move the view so far that the player slides under a HUD band: `bandLo`/`bandHi` are the HUD depths (u) at the
+ * low (top/left) and high (bottom/right) screen edges, `margin` the player's drawn radius plus its bar.
+ * Landscape keeps the plain follow camera (player centred, clear of the corner panels).
  */
-export function frameAxis(cam: number, viewExtent: number, mapExtent: number): number {
-  return viewExtent >= mapExtent ? mapExtent / 2 : cam;
+export function frameAxis(cam: number, player: number, viewExtent: number, mapExtent: number, bandLo: number, bandHi: number, margin: number): number {
+  const half = viewExtent / 2;
+  const want = viewExtent >= mapExtent ? mapExtent / 2 : Math.min(mapExtent - half, Math.max(half, cam));
+  const lo = player - half + bandHi + margin; // the player stays above / left of the far band
+  const hi = player + half - bandLo - margin; // ... and below / right of the near band
+  if (lo > hi) return cam;
+  return Math.min(hi, Math.max(lo, want));
 }

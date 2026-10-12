@@ -100,7 +100,7 @@ await view(844, 390, true); await open();
     const s = await shots();
     if (v === 'T1') { await touch('touchStart', [{ x: r[0], y: r[1], id: 21 }]); await touch('touchEnd', []); }
     if (v === 'T2') { await touch('touchStart', [{ x: r[0], y: r[1], id: 22 }]); await touch('touchMove', [{ x: r[0] + 60, y: r[1], id: 22 }]); await ticks(20); await touch('touchEnd', []); }
-    if (v === 'T3') { await touch('touchStart', [{ x: stickL.x, y: stickL.y, id: 23 }]); await touch('touchStart', [{ x: stickL.x, y: stickL.y, id: 23 }, { x: r[0], y: r[1], id: 24 }]); await touch('touchEnd', [{ x: stickL.x, y: stickL.y, id: 23 }]); }
+    if (v === 'T3') { await touch('touchStart', [{ x: stickL.x, y: stickL.y, id: 23 }]); await touch('touchStart', [{ x: stickL.x, y: stickL.y, id: 23 }, { x: r[0], y: r[1], id: 24 }]); await touch('touchMove', [{ x: stickL.x, y: stickL.y, id: 23 }]); } // lift only the Resume finger (CDP: omit it from a touchMove)
     await waitPhase('play'); await ticks(30);
     const afterResume = (await shots()) - s;
     let fresh;

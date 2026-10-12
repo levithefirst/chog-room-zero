@@ -6,7 +6,7 @@
 import { Application, Container, Graphics, Sprite, Text } from 'pixi.js';
 import { TUNING } from '../config/tuning';
 import { placeLabel, stackLabels, type Rect } from './labels';
-import { createCamera, frameAxis, stepCamera } from './camera';
+import { createCamera, frameAxis, stepCamera, viewScale } from './camera';
 import { WALL, walkable, type Level } from '../sim/level';
 import { pointInPolygon } from '../sim/geom';
 import { visibilityPolygon } from '../sim/vision';
@@ -15,7 +15,7 @@ import { player, revealed, type Actor, type World } from '../sim/world';
 import type { Brain } from '../sim/bots';
 import { STICK_RADIUS, AIM_DEADZONE, type Input } from '../input/input';
 import { bakeMap, type Baked } from './bake';
-import { clampMarker, enemyDrawMode } from './visibility';
+import { clampMarker, edgeAnchor, enemyDrawMode } from './visibility';
 
 const P = TUNING.palette;
 const R = TUNING.render;
@@ -104,9 +104,15 @@ export interface Renderer {
   visibleBots(): number;
   /** Hostiles drawn this frame only because they just shot at the player. */
   flashBots(): number;
+  /** Seen hostiles past the screen edge this frame (each gets an edge chevron). */
+  offscreenMarks(): number;
 }
 
 export const COVER_FLASH_SECONDS = 0.18;
+// Portrait camera: the same smoothing with a longer lead toward the aim (TUNING.render.portraitLookahead).
+const PORTRAIT_CAM = { ...TUNING.render, lookahead: TUNING.render.portraitLookahead };
+// The player's drawn radius plus its overhead bar, in u: how far from a HUD band the portrait camera keeps it.
+const PLAYER_MARGIN = 1;
 
 export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
   const app = new Application();
@@ -147,6 +153,8 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
   let explored: Uint8Array;
   let exploredDirty = true;
   let camX = 0, camY = 0, ppu = 40;
+  const shownHostiles: Actor[] = [];
+  let offscreenMarks = 0;
   let cam = createCamera(0, 0);
   const poly: number[] = [];
   const lightParams: LightParams = { x: 0, y: 0, facing: 0, range: 1, coneRad: 1, nearRadius: TUNING.vision.nearRadius, edgeRad: TUNING.vision.softEdgeDeg * DEG };
@@ -399,13 +407,27 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
     visibleBots: () => visBots,
     visPoly: () => poly,
     flashBots: () => flashBots,
+    offscreenMarks: () => offscreenMarks,
     draw(w, fx, input, dt, opts) {
       const p = player(w);
       const sw = app.screen.width, sh = app.screen.height;
-      ppu = Math.min(sw / R.viewWidthUnits, sh / R.minViewHeightUnits);
-      stepCamera(cam, p.x, p.y, p.facing, dt, R);
-      camX = frameAxis(cam.x, sw / ppu, level.w);
-      camY = frameAxis(cam.y, sh / ppu, level.h);
+      const portrait = sh > sw;
+      ppu = viewScale(sw, sh, R);
+      stepCamera(cam, p.x, p.y, p.facing, dt, portrait ? PORTRAIT_CAM : R);
+      camX = cam.x;
+      camY = cam.y;
+      if (portrait) {
+        // HUD bands (px -> u): panels hugging the top/bottom edge, and side panels between them (Ability, Reload).
+        let top = 0, bottom = 0, left = 0, right = 0;
+        for (const h of opts.hud ?? []) {
+          if (h.y + h.h < sh * 0.3) top = Math.max(top, h.y + h.h);
+          else if (h.y > sh * 0.7) bottom = Math.max(bottom, sh - h.y);
+          else if (h.x > sw * 0.5) right = Math.max(right, sw - h.x);
+          else left = Math.max(left, h.x + h.w);
+        }
+        camX = frameAxis(cam.x, p.x, sw / ppu, level.w, left / ppu, right / ppu, PLAYER_MARGIN);
+        camY = frameAxis(cam.y, p.y, sh / ppu, level.h, top / ppu, bottom / ppu, PLAYER_MARGIN);
+      }
       let sx = 0, sy = 0;
       if (fx.shake > 0) {
         const s = (R.shakePx * fx.shake) / R.shakeSeconds;
@@ -447,6 +469,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       bars.clear();
       visBots = 0;
       flashBots = 0;
+      shownHostiles.length = 0;
       const rev = revealed(w, p);
       for (const a of w.actors) {
         if (a.team === 'bot') {
@@ -457,6 +480,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
             pinged: rev.includes(a),
           });
           if (mode === null) continue;
+          if (a.alive) shownHostiles.push(a);
           if (mode === 'ping') {
             // Ping reveal: an outline only, so it reads as information, not presence.
             const pulse = 0.5 + 0.5 * Math.sin(w.tick / 4);
@@ -552,6 +576,19 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
           if (s === input.right) screen.circle(s.baseX, s.baseY, STICK_RADIUS * AIM_DEADZONE).stroke({ width: 1.5, color: P.signal, alpha: 0.4 });
           screen.circle(s.x, s.y, 18).fill({ color: P.team, alpha: 0.35 });
         }
+      }
+      // A hostile you can see (cone, muzzle flash, Ping) but which sits past the screen edge: a red edge chevron on
+      // the line from you to it. Only what you already see, never more (RC-5: the portrait view is ~15 u wide while
+      // Wick sees 12 u and the Lamp sidegrade 14.6 u).
+      offscreenMarks = 0;
+      for (const a of shownHostiles) {
+        const s = r.toScreen(a.x, a.y);
+        const e = edgeAnchor(ps.x, ps.y, s.x, s.y, 16, 16, sw - 16, sh - 16);
+        if (!e) continue;
+        offscreenMarks++;
+        const c = Math.cos(e.ang), sn = Math.sin(e.ang), z = 14;
+        screen.poly([e.x + c * z, e.y + sn * z, e.x - sn * z * 0.7, e.y + c * z * 0.7, e.x + sn * z * 0.7, e.y - c * z * 0.7])
+          .fill({ color: P.hostile, alpha: 0.95 }).stroke({ width: 1.5, color: 0x15140f, alpha: 0.8 });
       }
       const margin = 22;
       for (const m of fx.markers) {

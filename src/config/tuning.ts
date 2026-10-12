@@ -22,6 +22,11 @@ export const TUNING = {
     // Quiet walk: 55% speed, worth it only when sneaking. Half stick push on mobile.
     quietSpeedScale: 0.55,
     quietStickThreshold: 0.6,
+    // Touch facing (RC-5): with the aim thumb idle, you face where you walk (so the light cone shows the way and you
+    // can look without firing). After you stop aiming, the aim is held this long so you can strafe while watching.
+    touchAimHoldSeconds: 0.6,
+    // Move-stick push below this share does not turn you (thumb jitter near the centre).
+    touchFaceMoveMin: 0.25,
     // Body radius 0.35 u: slips through 1 u doors with room to spare.
     radius: 0.35,
     // Distance per footstep sound: about 2.6 steps/s at a run.
@@ -145,6 +150,13 @@ export const TUNING = {
     maxResolution: 1.5,
     viewWidthUnits: 22,
     minViewHeightUnits: 11,
+    // Portrait (phones held upright, RC-5): ~15 u across, so a 390 px phone draws the player ~27 px wide (as big as
+    // phone landscape) and sees ~32 u top to bottom. Never wider than 22 u, never closer than portraitMaxPpu (so a
+    // 600-800 px portrait tablet keeps phone-landscape scale instead of zooming in).
+    portraitViewWidthUnits: 15,
+    portraitMaxPpu: 30,
+    // Portrait lookahead toward the aim: with 7.5 u to each side, 3 u of lead shows ~10.5 u ahead of the player.
+    portraitLookahead: 3,
     // Camera (CHOG-DES-001, src/render/camera.ts): position follows player + lead over cameraSmoothing s; the lead
     // eases toward facing x lookahead over leadSmoothing s. Lookahead 2 -> 1.5 u (~52 px at 844x390, was ~70-90):
     // still shows more of where you aim, without the off-centre feel ADE noted.
