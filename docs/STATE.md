@@ -36,12 +36,39 @@ Last verified: 2026-10-12 by grokbot.
 - Owner access to Pixel 7 / iPhone 13. Hackathon name, deadline, rules.
 - One ability (LOCKED 4 mentions Space): not designed or built.
 
+## Implemented (EVIDENCE: branch `grokbot/p1-mvp` @ `b25bac0`)
+- Room Zero 40x24 tile map (`src/config/map.ts`): walls, half cover, two long sightlines, a loop. Circle-vs-box collision with sliding.
+- PC aim (mouse) and touch twin-stick (floating sticks, fire outside a 35% ring). Barrel shows facing. P0-2 movement values unchanged.
+- Weapon: magazine, reload, spread (+3 deg while running) shown by crosshair gap / touch wedge; 30 u/s travelling bullets, swept vs walls, cover, bodies.
+- Vision: visibility polygon raycast against wall segments is the light mask; remembered tiles dim; hostiles and bullets outside sight not drawn (`canSee`, `pointInPolygon`).
+- Sound bus feeds WebAudio synthesis (pan, distance, wall muffle), bot hearing, heard rings, and edge wedges.
+- 5 bots, one state machine: patrol, investigate, alert (0.4 s telegraph), engage, cover, pursue (2 flankers), search. Same rules, HP, damage as the player.
+- Health 100, 34 damage. Death recap: killer revealed, shot line, distance and direction, 1.2 s freeze, summary, R/tap restart. Win: all bots down. Title + fading hint.
+- NFT: `OwnershipAdapter`, guest default, dev mock (`?mockChog=`), placeholder config (null chain/contract). 4 sidegrades via `operatorFor`. Bound runs only write token history to localStorage.
+
+## Automated tests (EVIDENCE, Node 22.23.3)
+`npm ci` 0; `npm run typecheck` 0; `npm test` 60/60 (6 files: movement, input, world/collision/projectiles/sight/perception/determinism, bot batch, operator balance, NFT fallback/history); `npm run build` 0 (main chunk 282 kB, 86 kB gzip).
+
+## Browser run (EVIDENCE, headless Chrome swiftshader, `tools/browser-run.mjs`)
+Console errors: none (dev and preview). Bot behind wall at 4 u in cone: 0 bots drawn; through door gap: 1. Recap, win, 844x390 touch run OK. Software-render FPS ~29 idle, ~28 with ~150 bullets (not phone evidence). Shots: `/workspace/shots/p1-*.png` (box only).
+
+## Not performed (needs the owner)
+- Phone run on Pixel 7 / iPhone 13: NOT PERFORMED (steps in `docs/DEV.md`).
+- Feel, fairness, run length, audio by ear: NOT JUDGED. Owner playtest questions in `docs/DEV.md`.
+- G8 baseline on phones: NOT RECORDED.
+
+## Gates
+Core Feel Gate: BLOCKED on owner playtests. G1-G7, G9, G11, G12 built, awaiting playtest. G8 not recorded. G10 interface + mock only (BLOCKER: verified chain, contract, ownership method; server verification for a DB).
+
 ## Current task
-S1, P0-1, P0-2: see HANDOFFS H1-H3 (P0-1, P0-2 done, PRs open).
+S1, P0-1, P0-2: see HANDOFFS H1-H3.
 
 | Id | Owner | Branch | Files | Done when | Status |
 |---|---|---|---|---|---|
-| P1 | grokbot | grokbot/p1-mvp (base `grokbot/p0-2-pc-movement`) | `src/**`, `tests/**`, `index.html`, `public/favicon.svg`, `docs/design/art-direction.md`, `docs/DEV.md`, `tools/browser-run.mjs`, `docs/STATE.md`, `docs/HANDOFFS.md` | full MVP per owner mandate; Node 22 ci/typecheck/test/build pass; scripted browser run | approved, in progress (owner mandate 2026-10-12 02:56 WAT) |
+| P1 | grokbot | grokbot/p1-mvp (base `grokbot/p0-2-pc-movement`) | `src/**`, `tests/**`, `index.html`, `public/favicon.svg`, `docs/design/art-direction.md`, `docs/DEV.md`, `tools/browser-run.mjs`, `docs/STATE.md`, `docs/HANDOFFS.md` | full MVP per owner mandate; Node 22 ci/typecheck/test/build pass; scripted browser run | done, awaiting owner review and playtest (mandate 2026-10-12 02:56 WAT) |
+
+## Next smallest task (PROPOSED)
+P1-F1: owner playtest on PC and both phones; grokbot fixes the top 3 reported issues. Files: decided by the reports.
 
 ## Handoffs
-Latest: H3. History: `docs/HANDOFFS.md`.
+Latest: H4 (2026-10-12, grokbot -> owner, P1). History: `docs/HANDOFFS.md`.
