@@ -142,7 +142,7 @@ export function createInput(el: HTMLElement): Input {
     if (MOVE_CODES.has(e.code)) held.add(e.code);
     if (e.code === 'KeyR') reloadQueued = true;
     // R is reload only; it never restarts a run (CHOG-FLOW-001). Enter confirms menus.
-    if (e.code === 'Enter' && !e.repeat) action = true;
+    if ((e.code === 'Enter' || e.code === 'Space') && !e.repeat) action = true; // Space also confirms menus (consumed and dropped during play)
     if (e.code === 'Escape' || e.code === 'KeyP') pauseQueued = true;
     if (e.code === 'Space' || e.code === 'KeyQ') {
       e.preventDefault();
