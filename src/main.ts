@@ -5,7 +5,8 @@ import { createAudio } from './audio/audio';
 import { fixedSteps } from './sim/sim';
 import { createWorld, hears, player, stepWorld, type World } from './sim/world';
 import { sightClear, walkable } from './sim/level';
-import { clampMarker, THREAT_HIT_SECONDS, THREAT_SHOT_RANGE, THREAT_SHOT_SECONDS } from './render/visibility';
+import { clampMarker } from './render/visibility';
+import { muzzleFlashSeen } from './sim/vision';
 import { canSee } from './sim/vision';
 import { nextPhase, simRuns, type MatchEvent, type Phase } from './sim/match';
 import { TUNING } from './config/tuning';
@@ -18,6 +19,8 @@ const $ = (id: string) => document.getElementById(id)!;
 const root = $('app');
 const overlay = $('overlay');
 const hint = $('hint');
+// ?debug shows the bot perception overlay; add &nooverlay to keep the debug hook without it.
+const DEBUG_OVERLAY = location.search.includes('debug') && !location.search.includes('nooverlay');
 const HERO_KEY = 'chog.hero';
 
 function compass(dx: number, dy: number): string {
@@ -86,6 +89,23 @@ async function start() {
     e.stopPropagation();
     input.ability();
   };
+
+  // Small top hint pill: shown for `seconds`, then fades. Never covers the play centre.
+  let hintLeft = 0;
+  function showHint(html: string, seconds: number) {
+    hint.innerHTML = html;
+    hintLeft = seconds;
+    hint.style.opacity = seconds > 0 ? '1' : '0';
+  }
+  // First-match explanation of sound rings, shown once ever (persisted).
+  const RING_HINT_KEY = 'chog.hint.rings';
+  let ringHintDone = (() => { try { return localStorage.getItem(RING_HINT_KEY) === '1'; } catch { return true; } })();
+  function ringHint() {
+    if (ringHintDone) return;
+    ringHintDone = true;
+    try { localStorage.setItem(RING_HINT_KEY, '1'); } catch { /* ignore */ }
+    showHint('Gold rings: a noise you <b>heard</b>, not saw. Enemies hear you too: running is loud, creeping is quiet.', 6);
+  }
 
   function toast(text: string) {
     $('toast').textContent = text;
@@ -244,7 +264,7 @@ async function start() {
     hint.innerHTML = input.mode === 'touch'
       ? 'Left thumb moves, half push creeps. Right thumb aims, push past the ring to fire.'
       : 'WASD move · Shift creep · Mouse aim · Click fire · R reload · Space ability · Esc pause';
-    hint.style.opacity = runIndex === 1 ? '1' : '0';
+    showHint(hint.innerHTML, runIndex === 1 ? 6 : 0);
   }
 
   function endRun(won: boolean) {
@@ -285,22 +305,24 @@ async function start() {
       const own = s.sourceId === 0;
       const dx = s.x - p.x, dy = s.y - p.y;
       if (s.type === 'sonar') fx.pings.push({ x: s.x, y: s.y, age: 0, hostile: !own });
+      // The one reveal rule (docs/design/bots.md): a muzzle flash with wall line of sight shows the shooter
+      // briefly, at any range. Bots get the same signal from the player's flash.
+      if (s.type === 'shot' && !own && s.team === 'bot' && muzzleFlashSeen(world.level, p.x, p.y, s.x, s.y))
+        fx.threats[s.sourceId] = TUNING.perception.flashSeconds;
       const heard = own || hears(world.level, p.x, p.y, s);
       if (!heard) continue;
       audio.play(s.type, dx, dy, s.radius, !own && !sightClear(world.level, p.x, p.y, s.x, s.y), own, s.weapon);
       if (s.type === 'impact') {
-        fx.impacts.push({ x: s.x, y: s.y, age: 0 });
-        spark(s.x, s.y, 3, false);
+        fx.impacts.push({ x: s.x, y: s.y, age: 0, blocked: s.blocked });
+        spark(s.x, s.y, s.blocked ? 7 : 3, false);
       }
       if (own && s.type === 'pickup') toast('Picked up');
       if (own || s.team !== 'bot') continue;
       const src = world.actors[s.sourceId];
-      // A bot firing with a clear line close by shows itself for a moment (muzzle flash), even outside the cone.
-      if (s.type === 'shot' && src.alive && Math.hypot(dx, dy) <= THREAT_SHOT_RANGE && sightClear(world.level, p.x, p.y, src.x, src.y))
-        fx.threats[src.id] = Math.max(fx.threats[src.id] ?? 0, THREAT_SHOT_SECONDS);
       if (src.alive && canSee(world.level, p.x, p.y, p.facing, view, src.x, src.y)) continue;
       const err = Math.hypot(dx, dy) * 0.08;
       const m = clampMarker(world.level, s.x + (Math.random() * 2 - 1) * err, s.y + (Math.random() * 2 - 1) * err, src.x, src.y, walkable);
+      ringHint();
       fx.markers.push({ x: m.x, y: m.y, age: 0, life: TUNING.sound.markerLife, big: s.type === 'shot' || s.type === 'death' || s.type === 'sonar' });
     }
     for (const h of world.hits) {
@@ -311,7 +333,6 @@ async function start() {
       }
       if (h.target === 0) {
         fx.shake = TUNING.render.shakeSeconds;
-        fx.threats[h.by] = THREAT_HIT_SECONDS;
         fx.damageArcs.push({ ang: Math.atan2(h.fromY - p.y, h.fromX - p.x), age: 0 });
         audio.play('hurt', 0, 0, 1, false, true);
         ($('hurt') as HTMLElement).style.opacity = '1';
@@ -367,7 +388,6 @@ async function start() {
         afterStep();
         playTime += TUNING.simStepSeconds;
       }
-      if (playTime > 14) hint.style.opacity = '0';
       if (world.outcome === 'dead') {
         recapLeft = TUNING.render.deathFreeze;
         endRun(false);
@@ -406,9 +426,13 @@ async function start() {
     fx.pings = fx.pings.filter((m) => m.age < 0.7);
     fx.shake = Math.max(0, fx.shake - dt);
     toastLeft -= dt;
+    if (hintLeft > 0 && phase === 'play') {
+      hintLeft -= dt;
+      if (hintLeft <= 0) hint.style.opacity = '0';
+    }
     $('toast').style.opacity = toastLeft > 0 ? '1' : '0';
 
-    renderer.draw(world, fx, input, dt, { recap: phase === 'recap' || (phase === 'results' && world.outcome === 'dead'), marking: identity.marking, showSticks: phase === 'play' && input.mode === 'touch', playing: phase === 'play' });
+    renderer.draw(world, fx, input, dt, { recap: phase === 'recap' || (phase === 'results' && world.outcome === 'dead'), marking: identity.marking, showSticks: phase === 'play' && input.mode === 'touch', playing: phase === 'play', debug: DEBUG_OVERLAY });
 
     // HUD: only touch the DOM when a value changed.
     const p = player(world);

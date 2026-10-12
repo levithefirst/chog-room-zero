@@ -191,7 +191,11 @@ describe('bot perception limits', () => {
     p.x = 3.5; p.y = 5.5; bot.x = 8.5; bot.y = 5.5; bot.facing = Math.PI;
     stepWorld(w, IDLE_INPUT);
     expect(w.brains.get(1)!.state).toBe('alert');
-    const ticks = Math.ceil(TUNING.bots.reactionTime / TUNING.simStepSeconds);
+    // Seeded per-acquisition delay within [reactionMin, reactionMax] (docs/design/bots.md).
+    const r = w.brains.get(1)!.reaction;
+    expect(r).toBeGreaterThanOrEqual(TUNING.perception.reactionMin);
+    expect(r).toBeLessThanOrEqual(TUNING.perception.reactionMax);
+    const ticks = Math.ceil(r / TUNING.simStepSeconds);
     for (let i = 0; i < ticks - 3; i++) stepWorld(w, IDLE_INPUT);
     expect(w.brains.get(1)!.state).toBe('alert');
     expect(bot.shots).toBe(0);

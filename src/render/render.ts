@@ -1,12 +1,14 @@
 // Drawing only. Reads sim state and never writes it.
-// Layers: DIM map (always, so the level is never pitch black) -> fog over unexplored tiles -> LIT map through a
-// soft outer cone and a sharp inner cone (vision polygons) with distance falloff -> pickups, barriers, marks ->
-// actors (hostiles only when the sim says the player can see them) -> effects -> screen-space UI.
-import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
+// Layers: DIM map (cool slate, always, so the level is never pitch black) -> fog over unexplored tiles -> LIT map
+// through ONE light mesh over the visibility polygon (per-vertex falloff, lightmesh.ts) -> pickups, barriers, marks ->
+// actors (hostiles only when the sim says the player can see them) -> overhead bars -> effects -> ?debug overlay
+// -> screen-space UI.
+import { Application, Container, Graphics, Sprite, Text } from 'pixi.js';
 import { TUNING } from '../config/tuning';
 import { WALL, walkable, type Level } from '../sim/level';
 import { pointInPolygon } from '../sim/geom';
-import { visibilityPolygon, type ViewShape } from '../sim/vision';
+import { visibilityPolygon } from '../sim/vision';
+import { createLightMesh, type LightMesh, type LightParams } from './lightmesh';
 import { player, revealed, type Actor, type World } from '../sim/world';
 import type { Brain } from '../sim/bots';
 import { STICK_RADIUS, AIM_DEADZONE, type Input } from '../input/input';
@@ -16,6 +18,8 @@ import { clampMarker, enemyDrawMode } from './visibility';
 const P = TUNING.palette;
 const R = TUNING.render;
 const DEG = Math.PI / 180;
+// Dark keyline around every body: separates it from any floor value.
+const KEYLINE = 0x0b0f12;
 
 // Pixi keeps a reference to a points array, so each circle needs its own (32 sides; Pixi's own looks octagonal at u scale).
 function circle(g: Graphics, x: number, y: number, r: number, n = 24): Graphics {
@@ -56,7 +60,7 @@ export interface Spark {
 
 export interface Fx {
   markers: Marker[];
-  impacts: { x: number; y: number; age: number }[];
+  impacts: { x: number; y: number; age: number; blocked?: boolean }[];
   hitMarks: { x: number; y: number; age: number; kill: boolean }[];
   shake: number;
   corpses: { x: number; y: number; hostile: boolean }[];
@@ -80,43 +84,20 @@ export interface DrawOpts {
   marking: number | null;
   showSticks: boolean;
   playing: boolean;
+  /** ?debug perception overlay. */
+  debug?: boolean;
 }
 
 export interface Renderer {
   app: Application;
   toScreen(x: number, y: number): { x: number; y: number };
   draw(w: World, fx: Fx, input: Input, dt: number, opts: DrawOpts): void;
+  /** The visibility polygon computed this frame (shared, do not mutate). */
+  visPoly(): readonly number[];
   reset(w: World): void;
   visibleBots(): number;
   /** Hostiles drawn this frame only because they just shot at the player. */
   flashBots(): number;
-}
-
-function glowTexture(): Texture {
-  const c = document.createElement('canvas');
-  c.width = c.height = 128;
-  const x = c.getContext('2d')!;
-  const gr = x.createRadialGradient(64, 64, 0, 64, 64, 64);
-  gr.addColorStop(0, 'rgba(255,214,150,0.55)');
-  gr.addColorStop(0.5, 'rgba(255,200,130,0.18)');
-  gr.addColorStop(1, 'rgba(255,190,120,0)');
-  x.fillStyle = gr;
-  x.fillRect(0, 0, 128, 128);
-  return Texture.from(c);
-}
-
-function falloffTexture(): Texture {
-  const c = document.createElement('canvas');
-  c.width = c.height = 256;
-  const x = c.getContext('2d')!;
-  const gr = x.createRadialGradient(128, 128, 0, 128, 128, 128);
-  gr.addColorStop(0, 'rgba(0,0,0,0)');
-  gr.addColorStop(0.55, 'rgba(0,0,0,0.05)');
-  gr.addColorStop(0.85, 'rgba(0,0,0,0.25)');
-  gr.addColorStop(1, 'rgba(0,0,0,0.5)');
-  x.fillStyle = gr;
-  x.fillRect(0, 0, 256, 256);
-  return Texture.from(c);
 }
 
 export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
@@ -126,41 +107,30 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
     resizeTo: parent,
     antialias: true,
     autoDensity: true,
-    resolution: Math.min(window.devicePixelRatio || 1, 2),
+    // DPR cap 1.5: fill cost scales with pixels (P3 audit: dpr2 roughly halved fps vs dpr1).
+    resolution: Math.min(window.devicePixelRatio || 1, R.maxResolution),
+    // The light mesh ships a GLSL program only.
+    preference: 'webgl',
   });
   parent.appendChild(app.canvas);
 
   const world = new Container();
   const dimSprite = new Sprite();
   const fogG = new Graphics();
-  const softLit = new Container();
-  const softSprite = new Sprite();
-  const softMask = new Graphics();
-  const lit = new Container();
-  const litSprite = new Sprite();
-  const falloff = new Sprite(falloffTexture());
-  const softFalloff = new Sprite(falloff.texture);
-  const glow = new Sprite(glowTexture());
-  const visMask = new Graphics();
+  // One-pass light (lightmesh.ts): created on the first bake, lives in this layer.
+  const lightLayer = new Container();
+  let light: LightMesh | null = null;
   const props = new Graphics();
   const labels = new Container();
   const marks = new Graphics();
   const actors = new Graphics();
+  const bars = new Graphics();
   const fxG = new Graphics();
   const recapG = new Graphics();
+  const debugG = new Graphics();
+  const debugLabels = new Container();
   const screen = new Graphics();
-  falloff.anchor.set(0.5);
-  softFalloff.anchor.set(0.5);
-  glow.anchor.set(0.5);
-  glow.blendMode = 'add';
-  softSprite.alpha = 0.55;
-  softSprite.tint = 0xf2e2c8;
-  softLit.addChild(softSprite, softFalloff);
-  softLit.mask = softMask;
-  litSprite.tint = 0xfff2dc;
-  lit.addChild(litSprite, glow, falloff);
-  lit.mask = visMask;
-  world.addChild(dimSprite, fogG, softLit, softMask, lit, visMask, props, labels, marks, actors, fxG, recapG);
+  world.addChild(dimSprite, fogG, lightLayer, props, labels, marks, actors, bars, fxG, recapG, debugG, debugLabels);
   app.stage.addChild(world, screen);
 
   let level: Level;
@@ -170,8 +140,8 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
   let exploredDirty = true;
   let camX = 0, camY = 0, ppu = 40;
   const poly: number[] = [];
-  const softPoly: number[] = [];
-  const softView: ViewShape = { range: 1, coneRad: 1, nearRadius: TUNING.vision.nearRadius };
+  const lightParams: LightParams = { x: 0, y: 0, facing: 0, range: 1, coneRad: 1, nearRadius: TUNING.vision.nearRadius, edgeRad: TUNING.vision.softEdgeDeg * DEG };
+  const debugTexts: Text[] = [];
   let visBots = 0, flashBots = 0;
   let exploreTimer = 0;
   const pickupLabels: Text[] = [];
@@ -190,7 +160,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
         }
       }
     }
-    fogG.fill({ color: P.fogUnexplored, alpha: 0.6 });
+    fogG.fill({ color: P.fogUnexplored, alpha: 0.72 });
   }
 
   function updateExplored(p: Actor) {
@@ -217,14 +187,14 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
 
   function drawWeapon(g: Graphics, a: Actor, col: number, dark: number) {
     const W = a.weapon;
-    const r = TUNING.movement.radius;
+    const r = TUNING.movement.radius * R.actorScale;
     // Reload: the gun dips 35 deg. Recoil: it kicks back for the muzzle-flash time.
     const ang = a.facing + (a.reloadLeft > 0 ? -35 * DEG : 0);
     const kick = (a.muzzle / R.muzzleFlash) * (W.pellets > 1 ? 0.16 : W.id === 'marksman' ? 0.14 : 0.07);
     const c = Math.cos(ang), s = Math.sin(ang);
     const x0 = a.x + c * (r * 0.3 - kick), y0 = a.y + s * (r * 0.3 - kick);
-    const len = r + W.barrel - kick;
-    const thick = W.id === 'shotgun' ? 0.16 : W.id === 'marksman' ? 0.085 : W.id === 'smg' ? 0.12 : 0.11;
+    const len = r + W.barrel * 0.85 - kick;
+    const thick = (W.id === 'shotgun' ? 0.16 : W.id === 'marksman' ? 0.09 : W.id === 'smg' ? 0.13 : 0.12) * 1.15;
     g.moveTo(x0, y0).lineTo(a.x + c * len, a.y + s * len).stroke({ width: thick + 0.07, color: dark });
     g.moveTo(x0, y0).lineTo(a.x + c * len, a.y + s * len).stroke({ width: thick, color: col });
     if (W.id === 'marksman') circle(g, a.x + c * (r + 0.25), a.y + s * (r + 0.25), 0.07, 10).fill(dark);
@@ -232,7 +202,8 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
   }
 
   function drawBody(g: Graphics, a: Actor, hostile: boolean, marking: number | null, alert: boolean) {
-    const r0 = TUNING.movement.radius;
+    // Drawn 1.45x the sim radius (~36 px at 844x390); collision stays 0.35 u.
+    const r0 = TUNING.movement.radius * R.actorScale;
     let alpha = 1, r = r0;
     if (!a.alive) {
       const t = Math.min(1, a.deadFor / R.deathAnimSeconds);
@@ -257,13 +228,16 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
         a.x - cos * r * 0.35, a.y - sin * r * 0.35,
         a.x - px * r * 1.05 - cos * r * 0.85, a.y - py * r * 1.05 - sin * r * 0.85,
       ];
-      g.poly(pts).fill({ color: fill, alpha }).stroke({ width: 0.07, color: dark, alpha });
+      // Hostile ring first (under the body), then the body with a dark keyline.
+      if (a.alive) circle(g, a.x, a.y, r0 + 0.1).stroke({ width: 0.07, color: P.hostile, alpha: 0.9 });
+      g.poly(pts).fill({ color: fill, alpha }).stroke({ width: 0.075, color: KEYLINE, alpha });
       if (alert && a.alive) {
         // Telegraph: it has seen something and is about to commit.
         g.poly([a.x - 0.13, a.y - r - 0.75, a.x + 0.13, a.y - r - 0.75, a.x, a.y - r - 0.42]).fill(P.signal);
       }
     } else {
-      circle(g, a.x, a.y, r).fill({ color: fill, alpha }).stroke({ width: 0.07, color: dark, alpha });
+      if (a.alive) circle(g, a.x, a.y, r0 + 0.1).stroke({ width: 0.07, color: P.teamRing, alpha: 0.9 });
+      circle(g, a.x, a.y, r).fill({ color: fill, alpha }).stroke({ width: 0.075, color: KEYLINE, alpha });
       circle(g, a.x, a.y, r * 0.55).stroke({ width: 0.08, color: marking ?? a.hero.accent, alpha });
     }
     if (!a.alive && a.deadFor > R.deathAnimSeconds * 0.5) {
@@ -284,6 +258,46 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
         g.poly([mx + cos * z, my + sin * z, mx - sin * 0.1, my + cos * 0.1, mx + sin * 0.1, my - cos * 0.1]).fill(P.signal);
       }
     }
+  }
+
+  // Compact overhead bar for a visible actor: 34x4 px HP, 34x2 px armour (at ppu ~35).
+  function drawBar(a: Actor, hostile: boolean) {
+    const W = 0.96, H = 0.11, x = a.x - W / 2, y = a.y - TUNING.movement.radius * R.actorScale - 0.42;
+    bars.rect(x - 0.03, y - 0.03, W + 0.06, H + 0.1).fill({ color: KEYLINE, alpha: 0.75 });
+    bars.rect(x, y, W * Math.min(1, Math.max(0, a.hp / a.maxHp)), H).fill(hostile ? P.hostile : P.team);
+    if (a.maxArmor > 0 && a.armor > 0) bars.rect(x, y + H + 0.015, W * Math.min(1, a.armor / a.maxArmor), 0.05).fill(P.armor);
+  }
+
+  // ?debug: what each bot believes and why (docs/design/bots.md). Text objects pooled.
+  function drawDebug(w: World) {
+    debugG.clear();
+    let i = 0;
+    for (const a of w.actors) {
+      if (a.team !== 'bot' || !a.alive) continue;
+      const br = w.brains.get(a.id) as Brain;
+      const token = w.attackTokens.includes(a.id);
+      const col = br.source === 'seen' ? 0xff4d5e : br.source === 'flash' ? 0xffc94a : br.source === 'heard' ? 0x5aa9ff : br.source === 'shot' ? 0xff8a3d : br.source === 'sonar' ? 0x5ce07a : 0x9aa4ad;
+      if (br.lastKnown) debugG.moveTo(a.x, a.y).lineTo(br.lastKnown.x, br.lastKnown.y).stroke({ width: 0.05, color: col, alpha: 0.85 });
+      if (br.lastKnown) circle(debugG, br.lastKnown.x, br.lastKnown.y, 0.22).stroke({ width: 0.05, color: col });
+      circle(debugG, a.x, a.y, 0.95).stroke({ width: token ? 0.12 : 0.04, color: token ? 0xffd34d : 0x9aa4ad, alpha: token ? 1 : 0.5 });
+      const view = a.view;
+      debugG.moveTo(a.x, a.y).lineTo(a.x + Math.cos(a.facing - view.coneRad / 2) * 2, a.y + Math.sin(a.facing - view.coneRad / 2) * 2)
+        .moveTo(a.x, a.y).lineTo(a.x + Math.cos(a.facing + view.coneRad / 2) * 2, a.y + Math.sin(a.facing + view.coneRad / 2) * 2)
+        .stroke({ width: 0.03, color: 0xffffff, alpha: 0.35 });
+      let t = debugTexts[i];
+      if (!t) {
+        t = new Text({ text: '', style: { fontFamily: 'Plex Mono, monospace', fontSize: 20, fontWeight: '600', fill: 0xffffff, stroke: { color: 0x000000, width: 4 } } });
+        t.scale.set(1 / 80);
+        t.anchor.set(0.5, 1);
+        debugLabels.addChild(t);
+        debugTexts.push(t);
+      }
+      t.visible = true;
+      t.text = `${a.name} ${br.state}${token ? ' [T]' : ''}\n${br.source ?? '-'} s${Math.round(br.suspicion * 100)}`;
+      t.position.set(a.x, a.y - 1.05);
+      i++;
+    }
+    for (; i < debugTexts.length; i++) debugTexts[i].visible = false;
   }
 
   function drawPickups(w: World) {
@@ -333,10 +347,12 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
         bakedKey = key;
         // Free the old textures only after the next frame has stopped using them.
         if (old) setTimeout(() => { old.lit.destroy(true); old.dim.destroy(true); }, 200);
-        for (const s of [dimSprite, litSprite, softSprite]) {
-          s.texture = s === dimSprite ? baked.dim : baked.lit;
-          s.scale.set(1 / baked.ppu);
-        }
+        dimSprite.texture = baked.dim;
+        dimSprite.scale.set(1 / baked.ppu);
+        if (!light) {
+          light = createLightMesh(baked.lit, w.level.w, w.level.h, [1, 0.95, 0.86]);
+          lightLayer.addChild(light.mesh);
+        } else light.setTexture(baked.lit, w.level.w, w.level.h);
       }
       level = w.level;
       explored = new Uint8Array(level.w * level.h);
@@ -361,6 +377,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       for (let i = w.pickups.length; i < pickupLabels.length; i++) pickupLabels[i].visible = false;
     },
     visibleBots: () => visBots,
+    visPoly: () => poly,
     flashBots: () => flashBots,
     draw(w, fx, input, dt, opts) {
       const p = player(w);
@@ -380,20 +397,12 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       world.scale.set(ppu);
       world.position.set(sw / 2 - camX * ppu + sx, sh / 2 - camY * ppu + sy);
 
-      // Light: sharp inner cone + soft outer cone, both clipped by walls.
+      // Light: ONE visibility polygon per frame (also used for explore, bullets and fx), drawn as one mesh.
       const view = p.view;
       visibilityPolygon(level, p.x, p.y, p.facing, view, TUNING.vision.rayStepDeg * DEG, poly);
-      softView.range = view.range * 1.08;
-      softView.coneRad = view.coneRad + TUNING.vision.softEdgeDeg * 2 * DEG;
-      visibilityPolygon(level, p.x, p.y, p.facing, softView, TUNING.vision.rayStepDeg * 2 * DEG, softPoly);
-      visMask.clear().poly(poly).fill(0xffffff);
-      softMask.clear().poly(softPoly).fill(0xffffff);
-      falloff.position.set(p.x, p.y);
-      falloff.width = falloff.height = view.range * 2.1;
-      softFalloff.position.set(p.x, p.y);
-      softFalloff.width = softFalloff.height = softView.range * 2.1;
-      glow.position.set(p.x, p.y);
-      glow.width = glow.height = view.range * 1.6;
+      lightParams.x = p.x; lightParams.y = p.y; lightParams.facing = p.facing;
+      lightParams.range = view.range; lightParams.coneRad = view.coneRad; lightParams.nearRadius = view.nearRadius;
+      light?.update(poly, lightParams);
       exploreTimer -= dt;
       if (exploreTimer <= 0) {
         exploreTimer = 0.1;
@@ -417,6 +426,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       }
 
       actors.clear();
+      bars.clear();
       visBots = 0;
       flashBots = 0;
       const rev = revealed(w, p);
@@ -444,9 +454,13 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
           if (a.alive) visBots++;
           const br = w.brains.get(a.id) as Brain;
           drawBody(actors, a, true, null, br.state === 'alert');
+          if (a.alive) drawBar(a, true);
         }
       }
       drawBody(actors, p, false, opts.marking, false);
+      if (p.alive) drawBar(p, false);
+      if (opts.debug) drawDebug(w);
+      else if (debugG.children.length || debugTexts.length) { debugG.clear(); for (const t of debugTexts) t.visible = false; }
       if (opts.showSticks && input.right.active && p.alive) {
         const sp = p.lastSpread * DEG, L = Math.min(p.weapon.falloffEnd, 6);
         actors.moveTo(p.x, p.y).lineTo(p.x + Math.cos(p.facing - sp) * L, p.y + Math.sin(p.facing - sp) * L)
@@ -470,6 +484,8 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       for (const im of fx.impacts) {
         if (!pointInPolygon(im.x, im.y, poly)) continue;
         circle(fxG, im.x, im.y, 0.06 + im.age * 0.8, 10).fill({ color: 0x1a1612, alpha: 0.6 * (1 - im.age * 4) });
+        // 'Blocked' by half cover: a bright chevron burst, distinct from a wall puff.
+        if (im.blocked) circle(fxG, im.x, im.y, 0.12 + im.age * 1.4, 8).stroke({ width: 0.06, color: 0xe8f1ff, alpha: Math.max(0, 0.9 - im.age * 3.5) });
       }
       for (const h of fx.hitMarks) {
         const s = 0.24, al = 1 - h.age / 0.2;

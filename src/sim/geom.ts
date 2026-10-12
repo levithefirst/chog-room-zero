@@ -126,3 +126,44 @@ export function pointInPolygon(x: number, y: number, poly: readonly number[]): b
   }
   return inside;
 }
+
+/**
+ * Corner assist: a mover pressing head-on into a box face close to one of its ends gets a sideways direction
+ * toward the nearer end, so it slides around the corner instead of stopping dead. Returns a unit tangent
+ * ({0,0} when no assist applies). Pure; the caller moves and re-resolves.
+ */
+export function cornerAssistDir(
+  x: number, y: number, r: number, mx: number, my: number, boxes: readonly Box[], reach: number,
+): { x: number; y: number } {
+  const ml = Math.hypot(mx, my);
+  if (ml < 0.5) return { x: 0, y: 0 };
+  const ux = mx / ml, uy = my / ml;
+  for (const b of boxes) {
+    const cx = Math.max(b.x0, Math.min(x, b.x1));
+    const cy = Math.max(b.y0, Math.min(y, b.y1));
+    const dx = x - cx, dy = y - cy;
+    const d = Math.hypot(dx, dy);
+    if (d === 0 || d > r + 0.02) continue;
+    const nx = dx / d, ny = dy / d;
+    // Face contact only (axis normal) and pushing into it head-on (within ~40 deg).
+    if (Math.abs(nx) > 0.01 && Math.abs(ny) > 0.01) continue;
+    if (-(ux * nx + uy * ny) < 0.766) continue;
+    if (ny !== 0) {
+      const toLeft = x - (b.x0 - r), toRight = b.x1 + r - x;
+      const bias = ux; // prefer the side the stick leans toward
+      const left = toLeft - (bias < -0.05 ? reach : 0), right = toRight - (bias > 0.05 ? reach : 0);
+      if (Math.min(toLeft, toRight) > reach && !(bias < -0.05 && toLeft <= reach * 2) && !(bias > 0.05 && toRight <= reach * 2)) continue;
+      // Dead centre on a small box with no stick lean: no preferred side, so it stays a solid stop.
+      if (Math.abs(bias) <= 0.05 && Math.abs(toLeft - toRight) < 0.25) continue;
+      return { x: left <= right ? -1 : 1, y: 0 };
+    } else {
+      const toUp = y - (b.y0 - r), toDown = b.y1 + r - y;
+      const bias = uy;
+      const up = toUp - (bias < -0.05 ? reach : 0), down = toDown - (bias > 0.05 ? reach : 0);
+      if (Math.min(toUp, toDown) > reach && !(bias < -0.05 && toUp <= reach * 2) && !(bias > 0.05 && toDown <= reach * 2)) continue;
+      if (Math.abs(bias) <= 0.05 && Math.abs(toUp - toDown) < 0.25) continue;
+      return { x: 0, y: up <= down ? -1 : 1 };
+    }
+  }
+  return { x: 0, y: 0 };
+}

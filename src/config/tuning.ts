@@ -8,6 +8,10 @@ export const TUNING = {
   seed: 1337,
 
   movement: {
+    // Corner assist (CHOG-MAP-001 snagging): walking head-on (within 40 deg) into a box face that ends within this
+    // many u of clearing, slide sideways toward the nearer end at cornerAssistSpeed x run speed. Collision is unchanged.
+    cornerAssist: 0.9,
+    cornerAssistSpeed: 0.7,
     // Base run speed (heroes scale it). 4.2 u/s: brisk tactical jog. (P0-2, unchanged.)
     maxSpeed: 4.2,
     // Full speed in ~80 ms, stop in ~60 ms, reversals 1.5x: snappy, planted, deliberate. (P0-2, unchanged.)
@@ -105,7 +109,34 @@ export const TUNING = {
     patrolQuiet: true,
   },
 
+  // Perception rules shared by the player and the bots (docs/design/bots.md). One source of truth.
+  perception: {
+    // A muzzle flash with clear wall line of sight reveals the shooter for this long, at any range, both sides.
+    flashSeconds: 0.7,
+    // Reaction delay before a bot fires at what it sees: seeded per acquisition, uniform in [min, max].
+    reactionMin: 0.25,
+    reactionMax: 0.45,
+    // Being shot gives a direction only: a guess along the incoming ray, this many degrees off at most,
+    // at 60%..140% of the true distance.
+    shotDirErrorDeg: 20,
+    shotRangeMin: 0.6,
+    shotRangeMax: 1.4,
+    // Heard positions: error grows with distance (share of the distance).
+    hearErrorShare: 0.15,
+    // Suspicion: set by a signal (seen 1, flash 0.9, shot 0.8, heard 0.6), then decays to 0 over this many seconds.
+    memorySeconds: 6,
+    // At most this many bots may shoot at the player at once. The rest flank or hold.
+    attackTokens: 2,
+    // Minimum seconds between path requests per bot, unless the goal moved more than repathDistance.
+    repathSeconds: 0.35,
+    repathDistance: 1.5,
+  },
+
   render: {
+    // Bodies are drawn this many times the sim radius (~36 px at 844x390). Collision is unchanged.
+    actorScale: 1.45,
+    // Canvas resolution cap (device pixel ratio). Fill cost scales with pixels.
+    maxResolution: 1.5,
     viewWidthUnits: 22,
     minViewHeightUnits: 11,
     cameraSmoothing: 0.12,
@@ -127,7 +158,9 @@ export const TUNING = {
 
   palette: {
     // Out-of-sight: the map stays readable but cooler and darker.
-    fogUnexplored: 0x050607,
+    // Unexplored: dark cool fog over the slate ambient; outlines stay faintly visible (never pitch black).
+    fogUnexplored: 0x0f161c,
+    teamRing: 0x38e0c2,
     // Team colour (player) and hostile faction.
     team: 0xe6dfcc,
     teamDark: 0x2a2620,

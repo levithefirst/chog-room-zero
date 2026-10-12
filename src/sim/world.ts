@@ -3,12 +3,12 @@ import { TUNING } from '../config/tuning';
 import { BOT_SPAWNS, ROOM_ZERO, type BotSpawn } from '../config/map';
 import { heroById, type HeroDef } from '../config/heroes';
 import { WEAPONS, damageAt, type WeaponDef } from '../config/weapons';
-import { angleDiff, resolveCircle, segmentCircleT, type Box } from './geom';
-import { bulletBlockT, parseLevel, sightClear, type Level } from './level';
+import { angleDiff, cornerAssistDir, resolveCircle, segmentCircleT, type Box } from './geom';
+import { blockedByCover, bulletBlockT, markDynamic, parseLevel, sightClear, type Level } from './level';
 import { stepVelocity, type Vec2 } from './sim';
 import { NO_SIDEGRADE, type Sidegrade } from './operators';
 import type { ViewShape } from './vision';
-import { botThink, createBrain, type Brain } from './bots';
+import { botThink, createBrain, type Brain, type PerceptionEvent } from './bots';
 
 const DEG = Math.PI / 180;
 
@@ -91,6 +91,8 @@ export interface SoundEvent {
   tick: number;
   // Which gun, for shot sounds.
   weapon?: string;
+  // Impact on half cover (crate/slab) rather than a wall.
+  blocked?: boolean;
 }
 
 export interface HitEvent {
@@ -143,6 +145,10 @@ export interface World {
   pickups: Pickup[];
   barriers: Barrier[];
   brains: Map<number, Brain>;
+  /** Ids of bots currently allowed to shoot at the player (cap: TUNING.perception.attackTokens). */
+  attackTokens: number[];
+  /** When enabled (createWorld({ log: true })), every time a bot learns a player position, with its signal. */
+  perceptionLog: PerceptionEvent[] | null;
   outcome: 'playing' | 'dead' | 'won';
   playerKill: KillInfo | null;
 }
@@ -189,6 +195,7 @@ export interface WorldOptions {
   sidegrade?: Sidegrade;
   map?: readonly string[];
   bots?: BotSpawn[];
+  log?: boolean;
 }
 
 export function createWorld(opts: WorldOptions = {}): World {
@@ -204,7 +211,7 @@ export function createWorld(opts: WorldOptions = {}): World {
   return {
     tick: 0, rng: (opts.seed ?? TUNING.seed) | 0, level, actors, bullets: [], sounds: [], prevSounds: [], hits: [],
     pickups: level.pickupSpawns.map((p) => ({ ...p, active: true, respawnLeft: 0 })), barriers: [],
-    brains, outcome: 'playing', playerKill: null,
+    brains, attackTokens: [], perceptionLog: opts.log ? [] : null, outcome: 'playing', playerKill: null,
   };
 }
 
@@ -279,6 +286,8 @@ function useAbility(w: World, a: Actor, inp: ActorInput): void {
       w.barriers.push({ box, left: A.barrierSeconds, owner: a.id });
       w.level.coverBoxes.push(box);
       w.level.solidBoxes.push(box);
+      markDynamic(w.level, box, 1);
+      invalidatePaths(w);
       emit(w, 'barrier', cx, cy, TUNING.sound.ability, a);
       break;
     }
@@ -318,6 +327,16 @@ function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
   a.x += a.vx * dt;
   a.y += a.vy * dt;
   resolveCircle(a, M.radius, w.level.solidBoxes);
+  if (a.dashLeft <= 0) {
+    // Corner assist: never stop dead on a crate/wall edge you are nearly past (CHOG-MAP-001).
+    const t = cornerAssistDir(a.x, a.y, M.radius, inp.moveX, inp.moveY, w.level.solidBoxes, M.cornerAssist);
+    if (t.x !== 0 || t.y !== 0) {
+      const sp = M.maxSpeed * speedMul * M.cornerAssistSpeed * (inp.quiet ? M.quietSpeedScale : 1) * dt;
+      a.x += t.x * sp;
+      a.y += t.y * sp;
+      resolveCircle(a, M.radius, w.level.solidBoxes);
+    }
+  }
   a.stepAcc += Math.hypot(a.x - ox, a.y - oy);
   if (a.stepAcc >= M.stepDistance) {
     a.stepAcc -= M.stepDistance;
@@ -371,6 +390,7 @@ function stepBullets(w: World, dt: number): void {
     const nx = b.x + b.dx * b.weapon.bulletSpeed * dt;
     const ny = b.y + b.dy * b.weapon.bulletSpeed * dt;
     const wallT = bulletBlockT(w.level, b.ox, b.oy, b.x, b.y, nx, ny, b.weapon.piercesCover, lean);
+    const onCover = blockedByCover;
     let bestT = wallT >= 0 ? wallT : 2;
     let target: Actor | null = null;
     for (const a of w.actors) {
@@ -389,7 +409,11 @@ function stepBullets(w: World, dt: number): void {
       b.y = hy;
       const shooter = w.actors[b.owner];
       if (target) damage(w, target, shooter, b, hx, hy);
-      else emit(w, 'impact', hx, hy, TUNING.sound.impact, shooter);
+      else {
+        emit(w, 'impact', hx, hy, TUNING.sound.impact, shooter);
+        // Cover hit: flag it so the client shows a 'blocked' spark (cover rules are legible, not mysterious).
+        if (onCover) w.sounds[w.sounds.length - 1].blocked = true;
+      }
       continue;
     }
     b.x = nx;
@@ -420,6 +444,7 @@ function damage(w: World, t: Actor, by: Actor, b: Bullet, hx: number, hy: number
   if (killed) {
     t.hp = 0;
     t.alive = false;
+    { const ti = w.attackTokens.indexOf(t.id); if (ti >= 0) w.attackTokens.splice(ti, 1); }
     t.vx = t.vy = 0;
     by.kills++;
     emit(w, 'death', t.x, t.y, TUNING.sound.death, t);
@@ -468,6 +493,16 @@ function stepBarriers(w: World, dt: number): void {
   for (const e of expired) {
     w.level.coverBoxes.splice(w.level.coverBoxes.indexOf(e.box), 1);
     w.level.solidBoxes.splice(w.level.solidBoxes.indexOf(e.box), 1);
+    markDynamic(w.level, e.box, -1);
+  }
+  invalidatePaths(w);
+}
+
+/** A dynamic obstacle appeared or vanished: every bot re-plans on its next think. */
+function invalidatePaths(w: World): void {
+  for (const br of w.brains.values()) {
+    br.path.length = 0;
+    br.goal = null;
   }
 }
 

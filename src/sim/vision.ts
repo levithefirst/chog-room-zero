@@ -17,6 +17,14 @@ export function canSee(l: Level, x: number, y: number, facing: number, v: ViewSh
   return inShape && sightClear(l, x, y, px, py);
 }
 
+/**
+ * The one reveal rule, used by the renderer (player side) and the bots: a muzzle flash is seen when the
+ * observer has clear wall line of sight to the shooter. Any range, any direction. Half cover does not block it.
+ */
+export function muzzleFlashSeen(l: Level, ox: number, oy: number, sx: number, sy: number): boolean {
+  return sightClear(l, ox, oy, sx, sy);
+}
+
 function castRay(l: Level, x: number, y: number, a: number, max: number): number {
   const dx = Math.cos(a), dy = Math.sin(a);
   let best = max;
