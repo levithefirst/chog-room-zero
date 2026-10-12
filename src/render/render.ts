@@ -5,7 +5,7 @@
 // -> screen-space UI.
 import { Application, Container, Graphics, Sprite, Text } from 'pixi.js';
 import { TUNING } from '../config/tuning';
-import { placeLabel, type Rect } from './labels';
+import { placeLabel, stackLabels, type Rect } from './labels';
 import { createCamera, stepCamera } from './camera';
 import { WALL, walkable, type Level } from '../sim/level';
 import { pointInPolygon } from '../sim/geom';
@@ -277,6 +277,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
   function drawDebug(w: World) {
     debugG.clear();
     let i = 0;
+    const placed: { x: number; y: number }[] = [];
     for (const a of w.actors) {
       if (a.team !== 'bot' || !a.alive) continue;
       const br = w.brains.get(a.id) as Brain;
@@ -300,8 +301,12 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       t.visible = true;
       t.text = `${a.name} ${br.state}${token ? ' [T]' : ''}\n${br.source ?? '-'} s${Math.round(br.suspicion * 100)}`;
       t.position.set(a.x, a.y - 1.05);
+      placed.push({ x: a.x, y: a.y - 1.05 });
       i++;
     }
+    // Bots standing together: stack their labels instead of overprinting (2 lines ~0.6 u tall, ~2.4 u wide).
+    const ys = stackLabels(placed, 2.4, 0.62);
+    for (let k = 0; k < placed.length; k++) debugTexts[k].position.y = ys[k];
     for (; i < debugTexts.length; i++) debugTexts[i].visible = false;
   }
 

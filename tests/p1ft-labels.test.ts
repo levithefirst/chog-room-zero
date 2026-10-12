@@ -32,3 +32,19 @@ describe('HUD-002 pickup label placement', () => {
 function overlap(a: Rect, b: Rect) {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
+
+import { stackLabels } from '../src/render/labels';
+describe('debug overlay label stacking', () => {
+  it('two bots at the same spot get labels that do not overlap', () => {
+    const ys = stackLabels([{ x: 5, y: 5 }, { x: 5.1, y: 5.05 }], 2.2, 0.6);
+    expect(Math.abs(ys[0] - ys[1])).toBeGreaterThanOrEqual(0.6 - 1e-9);
+  });
+  it('labels far apart are not moved', () => {
+    expect(stackLabels([{ x: 0, y: 5 }, { x: 9, y: 5 }], 2.2, 0.6)).toEqual([5, 5]);
+  });
+  it('three in a pile stack into three rows', () => {
+    const ys = stackLabels([{ x: 5, y: 5 }, { x: 5, y: 5 }, { x: 5, y: 5 }], 2.2, 0.6).sort((a, b) => a - b);
+    expect(ys[1] - ys[0]).toBeGreaterThanOrEqual(0.6 - 1e-9);
+    expect(ys[2] - ys[1]).toBeGreaterThanOrEqual(0.6 - 1e-9);
+  });
+});
