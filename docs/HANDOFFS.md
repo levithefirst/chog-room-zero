@@ -110,3 +110,12 @@ Tests run       : Node 22.23.3: npm ci 0, typecheck 0, npm test 255/255 (27 file
 Not verified    : physical phones, feel, difficulty with humans, audio by ear, real NFT ownership (DEFERRED)
 Locked decisions touched : guest personal bests are device-local records, not token history (owner brief); DEMO screen reachable from the title (owner brief). No dependency added
 Next smallest task : ADE retest of the preview per /workspace/reports/rc-ade-brief.md
+
+HANDOFF H10  2026-10-12  grokbot -> owner, ADE
+Branch @ commit : grokbot/rc-1 (PR #9, commits after 6759d1f; no force-push). Final SHA + preview in /workspace/reports/rc2-ade-retest.md   pushed: yes
+Task            : RC-2 targeted follow-up (owner task, chat 2026-10-12 12:53 WAT; scope frozen)
+Fixes           : a menu press never fires (fire is held only while that press is still down; the first click after Deploy fires); ring-hint e2e setup (desktop mode, sim-tick waits; assertion unchanged); explicit 30 s timeout for the perception audit; debug-only ?autoplay
+Tests run       : npm test (counts/timing in rc2-ade-retest.md); rc-e2e, p1ft ring x20, rc2-preview-checks, rc-autoplay on the preview
+Not verified    : physical phones; human wins; resume-fire root cause (not reproducible in headless Chrome; fixed defensively)
+Locked decisions touched : none. No dependency added
+Next smallest task : ADE retest per /workspace/reports/rc2-ade-retest.md

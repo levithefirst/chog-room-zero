@@ -2,6 +2,7 @@
 
 - **Branch:** `grokbot/rc-1` (PR base `grokbot/p1-follow-through`).
 - **RC SHA:** the final commit of PR "RC-1: Chogathon release candidate". The SHA is recorded in the PR body, /workspace/reports/rc-acceptance.md and rc-ade-brief.md. This file can't contain its own commit hash.
+- **RC-2 (targeted follow-up, owner task 2026-10-12 12:53 WAT):** commits after 6759d1f on the same branch/PR #9. The RC SHA is the PR head, recorded in /workspace/reports/rc2-ade-retest.md. Changes: resume/menu press never fires, ring-hint e2e setup, perception test timeout, debug-only autoplay, preview check tools.
 - **Production:** still 969de1c. This RC is a preview only.
 
 ## What is in RC-1

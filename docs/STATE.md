@@ -69,3 +69,4 @@ P2-F1: owner plays the preview on PC, Pixel 7, iPhone 13; grokbot fixes the top 
 
 ## Handoffs
 Latest: H7 (2026-10-12, grokbot -> owner, P1 fairness and readability sprint). History: `docs/HANDOFFS.md`.
+| RC-2 | grokbot | grokbot/rc-1 (PR #9) | `src/input/input.ts`, `src/main.ts`, `src/debug/autopilot.ts`, `tests/rc2-resume.test.ts`, `tests/perception.test.ts`, `tests/helpers/autopilot.ts`, `tools/{rc-e2e,p1ft-e2e,p1ft-ring-repeat,rc-autoplay,rc2-preview-checks}.mjs`, `docs/{DEV,RELEASE,STATE,HANDOFFS}.md` | Targeted RC-1 follow-up (owner task 2026-10-12 12:53 WAT): resume click fire, ring e2e setup, suite timing, preview checks, scripted victory, Wick vs Brick | done, awaiting owner + ADE retest (/workspace/reports/rc2-ade-retest.md) |
