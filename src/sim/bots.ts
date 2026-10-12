@@ -5,11 +5,11 @@ import type { BotSpawn } from '../config/map';
 import { angleDiff } from './geom';
 import { findPath, shotClear, sightClear } from './level';
 import { canSee } from './vision';
-import { hears, player, rand, viewOf, type Actor, type ActorInput, type World } from './world';
+import { hears, player, rand, revealed, viewOf, type Actor, type ActorInput, type World } from './world';
 
 const DEG = Math.PI / 180;
 
-export type BotState = 'patrol' | 'investigate' | 'alert' | 'engage' | 'cover' | 'pursue' | 'search';
+export type BotState = 'patrol' | 'investigate' | 'alert' | 'engage' | 'cover' | 'pursue' | 'search' | 'heal';
 
 export interface Brain {
   state: BotState;
@@ -41,7 +41,7 @@ export function createBrain(spawn: BotSpawn): Brain {
   };
 }
 
-const out: ActorInput = { moveX: 0, moveY: 0, quiet: false, aim: 0, firing: false, reload: false };
+const out: ActorInput = { moveX: 0, moveY: 0, quiet: false, aim: 0, firing: false, reload: false, ability: false };
 
 function setGoal(w: World, a: Actor, br: Brain, gx: number, gy: number): void {
   if (br.goal && Math.floor(br.goal.x) === Math.floor(gx) && Math.floor(br.goal.y) === Math.floor(gy) && br.path.length) return;
@@ -78,7 +78,7 @@ function pickCover(w: World, a: Actor, threat: { x: number; y: number }): { x: n
   for (const s of w.level.coverSpots) {
     const d = Math.hypot(s.x - a.x, s.y - a.y);
     if (d >= bestD || d < 1) continue;
-    if (shotClear(w.level, threat.x, threat.y, s.x, s.y)) continue;
+    if (sightClear(w.level, threat.x, threat.y, s.x, s.y) && shotClear(w.level, threat.x, threat.y, s.x, s.y)) continue;
     bestD = d;
     best = s;
   }
@@ -107,6 +107,7 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
   const p = player(w);
   out.firing = false;
   out.reload = false;
+  out.ability = false;
   out.quiet = false;
   out.aim = a.facing;
   out.moveX = out.moveY = 0;
@@ -128,7 +129,7 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
     br.heardAt = { x: s.x + (rand(w) * 2 - 1) * err, y: s.y + (rand(w) * 2 - 1) * err };
   }
   const justHit = a.lastHitTick === w.tick - 1 && a.lastHitFrom;
-  const hurt = a.hp / TUNING.combat.maxHp < B.retreatHpShare;
+  const hurt = a.hp / a.maxHp < B.retreatHpShare;
 
   // Transitions.
   if (br.sawPlayer && br.state !== 'cover' && br.state !== 'engage' && br.state !== 'alert') {
@@ -156,7 +157,43 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
     br.timer = 0;
   }
 
+  // Hurt and not under fire right now: go for the nearest health pickup if one is up.
+  if (hurt && !br.sawPlayer && br.state !== 'heal' && br.state !== 'alert') {
+    const hp = nearestHealth(w, a);
+    if (hp) {
+      br.state = 'heal';
+      br.goal = null;
+    }
+  }
+  // Abilities, used for a readable reason.
+  if (a.abilityCd === 0) {
+    const k = a.hero.ability.kind;
+    if (k === 'mend' && a.hp < a.maxHp * 0.6) out.ability = true;
+    if (k === 'dash' && br.state === 'cover' && br.path.length > 2) out.ability = true;
+    if (k === 'sonar' && (br.state === 'investigate' || br.state === 'search') && br.timer > 0.5) out.ability = true;
+    if (k === 'barrier' && br.state === 'engage' && (justHit || a.hp < a.maxHp * 0.7)) out.ability = true;
+  }
+  // Its own sonar shows the player like it shows bots to the player: a fair, telegraphed reveal.
+  if (a.revealLeft > 0 && revealed(w, a).length) {
+    br.lastKnown = { x: p.x, y: p.y };
+    if (br.state === 'investigate' || br.state === 'search' || br.state === 'patrol') {
+      br.state = 'pursue';
+      br.goal = null;
+    }
+  }
+
   switch (br.state) {
+    case 'heal': {
+      const hp = nearestHealth(w, a);
+      if (!hp || br.sawPlayer) {
+        br.state = br.sawPlayer ? 'engage' : 'patrol';
+        br.goal = null;
+        break;
+      }
+      setGoal(w, a, br, hp.x, hp.y);
+      follow(a, br, dt);
+      break;
+    }
     case 'patrol': {
       out.quiet = B.patrolQuiet;
       const target = br.patrol[br.patrolIndex];
@@ -222,8 +259,17 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
       const toP = Math.atan2(p.y - a.y, p.x - a.x);
       out.aim = toP + br.aimOffset * err;
       // Hold the angle: stand still and shoot, only when the shot is not blocked by cover.
-      out.firing = Math.abs(angleDiff(a.facing, toP)) < B.fireToleranceDeg * DEG + err && shotClear(w.level, a.x, a.y, p.x, p.y);
-      if (!out.firing && a.ammo < a.op.magazine / 2) out.reload = true;
+      const range = a.weapon.falloffEnd + 2;
+      out.firing = Math.abs(angleDiff(a.facing, toP)) < B.fireToleranceDeg * DEG + err
+        && Math.hypot(p.x - a.x, p.y - a.y) <= range
+        && shotClear(w.level, a.x, a.y, p.x, p.y, a.weapon.piercesCover, TUNING.combat.coverLean);
+      // Out of range: close in along the path instead of wasting shots.
+      if (Math.hypot(p.x - a.x, p.y - a.y) > range) {
+        setGoal(w, a, br, p.x, p.y);
+        follow(a, br, dt);
+        out.aim = toP;
+      }
+      if (!out.firing && a.ammo < a.weapon.magazine / 2) out.reload = true;
       break;
     }
     case 'cover': {
@@ -237,7 +283,7 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
       if (arrived) {
         br.timer += dt;
         out.aim = Math.atan2(threat.y - a.y, threat.x - a.x);
-        if (a.ammo < a.op.magazine) out.reload = true;
+        if (a.ammo < a.weapon.magazine) out.reload = true;
         if (br.timer > B.coverSeconds) {
           // Peek: go back toward the last known spot (re-engages when it sees the player again).
           br.state = 'pursue';
@@ -266,4 +312,18 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
     }
   }
   return out;
+}
+
+function nearestHealth(w: World, a: Actor): { x: number; y: number } | null {
+  let best: { x: number; y: number } | null = null;
+  let bd: number = TUNING.bots.healthSeekRange;
+  for (const p of w.pickups) {
+    if (!p.active || p.kind !== 'health') continue;
+    const d = Math.hypot(p.x - a.x, p.y - a.y);
+    if (d < bd) {
+      bd = d;
+      best = p;
+    }
+  }
+  return best;
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GUEST, NFT_CONFIG, adapterFromUrl, mockAdapter, resolveIdentity, type OwnershipAdapter } from '../src/nft/identity';
 import { loadHistory, recordRun, type KeyValueStore } from '../src/nft/history';
-import { DEFAULT_OPERATOR } from '../src/sim/operators';
+import { NO_SIDEGRADE } from '../src/sim/operators';
 
 const memStore = (): KeyValueStore & { data: Map<string, string> } => {
   const data = new Map<string, string>();
@@ -13,7 +13,7 @@ describe('identity adapter fallback', () => {
   it('no adapter -> guest with the default operator', async () => {
     const r = await resolveIdentity(null);
     expect(r.identity).toEqual(GUEST);
-    expect(r.identity.operator).toBe(DEFAULT_OPERATOR);
+    expect(r.identity.sidegrade).toBe(NO_SIDEGRADE);
   });
   it('a throwing adapter (RPC down) -> guest', async () => {
     const bad: OwnershipAdapter = { name: 'chain', ownedTokens: async () => { throw new Error('rpc down'); } };

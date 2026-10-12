@@ -47,16 +47,22 @@ export interface Input {
   takeAction(): boolean;
   /** Touch reload button. */
   reload(): void;
+  /** Touch ability button. */
+  ability(): void;
+  /** Escape / P pressed since last call. */
+  takePause(): boolean;
   dispose(): void;
 }
 
-const MOVE_CODES = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ShiftLeft', 'ShiftRight', 'KeyR']);
+const MOVE_CODES = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ShiftLeft', 'ShiftRight', 'KeyR', 'Space', 'KeyQ']);
 
 export function createInput(el: HTMLElement): Input {
   const held = new Set<string>();
   let firing = false;
   let reloadQueued = false;
+  let abilityQueued = false;
   let action = false;
+  let pauseQueued = false;
   let lastAim = 0;
   const left: Stick = { active: false, id: -1, baseX: 0, baseY: 0, x: 0, y: 0 };
   const right: Stick = { active: false, id: -1, baseX: 0, baseY: 0, x: 0, y: 0 };
@@ -65,8 +71,9 @@ export function createInput(el: HTMLElement): Input {
     mode: matchMedia('(pointer: coarse)').matches ? 'touch' : 'pc',
     left, right, mouseX: 0, mouseY: 0,
     read(ax, ay) {
-      const out: ActorInput = { moveX: 0, moveY: 0, quiet: false, aim: lastAim, firing: false, reload: reloadQueued };
+      const out: ActorInput = { moveX: 0, moveY: 0, quiet: false, aim: lastAim, firing: false, reload: reloadQueued, ability: abilityQueued || held.has('Space') || held.has('KeyQ') };
       reloadQueued = false;
+      abilityQueued = false;
       if (inp.mode === 'pc') {
         const m = keysToMove(held);
         out.moveX = m.x;
@@ -91,6 +98,14 @@ export function createInput(el: HTMLElement): Input {
     reload() {
       reloadQueued = true;
     },
+    ability() {
+      abilityQueued = true;
+    },
+    takePause() {
+      const p = pauseQueued;
+      pauseQueued = false;
+      return p;
+    },
     takeAction() {
       const a = action;
       action = false;
@@ -111,7 +126,12 @@ export function createInput(el: HTMLElement): Input {
   const down = (e: KeyboardEvent) => {
     if (MOVE_CODES.has(e.code)) held.add(e.code);
     if (e.code === 'KeyR') reloadQueued = true;
-    if (e.code === 'KeyR' || e.code === 'Enter' || e.code === 'Space') action = true;
+    if (e.code === 'KeyR' || e.code === 'Enter') action = true;
+    if (e.code === 'Escape' || e.code === 'KeyP') pauseQueued = true;
+    if (e.code === 'Space' || e.code === 'KeyQ') {
+      e.preventDefault();
+      abilityQueued = true;
+    }
     inp.mode = 'pc';
   };
   const up = (e: KeyboardEvent) => void held.delete(e.code);

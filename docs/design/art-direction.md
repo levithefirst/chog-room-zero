@@ -1,69 +1,37 @@
-# Art direction (P1)
+# Art direction: Room Zero (P2 rewrite)
 
-Status: PROPOSAL, written by grokbot under the owner's P1 mandate (2026-10-12). The owner judges it by playing. Numbers live in `src/config/tuning.ts`.
+## Intent
+A service basement after the power died, lit by one hand lamp. The level is **always readable**: you can always see the shape of the floor, walls, doors, and cover. The lamp decides what is **known now**; everything else is memory. Hostiles and bullets exist only where the lamp (or a Ping) shows them.
 
-## Intent, one sentence
-A service basement after the power died: raw concrete, one hand lamp, and something rust-coloured moving where the lamp is not pointing.
-
-## Value hierarchy (darkest to brightest)
-Readable in grayscale. Each step up is something more urgent.
-
-| Step | Role | Colour |
+## Three states of every tile
+| State | Look | Why |
 |---|---|---|
-| 0 | Unknown (never seen) | `#07080a` |
-| 1 | Walls (solid, with a `#2b2a27` rim where seen floor meets them) | `#111214` |
-| 2 | Remembered floor (seen before, nothing live shown) | `#1b1b1a` |
-| 3 | Lit floor (inside your light right now) | `#3a362f` |
-| 4 | Half cover (blocks bullets and bodies, not sight) | `#6b6354` |
-| 5 | Characters: you (bone) and hostiles (rust) | `#e8e1d0`, `#c4532c` |
-| 6 | Projectiles, muzzle, heard marks (signal) | `#f2d98a` |
+| In the lamp | Full material colour, warm tint, additive glow near you, falloff toward the edge; a soft outer band (+10 deg each side, half brightness) so the cone never has a hard cut | Here is the truth |
+| Seen before / out of sight | Same map, baked darker (~44%), 65% desaturated, slightly cool | Navigable memory, no actors |
+| Never seen | The dim map under a 60% near-black fog | Unknown, but walls still faintly read: never pitch black |
 
-That is six roles. No colour exists without one. There is no cyan, no magenta, no neon, no gradient fill, no glow.
+## Value hierarchy (lightest to darkest)
+1. Signal yellow `#f2d98a`: muzzle flash, player tracers, alerts, ready ability. Used sparingly.
+2. Team bone `#e6dfcc` (round body, dark outline, hero accent ring) vs hostile rust `#c8502b` (angular arrowhead, dark outline). Shape AND colour differ, so it works for colour-blind players.
+3. Pickup colours: health sage `#9fd18b` (cross), armour steel `#8fb0c8` (shield), ammo ochre `#d9c27a` (three rounds). Each has a word label.
+4. Floors, mid values: tile (cool grey, 2x2 grout), concrete (warm grey, speckle, joints every 3 u), metal (dark blue-grey, diamond plate, seams, rivets), dock (olive, hazard band at its edge).
+5. Cover: crates (wood, lid, braces) and barriers (concrete, ochre stripes). Lighter than walls, darker than signal.
+6. Walls: the darkest masses, with a lit rim on every edge facing floor and a darker south face for height.
 
-## Silhouettes
-- You are round, with a barrel that sticks out past the body. The barrel is the facing indicator and reads at about 24 px.
-- Hostiles are angular: a blunt arrowhead pointing where they look. Round means you; points mean danger.
-- A bound Chog adds a thin inner ring in a muted marking colour. That ring is the only cosmetic change.
-- Heard things are rings, never bodies. Seen things are bodies. Shape tells you where the information came from, then colour.
+## Light and shadow
+Light comes from the north-west: walls cast a 0.3-0.45 u shadow south-east, cover 0.25 u, actors a soft ellipse. Grime gathers along walls; cracks and stains sit on floors. All baked once (procedural, seeded; no image assets).
 
-## Light
-The vision polygon is the only lighting. Lit floor is clipped to it with a clean edge. No bloom, no blur, no second fake light layer. Faint tile seams exist only inside the light, so speed and distance read while you move.
+## Motion and feedback
+Walk bob tied to the step cycle; recoil kick per gun; reload dips the gun and draws a ring; death shrinks and fades in 0.4 s, then leaves a decal. Tracers: marksman long and thick, shotgun short pellets, SMG thin. Hits: white cross, kill: rust cross plus sparks. Getting hit: red arc around you pointing at the shooter, screen-edge flash, shake, low thud. Low health: pulsing rust vignette.
 
-## Motion and effects (each one says something)
-- Tracer: a 0.9 u streak behind each bullet. Yours are signal; hostile ones are a warmer orange so you can tell incoming from outgoing.
-- Muzzle flash, 0.05 s: who fired.
-- Hit flash, 0.06 s white: that hit landed.
-- Hit mark (X at the impact), 0.15 s; a kill mark is rust and thicker.
-- Knockback 1.2 u/s: you were hit and from which side.
-- Shake: 3 px for 0.12 s, only when you take damage.
-- Low-health vignette: rust inset edge below 40% health.
-- Heard ring: expands and fades over 1.4 s at the rough area of an unseen sound. Off-screen, a small wedge on the screen edge points at it.
-- Alert tick: a short signal bar above a hostile that has seen something and is about to commit.
-- Impact cross, 0.12 s: where a bullet hit a wall.
-Nothing bounces, pulses, or floats for decoration. No particles beyond the impact cross.
+## Typography (SIL OFL 1.1, self-hosted in `public/fonts/`, licences alongside)
+Barlow Condensed (500/600) for words: narrow, industrial, fits landscape phones. IBM Plex Mono (400/600) for numbers so health and ammo never jitter.
 
-## Typography
-One monospace face for everything. Numbers (ammo, health, time) keep their width as they change, so the HUD never jitters. The CSS asks for Iosevka or JetBrains Mono and falls back to the system monospace. Known gap: no font file ships yet, so most players see the system monospace. Adding an OFL font file (with `docs/ASSETS.md`) is a follow-up.
+## HUD and screens
+Panels: near-black at 78% with a 1 px warm-grey line, 6 px radius. Vitals top-left, hostiles top-centre, mute/pause top-right, weapon bottom-right (bottom-centre on touch), ability and reload in right-thumb reach. All screens share one card style with a fade-and-rise transition. No gradients except the functional ability cooldown ring.
 
-## HUD rules
-- Four corners, small, dim: operator top left, hostiles left top centre, health bottom left, ammo bottom right. Mute top right.
-- Nothing in the centre of the screen during play except the hint, which fades out after 12 s.
-- Copy is verbs and facts: "Shot by Pump from 6 m east." "Guest run. Nothing was saved." No exclamation marks, no emoji, no "SYSTEM" words.
+## Not allowed
+Neon, purple-cyan gradients, glassmorphism, generic sci-fi glow, stock icons, anything resembling Bullet Echo's heroes, maps, or UI.
 
-## Audio identity
-All sounds are made in code with WebAudio. The palette is dry filtered noise for anything mechanical or underfoot, plus a low sine thump for weight. There are no tonal bleeps and no music.
-- Shot: band-passed crack plus a falling thump.
-- Run step: brighter heel tick. Creep step: darker, shorter, quieter.
-- Impact: high grit. Body hit: dull low thud.
-- Death: a long falling tone.
-- Reload: two dry clicks.
-
-Pan follows direction, volume follows distance within the sound's radius, and a wall in between muffles it (low-pass) and shrinks the radius.
-
-## Small screens
-- The view is fitted so at least 11 u show vertically, which suits a phone in landscape.
-- Touch sticks float where the thumb lands. The right stick shows its fire ring, and the reload button is 56 px.
-- The HUD respects safe-area insets.
-
-## Originality
-Everything here is drawn in code or written for this game. Nothing is taken from Bullet Echo or any other game: no characters, silhouettes, maps, UI, icons, or sounds. No Chog Genesis art is used, because the art rights are UNKNOWN.
+## Performance rules
+Map baked once per distinct map into a 32 px/u RenderTexture (1408x832); per frame only two masks, one falloff and one glow sprite, and the actor and effect Graphics. Sparks come from a fixed pool of 60.

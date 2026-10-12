@@ -1,29 +1,40 @@
-// Drawing only. Reads sim state and never writes it. The vision polygon is the lighting: lit floor is
-// clipped to it, remembered tiles are dim, unknown is near black. Hostiles are drawn only when visible.
-import { Application, Container, Graphics } from 'pixi.js';
+// Drawing only. Reads sim state and never writes it.
+// Layers: DIM map (always, so the level is never pitch black) -> fog over unexplored tiles -> LIT map through a
+// soft outer cone and a sharp inner cone (vision polygons) with distance falloff -> pickups, barriers, marks ->
+// actors (hostiles only when the sim says the player can see them) -> effects -> screen-space UI.
+import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import { TUNING } from '../config/tuning';
-import { COVER, WALL, type Level } from '../sim/level';
+import { WALL, type Level } from '../sim/level';
 import { pointInPolygon } from '../sim/geom';
-import { visibilityPolygon, canSee } from '../sim/vision';
-import { player, viewOf, type Actor, type World } from '../sim/world';
+import { visibilityPolygon, canSee, type ViewShape } from '../sim/vision';
+import { player, revealed, type Actor, type World } from '../sim/world';
 import type { Brain } from '../sim/bots';
 import { STICK_RADIUS, AIM_DEADZONE, type Input } from '../input/input';
+import { bakeMap, type Baked } from './bake';
 
 const P = TUNING.palette;
+const R = TUNING.render;
+const DEG = Math.PI / 180;
 
-// Pixi picks circle segments from the local radius; at world scale (0.35 u) that looks octagonal.
-// Draw our own 32-sided circles instead.
-// Pixi keeps a reference to the points array, so each circle needs its own.
-function circle(g: Graphics, x: number, y: number, r: number): Graphics {
-  const pts = new Array<number>(64);
-  for (let i = 0; i < 32; i++) {
-    const a = (i / 32) * Math.PI * 2;
+// Pixi keeps a reference to a points array, so each circle needs its own (32 sides; Pixi's own looks octagonal at u scale).
+function circle(g: Graphics, x: number, y: number, r: number, n = 24): Graphics {
+  const pts = new Array<number>(n * 2);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
     pts[i * 2] = x + Math.cos(a) * r;
     pts[i * 2 + 1] = y + Math.sin(a) * r;
   }
   return g.poly(pts, true);
 }
-const DEG = Math.PI / 180;
+
+function arc(g: Graphics, x: number, y: number, r: number, a0: number, a1: number, n = 16): Graphics {
+  g.moveTo(x + Math.cos(a0) * r, y + Math.sin(a0) * r);
+  for (let i = 1; i <= n; i++) {
+    const a = a0 + ((a1 - a0) * i) / n;
+    g.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+  }
+  return g;
+}
 
 export interface Marker {
   x: number;
@@ -33,27 +44,80 @@ export interface Marker {
   big: boolean;
 }
 
+export interface Spark {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  age: number;
+  hostile: boolean;
+}
+
 export interface Fx {
   markers: Marker[];
   impacts: { x: number; y: number; age: number }[];
   hitMarks: { x: number; y: number; age: number; kill: boolean }[];
   shake: number;
   corpses: { x: number; y: number; hostile: boolean }[];
+  // Fixed pool; `age >= 1` means free. Capped at TUNING.render.maxSparks.
+  sparks: Spark[];
+  damageArcs: { ang: number; age: number }[];
+  pings: { x: number; y: number; age: number; hostile: boolean }[];
+}
+
+export function createFx(): Fx {
+  return {
+    markers: [], impacts: [], hitMarks: [], shake: 0, corpses: [], damageArcs: [], pings: [],
+    sparks: Array.from({ length: R.maxSparks }, () => ({ x: 0, y: 0, vx: 0, vy: 0, age: 1, hostile: false })),
+  };
+}
+
+export interface DrawOpts {
+  recap: boolean;
+  marking: number | null;
+  showSticks: boolean;
+  playing: boolean;
 }
 
 export interface Renderer {
   app: Application;
-  /** Screen position of a world point (after the camera of the last frame). */
   toScreen(x: number, y: number): { x: number; y: number };
-  draw(w: World, fx: Fx, input: Input, dt: number, opts: { recap: boolean; marking: number | null; showSticks: boolean; playing: boolean }): void;
+  draw(w: World, fx: Fx, input: Input, dt: number, opts: DrawOpts): void;
   reset(w: World): void;
   visibleBots(): number;
+}
+
+function glowTexture(): Texture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const x = c.getContext('2d')!;
+  const gr = x.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gr.addColorStop(0, 'rgba(255,214,150,0.55)');
+  gr.addColorStop(0.5, 'rgba(255,200,130,0.18)');
+  gr.addColorStop(1, 'rgba(255,190,120,0)');
+  x.fillStyle = gr;
+  x.fillRect(0, 0, 128, 128);
+  return Texture.from(c);
+}
+
+function falloffTexture(): Texture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const x = c.getContext('2d')!;
+  const gr = x.createRadialGradient(128, 128, 0, 128, 128, 128);
+  gr.addColorStop(0, 'rgba(0,0,0,0)');
+  gr.addColorStop(0.55, 'rgba(0,0,0,0.05)');
+  gr.addColorStop(0.85, 'rgba(0,0,0,0.25)');
+  gr.addColorStop(1, 'rgba(0,0,0,0.5)');
+  x.fillStyle = gr;
+  x.fillRect(0, 0, 256, 256);
+  return Texture.from(c);
 }
 
 export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
   const app = new Application();
   await app.init({
-    background: P.unknown,
+    background: 0x0b0c0d,
     resizeTo: parent,
     antialias: true,
     autoDensity: true,
@@ -62,117 +126,191 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
   parent.appendChild(app.canvas);
 
   const world = new Container();
-  const memory = new Graphics();
+  const dimSprite = new Sprite();
+  const fogG = new Graphics();
+  const softLit = new Container();
+  const softSprite = new Sprite();
+  const softMask = new Graphics();
   const lit = new Container();
-  const litFloor = new Graphics();
+  const litSprite = new Sprite();
+  const falloff = new Sprite(falloffTexture());
+  const softFalloff = new Sprite(falloff.texture);
+  const glow = new Sprite(glowTexture());
   const visMask = new Graphics();
+  const props = new Graphics();
+  const labels = new Container();
   const marks = new Graphics();
   const actors = new Graphics();
+  const fxG = new Graphics();
   const recapG = new Graphics();
   const screen = new Graphics();
-  lit.addChild(litFloor);
+  falloff.anchor.set(0.5);
+  softFalloff.anchor.set(0.5);
+  glow.anchor.set(0.5);
+  glow.blendMode = 'add';
+  softSprite.alpha = 0.55;
+  softSprite.tint = 0xf2e2c8;
+  softLit.addChild(softSprite, softFalloff);
+  softLit.mask = softMask;
+  litSprite.tint = 0xfff2dc;
+  lit.addChild(litSprite, glow, falloff);
   lit.mask = visMask;
-  world.addChild(memory, lit, visMask, marks, actors, recapG);
+  world.addChild(dimSprite, fogG, softLit, softMask, lit, visMask, props, labels, marks, actors, fxG, recapG);
   app.stage.addChild(world, screen);
 
   let level: Level;
+  let baked: Baked | null = null;
+  let bakedKey = '';
   let explored: Uint8Array;
-  let exploredCount = -1;
+  let exploredDirty = true;
   let camX = 0, camY = 0, ppu = 40;
   const poly: number[] = [];
+  const softPoly: number[] = [];
+  const softView: ViewShape = { range: 1, coneRad: 1, nearRadius: TUNING.vision.nearRadius };
   let visBots = 0;
   let exploreTimer = 0;
+  const pickupLabels: Text[] = [];
 
-  function drawLitFloor() {
-    litFloor.clear();
-    litFloor.rect(0, 0, level.w, level.h).fill(P.floorLit);
-    // Faint tile seams so speed and distance read on the floor. Only inside the light.
-    for (let x = 1; x < level.w; x++) litFloor.moveTo(x, 0).lineTo(x, level.h);
-    for (let y = 1; y < level.h; y++) litFloor.moveTo(0, y).lineTo(level.w, y);
-    litFloor.stroke({ width: 0.02, color: 0x000000, alpha: 0.18 });
-    for (const b of level.coverBoxes) litFloor.rect(b.x0 + 0.08, b.y0 + 0.08, b.x1 - b.x0 - 0.16, b.y1 - b.y0 - 0.16).fill(P.cover);
-  }
-
-  function drawMemory() {
-    memory.clear();
-    const { w, h, tiles } = level;
+  function drawFog() {
+    fogG.clear();
+    const { w, h } = level;
     for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        if (!explored[y * w + x]) continue;
-        const t = tiles[y * w + x];
-        if (t === WALL) memory.rect(x, y, 1, 1).fill(P.wall);
-        else memory.rect(x, y, 1, 1).fill(P.floorRemembered);
-        if (t === COVER) memory.rect(x + 0.08, y + 0.08, 0.84, 0.84).fill({ color: P.cover, alpha: 0.35 });
-      }
-    }
-    // Wall rims: a thin lighter edge, one unit at a time, only where the floor beside it has been seen.
-    const seenFloor = (x: number, y: number) => x >= 0 && y >= 0 && x < w && y < h && explored[y * w + x] === 1 && tiles[y * w + x] !== WALL;
-    for (const s of level.segments) {
-      if (s.ay === s.by) {
-        for (let x = Math.min(s.ax, s.bx); x < Math.max(s.ax, s.bx); x++) {
-          if (seenFloor(x, s.ay - 1) || seenFloor(x, s.ay)) memory.rect(x, s.ay - 0.025, 1, 0.05);
-        }
-      } else {
-        for (let y = Math.min(s.ay, s.by); y < Math.max(s.ay, s.by); y++) {
-          if (seenFloor(s.ax - 1, y) || seenFloor(s.ax, y)) memory.rect(s.ax - 0.025, y, 0.05, 1);
+      let run = -1;
+      for (let x = 0; x <= w; x++) {
+        const un = x < w && !explored[y * w + x];
+        if (un && run < 0) run = x;
+        if (!un && run >= 0) {
+          fogG.rect(run, y, x - run, 1);
+          run = -1;
         }
       }
     }
-    memory.fill(P.wallEdge);
+    fogG.fill({ color: P.fogUnexplored, alpha: 0.6 });
   }
 
   function updateExplored(p: Actor) {
-    const r = Math.ceil(p.op.range) + 1;
+    const r = Math.ceil(p.view.range) + 1;
     const { w, h, tiles } = level;
-    let n = 0;
     for (let y = Math.max(0, Math.floor(p.y) - r); y < Math.min(h, Math.floor(p.y) + r + 1); y++) {
       for (let x = Math.max(0, Math.floor(p.x) - r); x < Math.min(w, Math.floor(p.x) + r + 1); x++) {
         const i = y * w + x;
         if (explored[i]) continue;
+        let seen = false;
         if (tiles[i] === WALL) {
-          // A wall is known once a lit floor tile touches it.
-          const touch = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => {
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
             const tx = x + dx, ty = y + dy;
-            return tx >= 0 && ty >= 0 && tx < w && ty < h && tiles[ty * w + tx] !== WALL && pointInPolygon(tx + 0.5, ty + 0.5, poly);
-          });
-          if (touch) { explored[i] = 1; n++; }
-        } else if (pointInPolygon(x + 0.5, y + 0.5, poly)) {
+            if (tx >= 0 && ty >= 0 && tx < w && ty < h && tiles[ty * w + tx] !== WALL && pointInPolygon(tx + 0.5, ty + 0.5, poly)) seen = true;
+          }
+        } else seen = pointInPolygon(x + 0.5, y + 0.5, poly);
+        if (seen) {
           explored[i] = 1;
-          n++;
+          exploredDirty = true;
         }
       }
     }
-    if (n) exploredCount += n;
+  }
+
+  function drawWeapon(g: Graphics, a: Actor, col: number, dark: number) {
+    const W = a.weapon;
+    const r = TUNING.movement.radius;
+    // Reload: the gun dips 35 deg. Recoil: it kicks back for the muzzle-flash time.
+    const ang = a.facing + (a.reloadLeft > 0 ? -35 * DEG : 0);
+    const kick = (a.muzzle / R.muzzleFlash) * (W.pellets > 1 ? 0.16 : W.id === 'marksman' ? 0.14 : 0.07);
+    const c = Math.cos(ang), s = Math.sin(ang);
+    const x0 = a.x + c * (r * 0.3 - kick), y0 = a.y + s * (r * 0.3 - kick);
+    const len = r + W.barrel - kick;
+    const thick = W.id === 'shotgun' ? 0.16 : W.id === 'marksman' ? 0.085 : W.id === 'smg' ? 0.12 : 0.11;
+    g.moveTo(x0, y0).lineTo(a.x + c * len, a.y + s * len).stroke({ width: thick + 0.07, color: dark });
+    g.moveTo(x0, y0).lineTo(a.x + c * len, a.y + s * len).stroke({ width: thick, color: col });
+    if (W.id === 'marksman') circle(g, a.x + c * (r + 0.25), a.y + s * (r + 0.25), 0.07, 10).fill(dark);
+    if (W.id === 'smg') g.moveTo(a.x + c * (r + 0.1), a.y + s * (r + 0.1)).lineTo(a.x + c * (r + 0.1) - s * 0.18, a.y + s * (r + 0.1) + c * 0.18).stroke({ width: 0.07, color: dark });
   }
 
   function drawBody(g: Graphics, a: Actor, hostile: boolean, marking: number | null, alert: boolean) {
-    const r = TUNING.movement.radius;
-    const c = !a.alive ? 0x6f6a60 : a.hitFlash > 0 ? 0xffffff : hostile ? P.hostile : P.player;
+    const r0 = TUNING.movement.radius;
+    let alpha = 1, r = r0;
+    if (!a.alive) {
+      const t = Math.min(1, a.deadFor / R.deathAnimSeconds);
+      alpha = 1 - t * 0.55;
+      r = r0 * (1 - t * 0.25);
+    }
+    // Walk bob: a small breathing pulse tied to the step cycle.
+    const speed = Math.hypot(a.vx, a.vy);
+    if (a.alive && speed > 0.3) r *= 1 + 0.06 * Math.sin((a.stepAcc / TUNING.movement.stepDistance) * Math.PI * 2);
+    const fill = !a.alive ? 0x6f6a60 : a.hitFlash > 0 ? 0xffffff : hostile ? P.hostile : P.team;
+    const dark = hostile ? P.hostileDark : P.teamDark;
+    // Soft drop shadow.
+    g.ellipse(a.x + 0.08, a.y + 0.14, r0 * 1.05, r0 * 0.85).fill({ color: 0x000000, alpha: 0.35 * alpha });
+    if (a.alive) drawWeapon(g, a, hostile ? 0x2a1a14 : 0x3a372f, dark);
     const cos = Math.cos(a.facing), sin = Math.sin(a.facing);
-    // Facing: a barrel that sticks out past the body. Readable at phone scale.
-    g.moveTo(a.x + cos * r * 0.4, a.y + sin * r * 0.4).lineTo(a.x + cos * r * 1.75, a.y + sin * r * 1.75)
-      .stroke({ width: 0.11, color: c });
     if (hostile) {
-      // Hostiles are angular: a blunt arrowhead pointing where they look.
+      // Hostile faction: angular arrowhead, dark outline. Never confusable with the round team body.
       const px = -sin, py = cos;
-      g.poly([
-        a.x + cos * r * 1.15, a.y + sin * r * 1.15,
-        a.x + px * r - cos * r * 0.8, a.y + py * r - sin * r * 0.8,
+      const pts = [
+        a.x + cos * r * 1.2, a.y + sin * r * 1.2,
+        a.x + px * r * 1.05 - cos * r * 0.85, a.y + py * r * 1.05 - sin * r * 0.85,
         a.x - cos * r * 0.35, a.y - sin * r * 0.35,
-        a.x - px * r - cos * r * 0.8, a.y - py * r - sin * r * 0.8,
-      ]).fill(c);
-      if (alert) {
+        a.x - px * r * 1.05 - cos * r * 0.85, a.y - py * r * 1.05 - sin * r * 0.85,
+      ];
+      g.poly(pts).fill({ color: fill, alpha }).stroke({ width: 0.07, color: dark, alpha });
+      if (alert && a.alive) {
         // Telegraph: it has seen something and is about to commit.
-        g.rect(a.x - 0.05, a.y - r - 0.6, 0.1, 0.32).fill(P.signal);
+        g.poly([a.x - 0.13, a.y - r - 0.75, a.x + 0.13, a.y - r - 0.75, a.x, a.y - r - 0.42]).fill(P.signal);
       }
     } else {
-      // The player is round.
-      circle(g, a.x, a.y, r).fill(c);
-      if (marking !== null) circle(g, a.x, a.y, r * 0.55).stroke({ width: 0.09, color: marking });
+      circle(g, a.x, a.y, r).fill({ color: fill, alpha }).stroke({ width: 0.07, color: dark, alpha });
+      circle(g, a.x, a.y, r * 0.55).stroke({ width: 0.08, color: marking ?? a.hero.accent, alpha });
     }
-    if (a.muzzle > 0) {
-      const mx = a.x + cos * r * 1.9, my = a.y + sin * r * 1.9;
-      g.poly([mx + cos * 0.35, my + sin * 0.35, mx - sin * 0.1, my + cos * 0.1, mx + sin * 0.1, my - cos * 0.1]).fill(P.signal);
+    if (!a.alive && a.deadFor > R.deathAnimSeconds * 0.5) {
+      g.moveTo(a.x - 0.2, a.y - 0.2).lineTo(a.x + 0.2, a.y + 0.2).moveTo(a.x + 0.2, a.y - 0.2).lineTo(a.x - 0.2, a.y + 0.2)
+        .stroke({ width: 0.07, color: dark, alpha: 0.8 });
+    }
+    if (a.alive && a.reloadLeft > 0) {
+      const t = 1 - a.reloadLeft / a.weapon.reloadSeconds;
+      arc(g, a.x, a.y, r0 + 0.16, -Math.PI / 2, -Math.PI / 2 + t * Math.PI * 2, 20).stroke({ width: 0.05, color: P.signal, alpha: 0.85 });
+    }
+    if (a.alive && a.muzzle > 0) {
+      const W = a.weapon;
+      const L = r0 + W.barrel + 0.05;
+      const mx = a.x + cos * L, my = a.y + sin * L;
+      if (W.pellets > 1) g.poly([mx, my, mx + Math.cos(a.facing - 0.35) * 0.5, my + Math.sin(a.facing - 0.35) * 0.5, mx + Math.cos(a.facing + 0.35) * 0.5, my + Math.sin(a.facing + 0.35) * 0.5]).fill({ color: P.signal, alpha: 0.9 });
+      else {
+        const z = W.id === 'marksman' ? 0.6 : W.id === 'smg' ? 0.25 : 0.35;
+        g.poly([mx + cos * z, my + sin * z, mx - sin * 0.1, my + cos * 0.1, mx + sin * 0.1, my - cos * 0.1]).fill(P.signal);
+      }
+    }
+  }
+
+  function drawPickups(w: World) {
+    props.clear();
+    w.pickups.forEach((p, i) => {
+      const lbl = pickupLabels[i];
+      const known = explored[Math.floor(p.y) * level.w + Math.floor(p.x)];
+      lbl.visible = !!known;
+      if (!known) return;
+      const col = p.kind === 'health' ? P.heal : p.kind === 'armor' ? P.armor : P.ammo;
+      if (!p.active) {
+        circle(props, p.x, p.y, 0.32).stroke({ width: 0.04, color: col, alpha: 0.35 });
+        const t = 1 - p.respawnLeft / TUNING.pickups[p.kind].respawn;
+        arc(props, p.x, p.y, 0.32, -Math.PI / 2, -Math.PI / 2 + t * Math.PI * 2).stroke({ width: 0.06, color: col, alpha: 0.6 });
+        lbl.alpha = 0.4;
+        return;
+      }
+      lbl.alpha = 1;
+      const bob = Math.sin(w.tick / 20 + i) * 0.04;
+      props.ellipse(p.x + 0.05, p.y + 0.12, 0.34, 0.24).fill({ color: 0x000000, alpha: 0.35 });
+      props.roundRect(p.x - 0.3, p.y - 0.3 + bob, 0.6, 0.6, 0.1).fill(0x1d1f20).stroke({ width: 0.05, color: col });
+      if (p.kind === 'health') props.rect(p.x - 0.18, p.y - 0.06 + bob, 0.36, 0.12).rect(p.x - 0.06, p.y - 0.18 + bob, 0.12, 0.36).fill(col);
+      else if (p.kind === 'armor') props.poly([p.x - 0.17, p.y - 0.17 + bob, p.x + 0.17, p.y - 0.17 + bob, p.x + 0.17, p.y + 0.02 + bob, p.x, p.y + 0.2 + bob, p.x - 0.17, p.y + 0.02 + bob]).fill(col);
+      else for (let k = 0; k < 3; k++) props.rect(p.x - 0.17 + k * 0.13, p.y - 0.16 + bob, 0.08, 0.32).fill(col);
+    });
+    // Deployed slabs.
+    for (const b of w.barriers) {
+      const bx = b.box;
+      props.rect(bx.x0 + 0.08, bx.y0 + 0.12, bx.x1 - bx.x0, bx.y1 - bx.y0).fill({ color: 0x000000, alpha: 0.3 });
+      props.rect(bx.x0, bx.y0, bx.x1 - bx.x0, bx.y1 - bx.y0).fill(0x7d8a8e).stroke({ width: 0.05, color: 0x2e3436 });
+      const t = b.left / TUNING.abilities.barrierSeconds;
+      props.rect(bx.x0, bx.y0, (bx.x1 - bx.x0) * t, 0.05).fill({ color: P.signal, alpha: 0.8 });
     }
   }
 
@@ -182,136 +320,188 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       return { x: (x - camX) * ppu + app.screen.width / 2, y: (y - camY) * ppu + app.screen.height / 2 };
     },
     reset(w) {
+      // Bake once per distinct map (every restart builds a new Level object for the same tiles).
+      const key = `${w.level.w}x${w.level.h}:${w.level.tiles.join('')}`;
+      if (!baked || key !== bakedKey) {
+        const old = baked;
+        baked = bakeMap(app.renderer, w.level);
+        bakedKey = key;
+        // Free the old textures only after the next frame has stopped using them.
+        if (old) setTimeout(() => { old.lit.destroy(true); old.dim.destroy(true); }, 200);
+        for (const s of [dimSprite, litSprite, softSprite]) {
+          s.texture = s === dimSprite ? baked.dim : baked.lit;
+          s.scale.set(1 / baked.ppu);
+        }
+      }
       level = w.level;
       explored = new Uint8Array(level.w * level.h);
-      exploredCount = 0;
+      exploredDirty = true;
       const p = player(w);
       camX = p.x;
       camY = p.y;
-      drawLitFloor();
-      memory.clear();
-      exploredCount = -1;
+      // Labels are reused across restarts (destroying a bound Text texture warns in Pixi).
+      w.pickups.forEach((pk, i) => {
+        let t = pickupLabels[i];
+        if (!t) {
+          t = new Text({ text: '', style: { fontFamily: 'Plex Mono, monospace', fontSize: 22, fontWeight: '600', fill: 0xffffff, stroke: { color: 0x000000, width: 4 } } });
+          t.anchor.set(0.5, 0);
+          t.scale.set(1 / 80);
+          labels.addChild(t);
+          pickupLabels.push(t);
+        }
+        t.text = pk.kind === 'health' ? 'HEALTH' : pk.kind === 'armor' ? 'ARMOUR' : 'AMMO';
+        t.tint = pk.kind === 'health' ? P.heal : pk.kind === 'armor' ? P.armor : P.ammo;
+        t.position.set(pk.x, pk.y + 0.38);
+      });
+      for (let i = w.pickups.length; i < pickupLabels.length; i++) pickupLabels[i].visible = false;
     },
     visibleBots: () => visBots,
     draw(w, fx, input, dt, opts) {
       const p = player(w);
       const sw = app.screen.width, sh = app.screen.height;
-      ppu = Math.min(sw / TUNING.render.viewWidthUnits, sh / TUNING.render.minViewHeightUnits);
-
-      // Camera: smooth follow with a small lookahead toward the aim.
-      const tx = p.x + Math.cos(p.facing) * TUNING.render.lookahead;
-      const ty = p.y + Math.sin(p.facing) * TUNING.render.lookahead;
-      const k = 1 - Math.exp(-dt / TUNING.render.cameraSmoothing);
+      ppu = Math.min(sw / R.viewWidthUnits, sh / R.minViewHeightUnits);
+      const tx = p.x + Math.cos(p.facing) * R.lookahead;
+      const ty = p.y + Math.sin(p.facing) * R.lookahead;
+      const k = 1 - Math.exp(-dt / R.cameraSmoothing);
       camX += (tx - camX) * k;
       camY += (ty - camY) * k;
       let sx = 0, sy = 0;
       if (fx.shake > 0) {
-        const s = (TUNING.render.shakePx * fx.shake) / TUNING.render.shakeSeconds;
+        const s = (R.shakePx * fx.shake) / R.shakeSeconds;
         sx = (Math.random() * 2 - 1) * s;
         sy = (Math.random() * 2 - 1) * s;
       }
       world.scale.set(ppu);
       world.position.set(sw / 2 - camX * ppu + sx, sh / 2 - camY * ppu + sy);
 
-      // Light.
-      const view = viewOf(p);
+      // Light: sharp inner cone + soft outer cone, both clipped by walls.
+      const view = p.view;
       visibilityPolygon(level, p.x, p.y, p.facing, view, TUNING.vision.rayStepDeg * DEG, poly);
-      visMask.clear().poly(poly.slice()).fill(0xffffff);
+      softView.range = view.range * 1.08;
+      softView.coneRad = view.coneRad + TUNING.vision.softEdgeDeg * 2 * DEG;
+      visibilityPolygon(level, p.x, p.y, p.facing, softView, TUNING.vision.rayStepDeg * 2 * DEG, softPoly);
+      visMask.clear().poly(poly).fill(0xffffff);
+      softMask.clear().poly(softPoly).fill(0xffffff);
+      falloff.position.set(p.x, p.y);
+      falloff.width = falloff.height = view.range * 2.1;
+      softFalloff.position.set(p.x, p.y);
+      softFalloff.width = softFalloff.height = softView.range * 2.1;
+      glow.position.set(p.x, p.y);
+      glow.width = glow.height = view.range * 1.6;
       exploreTimer -= dt;
-      if (exploreTimer <= 0 || exploredCount < 0) {
+      if (exploreTimer <= 0) {
         exploreTimer = 0.1;
-        const before = exploredCount;
-        if (exploredCount < 0) exploredCount = 0;
         updateExplored(p);
-        if (exploredCount !== before) drawMemory();
+        if (exploredDirty) {
+          exploredDirty = false;
+          drawFog();
+        }
       }
+      drawPickups(w);
 
-      // Heard markers: shape says "heard", not "seen". Rings, never a body.
+      // Heard markers: rings, never a body. Corpses stay as decals.
       marks.clear();
       for (const m of fx.markers) {
         const t = m.age / m.life;
         const rad = (m.big ? 0.9 : 0.45) + t * (m.big ? 1.2 : 0.6);
-        circle(marks, m.x, m.y, rad).stroke({ width: 0.06, color: P.signal, alpha: 0.7 * (1 - t) });
+        circle(marks, m.x, m.y, rad).stroke({ width: 0.06, color: P.signal, alpha: 0.75 * (1 - t) });
       }
       for (const c of fx.corpses) {
-        marks.moveTo(c.x - 0.25, c.y - 0.25).lineTo(c.x + 0.25, c.y + 0.25).moveTo(c.x + 0.25, c.y - 0.25).lineTo(c.x - 0.25, c.y + 0.25)
-          .stroke({ width: 0.08, color: c.hostile ? P.hostile : P.player, alpha: 0.5 });
+        marks.ellipse(c.x, c.y, 0.42, 0.3).fill({ color: c.hostile ? P.hostileDark : P.teamDark, alpha: 0.55 });
       }
 
-      // Actors, bullets, impacts: only what the player can see.
       actors.clear();
       visBots = 0;
+      const rev = revealed(w, p);
       for (const a of w.actors) {
-        if (!a.alive) continue;
         if (a.team === 'bot') {
+          if (!a.alive && a.deadFor > R.deathAnimSeconds) continue;
           const seen = canSee(level, p.x, p.y, p.facing, view, a.x, a.y) || (opts.recap && w.playerKill?.killerId === a.id);
-          if (!seen) continue;
-          visBots++;
+          if (!seen) {
+            if (rev.includes(a)) {
+              // Ping reveal: an outline only, so it reads as information, not presence.
+              const pulse = 0.5 + 0.5 * Math.sin(w.tick / 4);
+              circle(actors, a.x, a.y, 0.42).stroke({ width: 0.07, color: P.hostile, alpha: 0.5 + pulse * 0.4 });
+              actors.moveTo(a.x, a.y).lineTo(a.x + Math.cos(a.facing) * 0.7, a.y + Math.sin(a.facing) * 0.7).stroke({ width: 0.06, color: P.hostile, alpha: 0.7 });
+            }
+            continue;
+          }
+          if (a.alive) visBots++;
           const br = w.brains.get(a.id) as Brain;
           drawBody(actors, a, true, null, br.state === 'alert');
-        } else drawBody(actors, a, false, opts.marking, false);
+        }
       }
-      if (!p.alive) drawBody(actors, p, false, opts.marking, false);
+      drawBody(actors, p, false, opts.marking, false);
       if (opts.showSticks && input.right.active && p.alive) {
-        // Touch has no crosshair: show the current spread as a faint wedge ahead of the barrel.
-        const sp = p.lastSpread * DEG, L = 3.2;
+        const sp = p.lastSpread * DEG, L = Math.min(p.weapon.falloffEnd, 6);
         actors.moveTo(p.x, p.y).lineTo(p.x + Math.cos(p.facing - sp) * L, p.y + Math.sin(p.facing - sp) * L)
           .moveTo(p.x, p.y).lineTo(p.x + Math.cos(p.facing + sp) * L, p.y + Math.sin(p.facing + sp) * L)
-          .stroke({ width: 0.03, color: P.player, alpha: 0.35 });
+          .stroke({ width: 0.03, color: P.team, alpha: 0.35 });
       }
+
+      // Effects inside the light only.
+      fxG.clear();
       for (const b of w.bullets) {
         if (!pointInPolygon(b.x, b.y, poly)) continue;
         const travelled = Math.hypot(b.x - b.ox, b.y - b.oy);
-        const len = Math.min(0.9, travelled);
-        const hostile = b.owner !== 0;
-        actors.moveTo(b.x - b.dx * len, b.y - b.dy * len).lineTo(b.x, b.y)
-          .stroke({ width: 0.07, color: hostile ? 0xff9a6b : P.signal });
+        const len = Math.min(b.weapon.id === 'marksman' ? 2.2 : b.weapon.pellets > 1 ? 0.5 : 0.9, travelled);
+        fxG.moveTo(b.x - b.dx * len, b.y - b.dy * len).lineTo(b.x, b.y)
+          .stroke({ width: b.weapon.tracer, color: b.owner !== 0 ? P.hostileTracer : P.signal });
+      }
+      for (const s of fx.sparks) {
+        if (s.age >= 1 || !pointInPolygon(s.x, s.y, poly)) continue;
+        fxG.moveTo(s.x, s.y).lineTo(s.x - s.vx * 0.03, s.y - s.vy * 0.03).stroke({ width: 0.04, color: s.hostile ? P.hostile : P.signal, alpha: 1 - s.age });
       }
       for (const im of fx.impacts) {
         if (!pointInPolygon(im.x, im.y, poly)) continue;
-        const s = 0.12 + im.age;
-        actors.moveTo(im.x - s, im.y).lineTo(im.x + s, im.y).moveTo(im.x, im.y - s).lineTo(im.x, im.y + s)
-          .stroke({ width: 0.04, color: P.signal, alpha: 1 - im.age * 8 });
+        circle(fxG, im.x, im.y, 0.06 + im.age * 0.8, 10).fill({ color: 0x1a1612, alpha: 0.6 * (1 - im.age * 4) });
       }
       for (const h of fx.hitMarks) {
-        const s = 0.22, a = 1 - h.age / 0.15;
-        actors.moveTo(h.x - s, h.y - s).lineTo(h.x + s, h.y + s).moveTo(h.x + s, h.y - s).lineTo(h.x - s, h.y + s)
-          .stroke({ width: h.kill ? 0.1 : 0.06, color: h.kill ? P.hostile : 0xffffff, alpha: a });
+        const s = 0.24, al = 1 - h.age / 0.2;
+        fxG.moveTo(h.x - s, h.y - s).lineTo(h.x + s, h.y + s).moveTo(h.x + s, h.y - s).lineTo(h.x - s, h.y + s)
+          .stroke({ width: h.kill ? 0.12 : 0.07, color: h.kill ? P.hostile : 0xffffff, alpha: al });
+      }
+      for (const pg of fx.pings) {
+        const t = pg.age / 0.7;
+        circle(fxG, pg.x, pg.y, 0.5 + t * TUNING.abilities.sonarRadius, 48).stroke({ width: 0.08, color: pg.hostile ? P.hostile : P.armor, alpha: 0.7 * (1 - t) });
       }
 
-      // Death recap: the line of the killing shot, from where the killer stood.
       recapG.clear();
       if (opts.recap && w.playerKill) {
-        const k = w.playerKill;
-        recapG.moveTo(k.fromX, k.fromY).lineTo(k.toX, k.toY).stroke({ width: 0.06, color: P.hostile, alpha: 0.9 });
-        circle(recapG, k.fromX, k.fromY, 0.6).stroke({ width: 0.06, color: P.hostile });
+        const kk = w.playerKill;
+        recapG.moveTo(kk.fromX, kk.fromY).lineTo(kk.toX, kk.toY).stroke({ width: 0.07, color: P.hostile, alpha: 0.9 });
+        circle(recapG, kk.fromX, kk.fromY, 0.6).stroke({ width: 0.07, color: P.hostile });
       }
 
-      // Screen space: crosshair with visible spread, touch sticks, edge indicators.
+      // Screen space.
       screen.clear();
+      const ps = r.toScreen(p.x, p.y);
       if (input.mode === 'pc' && p.alive && opts.playing) {
-        const ps = r.toScreen(p.x, p.y);
         const d = Math.hypot(input.mouseX - ps.x, input.mouseY - ps.y);
         const gap = Math.max(4, Math.tan(p.lastSpread * DEG) * d);
         const mx = input.mouseX, my = input.mouseY;
         screen.moveTo(mx - gap - 7, my).lineTo(mx - gap, my).moveTo(mx + gap, my).lineTo(mx + gap + 7, my)
           .moveTo(mx, my - gap - 7).lineTo(mx, my - gap).moveTo(mx, my + gap).lineTo(mx, my + gap + 7)
-          .stroke({ width: 2, color: P.player, alpha: 0.9 });
-        screen.circle(mx, my, 1.2).fill(P.player);
+          .stroke({ width: 2, color: P.team, alpha: 0.9 });
+        screen.circle(mx, my, 1.2).fill(P.team);
+      }
+      // Damage direction: a red arc around the player toward where the shot came from.
+      for (const da of fx.damageArcs) {
+        const al = 1 - da.age / R.damageArcSeconds;
+        arc(screen, ps.x, ps.y, ppu * 1.4, da.ang - 0.38, da.ang + 0.38, 12).stroke({ width: 6, color: P.hostile, alpha: 0.9 * al });
       }
       if (opts.showSticks) {
         for (const s of [input.left, input.right]) {
           if (!s.active) continue;
-          screen.circle(s.baseX, s.baseY, STICK_RADIUS).stroke({ width: 2, color: P.player, alpha: 0.25 });
+          screen.circle(s.baseX, s.baseY, STICK_RADIUS).stroke({ width: 2, color: P.team, alpha: 0.25 });
           if (s === input.right) screen.circle(s.baseX, s.baseY, STICK_RADIUS * AIM_DEADZONE).stroke({ width: 1.5, color: P.signal, alpha: 0.4 });
-          screen.circle(s.x, s.y, 18).fill({ color: P.player, alpha: 0.35 });
+          screen.circle(s.x, s.y, 18).fill({ color: P.team, alpha: 0.35 });
         }
       }
       const margin = 22;
       for (const m of fx.markers) {
         const s = r.toScreen(m.x, m.y);
         if (s.x > 0 && s.x < sw && s.y > 0 && s.y < sh) continue;
-        // Off-screen heard sound: a small wedge on the screen edge pointing at it.
         const ang = Math.atan2(s.y - sh / 2, s.x - sw / 2);
         const ex = Math.max(margin, Math.min(sw - margin, sw / 2 + Math.cos(ang) * sw));
         const ey = Math.max(margin, Math.min(sh - margin, sh / 2 + Math.sin(ang) * sh));
