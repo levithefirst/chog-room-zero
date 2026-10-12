@@ -12,6 +12,7 @@ import { nextPhase, simRuns, type MatchEvent, type Phase } from './sim/match';
 import { TUNING } from './config/tuning';
 import { HEROES, heroById } from './config/heroes';
 import { heroForKey } from './ui/heroKeys';
+import { rotatePromptShown, ROTATE_QUERY } from './ui/orientation';
 import { coverBoxAt } from './sim/cover';
 import { WEAPONS } from './config/weapons';
 import { adapterFromUrl, resolveIdentity, GUEST, type Identity } from './nft/identity';
@@ -302,6 +303,12 @@ async function start() {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && phase === 'play') go('pause');
   });
+  // Rotating to portrait covers the game with the rotate prompt: pause, so the sim never runs unseen.
+  const checkRotate = () => {
+    if (phase === 'play' && rotatePromptShown(window.innerWidth, window.innerHeight)) go('pause');
+  };
+  window.addEventListener('resize', checkRotate);
+  window.matchMedia?.(ROTATE_QUERY).addEventListener?.('change', checkRotate);
   // Losing window focus (alt-tab, notification shade, another window) pauses too.
   window.addEventListener('blur', () => {
     if (phase === 'play') go('pause');

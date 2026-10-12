@@ -22,3 +22,13 @@ describe('UI-001 hero select number keys', () => {
     expect(heroForKey({ key: 'a', code: 'KeyA' }, HEROES)).toBeNull();
   });
 });
+
+import { rotatePromptShown } from '../src/ui/orientation';
+describe('rotation: the portrait prompt pauses play (P1FT phase 3 finding)', () => {
+  it('matches the CSS rule: portrait and width <= 820 px', () => {
+    expect(rotatePromptShown(390, 844)).toBe(true);
+    expect(rotatePromptShown(375, 667)).toBe(true);
+    expect(rotatePromptShown(844, 390)).toBe(false);
+    expect(rotatePromptShown(900, 1200)).toBe(false); // tablet portrait: no prompt
+  });
+});
