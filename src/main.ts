@@ -108,6 +108,25 @@ async function start() {
     showHint('Gold rings: a noise you <b>heard</b>, not saw. Enemies hear you too: running is loud, creeping is quiet.', 6);
   }
 
+  // HUD panel rects for label avoidance (CHOG-HUD-002). Measured from the DOM, so safe-area insets count; cached
+  // and refreshed on resize/orientation change and every 30 frames (cheap) so layout changes are picked up.
+  const HUD_IDS = ['vitals', 'foes', 'sys', 'weapon', 'ability', 'reload'];
+  let hudCache: { x: number; y: number; w: number; h: number }[] = [];
+  let hudAge = 1e9;
+  window.addEventListener('resize', () => (hudAge = 1e9));
+  function hudRects() {
+    if (++hudAge < 30) return hudCache;
+    hudAge = 0;
+    hudCache = [];
+    for (const id of HUD_IDS) {
+      const el = document.getElementById(id);
+      if (!el || el.offsetParent === null) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width && r.height) hudCache.push({ x: r.left, y: r.top, w: r.width, h: r.height });
+    }
+    return hudCache;
+  }
+
   function toast(text: string) {
     $('toast').textContent = text;
     toastLeft = 1.4;
@@ -444,7 +463,7 @@ async function start() {
     }
     $('toast').style.opacity = toastLeft > 0 ? '1' : '0';
 
-    renderer.draw(world, fx, input, dt, { recap: phase === 'recap' || (phase === 'results' && world.outcome === 'dead'), marking: identity.marking, showSticks: phase === 'play' && input.mode === 'touch', playing: phase === 'play', debug: DEBUG_OVERLAY });
+    renderer.draw(world, fx, input, dt, { recap: phase === 'recap' || (phase === 'results' && world.outcome === 'dead'), marking: identity.marking, showSticks: phase === 'play' && input.mode === 'touch', playing: phase === 'play', debug: DEBUG_OVERLAY, hud: hudRects() });
 
     // HUD: only touch the DOM when a value changed.
     const p = player(world);

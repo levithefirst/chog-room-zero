@@ -5,6 +5,7 @@
 // -> screen-space UI.
 import { Application, Container, Graphics, Sprite, Text } from 'pixi.js';
 import { TUNING } from '../config/tuning';
+import { placeLabel, type Rect } from './labels';
 import { WALL, walkable, type Level } from '../sim/level';
 import { pointInPolygon } from '../sim/geom';
 import { visibilityPolygon } from '../sim/vision';
@@ -86,6 +87,8 @@ export interface DrawOpts {
   playing: boolean;
   /** ?debug perception overlay. */
   debug?: boolean;
+  /** HUD panel rects in screen (CSS) px; pickup labels avoid them (CHOG-HUD-002). */
+  hud?: readonly Rect[];
 }
 
 export interface Renderer {
@@ -300,13 +303,18 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
     for (; i < debugTexts.length; i++) debugTexts[i].visible = false;
   }
 
-  function drawPickups(w: World) {
+  function drawPickups(w: World, hud: readonly Rect[]) {
     props.clear();
     w.pickups.forEach((p, i) => {
       const lbl = pickupLabels[i];
       const known = explored[Math.floor(p.y) * level.w + Math.floor(p.x)];
       lbl.visible = !!known;
       if (!known) return;
+      // Keep the label out from under HUD panels: below by default, above if blocked, hidden if both are.
+      const sx = world.position.x + p.x * ppu, sy = world.position.y + p.y * ppu;
+      const pl = placeLabel(sx, sy, lbl.width * ppu, lbl.height * ppu, 0.38 * ppu, hud);
+      lbl.visible = pl.visible;
+      lbl.position.set(p.x, p.y + (pl.y - sy) / ppu);
       const col = p.kind === 'health' ? P.heal : p.kind === 'armor' ? P.armor : P.ammo;
       if (!p.active) {
         circle(props, p.x, p.y, 0.32).stroke({ width: 0.04, color: col, alpha: 0.35 });
@@ -412,7 +420,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
           drawFog();
         }
       }
-      drawPickups(w);
+      drawPickups(w, opts.hud ?? []);
 
       // Heard markers: rings, never a body. Corpses stay as decals.
       marks.clear();
