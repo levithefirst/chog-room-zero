@@ -18,3 +18,12 @@ export function stepCamera(c: Camera, px: number, py: number, facing: number, dt
   c.x += (px + c.lx - c.x) * k;
   c.y += (py + c.ly - c.y) * k;
 }
+
+/**
+ * Where to draw the view centre on one axis. If the whole map fits on this axis (a tall portrait tablet sees ~29-33 u
+ * of a 26 u map), centre the map, so no screen space is spent on void past the edge. Otherwise follow the camera
+ * unclamped, as before: in landscape the player stays centred and never slides under the corner HUD panels.
+ */
+export function frameAxis(cam: number, viewExtent: number, mapExtent: number): number {
+  return viewExtent >= mapExtent ? mapExtent / 2 : cam;
+}

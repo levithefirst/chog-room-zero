@@ -132,7 +132,14 @@
       #rotate { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 10; align-items: center; justify-content: center; flex-direction: column; gap: 14px; text-align: center; font-size: 20px; letter-spacing: 0.1em; text-transform: uppercase; }
       #rotate svg { width: 64px; height: 64px; stroke: var(--signal); fill: none; stroke-width: 2; animation: turn 1.6s ease-in-out infinite; }
       @keyframes turn { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
-      @media (orientation: portrait) and (max-width: 820px) { #rotate { display: flex; } }
+      #rotate b { font-weight: 600; }
+      #rotate small { color: #9a9384; font-size: 14px; letter-spacing: .05em; text-transform: none; max-width: 22em; line-height: 1.4; }
+      #rotate .run { color: var(--ink); font-size: 15px; }
+      #rotate .wide { display: none; }
+      /* A mouse-driven window (desktop) gets window wording; a phone gets turn-it wording. */
+      @media (hover: hover) and (pointer: fine) { #rotate .turn { display: none; } #rotate .wide { display: inline; } }
+      /* Phones only: below 600 px wide in portrait (src/ui/orientation.ts). Tablets play in portrait. */
+      @media (orientation: portrait) and (max-width: 599px) { #rotate { display: flex; } }
     </style>
   </head>
   <body>
@@ -162,7 +169,7 @@
       <div id="toast"></div>
     </div>
     <div id="overlay" class="layer"></div>
-    <div id="rotate"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" /><path d="M11 18h2" /></svg>Turn your phone sideways<small style="color:#9a9384;font-size:14px;letter-spacing:.05em;text-transform:none">Room Zero plays in landscape.</small></div>
+    <div id="rotate"><svg viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2" /><path d="M11 18h2" /></svg><b class="turn">Turn your phone sideways</b><b class="wide">Make the window wider</b><small id="rotnote">Room Zero plays in landscape.</small></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

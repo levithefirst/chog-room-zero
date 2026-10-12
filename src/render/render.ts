@@ -6,7 +6,7 @@
 import { Application, Container, Graphics, Sprite, Text } from 'pixi.js';
 import { TUNING } from '../config/tuning';
 import { placeLabel, stackLabels, type Rect } from './labels';
-import { createCamera, stepCamera } from './camera';
+import { createCamera, frameAxis, stepCamera } from './camera';
 import { WALL, walkable, type Level } from '../sim/level';
 import { pointInPolygon } from '../sim/geom';
 import { visibilityPolygon } from '../sim/vision';
@@ -404,8 +404,8 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       const sw = app.screen.width, sh = app.screen.height;
       ppu = Math.min(sw / R.viewWidthUnits, sh / R.minViewHeightUnits);
       stepCamera(cam, p.x, p.y, p.facing, dt, R);
-      camX = cam.x;
-      camY = cam.y;
+      camX = frameAxis(cam.x, sw / ppu, level.w);
+      camY = frameAxis(cam.y, sh / ppu, level.h);
       let sx = 0, sy = 0;
       if (fx.shake > 0) {
         const s = (R.shakePx * fx.shake) / R.shakeSeconds;

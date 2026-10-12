@@ -58,6 +58,11 @@ export interface Input {
    * pointer is released and pressed again, so the click that closed the menu can never also shoot.
    */
   holdFireUntilRelease(): void;
+  /**
+   * Drop every held key, stick and pointer (orientation flip): a stick base recorded in the old orientation's
+   * coordinates means nothing after a rotation, and some browsers never send the release for a finger held through it.
+   */
+  releaseAll(): void;
   dispose(): void;
 }
 
@@ -139,6 +144,10 @@ export function createInput(el: HTMLElement): Input {
       // released (Deploy -> loading -> play, Esc resume), the next press fires normally.
       blocked.clear();
       for (const id of pointersDown) blocked.add(id);
+    },
+    releaseAll() {
+      clear();
+      fireLatched = false;
     },
     takeAction() {
       const a = action;

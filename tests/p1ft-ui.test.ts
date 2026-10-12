@@ -25,10 +25,14 @@ describe('UI-001 hero select number keys', () => {
 
 import { rotatePromptShown } from '../src/ui/orientation';
 describe('rotation: the portrait prompt pauses play (P1FT phase 3 finding)', () => {
-  it('matches the CSS rule: portrait and width <= 820 px', () => {
+  it('matches the CSS rule: portrait and width < 600 px (RC-4: was <= 820, which blocked tablets in portrait)', () => {
     expect(rotatePromptShown(390, 844)).toBe(true);
     expect(rotatePromptShown(375, 667)).toBe(true);
+    expect(rotatePromptShown(599, 900)).toBe(true);
     expect(rotatePromptShown(844, 390)).toBe(false);
     expect(rotatePromptShown(900, 1200)).toBe(false); // tablet portrait: no prompt
+    expect(rotatePromptShown(820, 1180)).toBe(false);
+    expect(rotatePromptShown(768, 1024)).toBe(false);
+    expect(rotatePromptShown(744, 1133)).toBe(false); // smallest current iPad portrait
   });
 });

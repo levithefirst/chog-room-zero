@@ -13,7 +13,7 @@ import { nextPhase, simRuns, type MatchEvent, type Phase } from './sim/match';
 import { TUNING } from './config/tuning';
 import { HEROES, heroById } from './config/heroes';
 import { heroForKey } from './ui/heroKeys';
-import { rotatePromptShown, ROTATE_QUERY } from './ui/orientation';
+import { orientationOf, rotatePromptShown, ROTATE_QUERY } from './ui/orientation';
 import { coverBoxAt } from './sim/cover';
 import { WEAPONS } from './config/weapons';
 import { adapterFromUrl, resolveIdentity, GUEST, type Identity } from './nft/identity';
@@ -193,7 +193,17 @@ async function start() {
     render();
   }
 
+  // The portrait prompt says what is waiting behind it: a paused run is kept exactly as it was.
+  function updateRotateNote() {
+    const inRun = phase === 'pause' || phase === 'play';
+    const left = world.actors.filter((a) => a.team === 'bot' && a.alive).length;
+    $('rotnote').innerHTML = inRun
+      ? `<span class="run">Run paused · ${esc(heroById(heroId).name)} · ${left} hostile${left === 1 ? '' : 's'} left</span><br>Nothing is lost. Turn back to landscape, then Resume.`
+      : 'Room Zero plays in landscape.';
+  }
+
   function render() {
+    updateRotateNote();
     $('hud').classList.toggle('on', phase === 'play' || phase === 'pause' || phase === 'recap');
     switch (phase) {
       case 'title': return showTitle();
@@ -398,9 +408,18 @@ async function start() {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && phase === 'play') go('pause');
   });
-  // Rotating to portrait covers the game with the rotate prompt: pause, so the sim never runs unseen.
+  // Rotating to portrait covers the game with the rotate prompt: pause, so the sim never runs unseen. (The ticker
+  // also pauses if play ever starts behind it, e.g. Deploy pressed in portrait.) Any orientation flip releases held
+  // sticks and keys: their screen coordinates belong to the old layout.
+  let lastOrientation = orientationOf(window.innerWidth, window.innerHeight);
   const checkRotate = () => {
+    const o = orientationOf(window.innerWidth, window.innerHeight);
+    if (o !== lastOrientation) {
+      lastOrientation = o;
+      input.releaseAll();
+    }
     if (phase === 'play' && rotatePromptShown(window.innerWidth, window.innerHeight)) go('pause');
+    updateRotateNote();
   };
   window.addEventListener('resize', checkRotate);
   window.matchMedia?.(ROTATE_QUERY).addEventListener?.('change', checkRotate);
@@ -516,6 +535,7 @@ async function start() {
       else if (phase === 'pause') go('resume');
     }
 
+    if (phase === 'play' && rotatePromptShown(window.innerWidth, window.innerHeight)) go('pause');
     if (simRuns(phase)) {
       const p = player(world);
       const ps = renderer.toScreen(p.x, p.y);
