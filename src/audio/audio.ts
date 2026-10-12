@@ -3,7 +3,7 @@
 // Positional: pan by direction, volume by distance within the event's radius, muffled through walls.
 import type { SoundType } from '../sim/world';
 
-export type CueType = SoundType | 'hurt' | 'ui';
+export type CueType = SoundType | 'hurt' | 'ui' | 'blocked';
 
 export interface Audio {
   unlock(): void;
@@ -176,6 +176,11 @@ export function createAudio(): Audio {
         case 'impact': // bullet into concrete: grit
           burst(0, 0.06, 'highpass', 2500, 0.7, 0.4);
           len = 0.1;
+          break;
+        case 'blocked': // bullet stopped by half cover: a hollow knock + clank, distinct from concrete grit
+          thump(0, 0.07, 420, 240, 0.55);
+          burst(0, 0.05, 'bandpass', 1300, 6, 0.45);
+          len = 0.12;
           break;
         case 'hit': // into a body: low and dull, clearly not concrete
           burst(0, 0.08, 'lowpass', 500, 1, 0.7);

@@ -48,3 +48,15 @@ describe('debug overlay label stacking', () => {
     expect(ys[2] - ys[1]).toBeGreaterThanOrEqual(0.6 - 1e-9);
   });
 });
+
+import { coverBoxAt } from '../src/sim/cover';
+describe('blocked-shot feedback: which cover piece took the bullet', () => {
+  const boxes = [{ x0: 2, y0: 2, x1: 4, y1: 3 }, { x0: 8, y0: 1, x1: 9, y1: 4 }];
+  it('finds the box an impact point sits on (edge included, small tolerance)', () => {
+    expect(coverBoxAt(boxes, 3, 2.0)).toBe(boxes[0]);
+    expect(coverBoxAt(boxes, 7.97, 2.5)).toBe(boxes[1]);
+  });
+  it('returns null for a wall hit away from cover', () => {
+    expect(coverBoxAt(boxes, 6, 6)).toBeNull();
+  });
+});

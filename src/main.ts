@@ -1,4 +1,4 @@
-import { createRenderer, createFx } from './render/render';
+import { createRenderer, createFx, COVER_FLASH_SECONDS } from './render/render';
 import { createInput } from './input/input';
 import { createSummaryGate } from './input/gate';
 import { createAudio } from './audio/audio';
@@ -12,6 +12,7 @@ import { nextPhase, simRuns, type MatchEvent, type Phase } from './sim/match';
 import { TUNING } from './config/tuning';
 import { HEROES, heroById } from './config/heroes';
 import { heroForKey } from './ui/heroKeys';
+import { coverBoxAt } from './sim/cover';
 import { WEAPONS } from './config/weapons';
 import { adapterFromUrl, resolveIdentity, GUEST, type Identity } from './nft/identity';
 import { recordRun, type TokenHistory } from './nft/history';
@@ -342,10 +343,15 @@ async function start() {
         fx.threats[s.sourceId] = TUNING.perception.flashSeconds;
       const heard = own || hears(world.level, p.x, p.y, s);
       if (!heard) continue;
-      audio.play(s.type, dx, dy, s.radius, !own && !sightClear(world.level, p.x, p.y, s.x, s.y), own, s.weapon);
+      audio.play(s.type === 'impact' && s.blocked ? 'blocked' : s.type, dx, dy, s.radius, !own && !sightClear(world.level, p.x, p.y, s.x, s.y), own, s.weapon);
       if (s.type === 'impact') {
         fx.impacts.push({ x: s.x, y: s.y, age: 0, blocked: s.blocked });
         spark(s.x, s.y, s.blocked ? 7 : 3, false);
+        // Blocked by half cover: the crate/slab outline flashes briefly so the cover reads as what stopped it.
+        if (s.blocked) {
+          const box = coverBoxAt(world.level.coverBoxes, s.x, s.y);
+          if (box) fx.coverFlashes.push({ box, age: 0 });
+        }
       }
       if (own && s.type === 'pickup') toast('Picked up');
       if (own || s.team !== 'bot') continue;
@@ -452,6 +458,8 @@ async function start() {
     }
     fx.markers = fx.markers.filter((m) => m.age < m.life);
     fx.impacts = fx.impacts.filter((m) => m.age < 0.25);
+    for (const c of fx.coverFlashes) c.age += dt;
+    fx.coverFlashes = fx.coverFlashes.filter((c) => c.age < COVER_FLASH_SECONDS);
     fx.hitMarks = fx.hitMarks.filter((m) => m.age < 0.2);
     fx.damageArcs = fx.damageArcs.filter((m) => m.age < TUNING.render.damageArcSeconds);
     fx.pings = fx.pings.filter((m) => m.age < 0.7);

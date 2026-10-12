@@ -63,6 +63,8 @@ export interface Spark {
 export interface Fx {
   markers: Marker[];
   impacts: { x: number; y: number; age: number; blocked?: boolean }[];
+  /** Cover pieces that just stopped a bullet: outline flash (COVER_FLASH_SECONDS). */
+  coverFlashes: { box: { x0: number; y0: number; x1: number; y1: number }; age: number }[];
   hitMarks: { x: number; y: number; age: number; kill: boolean }[];
   shake: number;
   corpses: { x: number; y: number; hostile: boolean }[];
@@ -76,7 +78,7 @@ export interface Fx {
 
 export function createFx(): Fx {
   return {
-    markers: [], impacts: [], hitMarks: [], shake: 0, corpses: [], damageArcs: [], pings: [], threats: [],
+    markers: [], impacts: [], coverFlashes: [], hitMarks: [], shake: 0, corpses: [], damageArcs: [], pings: [], threats: [],
     sparks: Array.from({ length: R.maxSparks }, () => ({ x: 0, y: 0, vx: 0, vy: 0, age: 1, hostile: false })),
   };
 }
@@ -103,6 +105,8 @@ export interface Renderer {
   /** Hostiles drawn this frame only because they just shot at the player. */
   flashBots(): number;
 }
+
+export const COVER_FLASH_SECONDS = 0.18;
 
 export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
   const app = new Application();
@@ -494,6 +498,10 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       for (const s of fx.sparks) {
         if (s.age >= 1 || !pointInPolygon(s.x, s.y, poly)) continue;
         fxG.moveTo(s.x, s.y).lineTo(s.x - s.vx * 0.03, s.y - s.vy * 0.03).stroke({ width: 0.04, color: s.hostile ? P.hostile : P.signal, alpha: 1 - s.age });
+      }
+      for (const cf of fx.coverFlashes) {
+        const b = cf.box, al = Math.max(0, 1 - cf.age / COVER_FLASH_SECONDS);
+        fxG.rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0).stroke({ width: 0.07, color: 0xe8f1ff, alpha: 0.85 * al });
       }
       for (const im of fx.impacts) {
         if (!pointInPolygon(im.x, im.y, poly)) continue;

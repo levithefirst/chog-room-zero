@@ -27,3 +27,9 @@ export function coverStops(kind: CoverKind, pierce: boolean, shooterDist: number
   if (pierce && r.piercedByMarksman) return false;
   return !(r.lean > 0 && shooterDist <= r.lean);
 }
+
+/** The cover box an impact point is on (within `tol` u of it), for the client's brief "blocked" outline flash. */
+export function coverBoxAt<B extends { x0: number; y0: number; x1: number; y1: number }>(boxes: readonly B[], x: number, y: number, tol = 0.06): B | null {
+  for (const b of boxes) if (x >= b.x0 - tol && x <= b.x1 + tol && y >= b.y0 - tol && y <= b.y1 + tol) return b;
+  return null;
+}
