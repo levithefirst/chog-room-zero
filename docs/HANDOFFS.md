@@ -40,3 +40,17 @@ Not verified    : phone load (Pixel 7 / iPhone 13); movement feel (owner PC play
 Locked decisions touched : none
 Next smallest task : P0-3 PC mouse aim only. Files: src/input/input.ts, src/sim/sim.ts, src/config/tuning.ts, src/render/render.ts, src/main.ts, tests/input.test.ts, tests/sim.test.ts
 ```
+
+```
+HANDOFF H4  2026-10-12  grokbot -> owner
+Branch @ commit : grokbot/p1-mvp @ b25bac0deb789082158613dee3bad40a90315bc4   pushed: yes
+Task            : P1 Room Zero MVP under the owner mandate (2026-10-12 02:56 WAT). Stacked on P0-2 (PR base grokbot/p0-2-pc-movement)
+Files changed   : index.html, public/favicon.svg, src/main.ts, src/config/{tuning,map}.ts, src/sim/{sim,world,bots,vision,level,geom,operators}.ts, src/render/render.ts, src/input/input.ts, src/audio/audio.ts, src/nft/{identity,history}.ts, tests/{sim,input,world,bots,operators,nft}.test.ts, tools/browser-run.mjs, docs/design/art-direction.md, docs/DEV.md, docs/STATE.md, docs/HANDOFFS.md
+Tests run       : Node 22.23.3: npm ci -> 0; npm run typecheck -> 0; npm test -> 60/60; npm run build -> 0; node tools/browser-run.mjs (headless Chrome) -> title, explore, hidden enemy (0 drawn), visible through door (1 drawn), combat tracers, death recap, summary, win, 844x390 touch: all reached, console errors none; vite preview console errors none
+Known failures  : none in automated checks. Defects listed in the P1 PR (no shipped font file, no ability, single-thread A*, per-frame allocations in vision and Pixi redraws)
+Blockers        : phone run (owner devices); NFT chain adapter and server history need verified chain, contract, ownership method (UNKNOWN)
+Not verified    : feel, fairness, run length, audio by ear, phone performance (G8), real GPU
+Locked decisions touched : LOCKED 10 changed by owner mandate (NFT layer allowed now; built as interface + mock only). LOCKED 16 added: win = all bots eliminated (mandate). No dependency added; viem stays PROPOSAL (no real read possible)
+Next smallest task : P1-F1 owner playtest on PC and both phones, then fix the top 3 reported issues. Files decided by the reports
+```
+STATE trim note (H4): the gate table (all "not started") and the P0-1/P0-2 evidence rows were removed from STATE; P0 evidence is in H2 and H3 above.
