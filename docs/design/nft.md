@@ -1,16 +1,18 @@
 # NFT identity
 
-Status: the rules below marked LOCKED come from the owner. Mechanics and the binding flow are PROPOSALS. Chain, contract, metadata, ownership method, and art rights are UNKNOWN and must be verified, never assumed.
+Status: the rules below marked LOCKED come from the owner. Chain, contract, metadata and ownership method are EVIDENCE from NFT-R1 (`docs/research/chog-genesis/`) and are re-checked live by the server before any benefit applies. Art and name rights are UNKNOWN: placeholders only.
 
-Nothing here is built until the Core Feel Gate passes (`docs/GATES.md`).
+The owner's master build prompt (2026-10-13) replaced "sidegrades only" with a class system. NFT combat power for real holders stays switched off (`NFT_COMBAT`) until the Core Feel Gate passes (`docs/GATES.md`); the database, verification and demo mode may be built before it.
 
-## LOCKED rules
-- Anyone can play the core loop. No NFT or $CHOG needed.
-- Guest runs are disposable. They create no persistent Chog operator history.
-- Binding a Chog Genesis NFT creates a persistent operator identity with token-specific history.
-- Token-derived traits are fair sidegrades. Never flat damage, health, or movement speed advantages.
-- Removal test (below) must pass for every NFT-linked mechanic.
-- Token-ID traits alone are not enough if owning the token has no meaningful persistent consequence.
+## LOCKED rules (owner, 2026-10-13 master build prompt)
+- Anyone can play solo, 1v1 and 3v3 with no NFT, no wallet and no $CHOG.
+- 5v5 is for verified Chog holders only, enforced on the game server, never by the browser.
+- Holders get a combat advantage and rarity sets starting power (tier ladder in `docs/design/power.md`). The ten 1:1 Chogs sit in the top tier and each has a distinct signature ability in the single ability slot. No second simultaneous ability.
+- Free players have an upgrade path (shards earned in validated matches). No combat power is ever sold. Competitive rating is separate from character power.
+- Account progression (XP, level, shards, upgrades, rating) belongs to the account. Token history belongs to the token. A transfer never moves account XP or currency.
+- Ownership is verified on the server (wallet signature, then a chain read). Every failure fails closed to free-player rules and leaves the game playable.
+- A clearly labelled demo mode exists for development and judging. It never earns rewards, never counts as verified, and plays in its own queues.
+- Guest runs (not signed in) are disposable. Removal test (below) must pass for every NFT-linked mechanic.
 
 ## Removal test (two parts, both must pass)
 Question: if NFT ownership were removed, would the experience AND what persists stay almost the same? If yes, the mechanic fails. Redesign or cut it.
@@ -25,21 +27,20 @@ RESULT      STRONG / WEAK -> KEEP / REDESIGN / CUT
 
 Weak means the difference is only a skin, portrait, badge, access, title, color, or a flat stat boost.
 
-## Sidegrades (PROPOSAL)
-- Three trait areas at most: weapon behavior, vision profile, one ability.
-- Change the shape of play, not the size of numbers. Examples of the kind of difference that counts: a narrow long view versus a wide short view; a steady weapon versus a burst weapon with a rhythm; an ability that makes a decoy sound versus one that briefly quiets footsteps.
-- Every operator, including the default, spends the same power budget. Strength in one place costs something elsewhere. Base damage, health, and speed are identical across operators (G10 tests this).
-- The default operator is a complete, fun design that can win.
-- Rarity may make an operator stranger, never better.
+## Class system (LOCKED direction; numbers in `src/config/power.ts`)
+- Tier comes from the token's on-chain metadata (`Tier` trait via `metadataId`), never from a hash, a rank score or the browser.
+- A tier changes health, armour and, for the 1:1s only, damage and the ability. Movement speed never changes with tier: positioning stays the skill.
+- Caps, the measured duel shares and the reasons for each number are in `docs/design/power.md`. Any value outside those caps is an automatic CUT.
+- A free player at full upgrades must keep a real chance against a Common holder (measured band in `power.md`).
+- The four RC-1 sidegrades (Lamp, Wide, Steady, Spray) stay as shape-only options on top of the class (`tests/operators.test.ts`).
 
-## Where traits come from (UNKNOWN, decide after verifying)
-- Option A: real Genesis metadata traits, mapped by a hand-written table to a small set of designed operators. Needs the metadata to be checked first.
-- Option B: a deterministic function of the token ID choosing among a small hand-designed set (about 6 to 9). Honest and works offline, but traits will not match the art, so the UI must not pretend they do.
-- Either way it is a pure function `operatorFor(tokenId, traits?)` in the sim data, fully tested.
+## Where traits come from
+- Tier and the 1:1 name: Option A, the verified catalogue (`data/chog-genesis/`), keyed by `metadataId`.
+- Sidegrade shape: Option B, the RC-1 deterministic hash (unchanged). Labelled as such in the UI.
 
-## Persistent identity (PROPOSAL)
+## Persistent identity (LOCKED direction; storage in Neon schema `room_zero`)
 - History belongs to the token: rooms played, wins, kills, deaths, survival time, streak. "Notable runs" is a cut candidate.
-- One result is written at match end for a bound run. Nothing is written for a guest run.
+- One result is written at match end, by the server settlement, for a validated online match. Nothing is written for a guest run or a demo run. Solo runs are simulated in the browser, so they earn no server rewards.
 - Binding flow idea: connect wallet (lazy loaded) -> sign a plain message (no transaction, no approvals) -> server checks ownership -> operator bound. The client never reports ownership itself.
 - If the token changes owner, the new owner binds and sees the token's history. Say so in the UI.
 - Every failure (no wallet, wrong network, signature rejected, RPC down, token not owned, metadata missing) leaves the game playable as a guest.
@@ -56,7 +57,7 @@ Record each as EVIDENCE in STATE (source, date, who checked):
 Never write the guessed answer into code, config, or docs as if it were true.
 
 ## NFT copy and flow
-No "unlock your power" language. No rarity color as a power signal. No mint or marketplace links in the play flow. Do not show the NFT screen before the player has finished a room.
+No "unlock your power" or "pay to win" language. The tier is always shown to both sides (badge on the player card and the in-match name tag) so the opponent knows what they face. No mint or marketplace links in the play flow. Do not show the NFT screen before the player has finished a room.
 
 ## RC-1 NFT DEMO (built; DEMO only)
 A real wallet and ownership check are DEFERRED: chain, contract and metadata are still UNKNOWN. The DEMO shows how a Chog would change play:

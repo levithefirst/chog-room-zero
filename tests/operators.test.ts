@@ -34,7 +34,7 @@ describe('NFT sidegrades are fair on every hero', () => {
       });
     }
   }
-  it('no sidegrade touches damage, health, armour, or speed (LOCKED 9)', () => {
+  it('no sidegrade touches damage, health, armour, or speed (sidegrades are shape only; tier power lives in src/config/power.ts)', () => {
     for (const s of [NO_SIDEGRADE, ...SIDEGRADES]) expect(Object.keys(s).some((k) => /damage|hp|health|armor|speed/i.test(k))).toBe(false);
   });
   it('operatorFor is deterministic and only returns designed sidegrades', () => {

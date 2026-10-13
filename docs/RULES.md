@@ -38,14 +38,16 @@ Rules of honesty:
 - Movement has deliberate acceleration, turning, and stopping behavior.
 - Hit direction, projectiles, deaths, and sound must tell the player useful things. Screen shake and effects are purposeful, never decoration.
 - Bots use cover, hold angles, break line of sight, investigate sound, reposition. They do not just rush the player.
-- Anyone can play the core loop. Guest runs are disposable and create no persistent Chog operator history.
-- Binding a Chog Genesis NFT creates a persistent operator identity with token-specific history.
-- Token-derived traits are fair sidegrades. Never flat damage, health, or movement speed advantages.
+- Anyone can play solo, online 1v1 and online 3v3 with no wallet and no NFT. Online 5v5 is for verified CHOG Genesis holders only, enforced on the game server (owner, 2026-10-13 MASTER BUILD PROMPT).
+- Guest runs are disposable and create no persistent history. A signed-in account keeps server-side progression (XP, level, shards, upgrades, rating) whether or not it holds an NFT.
+- Binding a Chog Genesis NFT creates a persistent operator identity with token-specific history, kept separate from account progression.
+- Class system (owner, 2026-10-13): NFT rarity sets starting power, and the ten 1:1 tokens are the top tier with a signature ability in the single ability slot. Every number lives in `src/config/power.ts` and stays inside the caps in `docs/design/power.md`. Free players reach more power through earned upgrades. No combat power is ever sold.
 - NFT removal test (`docs/design/nft.md`): if removing ownership changes neither the play experience nor what persists, the integration fails.
-- No NFT, wallet, or database work until the Core Feel Gate passes (`docs/GATES.md`).
+- NFT benefits need server-verified ownership. A browser-supplied token or address is never trusted. NFT combat power for real holders stays switched off in production (`NFT_COMBAT`) until the Core Feel Gate passes; accounts, the database and ownership verification may be built before it (owner, 2026-10-13).
 - Never invent chain, contract, metadata, ownership method, or art-rights details. Verify first.
-- Out of scope for the MVP: Railway worker, multiplayer, custom smart contract, paid inference, $CHOG economy, second map, second ability, loot chests, gear grid, clans, season pass.
-- Gameplay never depends on $CHOG. Wallet connect is never required to play.
+- Out of scope for the MVP: Railway worker, custom smart contract, paid inference, $CHOG economy, real-money purchases and paid currency (monetization is decided later), second map, a second simultaneous ability, loot chests, gear grid, clans, season pass. (Online multiplayer was added by the owner in RC-8.)
+- Gameplay never depends on $CHOG. Wallet connect is never required for solo, 1v1 or 3v3.
+- Database: reuse the owner's Neon. Migrations are additive, live in their own schema (`room_zero`) and never drop or reset data.
 
 ## 4. Tasks, files, and who owns them
 
@@ -96,7 +98,7 @@ VERDICT      KEEP / MODIFY / CUT, one or two plain sentences
 ```
 
 - The SCOPE line is mandatory at all times. Every added system names an equal or larger cut. No cut named means no.
-- Automatic CUT: multiplayer, custom contract, $CHOG in gameplay, NFT-gated play, flat stat boosts, anything on the out-of-scope list in section 3.
+- Automatic CUT: custom contract, $CHOG in gameplay, NFT-gating solo, 1v1 or 3v3, selling combat power, stat values outside the caps in `docs/design/power.md`, anything on the out-of-scope list in section 3.
 - Automatic MODIFY: works on one platform only, gives information the player did not earn, has no readable telegraph.
 - Log CUTs in STATE (Cut list) with the reason, so they do not return in disguise.
 - Reject owner ideas that weaken the game. Give the reason in plain words and offer the cheapest version that keeps the spark. The owner decides; if they insist, log it and build it well.

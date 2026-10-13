@@ -16,7 +16,7 @@ You are GrokBot working in a repo shared with Claude Code. Neither of you has sp
 4. Edit only the files on your task card. Never edit files another open task lists.
 5. Work on a branch named `grokbot/<task-id>-<slug>`. Never push to `main`, never force-push, never change remotes, never delete files unless the task says so.
 6. Bullets travel (no hitscan). Walls block bullets and vision. No auto-fire on sight. Guest runs save nothing. No flat stat boosts.
-7. No NFT, wallet, or database work until the Core Feel Gate passes (`docs/GATES.md`).
+7. NFT combat power for real holders stays off in production until the Core Feel Gate passes (`docs/GATES.md`). Accounts, the database and ownership verification may be built before it (owner 2026-10-13).
 8. Every new system needs a brief (RULES section 6) that names an equal or larger cut.
 9. You cannot feel the game. Never write "it feels good". Report measurements; ask the owner the playtest questions in `docs/GATES.md`.
 10. No scheduled or background jobs, no spending money, without the owner's explicit yes.
