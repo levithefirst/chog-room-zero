@@ -1,7 +1,8 @@
 // The match simulation. Deterministic: fixed step, seeded random, no wall-clock time, no rendering.
 import { TUNING } from '../config/tuning';
 import { BOT_SPAWNS, ROOM_ZERO, ZONE_CENTRES, type BotSpawn } from '../config/map';
-import { heroById, type HeroDef } from '../config/heroes';
+import { heroById, type AbilityDef, type HeroDef } from '../config/heroes';
+import { BASE_POWER, type Power } from '../config/power';
 import { WEAPONS, damageAt, type WeaponDef } from '../config/weapons';
 import { angleDiff, cornerAssistDir, resolveCircle, segmentCircleT, type Box } from './geom';
 import { blockedByCover, bulletBlockT, markDynamic, parseLevel, sightClear, type Level } from './level';
@@ -34,6 +35,10 @@ export interface Actor {
   team: Team;
   name: string;
   hero: HeroDef;
+  /** The one ability slot: the hero's ability, or a 1:1 signature (src/config/power.ts). */
+  ability: AbilityDef;
+  /** Tier power (free, holder tier, demo). Applied once at spawn, except damageMul which applies per hit. */
+  power: Power;
   weapon: WeaponDef;
   view: ViewShape;
   x: number;
@@ -55,6 +60,13 @@ export interface Actor {
   dashX: number;
   dashY: number;
   revealLeft: number;
+  /** Signature effect timers (seconds left). */
+  shieldLeft: number;
+  frenzyLeft: number;
+  slowLeft: number;
+  slowMul: number;
+  /** Burst wind-up: seconds until it goes off (0 = none pending). */
+  burstLeft: number;
   stepAcc: number;
   // Presentation timers, counted in sim time so replays look the same.
   hitFlash: number;
@@ -92,7 +104,8 @@ export interface Bullet {
 }
 
 export type SoundType =
-  | 'step' | 'quietStep' | 'shot' | 'impact' | 'hit' | 'death' | 'reload' | 'pickup' | 'dash' | 'sonar' | 'barrier' | 'mend';
+  | 'step' | 'quietStep' | 'shot' | 'impact' | 'hit' | 'death' | 'reload' | 'pickup' | 'dash' | 'sonar' | 'barrier' | 'mend'
+  | 'windup' | 'burst' | 'scream' | 'shield' | 'frenzy';
 
 /** The one sound event bus: feeds audio, bot hearing, and the player's heard markers. */
 export interface SoundEvent {
@@ -203,13 +216,15 @@ export function viewFor(hero: HeroDef, sg: Sidegrade): ViewShape {
   return { range: hero.vision.range * sg.rangeMul, coneRad: hero.vision.coneDeg * sg.coneMul * DEG, nearRadius: TUNING.vision.nearRadius };
 }
 
-function makeActor(id: number, team: Team, name: string, hero: HeroDef, sg: Sidegrade, x: number, y: number, facing: number): Actor {
+function makeActor(id: number, team: Team, name: string, hero: HeroDef, sg: Sidegrade, x: number, y: number, facing: number, power: Power = BASE_POWER): Actor {
   const weapon = weaponFor(hero, sg);
+  const ab = power.signature ?? hero.ability;
+  const maxHp = Math.round(hero.maxHp * power.hpMul);
   return {
-    id, team, name, hero, weapon, view: viewFor(hero, sg), x, y, vx: 0, vy: 0, facing,
-    hp: hero.maxHp, maxHp: hero.maxHp, armor: hero.maxArmor, maxArmor: Math.max(hero.maxArmor, 50), alive: true,
+    id, team, name, hero, ability: { ...ab, cooldown: ab.cooldown * power.cooldownMul }, power, weapon, view: viewFor(hero, sg), x, y, vx: 0, vy: 0, facing,
+    hp: maxHp, maxHp, armor: hero.maxArmor + power.armor, maxArmor: Math.max(hero.maxArmor, 50) + power.armor, alive: true,
     ammo: weapon.magazine, reserve: weapon.reserve, cooldown: 0, reloadLeft: 0, abilityCd: 0, dashLeft: 0, dashX: 0, dashY: 0,
-    revealLeft: 0, stepAcc: 0, hitFlash: 0, muzzle: 0, deadFor: 0, lastSpread: weapon.spreadDeg, lastHitTick: -999, lastHitFrom: null,
+    revealLeft: 0, shieldLeft: 0, frenzyLeft: 0, slowLeft: 0, slowMul: 1, burstLeft: 0, stepAcc: 0, hitFlash: 0, muzzle: 0, deadFor: 0, lastSpread: weapon.spreadDeg, lastHitTick: -999, lastHitFrom: null,
     shots: 0, bullets: 0, hits: 0, kills: 0, damageDealt: 0, damageTaken: 0, death: null, zoneTick: -999,
   };
 }
@@ -218,13 +233,15 @@ export interface WorldOptions {
   seed?: number;
   hero?: string;
   sidegrade?: Sidegrade;
+  /** Solo player's tier power (verified holder with NFT combat on, or labelled demo). Bots are always base power. */
+  power?: Power;
   map?: readonly string[];
   bots?: BotSpawn[];
   log?: boolean;
   /** Danger zone on (the game and the server turn it on; most unit tests leave it off to isolate a rule). */
   zone?: boolean;
   /** Online match: these humans instead of the solo player and bots (actor ids follow the array order). */
-  versus?: { name: string; hero: string; team: 'alpha' | 'bravo'; x: number; y: number; facing: number }[];
+  versus?: { name: string; hero: string; team: 'alpha' | 'bravo'; x: number; y: number; facing: number; power?: Power }[];
   friendlyFire?: boolean;
 }
 
@@ -233,7 +250,7 @@ export function createWorld(opts: WorldOptions = {}): World {
   const seed = (opts.seed ?? TUNING.seed) | 0;
   const brains = new Map<number, Brain>();
   if (opts.versus) {
-    const actors = opts.versus.map((v, i) => makeActor(i, v.team, v.name, heroById(v.hero), NO_SIDEGRADE, v.x, v.y, v.facing));
+    const actors = opts.versus.map((v, i) => makeActor(i, v.team, v.name, heroById(v.hero), NO_SIDEGRADE, v.x, v.y, v.facing, v.power));
     const spawns = (['alpha', 'bravo'] as const).map((t) => {
       const m = opts.versus!.filter((v) => v.team === t);
       return { x: m.reduce((a, v) => a + v.x, 0) / Math.max(1, m.length), y: m.reduce((a, v) => a + v.y, 0) / Math.max(1, m.length) };
@@ -246,7 +263,7 @@ export function createWorld(opts: WorldOptions = {}): World {
       zone: opts.zone === false ? null : planZone(level, seed, ZONE_CENTRES, TUNING.zone, spawns),
     };
   }
-  const actors: Actor[] = [makeActor(0, 'player', 'You', heroById(opts.hero ?? 'kettle'), opts.sidegrade ?? NO_SIDEGRADE, level.playerSpawn.x, level.playerSpawn.y, 0)];
+  const actors: Actor[] = [makeActor(0, 'player', 'You', heroById(opts.hero ?? 'kettle'), opts.sidegrade ?? NO_SIDEGRADE, level.playerSpawn.x, level.playerSpawn.y, 0, opts.power)];
   (opts.bots ?? BOT_SPAWNS).forEach((b, i) => {
     const [tx, ty] = b.patrol[0];
     const a = makeActor(i + 1, 'bot', b.name, heroById(b.hero), NO_SIDEGRADE, tx + 0.5, ty + 0.5, Math.PI);
@@ -314,32 +331,32 @@ function startReload(w: World, a: Actor): void {
 
 function useAbility(w: World, a: Actor, inp: ActorInput): void {
   const A = TUNING.abilities;
-  const ab = a.hero.ability;
+  const ab = a.ability;
   a.abilityCd = ab.cooldown;
   switch (ab.kind) {
     case 'dash': {
       let dx = inp.moveX, dy = inp.moveY;
       const d = Math.hypot(dx, dy);
       if (d === 0) { dx = Math.cos(a.facing); dy = Math.sin(a.facing); } else { dx /= d; dy /= d; }
-      a.dashLeft = A.dashSeconds;
+      a.dashLeft = ab.seconds ?? A.dashSeconds;
       a.dashX = dx;
       a.dashY = dy;
       emit(w, 'dash', a.x, a.y, TUNING.sound.quietStep, a);
       break;
     }
     case 'sonar':
-      a.revealLeft = A.sonarSeconds;
+      a.revealLeft = ab.seconds ?? A.sonarSeconds;
       emit(w, 'sonar', a.x, a.y, A.sonarSound, a);
       break;
     case 'barrier': {
       const cx = a.x + Math.cos(a.facing) * 1.1, cy = a.y + Math.sin(a.facing) * 1.1;
       // Axis-aligned slab across the facing direction.
       const horizontal = Math.abs(Math.sin(a.facing)) > Math.abs(Math.cos(a.facing));
-      const hl = A.barrierLength / 2, hd = A.barrierDepth / 2;
+      const hl = (ab.length ?? A.barrierLength) / 2, hd = A.barrierDepth / 2;
       const box: Box = horizontal
         ? { x0: cx - hl, y0: cy - hd, x1: cx + hl, y1: cy + hd }
         : { x0: cx - hd, y0: cy - hl, x1: cx + hd, y1: cy + hl };
-      w.barriers.push({ box, left: A.barrierSeconds, owner: a.id });
+      w.barriers.push({ box, left: ab.seconds ?? A.barrierSeconds, owner: a.id });
       w.level.coverBoxes.push(box);
       w.level.solidBoxes.push(box);
       markDynamic(w.level, box, 1);
@@ -347,11 +364,62 @@ function useAbility(w: World, a: Actor, inp: ActorInput): void {
       emit(w, 'barrier', cx, cy, TUNING.sound.ability, a);
       break;
     }
-    case 'mend':
-      a.hp = Math.min(a.maxHp, a.hp + A.mendAmount);
+    case 'mend': {
+      const heal = (t: Actor) => {
+        t.hp = Math.min(t.maxHp, t.hp + (ab.amount ?? A.mendAmount));
+        if (ab.armor) t.armor = Math.min(t.maxArmor, t.armor + ab.armor);
+      };
+      heal(a);
+      if (ab.allies) for (const t of w.actors) if (t !== a && t.alive && t.team === a.team && Math.hypot(t.x - a.x, t.y - a.y) <= (ab.radius ?? 0)) heal(t);
       emit(w, 'mend', a.x, a.y, TUNING.sound.reload, a);
       break;
+    }
+    case 'burst':
+      // Telegraph first: everyone in earshot hears the wind-up and sees the ring before it goes off (no surprise damage).
+      a.burstLeft = ab.windup ?? 0.5;
+      emit(w, 'windup', a.x, a.y, TUNING.sound.ability, a);
+      break;
+    case 'scream':
+      for (const t of hostilesInSight(w, a, ab.radius ?? 0)) { t.slowLeft = ab.seconds ?? 0; t.slowMul = ab.amount ?? 1; }
+      emit(w, 'scream', a.x, a.y, TUNING.sound.shot, a);
+      break;
+    case 'shield':
+      a.shieldLeft = ab.seconds ?? 0;
+      emit(w, 'shield', a.x, a.y, TUNING.sound.ability, a);
+      break;
+    case 'frenzy':
+      a.frenzyLeft = ab.seconds ?? 0;
+      emit(w, 'frenzy', a.x, a.y, TUNING.sound.ability, a);
+      break;
   }
+}
+
+/** Living hostiles within r of a with a clear line (walls block signature effects the same way they block bullets). */
+function hostilesInSight(w: World, a: Actor, r: number): Actor[] {
+  return w.actors.filter((t) => t.alive && t.team !== a.team && Math.hypot(t.x - a.x, t.y - a.y) <= r && sightClear(w.level, a.x, a.y, t.x, t.y));
+}
+
+function detonate(w: World, a: Actor): void {
+  const ab = a.ability;
+  for (const t of hostilesInSight(w, a, ab.radius ?? 0)) {
+    if (t.shieldLeft > 0) continue;
+    const raw = (ab.amount ?? 0) * a.power.damageMul;
+    const m = mitigate(t.armor, raw, ab.armorPen ?? 0);
+    t.armor -= m.armor;
+    t.hp -= m.hp;
+    t.hitFlash = TUNING.render.hitFlash;
+    t.lastHitTick = w.tick;
+    t.lastHitFrom = { x: a.x, y: a.y };
+    a.damageDealt += raw;
+    t.damageTaken += m.hp + m.armor;
+    const killed = t.hp <= 0;
+    w.hits.push({ target: t.id, by: a.id, x: t.x, y: t.y, fromX: a.x, fromY: a.y, hpDamage: m.hp, armorDamage: m.armor, killed });
+    if (killed) {
+      a.kills++;
+      down(w, t, { cause: 'shot', killerId: a.id, weapon: ab.name, fromX: a.x, fromY: a.y, toX: t.x, toY: t.y, tick: w.tick });
+    }
+  }
+  emit(w, 'burst', a.x, a.y, TUNING.sound.shot, a);
 }
 
 function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
@@ -364,9 +432,16 @@ function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
   }
   a.abilityCd = Math.max(0, a.abilityCd - dt);
   a.revealLeft = Math.max(0, a.revealLeft - dt);
+  a.shieldLeft = Math.max(0, a.shieldLeft - dt);
+  a.frenzyLeft = Math.max(0, a.frenzyLeft - dt);
+  a.slowLeft = Math.max(0, a.slowLeft - dt);
+  if (a.burstLeft > 0) {
+    a.burstLeft = Math.max(0, a.burstLeft - dt);
+    if (a.burstLeft === 0) detonate(w, a);
+  }
   if (inp.ability && a.abilityCd === 0) useAbility(w, a, inp);
 
-  const speedMul = a.hero.speed;
+  const speedMul = a.hero.speed * (a.slowLeft > 0 ? a.slowMul : 1);
   if (a.dashLeft > 0) {
     a.dashLeft = Math.max(0, a.dashLeft - dt);
     a.vx = a.dashX * TUNING.abilities.dashSpeed;
@@ -420,7 +495,7 @@ function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
     startReload(w, a);
     if (a.reloadLeft > 0) return;
   }
-  if (inp.firing && a.cooldown === 0 && a.ammo > 0) {
+  if (inp.firing && a.cooldown === 0 && a.ammo > 0 && a.shieldLeft === 0) {
     const spread = a.lastSpread * DEG;
     for (let i = 0; i < W.pellets; i++) {
       // Pellets fan evenly across the spread with a little jitter; single shots are random within it.
@@ -490,7 +565,9 @@ function stepBullets(w: World, dt: number): void {
 }
 
 function damage(w: World, t: Actor, by: Actor, b: Bullet, hx: number, hy: number): void {
-  const raw = damageAt(b.weapon, Math.hypot(hx - b.ox, hy - b.oy)) * (by.team === 'bot' ? TUNING.bots.damageMul : 1);
+  // Gold Shell: the bullet stops on the shell and does nothing (the hit spark still shows where it landed).
+  const raw = t.shieldLeft > 0 ? 0
+    : damageAt(b.weapon, Math.hypot(hx - b.ox, hy - b.oy)) * (by.team === 'bot' ? TUNING.bots.damageMul : 1) * by.power.damageMul * (by.frenzyLeft > 0 ? by.ability.amount ?? 1 : 1);
   const m = mitigate(t.armor, raw, b.weapon.armorPen);
   t.armor -= m.armor;
   t.hp -= m.hp;
@@ -608,7 +685,7 @@ function invalidatePaths(w: World): void {
 /** Hostiles a viewer's sonar is revealing right now (ignores walls, by design of the ability). */
 export function revealed(w: World, viewer: Actor): Actor[] {
   if (viewer.revealLeft <= 0) return [];
-  const R = TUNING.abilities.sonarRadius;
+  const R = viewer.ability.radius ?? TUNING.abilities.sonarRadius;
   return w.actors.filter((a) => a.alive && a.team !== viewer.team && Math.hypot(a.x - viewer.x, a.y - viewer.y) <= R);
 }
 

@@ -45,7 +45,7 @@ export function createAutopilot(seed: number, aimErrDeg = 3): Autopilot {
         else if (d > want) { inp.moveX = (seen.x - p.x) / d; inp.moveY = (seen.y - p.y) / d; inp.quiet = false; }
         inp.firing = clear && d <= want + 0.5 && p.ammo > 0 && p.reloadLeft <= 0;
         if (p.ammo === 0) inp.reload = true;
-        if (p.hero.ability.kind !== 'mend' && p.abilityCd === 0) inp.ability = true;
+        if (p.ability.kind !== 'mend' && p.abilityCd === 0) inp.ability = true;
         if (zoneSpot) {
           // Fight on the way in: keep shooting what it sees, but the feet go to the zone.
           if (--repath <= 0 || path.length === 0) { path = findPath(w.level, p.x, p.y, zoneSpot.x, zoneSpot.y); repath = 30; }
@@ -72,7 +72,7 @@ export function createAutopilot(seed: number, aimErrDeg = 3): Autopilot {
           if (!hitBy) inp.aim = Math.atan2(inp.moveY, inp.moveX);
         }
       }
-      if (p.hero.ability.kind === 'mend' && p.hp < p.maxHp * 0.55 && p.abilityCd === 0) inp.ability = true;
+      if (p.ability.kind === 'mend' && p.hp < p.maxHp * 0.55 && p.abilityCd === 0) inp.ability = true;
       return inp;
     },
   };

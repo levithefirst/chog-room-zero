@@ -47,7 +47,7 @@ export function nextTip(s: TipState, shown: ReadonlySet<TipId>): TipId | null {
 const P = TUNING.pickups;
 
 /** Tip text. `touch` picks the control words; `ability` is the operator's own ability. */
-export function tipText(id: TipId, touch: boolean, ability: { kind: AbilityKind; name: string }): string {
+export function tipText(id: TipId, touch: boolean, ability: { kind: AbilityKind; name: string; text?: string }): string {
   const abilityKey = touch ? 'the ability button' : 'Space';
   switch (id) {
     case 'pickup-health': return `<b>Health</b> pack: walk over it to heal ${P.health.amount}.`;
@@ -57,13 +57,15 @@ export function tipText(id: TipId, touch: boolean, ability: { kind: AbilityKind;
     case 'hurt': return 'Hit! The <b>red arc</b> points at the shooter. Break line of sight behind a wall.';
     case 'cover': return 'Crates and slabs <b>stop bullets</b>. Shoot over them from right behind.';
     case 'ability': {
-      const what: Record<AbilityKind, string> = {
+      const what: Partial<Record<AbilityKind, string>> = {
         mend: 'restores 35 health. Save it for after a fight.',
         dash: 'is a short, quiet burst of speed where you move.',
         sonar: 'shows every hostile within 14 m for 2.5 s. They hear it.',
         barrier: 'drops waist-high cover ahead. It stops bullets, not sight.',
       };
-      return `<b>${ability.name}</b> (${abilityKey}) ${what[ability.kind]}`;
+      // A 1:1 signature replaces the hero ability and explains itself.
+      const sig = !(ability.kind in what) || !['Patch', 'Slip', 'Ping', 'Slab'].includes(ability.name);
+      return `<b>${ability.name}</b> (${abilityKey}) ${sig && ability.text ? ability.text : what[ability.kind] ?? ''}`;
     }
   }
 }

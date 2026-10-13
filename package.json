@@ -13,12 +13,14 @@
     "server": "node dist-server/index.js"
   },
   "dependencies": {
+    "@neondatabase/serverless": "1.1.0",
     "@noble/curves": "^2.4.0",
     "@noble/hashes": "^2.4.0",
     "pixi.js": "^8.22.0",
     "ws": "^8.22.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "@types/ws": "^8.18.2",
     "typescript": "^7.0.2",
     "vite": "^8.3.4",

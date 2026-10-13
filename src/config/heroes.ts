@@ -1,6 +1,7 @@
 // Hero archetypes. Adding a hero means adding an entry here: weapon, body, vision, one ability.
 // Bots use the same entries. Names are original to this game.
-export type AbilityKind = 'dash' | 'sonar' | 'barrier' | 'mend';
+// The last four exist only as 1:1 signature abilities (src/config/power.ts).
+export type AbilityKind = 'dash' | 'sonar' | 'barrier' | 'mend' | 'burst' | 'scream' | 'shield' | 'frenzy';
 
 export interface AbilityDef {
   kind: AbilityKind;
@@ -8,6 +9,15 @@ export interface AbilityDef {
   cooldown: number;
   // Plain description shown on hero select.
   text: string;
+  /** Signature overrides of the kind's TUNING.abilities numbers. Hero abilities leave these unset. */
+  seconds?: number;
+  amount?: number;
+  radius?: number;
+  armor?: number;
+  allies?: boolean;
+  windup?: number;
+  armorPen?: number;
+  length?: number;
 }
 
 export interface HeroDef {
@@ -26,7 +36,7 @@ export interface HeroDef {
   accent: number;
 }
 
-export const ABILITIES: Record<AbilityKind, AbilityDef> = {
+export const ABILITIES: Record<'dash' | 'sonar' | 'barrier' | 'mend', AbilityDef> = {
   dash: { kind: 'dash', name: 'Slip', cooldown: 6, text: 'Short burst of speed in the move direction. Quiet.' },
   sonar: { kind: 'sonar', name: 'Ping', cooldown: 14, text: 'Shows every hostile within 14 m for 2.5 s. They hear the ping.' },
   barrier: { kind: 'barrier', name: 'Slab', cooldown: 16, text: 'Drops a waist-high slab ahead for 12 s. Stops bullets, not sight.' },

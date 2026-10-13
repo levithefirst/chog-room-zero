@@ -280,7 +280,7 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
   }
   // Abilities, used for a readable reason.
   if (a.abilityCd === 0) {
-    const k = a.hero.ability.kind;
+    const k = a.ability.kind;
     if (k === 'mend' && a.hp < a.maxHp * 0.6) out.ability = true;
     if (k === 'dash' && br.state === 'cover' && br.path.length > 2) out.ability = true;
     if (k === 'sonar' && (br.state === 'investigate' || br.state === 'search') && br.timer > 0.5) out.ability = true;

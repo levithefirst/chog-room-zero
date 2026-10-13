@@ -662,7 +662,7 @@ async function start() {
     const me = world.actors[0];
     $('hero').innerHTML = `${esc(me.hero.name)} · <b>Online ${esc(onlineMode)}</b>`;
     $('wname').textContent = me.weapon.name;
-    $('abl').innerHTML = `${esc(me.hero.ability.name)}<small class="keyhint">Space</small>`;
+    $('abl').innerHTML = `${esc(me.ability.name)}<small class="keyhint">Space</small>`;
     $('pips').innerHTML = world.actors.filter((a) => a.team !== me.team).map(() => '<i></i>').join('');
     lastHud = '';
     showHint(`Online ${esc(onlineMode)}: ${MODE_SIZE[onlineMode] / 2} a side, real players. Your side is ringed green.`, 5);
@@ -845,7 +845,7 @@ async function start() {
     if (!id) return;
     shownTips.add(id);
     saveShownTips(localStorage, shownTips);
-    showHint(tipText(id, input.mode === 'touch', p.hero.ability), 5);
+    showHint(tipText(id, input.mode === 'touch', p.ability), 5);
     sinceHint = 0;
   }
 
@@ -1040,7 +1040,7 @@ async function start() {
     // HUD: only touch the DOM when a value changed.
     const p = player(world);
     const left = world.actors.filter((a) => a.team !== p.team && a.alive).length;
-    const cdShare = p.abilityCd / p.hero.ability.cooldown;
+    const cdShare = p.abilityCd / p.ability.cooldown;
     const reloadShare = p.reloadLeft > 0 ? 1 - p.reloadLeft / p.weapon.reloadSeconds : 0;
     const key = `${Math.ceil(p.hp)}|${Math.ceil(p.armor)}|${p.ammo}|${p.reserve}|${left}|${Math.round(cdShare * 60)}|${Math.round(reloadShare * 40)}`;
     if (key !== lastHud) {
