@@ -43,10 +43,11 @@ Last verified: 2026-10-13 by claude (RC-8).
 - RC-8 (H16): touch pickups, true-size CHOG-inspired operators, solid cover for every bullet (7 scenarios), danger zone, PROVISIONAL palette (CSS + Pixi), authoritative online server + client (not deployed).
 - RC-7 (branch `ccr-e7fadb8f-qtochk`, H15): boot screen, main menu, callsign, controls diagram, operator portraits, player card (Player/Operators/Medals/Loadout), 12 medals, settings, contextual tips, pickup feedback, results with medals, optional sign-in functions. Reference map: `docs/REFERENCE-MAP.md`.
 
-## Automated tests (EVIDENCE, Node 22.22, 4 cores; RC-7, see H15 for bundle and counts)
-`npx vitest run` 305/305 (35 files). Headless Chrome (emulated; NOT devices) on the local build: rc7-menus 7/7 viewports, rc6-launch 6/6, rc4-matrix 12/12, rc-e2e 11/11, rc3-input-probe 6/6, p1ft-e2e 12/12, rc2-preview-checks 4/4, rc5-touchplay x4, rc-autoplay SCRIPTED wins desktop x4 + touch x3, ring 20/20. Vercel preview: `/api/auth/config|session|google/start` answer as designed (not configured).
+## Automated tests (EVIDENCE, Node 22.22, 4 cores; RC-8, details H16)
+`npx vitest run` 369/369 (41 files). Headless Chrome (emulated; NOT devices) on the local build of 85572dd (= the preview's index-BMbTTpTN.js): rc8-shots 3/3 viewports (16 checks each), rc8-online 1v1 + 3v3 + 5v5 (one Chrome process per player, loopback), rc7-menus 7/7, rc6-launch 6/6, rc4-matrix 12/12, rc-e2e 11/11, rc3-input-probe 6/6, p1ft-e2e 12/12, rc2-preview-checks 4/4, rc5-touchplay x2, rc-autoplay SCRIPTED wins x4 (Mop needed a disclosed seed), ring 20/20.
 
 ## Not performed (needs the owner)
+- RC-8: online over a real network, a hosted game server, touch input online, zone and operator readability by a person, Mop balance (scripted Mop wins ~3% of seeds).
 - Pixel 7 / iPhone 13 / any real tablet (Android Chrome fullscreen + lock, iOS Safari turned stage and safe areas), real-GPU FPS, feel, fairness, audio by ear, a human win, the demo video, scripted browser checks against the live URL (this container cannot reach *.vercel.app; the bundle is matched by hash instead).
 
 ## Gates
@@ -55,11 +56,11 @@ Core Feel Gate: BLOCKED on owner playtests. G10 interface + mock only (BLOCKER: 
 ## Current task
 | Id | Owner | Branch | Files | Done when | Status |
 |---|---|---|---|---|---|
-| RC-6 | claude | ccr-e7fadb8f-qtochk | see H14 | Landscape launch | done; was production (62bccd8), now the first rollback target |
-| RC-7 | claude | ccr-e7fadb8f-qtochk (from a55b57b) | `index.html`, `vite.config.ts`, `tsconfig.json`, `package*.json`, `api/**`, `src/{main.ts,audio/audio.ts,input/input.ts,render/render.ts,sim/match.ts}`, `src/ui/{art,auth,medals,profile,records,screens,stage,tips}.ts`, `tests/{rc7-*,rc-records}.test.ts`, `tools/rc7-menus.mjs`, `README.md`, `docs/{AUTH,REFERENCE-MAP,DEV,RELEASE,STATE,HANDOFFS}.md` | Owner "MASTER EXECUTION PROMPT" 2026-10-13: reference-driven menus, profile, medals, settings, tips, sign-in; verified preview; production only with the owner's yes | done; 03a2409 in production on both domains (owner approved 2026-10-13) |
+| RC-7 | claude | ccr-e7fadb8f-qtochk | see H15 | Menus, profile, medals, settings, tips, sign-in | done; 03a2409 in production |
+| RC-8 | claude | ccr-e7fadb8f-qtochk, PR #10 | see H16 | Owner "COMPLETE GAMEPLAY, COMBAT, MULTIPLAYER & BRAND IDENTITY UPGRADE" 2026-10-13: pickups, operators, cover, zone, PROVISIONAL palette, online | done on the branch; preview 85572dd; production and server hosting wait for the owner |
 
-Done rows P1-RC-5 moved to `docs/HANDOFFS.md` (H11, H14 trim notes).
+Done rows P1-RC-6 moved to `docs/HANDOFFS.md` (H11, H14 trim notes).
 
 
 ## Handoffs
-Latest: H15 (2026-10-13, claude -> owner; RC-7). History: `docs/HANDOFFS.md`.
+Latest: H16 (2026-10-13, claude -> owner; RC-8). History: `docs/HANDOFFS.md`.
