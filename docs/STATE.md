@@ -56,10 +56,9 @@ Core Feel Gate: BLOCKED on owner playtests. G10 interface + mock only (BLOCKER: 
 ## Current task
 | Id | Owner | Branch | Files | Done when | Status |
 |---|---|---|---|---|---|
-| RC-7 | claude | ccr-e7fadb8f-qtochk | see H15 | Menus, profile, medals, settings, tips, sign-in | done; 03a2409 in production |
 | RC-8 | claude | ccr-e7fadb8f-qtochk, PR #10 | see H16 | Owner "COMPLETE GAMEPLAY, COMBAT, MULTIPLAYER & BRAND IDENTITY UPGRADE" 2026-10-13: pickups, operators, cover, zone, PROVISIONAL palette, online | done on the branch; hosted preview 6301737 + Render Free; production waits for the owner |
 
-Done rows P1-RC-6 moved to `docs/HANDOFFS.md` (H11, H14 trim notes).
+Done rows P1-RC-7 moved to `docs/HANDOFFS.md` (H11, H14 trim notes).
 
 
 ## Handoffs

@@ -242,3 +242,4 @@ Blockers        : hosted 3v3/5v5 and hosted reconnect need more simultaneous cli
 Not verified    : physical phones, separate home/mobile networks, touch online, long zone-only match on the hosted server, several hosted matches at once, Render logs
 Locked decisions touched : none. No production change, no merge, no paid plan
 Next smallest task : owner and a friend open the branch URL on two phones on different networks > Online > same private code > 1v1; or allow onrender.com in this environment so the agent runs tools/rc8-online.mjs (3v3/5v5) against Render. No files
+H17 trim note: STATE row RC-7 (menus, profile, medals, settings, tips, sign-in; done H15; 03a2409 in production) moved here.
