@@ -31,6 +31,7 @@ import { esc, howtoHtml, nickHtml, onlineHtml, onlineResultsHtml, profileHtml, r
 import { discoverWallets, fetchAuthConfig, fetchSession, googleSignIn, signOut, walletSignIn, type ServerIdentity } from './ui/auth';
 import { SIDEGRADES } from './sim/operators';
 import { createAutopilot, type Autopilot } from './debug/autopilot';
+import { createOnlineDriver } from './debug/onlineDriver';
 
 const $ = (id: string) => document.getElementById(id)!;
 const root = $('app');
@@ -126,6 +127,11 @@ async function start() {
   let onlineMode: Mode = '1v1';
   let netKey = '';
   let lastPing = 0;
+  // Hosted online tests (debug only): ?debug&online=1v1|3v3|5v5&code=XXXX&drive=1 joins that queue at boot and lets a
+  // scripted player (src/debug/onlineDriver.ts) send the controls. A browser service that cannot click can then play.
+  const ONLINE_AUTO = QS.has('debug') ? (QS.get('online') as Mode | null) : null;
+  const ONLINE_CODE = QS.has('debug') ? (QS.get('code') ?? '') : '';
+  const onlineDriver = QS.has('debug') && QS.get('drive') === '1' ? createOnlineDriver() : null;
 
   let phase: Phase = 'title';
   let heroId = (() => {
@@ -634,7 +640,7 @@ async function start() {
     if (!NET_URL) return;
     onlineMode = mode;
     net ??= new OnlineSession(NET_URL, () => displayName(profile), () => heroId, sessionStorage);
-    const code = ((document.getElementById('roomcode') as HTMLInputElement | null)?.value ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const code = ((document.getElementById('roomcode') as HTMLInputElement | null)?.value ?? ONLINE_CODE).toUpperCase().replace(/[^A-Z0-9]/g, '');
     net.joinQueue(mode, code.length >= 4 ? code.slice(0, 8) : undefined);
     render();
   }
@@ -704,7 +710,8 @@ async function start() {
   bootDone();
   // Reload or crash mid online match: this tab still holds its session token, so it quietly asks the server to
   // resume. If the match is still on, the server hands the operator back (pollOnline enters it); if not, nothing shows.
-  try {
+  if (NET_URL && ONLINE_AUTO && MODE_SIZE[ONLINE_AUTO]) { titleView = 'online'; joinOnline(ONLINE_AUTO); }
+  else try {
     if (NET_URL && sessionStorage.getItem('chog-room-zero:net-token')) {
       net = new OnlineSession(NET_URL, () => displayName(profile), () => heroId, sessionStorage);
       net.connect();
@@ -930,7 +937,7 @@ async function start() {
       // Online: send controls, show the server's state. Nothing here decides a hit, damage or the result.
       const p = player(world);
       const ps = renderer.toScreen(p.x, p.y);
-      const inp = input.read(ps.x, ps.y);
+      const inp = onlineDriver ? onlineDriver(world) : input.read(ps.x, ps.y);
       net.sendInput(p.alive ? inp : { ...inp, firing: false, moveX: 0, moveY: 0 }, performance.now());
       net.update(p.alive ? inp.aim : null);
       for (const ev of net.takeEvents()) { world.sounds = ev.sounds; world.hits = ev.hits; afterStep(); }
