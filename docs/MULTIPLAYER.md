@@ -1,7 +1,8 @@
 # Online multiplayer (RC-8)
 
-Status 2026-10-13: **hosted on Render Free** (`https://room-zero-game.onrender.com`, owner-created), connected to the RC-8
-preview only. 1v1 verified end to end on the hosted server; 3v3/5v5 hosted runs and real devices still to do (below).
+Status 2026-10-13: **in production** (owner release order 2026-10-13). Game server on Render Free
+(`https://room-zero-game.onrender.com`, owner-created), used by https://chogroomzero.xyz, https://chog-room-zero.vercel.app
+and the RC-8 branch preview. 1v1 verified on the hosted server; 3v3/5v5 hosted runs and real devices still to do (below).
 Solo play against bots is unchanged and needs no server.
 
 ## Before RC-8
@@ -60,9 +61,9 @@ can see. Sounds: those the player can hear (same hearing rule as solo). So a mod
 
 | Mode | Implemented | Tested with independent clients in one authoritative match | Deployed |
 |---|---|---|---|
-| 1v1 | yes | yes: 2 browser processes, loopback, incl. mid-match reload and resume; HOSTED: 2 external browsers via the preview and Render, full match | Render Free, preview only |
-| 3v3 | yes | yes: 6 browser processes, loopback; hosted not run | Render Free, preview only |
-| 5v5 | yes | yes: 10 browser processes, loopback (4-core machine at load ~36: slow frames, match still completed); hosted not run | Render Free, preview only |
+| 1v1 | yes | yes: 2 browser processes, loopback, incl. mid-match reload and resume; HOSTED: 2 external browsers via the preview and Render, full match | Render Free, production + branch preview |
+| 3v3 | yes | yes: 6 browser processes, loopback; hosted not run | Render Free, production + branch preview |
+| 5v5 | yes | yes: 10 browser processes, loopback (4-core machine at load ~36: slow frames, match still completed); hosted not run | Render Free, production + branch preview |
 
 Not tested: real internet latency and packet loss, phones or touch input online (the touch path produces the same
 controls as in solo, but no online run used it), more than one match at a time on the server, a hosted server.
@@ -96,8 +97,9 @@ then Online says plainly that the server is not deployed. Owner: create the serv
 `render.yaml` (repo root) is a Render Blueprint for exactly one service: `room-zero-game`, **plan free** (Render's
 default for an omitted plan is the paid 0.5c-512mb), region frankfurt, branch `ccr-e7fadb8f-qtochk`, build
 `npm ci && npm run build:server`, start `npm run server`, health check `/`. Environment variable names:
-`NODE_VERSION` (22.22.0, the tested runtime; `package.json` engines has no upper bound) and `ALLOWED_ORIGINS` (the
-RC-8 preview's stable branch URL only). `PORT` is provided by Render. No database, no disk, no secrets.
+`NODE_VERSION` (22.22.0, the tested runtime; `package.json` engines has no upper bound) and `ALLOWED_ORIGINS`
+(`https://chogroomzero.xyz`, `https://chog-room-zero.vercel.app` and the RC-8 preview's stable branch URL; exact match,
+no wildcard; production domains added in the release commit 3743ded). `PORT` is provided by Render. No database, no disk, no secrets.
 
 Owner steps (this agent has no Render access, and this environment's network blocks render.com and onrender.com):
 1. dashboard.render.com > New > Blueprint > connect GitHub repo `levithefirst/chog-room-zero` > branch
@@ -132,8 +134,34 @@ to wake. Opening Online sends an HTTP request that wakes it and retries the sock
   (owner dashboard only). All of these passed locally (`tools/rc8-online.mjs`, `tests/rc8-online.test.ts`).
 - Testers must use the branch URL https://chog-room-zero-git-ccr-e7fad-e59a4d-levithefirst-1227s-projects.vercel.app;
   per-deployment preview URLs are refused by `ALLOWED_ORIGINS` (HTTP 401 on the socket).
-- Debug hook for hosted checks: `?debug&online=1v1|3v3|5v5&code=XXXX&drive=1` joins at boot and lets a scripted
-  player send controls on a 50 ms timer; `<body data-netlog>` carries the server-reported state and result.
+- Invite link (all builds): `?online=1v1|3v3|5v5[&code=XXXX]` opens Online and joins that queue; the player still
+  plays with their own controls.
+- Test hooks (preview and local builds only; compiled out of production by `__TEST_HOOKS__` in `vite.config.ts`, false
+  when `VERCEL_ENV=production`): `&debug&drive=1` lets a scripted player send controls on a 50 ms timer,
+  `<body data-netlog>` carries the server-reported state, `?server=` points the client at another server, and
+  `__chog.net` exposes the session. Checked: the production bundle (`index-BBZliTaf.js`, byte-identical to a local
+  build with `VERCEL_ENV=production`) has no driver, no connection log, no `__chog.net`, and calls the server-URL helper
+  with an empty query string; a local production-flavoured build opened with `?debug&online=1v1&drive=1&server=...`
+  joined the baked-in server, ignored `?server=`, and both players stood still for 12 s.
+
+## Production release (2026-10-13, owner order "We're moving Room Zero to production. Execute the release now.")
+
+- Commit 3743ded (test hooks out of production, production origins in `render.yaml`). Vercel production deployment
+  `dpl_5kxf2ZzZ9MVdX3BUn46ZyhmoLSMS`, READY; get_alias: both production domains point to it; both serve
+  `index-BBZliTaf.js` (HTTP 200, the game boots to How to play). Vercel `VITE_GAME_SERVER_URL` (plain) added for
+  Production; the owner's sign-in variables untouched.
+- Render: the hosted allowlist now accepts both production domains and still refuses others (both shown below).
+  This agent has no Render access, so the mechanism is inferred, not seen: Blueprint sync of `render.yaml` on the push.
+- Production-origin sockets, read on the server: `/stats` `{"players":0,"queued":0,"rooms":0}` before; then with one
+  external browser on https://chogroomzero.xyz and one on https://chog-room-zero.vercel.app, both opening
+  `?online=1v1&code=PRODE5` (normal production client, no driver), `/stats` `{"players":2,"queued":0,"rooms":1}`: both
+  accepted and matched into a 1v1. The external browser renders at ~0 fps, so its own screen did not redraw; the
+  server count is the evidence. Gameplay in that match (snapshots, hits, result) was not observed from production.
+- Unlisted origin still refused on the hosted server: the per-deployment preview URL of 3743ded logged
+  `close 1006` before `open` on five tries in 18 s while the server was up.
+- PR #10 not merged: its base `grokbot/rc-1` is PR #9's head in the stacked chain #1-#9 to `setup/skill-system`, not a
+  production branch; every production deployment (RC-4, RC-6, RC-7 and now RC-8) is built from this branch's commit.
+  Merging #10 alone would fold RC-8 into PR #9 and break the "merge in order" rule. Owner decision.
 
 ## Run it locally
 
