@@ -71,7 +71,7 @@ export function titleHtml(c: ScreenCtx): string {
   const named = c.profile.nickname !== null;
   return `<div class="screen menu">
 <header class="topbar">
-  <button class="player-chip" data-act="profile" aria-label="Player card">${tokenSvg(fav ? fav.accent : null)}<span><b>${esc(displayName(c.profile))}</b><small>${named ? `ID ${c.profile.id}` : 'Tap to pick a callsign'}</small></span>${named ? '' : '<i class="new">NEW</i>'}</button>
+  <button class="player-chip" data-act="profile" aria-label="Player card">${tokenSvg(fav ? fav.accent : null, fav?.id)}<span><b>${esc(displayName(c.profile))}</b><small>${named ? `ID ${c.profile.id}` : 'Tap to pick a callsign'}</small></span>${named ? '' : '<i class="new">NEW</i>'}</button>
   <div class="bar-right"><button class="icon-btn" data-act="settings" aria-label="Settings">${ICON.gear}</button></div>
 </header>
 <div class="menu-body">
@@ -106,7 +106,7 @@ export function howtoHtml(c: ScreenCtx): string {
 <tr><td>Aim / shoot</td><td>${t ? 'Right thumb; push past the ring to fire' : 'Mouse; hold left click'}</td></tr>
 <tr><td>Creep (quiet)</td><td>${t ? 'Half push on the left stick' : 'Hold Shift'}</td></tr>
 <tr><td>Ability</td><td>${t ? 'Ability button' : 'Space'} · reload ${t ? 'button' : 'R'}</td></tr>
-<tr><td>Gold rings</td><td>A noise you heard, not saw. Running is loud; enemies hear you too.</td></tr>
+<tr><td>Pale rings</td><td>A noise you heard, not saw. Running is loud; enemies hear you too.</td></tr>
 <tr><td>Win</td><td>Down all five hostiles. Bots only shoot from inside your sight range.</td></tr></table></div>
 <div class="btns"><button class="btn primary" data-act="howto-close">Got it</button></div></div>`;
 }
@@ -151,7 +151,7 @@ function playerCard(c: ScreenCtx): string {
     return m && c.medals[m.id] ? `<span class="pin" title="${esc(m.name)}">${medalSvg(m, true)}</span>` : '<span class="pin empty" title="Pin a medal from the Medals tab">+</span>';
   }).join('');
   const linked = c.profile.linked.map((l) => `<span class="linkchip">${l.provider === 'google' ? 'Google' : 'Wallet'} · ${esc(l.label)}</span>`).join('');
-  return `<aside class="pcard"><div class="pcard-head">${tokenSvg(fav ? fav.accent : null)}<span><b>${esc(displayName(c.profile))}</b><small>ID ${c.profile.id}</small></span>
+  return `<aside class="pcard"><div class="pcard-head">${tokenSvg(fav ? fav.accent : null, fav?.id)}<span><b>${esc(displayName(c.profile))}</b><small>ID ${c.profile.id}</small></span>
 <button class="icon-btn small" data-act="nick" aria-label="Edit callsign">${ICON.edit}</button></div>
 <div class="pcard-art">${portraitSvg(show, 'p', show.id === c.heroId ? c.marking : null)}<span class="pcard-op">${fav ? 'Favourite' : 'Current'}: ${esc(show.name)}</span></div>
 <div class="pins">${pins}</div>${linked ? `<div class="links">${linked}</div>` : '<div class="links"><span class="linkchip dim">Guest · this device</span></div>'}</aside>`;

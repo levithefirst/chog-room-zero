@@ -1,3 +1,5 @@
+import { px } from './brand';
+
 // Every tunable number lives here (weapons in weapons.ts, heroes in heroes.ts). Each comment says what the
 // value should feel like. All values are PROPOSALS to tune by hand. 1 u is about 1 metre; time in seconds.
 
@@ -164,8 +166,9 @@ export const TUNING = {
   },
 
   render: {
-    // Bodies are drawn this many times the sim radius (~36 px at 844x390). Collision is unchanged.
-    actorScale: 1.45,
+    // Bodies are drawn at this many times the sim radius. RC-8: 1, the drawn operator IS the hitbox (was 1.45, which
+    // the owner read as an oversized circle that bullets missed). ~27 px across at 844x390, ~46 px at 1440x900.
+    actorScale: 1,
     // Canvas resolution cap (device pixel ratio). Fill cost scales with pixels.
     maxResolution: 1.5,
     viewWidthUnits: 22,
@@ -199,19 +202,26 @@ export const TUNING = {
   },
 
   palette: {
+    // RC-8: in-world colours come from the PROVISIONAL CHOG tokens (src/config/brand.ts), never typed in here.
     // Out-of-sight: the map stays readable but cooler and darker.
     // Unexplored: dark cool fog over the slate ambient; outlines stay faintly visible (never pitch black).
     fogUnexplored: 0x0f161c,
-    teamRing: 0x38e0c2,
-    // Team colour (player) and hostile faction.
-    team: 0xe6dfcc,
-    teamDark: 0x2a2620,
-    hostile: 0xc8502b,
-    hostileDark: 0x3a1610,
-    signal: 0xf2d98a,
-    hostileTracer: 0xff9a6b,
-    heal: 0x9fd18b,
-    armor: 0x8fb0c8,
-    ammo: 0xd9c27a,
+    // Ally ring (you, and teammates online).
+    teamRing: px('ally'),
+    // Player-side fills (overhead bar) and the hostile faction (outline, markers, bars).
+    team: px('health'),
+    teamDark: px('bgDeep'),
+    hostile: px('enemy'),
+    hostileDark: px('bgDeep'),
+    // Reticle, own tracers, heard-sound rings and reload arcs: cream reads on every floor value.
+    signal: px('cream'),
+    hostileTracer: px('dangerGlow'),
+    heal: px('health'),
+    armor: px('armor'),
+    ammo: px('ammo'),
+    // Soft glow under a pickup you would take (brand guide: pickup glows soft purple).
+    pickup: px('pickup'),
+    zone: px('dangerZone'),
+    zoneGlow: px('dangerGlow'),
   },
 } as const;

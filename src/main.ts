@@ -3,7 +3,8 @@ import { createInput, touchStick } from './input/input';
 import { createSummaryGate, overlayInputAllowed } from './input/gate';
 import { createAudio } from './audio/audio';
 import { fixedSteps } from './sim/sim';
-import { createWorld, hears, player, stepWorld, touchingFull, wants, IDLE_INPUT, type Pickup, type PickupKind, type World } from './sim/world';
+import { createWorld, hears, matchSeconds, player, stepWorld, touchingFull, wants, IDLE_INPUT, type Pickup, type PickupKind, type World } from './sim/world';
+import { outsideCircle, zoneAt } from './sim/zone';
 import { ROOM_ZERO } from './config/map';
 import { sightClear, walkable } from './sim/level';
 import { clampMarker } from './render/visibility';
@@ -227,7 +228,7 @@ async function start() {
     if (ringHintDone) return;
     ringHintDone = true;
     try { localStorage.setItem(RING_HINT_KEY, '1'); } catch { /* ignore */ }
-    showHint('Gold rings: a noise you <b>heard</b>, not saw. Enemies hear you too: running is loud, creeping is quiet.', 6);
+    showHint('Pale rings: a noise you <b>heard</b>, not saw. Enemies hear you too: running is loud, creeping is quiet.', 6);
   }
 
   // HUD panel rects for label avoidance (CHOG-HUD-002). Measured from the DOM, so safe-area insets count, and turned
@@ -816,6 +817,8 @@ async function start() {
   const ringFill = $('ringfill') as unknown as SVGCircleElement;
   const pipsEl = $('pips');
   let lastHud = '';
+  let lastZone = '';
+  let zoneTickLeft = 0;
 
   renderer.app.ticker.add((ticker) => {
     const dt = Math.min(0.1, ticker.deltaMS / 1000);
@@ -925,6 +928,27 @@ async function start() {
       const ab = $('ability');
       ab.style.setProperty('--cd', `${(1 - cdShare) * 360}deg`);
       ab.classList.toggle('ready', cdShare === 0);
+    }
+    // Danger zone HUD (RC-8): phase words + countdown; "Outside" and a red edge while it is hurting you.
+    if (world.zone) {
+      const zv = zoneAt(world.zone, matchSeconds(world));
+      const out = p.alive && outsideCircle(zv.circle, p.x, p.y);
+      const label = out ? 'Outside zone' : zv.phase === 'safe' ? 'Zone in' : zv.phase === 'warning' ? 'Closes in' : zv.phase === 'shrinking' ? 'Closing' : 'Final zone';
+      const secs = zv.left === Infinity ? '' : `${Math.floor(Math.ceil(zv.left) / 60)}:${String(Math.ceil(zv.left) % 60).padStart(2, '0')}`;
+      const zkey = `${label}|${secs}|${zv.phase}`;
+      if (zkey !== lastZone) {
+        lastZone = zkey;
+        $('zphase').textContent = label;
+        $('ztime').textContent = secs;
+        $('zone').classList.toggle('hot', zv.phase !== 'safe');
+        $('foes').classList.toggle('outside', out);
+      }
+      const hurtByZone = out && zv.dps > 0;
+      $('zoneedge').style.opacity = hurtByZone ? String(0.55 + 0.35 * (0.5 + 0.5 * Math.sin(performance.now() / 140))) : '0';
+      if (hurtByZone && phase === 'play') {
+        zoneTickLeft -= dt;
+        if (zoneTickLeft <= 0) { zoneTickLeft = 0.75; audio.play('hurt', 0, 0, 1, false, true); }
+      } else zoneTickLeft = 0;
     }
     const low = p.alive && p.hp / p.maxHp <= TUNING.render.lowHpShare;
     $('vignette').style.opacity = low ? String(0.45 + 0.35 * (0.5 + 0.5 * Math.sin(performance.now() / 180))) : '0';

@@ -15,13 +15,34 @@ import { player, revealed, wants, type Actor, type World } from '../sim/world';
 import type { Brain } from '../sim/bots';
 import { touchStick, AIM_DEADZONE, type Input } from '../input/input';
 import { bakeMap, type Baked } from './bake';
+import { chogParts, place, type ChogParts, type Oval } from '../ui/chogShape';
+import { px, type BrandToken } from '../config/brand';
+import { outsideCircle, zoneAt, type Circle } from '../sim/zone';
+import { matchSeconds } from '../sim/world';
 import { clampMarker, edgeAnchor, enemyDrawMode } from './visibility';
 
 const P = TUNING.palette;
 const R = TUNING.render;
 const DEG = Math.PI / 180;
 // Dark keyline around every body: separates it from any floor value.
-const KEYLINE = 0x0b0f12;
+const KEYLINE = px('bgDeep');
+
+// Operator art (src/ui/chogShape.ts), cached per hero. Every placed polygon gets its own array: Pixi keeps a
+// reference to the points until it renders, so a shared scratch array would draw the last shape in every slot.
+const PARTS = new Map<string, ChogParts>();
+const partsOf = (id: string) => { let p = PARTS.get(id); if (!p) { p = chogParts(id); PARTS.set(id, p); } return p; };
+function ovalPts(o: Oval, n = 14): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; out.push(o.x + Math.cos(a) * o.rx, o.y + Math.sin(a) * o.ry); }
+  return out;
+}
+const OVALS = new Map<Oval, number[]>();
+const ovalOf = (o: Oval) => { let v = OVALS.get(o); if (!v) { v = ovalPts(o); OVALS.set(o, v); } return v; };
+/** A unit-space dot on an operator, placed in the world. */
+function dotAt(a: { x: number; y: number; facing: number }, d: { x: number; y: number }, r: number) {
+  const c = Math.cos(a.facing), s = Math.sin(a.facing);
+  return { x: a.x + (d.x * c - d.y * s) * r, y: a.y + (d.x * s + d.y * c) * r };
+}
 
 // Pixi keeps a reference to a points array, so each circle needs its own (32 sides; Pixi's own looks octagonal at u scale).
 function circle(g: Graphics, x: number, y: number, r: number, n = 24): Graphics {
@@ -140,6 +161,8 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
   const lightLayer = new Container();
   let light: LightMesh | null = null;
   const props = new Graphics();
+  // Danger zone (RC-8): over the floor and cover, under bodies, so operators stay readable inside the red.
+  const zoneG = new Graphics();
   const labels = new Container();
   const marks = new Graphics();
   const actors = new Graphics();
@@ -149,7 +172,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
   const debugG = new Graphics();
   const debugLabels = new Container();
   const screen = new Graphics();
-  world.addChild(dimSprite, fogG, lightLayer, props, labels, marks, actors, bars, fxG, recapG, debugG, debugLabels);
+  world.addChild(dimSprite, fogG, lightLayer, props, zoneG, labels, marks, actors, bars, fxG, recapG, debugG, debugLabels);
   app.stage.addChild(world, screen);
 
   let level: Level;
@@ -224,7 +247,8 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
   }
 
   function drawBody(g: Graphics, a: Actor, hostile: boolean, marking: number | null, alert: boolean) {
-    // Drawn 1.45x the sim radius (~36 px at 844x390); collision stays 0.35 u.
+    // RC-8: the CHOG-inspired operator (src/ui/chogShape.ts) at its true sim size: valleys and spike tips straddle the
+    // 0.35 u hitbox, so a bullet that touches the drawn body hits and one that misses it misses.
     const r0 = TUNING.movement.radius * R.actorScale;
     let alpha = 1, r = r0;
     if (!a.alive) {
@@ -234,41 +258,58 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
     }
     // Walk bob: a small breathing pulse tied to the step cycle.
     const speed = Math.hypot(a.vx, a.vy);
-    if (a.alive && speed > 0.3) r *= 1 + 0.06 * Math.sin((a.stepAcc / TUNING.movement.stepDistance) * Math.PI * 2);
-    const fill = !a.alive ? 0x6f6a60 : a.hitFlash > 0 ? 0xffffff : hostile ? P.hostile : P.team;
-    const dark = hostile ? P.hostileDark : P.teamDark;
+    if (a.alive && speed > 0.3) r *= 1 + 0.05 * Math.sin((a.stepAcc / TUNING.movement.stepDistance) * Math.PI * 2);
+    const parts = partsOf(a.hero.id);
+    const col = (t: BrandToken) => px(t);
     // Soft drop shadow.
-    g.ellipse(a.x + 0.08, a.y + 0.14, r0 * 1.05, r0 * 0.85).fill({ color: 0x000000, alpha: 0.35 * alpha });
-    if (a.alive) drawWeapon(g, a, hostile ? 0x2a1a14 : 0x3a372f, dark);
-    const cos = Math.cos(a.facing), sin = Math.sin(a.facing);
-    if (hostile) {
-      // Hostile faction: angular arrowhead, dark outline. Never confusable with the round team body.
-      const px = -sin, py = cos;
-      const pts = [
-        a.x + cos * r * 1.2, a.y + sin * r * 1.2,
-        a.x + px * r * 1.05 - cos * r * 0.85, a.y + py * r * 1.05 - sin * r * 0.85,
-        a.x - cos * r * 0.35, a.y - sin * r * 0.35,
-        a.x - px * r * 1.05 - cos * r * 0.85, a.y - py * r * 1.05 - sin * r * 0.85,
-      ];
-      // Hostile ring first (under the body), then the body with a dark keyline.
-      if (a.alive) circle(g, a.x, a.y, r0 + 0.1).stroke({ width: 0.07, color: P.hostile, alpha: 0.9 });
-      g.poly(pts).fill({ color: fill, alpha }).stroke({ width: 0.075, color: KEYLINE, alpha });
-      if (alert && a.alive) {
-        // Telegraph: it has seen something and is about to commit.
-        g.poly([a.x - 0.13, a.y - r - 0.75, a.x + 0.13, a.y - r - 0.75, a.x, a.y - r - 0.42]).fill(P.signal);
-      }
-    } else {
-      if (a.alive) circle(g, a.x, a.y, r0 + 0.1).stroke({ width: 0.07, color: P.teamRing, alpha: 0.9 });
-      circle(g, a.x, a.y, r).fill({ color: fill, alpha }).stroke({ width: 0.075, color: KEYLINE, alpha });
-      circle(g, a.x, a.y, r * 0.55).stroke({ width: 0.08, color: marking ?? a.hero.accent, alpha });
+    g.ellipse(a.x + 0.06, a.y + 0.1, r0 * 1.1, r0 * 0.9).fill({ color: 0x000000, alpha: 0.35 * alpha });
+    // Team cue under the body, by SHAPE as well as colour: allies get a round ring, hostiles a jagged outline that
+    // follows the spikes (2 px class keyline), so the two never read alike even without colour.
+    if (a.alive) {
+      if (hostile) g.poly(place(parts.body, a.x, a.y, a.facing, r * 1.14)).stroke({ width: 0.1, color: P.hostile, alpha: 1 });
+      else circle(g, a.x, a.y, r0 * 1.42, 28).stroke({ width: 0.06, color: P.teamRing, alpha: 0.95 });
     }
+    if (a.alive) drawWeapon(g, a, hostile ? 0x2a1a14 : col('bgElevated'), KEYLINE);
+    const flash = a.alive && a.hitFlash > 0;
+    // Same purple body for every operator: friend or foe is told by the ring or jagged red outline and the bar colour.
+    const body = !a.alive ? col('disabled') : flash ? col('cream') : col('purple');
+    g.poly(place(parts.body, a.x, a.y, a.facing, r)).fill({ color: body, alpha }).stroke({ width: 0.045, color: KEYLINE, alpha });
+    if (a.alive && !hostile) g.poly(place(parts.body, a.x, a.y, a.facing, r * 0.97)).stroke({ width: 0.02, color: col('purpleBright'), alpha: 0.9 });
+    for (const gr of parts.gear) {
+      if (gr.poly) g.poly(place(gr.poly, a.x, a.y, a.facing, r)).fill({ color: col(gr.fill), alpha }).stroke(gr.stroke ? { width: 0.025, color: col(gr.stroke), alpha } : { width: 0 });
+    }
+    // Face, eyes (they look where the gun points), cheeks, hands.
+    g.poly(place(ovalOf(parts.face), a.x, a.y, a.facing, r)).fill({ color: hostile ? col('creamWarm') : col('cream'), alpha });
+    for (const gr of parts.gear) {
+      if (!gr.dot) continue;
+      const d = dotAt(a, gr.dot, r);
+      circle(g, d.x, d.y, gr.dot.r * r, 12).fill({ color: col(gr.fill), alpha });
+      if (gr.stroke) circle(g, d.x, d.y, gr.dot.r * r, 12).stroke({ width: 0.02, color: col(gr.stroke), alpha });
+    }
+    if (a.alive) {
+      for (const e of parts.eyes) {
+        const d = dotAt(a, e, r);
+        circle(g, d.x, d.y, e.r * r, 10).fill(KEYLINE);
+        const gl = dotAt(a, { x: e.x + 0.04, y: e.y - 0.04 }, r);
+        circle(g, gl.x, gl.y, e.r * r * 0.38, 6).fill(col('cream'));
+      }
+      for (const c of parts.cheeks) { const d = dotAt(a, c, r); circle(g, d.x, d.y, c.r * r, 8).fill({ color: hostile ? col('pinkSoft') : col('pink'), alpha: 0.85 }); }
+      for (const h of parts.hands) { const d = dotAt(a, h, r); circle(g, d.x, d.y, h.r * r, 10).fill(col('pink')).stroke({ width: 0.02, color: KEYLINE }); }
+    }
+    // Demo NFT marking colour (DEMO layer): a small badge on the back.
+    if (marking !== null && a.alive) { const d = dotAt(a, { x: -0.72, y: 0.36 }, r); circle(g, d.x, d.y, 0.06, 10).fill(marking).stroke({ width: 0.015, color: KEYLINE }); }
+    if (hostile && alert && a.alive) {
+      // Telegraph: it has seen something and is about to commit.
+      g.poly([a.x - 0.13, a.y - r - 0.75, a.x + 0.13, a.y - r - 0.75, a.x, a.y - r - 0.42]).fill(P.signal);
+    }
+    const cos = Math.cos(a.facing), sin = Math.sin(a.facing);
     if (!a.alive && a.deadFor > R.deathAnimSeconds * 0.5) {
       g.moveTo(a.x - 0.2, a.y - 0.2).lineTo(a.x + 0.2, a.y + 0.2).moveTo(a.x + 0.2, a.y - 0.2).lineTo(a.x - 0.2, a.y + 0.2)
-        .stroke({ width: 0.07, color: dark, alpha: 0.8 });
+        .stroke({ width: 0.07, color: KEYLINE, alpha: 0.8 });
     }
     if (a.alive && a.reloadLeft > 0) {
       const t = 1 - a.reloadLeft / a.weapon.reloadSeconds;
-      arc(g, a.x, a.y, r0 + 0.16, -Math.PI / 2, -Math.PI / 2 + t * Math.PI * 2, 20).stroke({ width: 0.05, color: P.signal, alpha: 0.85 });
+      arc(g, a.x, a.y, r0 * 1.7, -Math.PI / 2, -Math.PI / 2 + t * Math.PI * 2, 20).stroke({ width: 0.05, color: P.signal, alpha: 0.85 });
     }
     if (a.alive && a.muzzle > 0) {
       const W = a.weapon;
@@ -354,10 +395,10 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       // this" reads at a glance. Full health/armour/ammo: no ring, the pickup just sits there.
       if (me.alive && wants(me, p.kind)) {
         const pulse = 0.5 + 0.5 * Math.sin(w.tick / 9);
-        circle(props, p.x, p.y + bob, 0.48 + pulse * 0.08, 28).stroke({ width: 0.05, color: col, alpha: 0.35 + pulse * 0.4 });
+        circle(props, p.x, p.y + bob, 0.5 + pulse * 0.06, 28).fill({ color: P.pickup, alpha: 0.12 + pulse * 0.1 }).stroke({ width: 0.05, color: P.pickup, alpha: 0.45 + pulse * 0.4 });
       }
       props.ellipse(p.x + 0.05, p.y + 0.12, 0.34, 0.24).fill({ color: 0x000000, alpha: 0.35 });
-      props.roundRect(p.x - 0.3, p.y - 0.3 + bob, 0.6, 0.6, 0.1).fill(0x1d1f20).stroke({ width: 0.05, color: col });
+      props.roundRect(p.x - 0.3, p.y - 0.3 + bob, 0.6, 0.6, 0.1).fill(px('bgPanel')).stroke({ width: 0.05, color: col });
       if (p.kind === 'health') props.rect(p.x - 0.18, p.y - 0.06 + bob, 0.36, 0.12).rect(p.x - 0.06, p.y - 0.18 + bob, 0.12, 0.36).fill(col);
       else if (p.kind === 'armor') props.poly([p.x - 0.17, p.y - 0.17 + bob, p.x + 0.17, p.y - 0.17 + bob, p.x + 0.17, p.y + 0.02 + bob, p.x, p.y + 0.2 + bob, p.x - 0.17, p.y + 0.02 + bob]).fill(col);
       else for (let k = 0; k < 3; k++) props.rect(p.x - 0.17 + k * 0.13, p.y - 0.16 + bob, 0.08, 0.32).fill(col);
@@ -370,6 +411,31 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       const t = b.left / TUNING.abilities.barrierSeconds;
       props.rect(bx.x0, bx.y0, (bx.x1 - bx.x0) * t, 0.05).fill({ color: P.signal, alpha: 0.8 });
     }
+  }
+
+  // Dashed circle (the next safe circle during a warning): reads as "coming", not as a wall.
+  function dashed(g: Graphics, c: Circle, dashes: number) {
+    for (let i = 0; i < dashes; i++) {
+      const a0 = (i / dashes) * Math.PI * 2;
+      arc(g, c.x, c.y, c.r, a0, a0 + (Math.PI / dashes) * 1.1, 6);
+    }
+    return g;
+  }
+
+  /** Brand guide: zone fill #FF2D2D, edge glow #FF6B6B, a 1 px purple inner stroke. Fill at 22% instead of the guide's
+   * 60%: at 60% the floor, cover and bodies under it stop reading (token kept, treatment changed, docs/BRAND.md). */
+  function drawZone(w: World) {
+    zoneG.clear();
+    if (!w.zone) return;
+    const v = zoneAt(w.zone, matchSeconds(w));
+    const c = v.circle;
+    const m = 30;
+    zoneG.rect(-m, -m, level.w + m * 2, level.h + m * 2).fill({ color: P.zone, alpha: v.dps > 0 ? 0.22 : 0.12 });
+    circle(zoneG, c.x, c.y, c.r, 96).cut();
+    circle(zoneG, c.x, c.y, c.r + 0.12, 96).stroke({ width: 0.34, color: P.zoneGlow, alpha: 0.28 });
+    circle(zoneG, c.x, c.y, c.r, 96).stroke({ width: 0.1, color: P.zoneGlow, alpha: 0.95 });
+    circle(zoneG, c.x, c.y, c.r - 0.07, 96).stroke({ width: 0.03, color: px('purple'), alpha: 0.9 });
+    if (v.next) dashed(zoneG, v.next, 36).stroke({ width: 0.07, color: P.signal, alpha: 0.85 });
   }
 
   const r: Renderer = {
@@ -465,6 +531,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
         }
       }
       drawPickups(w, opts.hud ?? []);
+      drawZone(w);
 
       // Heard markers: rings, never a body. Corpses stay as decals.
       marks.clear();
@@ -587,6 +654,16 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       for (const da of fx.damageArcs) {
         const al = 1 - da.age / R.damageArcSeconds;
         arc(screen, ps.x, ps.y, ppu * 1.4, da.ang - 0.38, da.ang + 0.38, 12).stroke({ width: 6, color: P.hostile, alpha: 0.9 * al });
+      }
+      // Outside the danger zone: a red chevron next to you pointing the shortest way back in.
+      if (w.zone && p.alive && opts.playing) {
+        const zc = zoneAt(w.zone, matchSeconds(w)).circle;
+        if (outsideCircle(zc, p.x, p.y)) {
+          const ang = Math.atan2(zc.y - p.y, zc.x - p.x), c = Math.cos(ang), sn = Math.sin(ang);
+          const ex = ps.x + c * ppu * 1.15, ey = ps.y + sn * ppu * 1.15, z = 12;
+          screen.poly([ex + c * z, ey + sn * z, ex - sn * z * 0.75, ey + c * z * 0.75, ex + sn * z * 0.75, ey - c * z * 0.75])
+            .fill({ color: P.zoneGlow, alpha: 0.95 }).stroke({ width: 2, color: KEYLINE });
+        }
       }
       if (opts.showSticks) {
         for (const s of [input.left, input.right]) {
