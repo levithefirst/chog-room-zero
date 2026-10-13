@@ -6,7 +6,7 @@ Last verified: 2026-10-13 by claude (RC-8).
 ## Snapshot (EVIDENCE)
 - Repo `levithefirst/chog-room-zero` (private). Default/base branch `setup/skill-system` (LOCKED, owner 2026-10-11: no `main`). Never merge without the owner.
 - Open PRs, stacked: #1 S2; #2 P0-1; #3 P0-2; #4 P1 MVP; #5 P2; #6 P0F; #7 P1F; #8 P1FT; #9 RC-1/RC-2 (head 43f5a5d). RC-3 to RC-8 are branch `ccr-e7fadb8f-qtochk`, PR #10 on top of #9. Merge in order. #1 adds a skill-system README.md; RC-3 adds the game README.md (conflict to resolve at merge: keep the game README).
-- Vercel project `chog-room-zero` (protection off). Production (get_alias, 2026-10-13 10:46 UTC): `chog-room-zero.vercel.app` AND `chogroomzero.xyz` alias `dpl_54KMsMZ5gYJpPdWyy2UNjPvzNCTR`, a dashboard redeploy (10:45 UTC, owner account) of RC-7 03a2409; RC-8 did not touch production. Rollback, newest first: `dpl_56bwkszpsVENmDkAfX8scxf69HCA` (03a2409), `dpl_FDwxDzTdcg83ySTYeJEY6yXjnUKa` (62bccd8), `dpl_98JQWcLkHkKF2iBaiZwc8a2sZ3Lf` (0ca9f76). Sign-in env vars unset. Online game server: not deployed (owner picks a host, `docs/MULTIPLAYER.md`).
+- Vercel project `chog-room-zero` (protection off). Production (get_alias, 2026-10-13 10:46 UTC): `chog-room-zero.vercel.app` AND `chogroomzero.xyz` alias `dpl_54KMsMZ5gYJpPdWyy2UNjPvzNCTR`, a dashboard redeploy (10:45 UTC, owner account) of RC-7 03a2409; RC-8 did not touch production. Rollback, newest first: `dpl_56bwkszpsVENmDkAfX8scxf69HCA` (03a2409), `dpl_FDwxDzTdcg83ySTYeJEY6yXjnUKa` (62bccd8), `dpl_98JQWcLkHkKF2iBaiZwc8a2sZ3Lf` (0ca9f76). Sign-in env vars set by the owner (production only). Game server: Render Free `https://room-zero-game.onrender.com` (owner-created from `render.yaml`, branch `ccr-e7fadb8f-qtochk`); Vercel `VITE_GAME_SERVER_URL` = Preview + this branch only. Hosted 1v1 PASS (H17).
 - Hackathon: Chogathon 2026 (chogathon.chog.xyz, read 2026-10-12 from a 2026-10-11 cache). Deliverables and weights in `docs/SUBMISSION.md`. Judges gate on "the Chog NFT must be essential". Deadline: UNKNOWN (the page says both Oct 11 13:00 UTC and Oct 9 15:00 UTC). Project start date: UNKNOWN.
 
 ## LOCKED (owner; 2026-10-07, 2026-10-11, 2026-10-12, 2026-10-13)
@@ -40,14 +40,14 @@ Last verified: 2026-10-13 by claude (RC-8).
 
 ## Implemented (EVIDENCE)
 - P2 base game (map, 4 heroes, weapons, armour, lean, pickups, bots, match flow, HUD, fonts): list moved to `docs/HANDOFFS.md` (H15 trim note); see H5 for SHA.
-- RC-8 (H16): touch pickups, true-size CHOG-inspired operators, solid cover for every bullet (7 scenarios), danger zone, PROVISIONAL palette (CSS + Pixi), authoritative online server + client (not deployed).
+- RC-8 (H16): touch pickups, true-size CHOG-inspired operators, solid cover for every bullet (7 scenarios), danger zone, PROVISIONAL palette (CSS + Pixi), authoritative online server + client, hosted on Render Free for the preview (H17).
 - RC-7 (branch `ccr-e7fadb8f-qtochk`, H15): boot screen, main menu, callsign, controls diagram, operator portraits, player card (Player/Operators/Medals/Loadout), 12 medals, settings, contextual tips, pickup feedback, results with medals, optional sign-in functions. Reference map: `docs/REFERENCE-MAP.md`.
 
 ## Automated tests (EVIDENCE, Node 22.22, 4 cores; RC-8, details H16)
 `npx vitest run` 369/369 (41 files). Headless Chrome (emulated; NOT devices) on the local build of 85572dd (= the preview's index-BMbTTpTN.js): rc8-shots 3/3 viewports (16 checks each), rc8-online 1v1 + 3v3 + 5v5 (one Chrome process per player, loopback), rc7-menus 7/7, rc6-launch 6/6, rc4-matrix 12/12, rc-e2e 11/11, rc3-input-probe 6/6, p1ft-e2e 12/12, rc2-preview-checks 4/4, rc5-touchplay x2, rc-autoplay SCRIPTED wins x4 (Mop needed a disclosed seed), ring 20/20.
 
 ## Not performed (needs the owner)
-- RC-8: online over a real network, a hosted game server, touch input online, zone and operator readability by a person, Mop balance (scripted Mop wins ~3% of seeds).
+- RC-8: hosted 3v3/5v5, hosted reconnect, Render logs, phones on separate networks, touch input online, zone and operator readability by a person, Mop balance (scripted Mop wins ~3% of seeds).
 - Pixel 7 / iPhone 13 / any real tablet (Android Chrome fullscreen + lock, iOS Safari turned stage and safe areas), real-GPU FPS, feel, fairness, audio by ear, a human win, the demo video, scripted browser checks against the live URL (this container cannot reach *.vercel.app; the bundle is matched by hash instead).
 
 ## Gates
@@ -57,10 +57,10 @@ Core Feel Gate: BLOCKED on owner playtests. G10 interface + mock only (BLOCKER: 
 | Id | Owner | Branch | Files | Done when | Status |
 |---|---|---|---|---|---|
 | RC-7 | claude | ccr-e7fadb8f-qtochk | see H15 | Menus, profile, medals, settings, tips, sign-in | done; 03a2409 in production |
-| RC-8 | claude | ccr-e7fadb8f-qtochk, PR #10 | see H16 | Owner "COMPLETE GAMEPLAY, COMBAT, MULTIPLAYER & BRAND IDENTITY UPGRADE" 2026-10-13: pickups, operators, cover, zone, PROVISIONAL palette, online | done on the branch; preview 85572dd; production and server hosting wait for the owner |
+| RC-8 | claude | ccr-e7fadb8f-qtochk, PR #10 | see H16 | Owner "COMPLETE GAMEPLAY, COMBAT, MULTIPLAYER & BRAND IDENTITY UPGRADE" 2026-10-13: pickups, operators, cover, zone, PROVISIONAL palette, online | done on the branch; hosted preview 6301737 + Render Free; production waits for the owner |
 
 Done rows P1-RC-6 moved to `docs/HANDOFFS.md` (H11, H14 trim notes).
 
 
 ## Handoffs
-Latest: H16 (2026-10-13, claude -> owner; RC-8). History: `docs/HANDOFFS.md`.
+Latest: H17 (2026-10-13, claude -> owner; RC-8 hosting). History: `docs/HANDOFFS.md`.

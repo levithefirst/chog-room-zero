@@ -229,3 +229,16 @@ Not verified    : physical phones; online over a real network or with touch inpu
 Locked decisions touched : LOCKED 11/12 (multiplayer now allowed) and 16 (zone can end a run; online last side standing), owner RC-8 prompt 2026-10-13. Non-locked P2 proposal changed: marksman no longer pierces cover (owner). New dependency: ws (server only), @types/ws (dev). No merge, no deploy, no spend
 Next smallest task : owner plays the preview (solo: zone, pickups, operators; Wick and Mop), decides on a game-server host; then authorizes production. No files
 H16 trim note: STATE row RC-6 (landscape launch, done H14; 62bccd8, rollback target dpl_FDwxDzTdcg83ySTYeJEY6yXjnUKa) moved here.
+
+HANDOFF H17  2026-10-13  claude -> owner
+Branch @ commit : ccr-e7fadb8f-qtochk @ 63017378d67310fd433bc0afba122cb4c07f03e5 (last code commit)   pushed: yes   PR: #10
+Task            : RC-8 hosting: Render Free game server + RC-8 preview, hosted multiplayer checks
+Files changed   : render.yaml (new), src/net/client.ts (wake + retry, timer keep-alive, connection log), src/main.ts (debug auto-join/drive hook, netlog), src/debug/onlineDriver.ts (new), docs/{MULTIPLAYER,STATE,HANDOFFS}.md
+Render          : https://room-zero-game.onrender.com, Free, created by the owner from render.yaml (branch ccr-e7fadb8f-qtochk, build npm ci && npm run build:server, start npm run server, health /, env NODE_VERSION, ALLOWED_ORIGINS). GET / 200 "room-zero game server ok", /stats 200 (checked from outside: this container's network policy rejects onrender.com)
+Vercel          : VITE_GAME_SERVER_URL (plain) = wss://room-zero-game.onrender.com/ws, target preview, gitBranch ccr-e7fadb8f-qtochk; production variables unchanged; preview 5f1388a dpl_BvzgY77V8CZCgaQoYrtGCiG9V8bt bundle contains the address; branch URL now serves 6301737 dpl_8qtZWuYw1mebh21oHsUW7dgc3o9p
+Tests run       : npx vitest run -> 369/369. Local: origin allowlist (allowed -> welcome; foreign, production, none -> 401), wake retry (connected ~4 s after a late server), render loop stopped 15 s while queued -> still queued, URL-only 1v1 with render loops stopped -> server result in 9 s, rc8-online 1v1 PASS. Hosted (two separate external headless browsers via the branch URL and Render): run 1 connected then idle-kicked (render-loop ping; fixed), run 2 matched then both dropped with 1006 (Render redeploy from a push), run 3 matched but stalled (0-10 fps renderer; drive moved to a timer), run 4 PASS: matched 1.4 s, 184 snapshots each, rtt 107/122 ms, movement, fire, damage 126/144, bravo shot, alpha won 10.6 s, same result on both
+Known failures  : none open
+Blockers        : hosted 3v3/5v5 and hosted reconnect need more simultaneous clients than the external browser service allows (2) or this container allowed to reach *.onrender.com; Render logs need the owner's dashboard
+Not verified    : physical phones, separate home/mobile networks, touch online, long zone-only match on the hosted server, several hosted matches at once, Render logs
+Locked decisions touched : none. No production change, no merge, no paid plan
+Next smallest task : owner and a friend open the branch URL on two phones on different networks > Online > same private code > 1v1; or allow onrender.com in this environment so the agent runs tools/rc8-online.mjs (3v3/5v5) against Render. No files

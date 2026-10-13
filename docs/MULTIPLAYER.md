@@ -1,6 +1,7 @@
 # Online multiplayer (RC-8)
 
-Status 2026-10-13: **built and tested locally; Render Free chosen by the owner, service not created yet** (below).
+Status 2026-10-13: **hosted on Render Free** (`https://room-zero-game.onrender.com`, owner-created), connected to the RC-8
+preview only. 1v1 verified end to end on the hosted server; 3v3/5v5 hosted runs and real devices still to do (below).
 Solo play against bots is unchanged and needs no server.
 
 ## Before RC-8
@@ -59,9 +60,9 @@ can see. Sounds: those the player can hear (same hearing rule as solo). So a mod
 
 | Mode | Implemented | Tested with independent clients in one authoritative match | Deployed |
 |---|---|---|---|
-| 1v1 | yes | yes: 2 browser processes, loopback, incl. mid-match reload and resume | no (needs a host) |
-| 3v3 | yes | yes: 6 browser processes, loopback | no (needs a host) |
-| 5v5 | yes | yes: 10 browser processes, loopback (4-core machine at load ~36: slow frames, match still completed) | no (needs a host) |
+| 1v1 | yes | yes: 2 browser processes, loopback, incl. mid-match reload and resume; HOSTED: 2 external browsers via the preview and Render, full match | Render Free, preview only |
+| 3v3 | yes | yes: 6 browser processes, loopback; hosted not run | Render Free, preview only |
+| 5v5 | yes | yes: 10 browser processes, loopback (4-core machine at load ~36: slow frames, match still completed); hosted not run | Render Free, preview only |
 
 Not tested: real internet latency and packet loss, phones or touch input online (the touch path produces the same
 controls as in solo, but no online run used it), more than one match at a time on the server, a hosted server.
@@ -111,6 +112,28 @@ Free-tier behaviour the client handles: the service sleeps after 15 minutes with
 to wake. Opening Online sends an HTTP request that wakes it and retries the socket every 3 s for up to 90 s, showing
 "Waking the game server (free hosting, up to a minute)". An open game page pings every 2 s, which keeps it awake.
 750 free instance hours a month per workspace; rooms live in memory, so a restart or redeploy ends running matches.
+
+## Hosted results (2026-10-13)
+
+- Render: `GET /` 200 `room-zero game server ok`, `/stats` 200 (checked from outside; this agent's container cannot
+  reach onrender.com, its network policy rejects the host).
+- Vercel: `VITE_GAME_SERVER_URL=wss://room-zero-game.onrender.com/ws`, type plain, target Preview, git branch
+  `ccr-e7fadb8f-qtochk` only. Production variables unchanged. The built preview bundle contains the address.
+- Hosted 1v1 (preview 6301737 + Render): two separate external headless browsers (a scraping service, US region),
+  each opening `?debug&online=1v1&code=HOSTC5&drive=1` on the branch URL: connected, hello, matched in 1.4 s, 184
+  snapshots each, round trip 107 / 122 ms, both moved from their spawns to the centre, exchanged fire (126 / 144
+  damage), bravo was shot, alpha won at 10.6 s, and both received the same server result. PASS.
+- Found and fixed on the way: (1) the keep-alive ping ran in the render loop, so a slow or backgrounded page was
+  closed by the server's 10 s idle rule (seen live: "No messages for too long"); it now runs on a timer.
+  (2) Render redeploys the server on every push to the branch, which ends running matches (seen live: both players
+  dropped at once with close 1006 and could not resume). Do not push during play tests.
+- Not run on the hosted server: 3v3 and 5v5 (the external browser service runs only 2 browsers at once), mid-match
+  reload on the hosted server, a long zone-only match, physical phones, separate home/mobile networks, Render logs
+  (owner dashboard only). All of these passed locally (`tools/rc8-online.mjs`, `tests/rc8-online.test.ts`).
+- Testers must use the branch URL https://chog-room-zero-git-ccr-e7fad-e59a4d-levithefirst-1227s-projects.vercel.app;
+  per-deployment preview URLs are refused by `ALLOWED_ORIGINS` (HTTP 401 on the socket).
+- Debug hook for hosted checks: `?debug&online=1v1|3v3|5v5&code=XXXX&drive=1` joins at boot and lets a scripted
+  player send controls on a 50 ms timer; `<body data-netlog>` carries the server-reported state and result.
 
 ## Run it locally
 
