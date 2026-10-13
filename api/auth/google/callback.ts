@@ -1,7 +1,7 @@
 // GET /api/auth/google/callback: Google returns here with ?code&state. Check the state against the signed cookie,
 // exchange the code (with the client secret and PKCE verifier, server to server over TLS), read the ID token's
 // claims, and add the Google identity to this browser's session. Then back to the game.
-import { clearCookie, env, fromB64url, GOOGLE_COOKIE, googleOk, readCookie, readSession, redirect, sessionCookieWith, unsign } from '../../_lib/auth';
+import { clearCookie, env, fromB64url, GOOGLE_COOKIE, googleOk, readCookie, readSession, redirect, sessionCookieWith, unsign } from '../../_lib/auth.js';
 
 interface GoogleClaims { iss?: string; aud?: string; sub?: string; email?: string; email_verified?: boolean; name?: string; exp?: number }
 

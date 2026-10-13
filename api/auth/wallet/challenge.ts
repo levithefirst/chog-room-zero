@@ -1,7 +1,7 @@
 // POST /api/auth/wallet/challenge {address, chainId}: a fresh Sign-In with Ethereum message for this host, with a
 // random nonce and a 5 minute expiry. The exact message is kept in a signed HttpOnly cookie for this browser only,
 // so the signature can only be redeemed here, once, before it expires.
-import { allowedHosts, CHALLENGE_COOKIE, CHALLENGE_SECONDS, checksum, cookie, env, json, randomToken, requestHost, sameOrigin, secretOk, sign, siweMessage } from '../../_lib/auth';
+import { allowedHosts, CHALLENGE_COOKIE, CHALLENGE_SECONDS, checksum, cookie, env, json, randomToken, requestHost, sameOrigin, secretOk, sign, siweMessage } from '../../_lib/auth.js';
 
 export async function POST(req: Request): Promise<Response> {
   const e = env();

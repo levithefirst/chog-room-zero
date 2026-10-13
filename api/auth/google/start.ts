@@ -1,7 +1,7 @@
 // GET /api/auth/google/start: begin Google sign-in (OAuth 2.0 authorization code + PKCE). The state and the PKCE
 // verifier live in a short-lived signed HttpOnly cookie on the canonical origin (AUTH_ORIGIN), which is also where
 // Google sends the player back (redirect URI: AUTH_ORIGIN + /api/auth/google/callback, registered in Google Cloud).
-import { b64url, cookie, env, GOOGLE_COOKIE, GOOGLE_SECONDS, googleOk, json, randomToken, redirect, requestHost, sign } from '../../_lib/auth';
+import { b64url, cookie, env, GOOGLE_COOKIE, GOOGLE_SECONDS, googleOk, json, randomToken, redirect, requestHost, sign } from '../../_lib/auth.js';
 
 export async function GET(req: Request): Promise<Response> {
   const e = env();

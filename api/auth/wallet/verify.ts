@@ -2,7 +2,7 @@
 // issued (same nonce, host, address), unexpired, and signed by that address (EIP-191 recovery, server-side). The
 // challenge is cleared whatever the outcome, so a signature can be used once. A connected wallet is not signed in
 // until this succeeds.
-import { CHALLENGE_COOKIE, clearCookie, env, json, parseSiwe, readCookie, readSession, recoverPersonalSign, requestHost, sameOrigin, secretOk, sessionCookieWith, shortAddress, unsign, type Challenge } from '../../_lib/auth';
+import { CHALLENGE_COOKIE, clearCookie, env, json, parseSiwe, readCookie, readSession, recoverPersonalSign, requestHost, sameOrigin, secretOk, sessionCookieWith, shortAddress, unsign, type Challenge } from '../../_lib/auth.js';
 
 export async function POST(req: Request): Promise<Response> {
   const e = env();
