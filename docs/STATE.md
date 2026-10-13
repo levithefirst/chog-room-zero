@@ -1,12 +1,12 @@
 # Chog: Room Zero - shared state
 
 Source of truth for every agent. Rules: `docs/RULES.md`. Edit only in a handoff commit. Keep under 8,000 characters; move old rows to `docs/HANDOFFS.md`.
-Last verified: 2026-10-13 by claude (RC-7).
+Last verified: 2026-10-13 by claude (RC-8).
 
 ## Snapshot (EVIDENCE)
 - Repo `levithefirst/chog-room-zero` (private). Default/base branch `setup/skill-system` (LOCKED, owner 2026-10-11: no `main`). Never merge without the owner.
-- Open PRs, stacked: #1 S2; #2 P0-1; #3 P0-2; #4 P1 MVP; #5 P2; #6 P0F; #7 P1F; #8 P1FT; #9 RC-1/RC-2 (head 43f5a5d). RC-3 to RC-7 are branch `ccr-e7fadb8f-qtochk` on top of #9 (no PR yet). Merge in order. #1 adds a skill-system README.md; RC-3 adds the game README.md (conflict to resolve at merge: keep the game README).
-- Vercel project `chog-room-zero` (protection off). Production: `chog-room-zero.vercel.app` AND `chogroomzero.xyz` both alias `dpl_56bwkszpsVENmDkAfX8scxf69HCA`, built from 03a2409 (RC-7) with target production, serving index-jAdBlE_X.js (= the tested build apart from the embedded commit id, see H15), verified 2026-10-13 10:37 UTC (get_alias on both, HTTPS 200, real-browser render of both, /api/auth/config 200 on both). Approved by the owner in chat 2026-10-13. Rollback, newest first: `dpl_FDwxDzTdcg83ySTYeJEY6yXjnUKa` (62bccd8, RC-6), `dpl_98JQWcLkHkKF2iBaiZwc8a2sZ3Lf` (0ca9f76), `dpl_96e1NN2ggi4XyoXP2WPrHtNJtgGG` (969de1c). Sign-in env vars still unset.
+- Open PRs, stacked: #1 S2; #2 P0-1; #3 P0-2; #4 P1 MVP; #5 P2; #6 P0F; #7 P1F; #8 P1FT; #9 RC-1/RC-2 (head 43f5a5d). RC-3 to RC-8 are branch `ccr-e7fadb8f-qtochk`, PR #10 on top of #9. Merge in order. #1 adds a skill-system README.md; RC-3 adds the game README.md (conflict to resolve at merge: keep the game README).
+- Vercel project `chog-room-zero` (protection off). Production (get_alias, 2026-10-13 10:46 UTC): `chog-room-zero.vercel.app` AND `chogroomzero.xyz` alias `dpl_54KMsMZ5gYJpPdWyy2UNjPvzNCTR`, a dashboard redeploy (10:45 UTC, owner account) of RC-7 03a2409; RC-8 did not touch production. Rollback, newest first: `dpl_56bwkszpsVENmDkAfX8scxf69HCA` (03a2409), `dpl_FDwxDzTdcg83ySTYeJEY6yXjnUKa` (62bccd8), `dpl_98JQWcLkHkKF2iBaiZwc8a2sZ3Lf` (0ca9f76). Sign-in env vars unset. Online game server: not deployed (owner picks a host, `docs/MULTIPLAYER.md`).
 - Hackathon: Chogathon 2026 (chogathon.chog.xyz, read 2026-10-12 from a 2026-10-11 cache). Deliverables and weights in `docs/SUBMISSION.md`. Judges gate on "the Chog NFT must be essential". Deadline: UNKNOWN (the page says both Oct 11 13:00 UTC and Oct 9 15:00 UTC). Project start date: UNKNOWN.
 
 ## LOCKED (owner; 2026-10-07, 2026-10-11, 2026-10-12, 2026-10-13)
@@ -20,16 +20,17 @@ Last verified: 2026-10-13 by claude (RC-7).
 8. Bots: patrol, investigate, detect, pursue, attack, reposition, disengage, lose target; cover, angles, break LOS; never just rush.
 9. Anyone can play. Guest runs save nothing. Bound Genesis NFT = identity + token history. NFT sidegrades only, never flat damage, health, armour, or speed. (Heroes differ in speed/HP/armour; heroes are not NFT traits.)
 10. NFT layer: interface + labelled mock only; no chain reads, no ownership checks, no DB (mandates 2026-10-12 02:56 and 04:09 WAT). Changed by the owner 2026-10-13 ("MASTER EXECUTION PROMPT"): optional sign-in (Google OAuth, wallet SIWE for MetaMask/Rabby/Zerion) is allowed as identity only; this also lifts RULES 3 "no wallet work before the Core Feel Gate" for sign-in only.
-11. Bots, no multiplayer, no custom contract, no $CHOG dependency, wallet never required.
-12. Out of scope: Railway worker, multiplayer, custom contract, paid inference, $CHOG economy, loot chests, gear grid, clans, season pass. Changed by P2 mandate (04:09 WAT): the map was replaced (still one map), 3-4 heroes with one ability each, pickups.
+11. Bots, no custom contract, no $CHOG dependency, wallet never required. Changed by the owner 2026-10-13 (RC-8): online multiplayer 1v1/3v3/5v5 on an authoritative server is allowed; no paid host without the owner's yes.
+12. Out of scope: Railway worker, custom contract, paid inference, $CHOG economy, loot chests, gear grid, clans, season pass. Changed by P2 mandate (04:09 WAT): the map was replaced (still one map), 3-4 heroes with one ability each, pickups.
 13. Every added system names an equal or larger cut.
 14. No scheduled or background jobs without owner approval.
 15. Stack: TypeScript, Vite, PixiJS v8, Vitest.
-16. Win condition: eliminate all bots.
+16. Win condition: eliminate all bots. RC-8 (owner): a shrinking danger zone can end a run (zone death = loss); online, the last side standing wins.
 
 ## PROPOSALS (not approved)
 - Neon, viem: not installed. Vercel: hosting + `api/auth/*` functions (sign-in). Env vars `AUTH_SECRET`, `AUTH_ORIGIN`, `GOOGLE_CLIENT_ID/SECRET` NOT set (owner, `docs/AUTH.md`). Server-only deps @noble/curves, @noble/hashes (RC-7).
 - RC-7 medals (12), tips, settings and the menu layout (`docs/REFERENCE-MAP.md`).
+- RC-8: PROVISIONAL CHOG palette from the owner's brand guide (no official CHOG colours exist; `docs/BRAND.md`); zone tuning (`docs/design/zone.md`); operator art; hosting recommendation Render free (`docs/MULTIPLAYER.md`). Marksman no longer pierces crates/slabs (owner RC-8, replaces the P2 proposal).
 - All tuning numbers, heroes, weapons, armour and lean rules (`docs/design/benchmark.md`), art direction, the map, the four sidegrades, the fonts.
 
 ## UNKNOWN (never guess)
@@ -39,6 +40,7 @@ Last verified: 2026-10-13 by claude (RC-7).
 
 ## Implemented (EVIDENCE)
 - P2 base game (map, 4 heroes, weapons, armour, lean, pickups, bots, match flow, HUD, fonts): list moved to `docs/HANDOFFS.md` (H15 trim note); see H5 for SHA.
+- RC-8 (H16): touch pickups, true-size CHOG-inspired operators, solid cover for every bullet (7 scenarios), danger zone, PROVISIONAL palette (CSS + Pixi), authoritative online server + client (not deployed).
 - RC-7 (branch `ccr-e7fadb8f-qtochk`, H15): boot screen, main menu, callsign, controls diagram, operator portraits, player card (Player/Operators/Medals/Loadout), 12 medals, settings, contextual tips, pickup feedback, results with medals, optional sign-in functions. Reference map: `docs/REFERENCE-MAP.md`.
 
 ## Automated tests (EVIDENCE, Node 22.22, 4 cores; RC-7, see H15 for bundle and counts)
