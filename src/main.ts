@@ -134,7 +134,14 @@ async function start() {
   // the Full screen buttons (HUD, title, pause) ask again, so a player who leaves fullscreen is never fought.
   const canFs = fullscreenSupported();
   let launch: LaunchResult = 'not-tried';
-  const goLandscape = () => void requestLandscape().then((r) => { launch = r; paintFs(); });
+  // One request at a time: a returning player's first tap can be the Full screen button itself, which the auto
+  // launch below also sees.
+  let asking = false;
+  const goLandscape = () => {
+    if (asking) return;
+    asking = true;
+    void requestLandscape().then((r) => { launch = r; asking = false; paintFs(); });
+  };
   const paintFs = () => document.body.classList.toggle('canfs', canFs && !isFullscreen());
   paintFs();
   let launchTried = false;

@@ -7,6 +7,8 @@
 //             turns the viewport to landscape the way Android Chrome would. Models Android Chrome.
 //   denied  : Fullscreen real, lock real (headless rejects it, like desktop Chrome or a browser that refuses).
 //   iphone  : no element Fullscreen API and no lock (iPhone Safari): the stage stays turned while the phone is upright.
+//   return  : android behaviour, returning visitor (title first): the first tap is the title's Full screen button, which
+//             the first-tap launch also sees; exactly one fullscreen request and one lock must follow.
 // Bots are parked off the map during input checks (input and layout only; full matches: tools/rc5-touchplay.mjs).
 // Usage: node tools/rc6-launch.mjs <baseUrl> <outJson> [shotDir]   (VARIANTS=android:390x844,iphone:390x844,...)
 import { spawn } from 'node:child_process'; import fs from 'node:fs';
@@ -106,7 +108,7 @@ async function notStuck() {
     ok: Math.hypot(b.x - a.x, b.y - a.y) < 0.02 && b.v < 0.02 && b.shots === a.shots && c > b.shots && angDiff(f, Math.PI) < 0.15 };
 }
 
-const VARIANTS = (process.env.VARIANTS ?? 'android:390x844,android:375x667,denied:390x844,iphone:390x844,iphone:375x667').split(',').map((s) => { const [v, sz] = s.split(':'); const [w, h] = sz.split('x').map(Number); return { variant: v, w, h }; });
+const VARIANTS = (process.env.VARIANTS ?? 'android:390x844,android:375x667,denied:390x844,iphone:390x844,iphone:375x667,return:390x844').split(',').map((s) => { const [v, sz] = s.split(':'); const [w, h] = sz.split('x').map(Number); return { variant: v, w, h }; });
 const rows = [];
 for (const V of VARIANTS) {
   const name = `${V.variant}-${V.w}x${V.h}`;
@@ -114,11 +116,23 @@ for (const V of VARIANTS) {
   const ok = (k, pass, data) => { R.checks[k] = { pass: !!pass, ...(data === undefined ? {} : { data }) }; };
   try {
     await freshTab();
-    await cmd('Page.addScriptToEvaluateOnNewDocument', { source: instrument(V.variant) });
+    await cmd('Page.addScriptToEvaluateOnNewDocument', { source: instrument(V.variant === 'return' ? 'android' : V.variant) });
     await view(V.w, V.h);
     await cmd('Page.navigate', { url: `${base}/?debug&nooverlay` }); await sleep(2500);
     await ev('localStorage.clear()'); await cmd('Page.navigate', { url: `${base}/?debug&nooverlay` }); await sleep(3000);
     await readStage();
+    if (V.variant === 'return') {
+      await ev(`localStorage.setItem('chog.onboarded','1')`); await cmd('Page.navigate', { url: `${base}/?debug&nooverlay` }); await sleep(3000); await readStage();
+      const btn = await center('[data-fs]');
+      ok('title (returning visitor, upright) offers Full screen on the turned stage', !!btn && S.rotated, { btn, stage: S });
+      await tap('[data-fs]'); await sleep(900);
+      const L = await look();
+      ok('first tap on Full screen: exactly one fullscreen request and one landscape lock, in the gesture', (L.fsLog ?? []).filter((x) => x.fn === 'requestFullscreen').length === 1 && L.fsLog.filter((x) => x.fn === 'lock').length === 1 && L.fsLog[0].gesture === true && L.fullscreen && L.launch === 'locked' && !L.fsButtonShown, L);
+      ok('console errors: none', errors.length === 0, errors.slice(0, 3));
+      R.pass = Object.values(R.checks).every((c) => c.pass); rows.push(R);
+      console.log(`${R.pass ? 'PASS' : 'FAIL'} ${name}: ${Object.entries(R.checks).filter(([, c]) => !c.pass).map(([k, c]) => `${k} ${JSON.stringify(c.data ?? '')}`.slice(0, 500)).join(' | ') || `all ${Object.keys(R.checks).length} checks`}`);
+      continue;
+    }
     // 1. Opening in portrait: the landscape game at once, turned to fill the upright screen. No prompt, not blank.
     let L = await look(); const lit0 = await drawn();
     ok('1 open in portrait: landscape stage turned 90 deg, How to play showing, no rotate prompt, canvas drawn', L.rotated && landscapeOk(L) && L.card === 'Clear Room Zero' && lit0 > 0, { ...L, litSamples: lit0 });
