@@ -101,10 +101,13 @@ async function controls() {
 // Nothing held after a transition: no drift, no fire, and a fresh right push fires and aims west.
 async function notStuck() {
   await ticks(10); const a = await P0('({x:p.x,y:p.y,shots:p.shots})'); await ticks(30); const b = await P0('({x:p.x,y:p.y,shots:p.shots,v:Math.hypot(p.vx,p.vy)})');
+  // A reload tapped before the transition is frozen by the pause and still running now; a gun mid-reload cannot fire.
+  const gun = await P0('({ammo:p.ammo,reloadLeft:+p.reloadLeft.toFixed(2)})');
+  await ev(`(async()=>{const p=__chog.world.actors[0];for(let i=0;i<400&&(p.reloadLeft>0||p.ammo===0);i++)await new Promise(r=>setTimeout(r,25))})()`);
   const rx = S.w * 0.72, ry = S.h * 0.45;
   await touch('touchStart', [{ x: rx, y: ry, id: 6 }]); await touch('touchMove', [{ x: rx - 50, y: ry, id: 6 }]); await ticks(10);
   const f = await P0('p.facing'); const c = await P0('p.shots'); await touch('touchEnd', []); await ticks(5);
-  return { drift: +Math.hypot(b.x - a.x, b.y - a.y).toFixed(3), idleShots: b.shots - a.shots, freshFire: c - b.shots, aimWest: angDiff(f, Math.PI) < 0.15,
+  return { drift: +Math.hypot(b.x - a.x, b.y - a.y).toFixed(3), idleShots: b.shots - a.shots, freshFire: c - b.shots, aimWest: angDiff(f, Math.PI) < 0.15, gunBeforeFreshPush: gun,
     ok: Math.hypot(b.x - a.x, b.y - a.y) < 0.02 && b.v < 0.02 && b.shots === a.shots && c > b.shots && angDiff(f, Math.PI) < 0.15 };
 }
 

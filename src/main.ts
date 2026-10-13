@@ -149,6 +149,8 @@ async function start() {
     if (launchTried || !canFs || !matchMedia('(pointer: coarse)').matches) return;
     if (e instanceof PointerEvent && e.pointerType === 'mouse') return;
     launchTried = true; // the click that follows this pointerup does not ask twice
+    // A Full screen button makes its own request on click; asking here too would request twice.
+    if ((e.target as Element | null)?.closest?.('[data-fs], #fs')) return;
     goLandscape();
   };
   document.addEventListener('pointerup', autoLaunch, { capture: true });
