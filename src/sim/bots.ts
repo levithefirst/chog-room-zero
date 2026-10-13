@@ -5,6 +5,7 @@ import type { BotSpawn } from '../config/map';
 import { angleDiff } from './geom';
 import { findPath, shotClear, sightClear } from './level';
 import { canSee, muzzleFlashSeen } from './vision';
+import { safeSpot, zoneAt, zoneGoal } from './zone';
 import { hears, player, playerSightRange, rand, revealed, viewOf, type Actor, type ActorInput, type World } from './world';
 
 const DEG = Math.PI / 180;
@@ -44,6 +45,8 @@ export interface Brain {
   reaction: number;
   /** Last path request time (s of sim time) for repath throttling. */
   pathAt: number;
+  /** Heading into the danger zone (RC-8), which overrides its state until it is inside. */
+  zoneRun: boolean;
 }
 
 export type PerceptionSource = 'seen' | 'flash' | 'heard' | 'shot' | 'sonar' | 'memory';
@@ -69,7 +72,7 @@ export function createBrain(spawn: BotSpawn): Brain {
     patrol: spawn.patrol.map(([x, y]) => ({ x: x + 0.5, y: y + 0.5 })),
     patrolIndex: 0, flanker: spawn.flanker, timer: 0, seenFor: 0, engagedFor: 0, aimOffset: 0, aimTimer: 0,
     lastKnown: null, goal: null, path: [], stuckTimer: 0, stuckRepaths: 0, avoid: [], stuckFrom: { x: 0, y: 0 }, lookBase: 0, sawPlayer: false, heardAt: null,
-    source: null, suspicion: 0, reaction: TUNING.perception.reactionMax, pathAt: -1e9,
+    source: null, suspicion: 0, reaction: TUNING.perception.reactionMax, pathAt: -1e9, zoneRun: false,
   };
 }
 
@@ -291,6 +294,26 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
       br.goal = null;
     }
   }
+
+  // Danger zone (RC-8): outside, or near the edge of, the circle that is closing, getting in comes first. On the way
+  // it still shoots what it sees, under the same token, range and cover rules as when it holds an angle.
+  const zv = w.zone ? zoneAt(w.zone, w.tick * TUNING.simStepSeconds) : null;
+  const zg = zv ? zoneGoal(zv) : null;
+  if (zg && Math.hypot(a.x - zg.x, a.y - zg.y) > zg.r - TUNING.zone.moveInMargin) {
+    if (!br.zoneRun) { br.zoneRun = true; br.goal = null; }
+    const spot = safeSpot(w.level, zg, a.x, a.y, TUNING.zone.moveInMargin + 1.5);
+    setGoal(w, a, br, spot.x, spot.y);
+    follow(w, a, br, dt);
+    const toP = Math.atan2(p.y - a.y, p.x - a.x);
+    const range = Math.min(a.weapon.falloffEnd + 2, playerSightRange(w) - 0.25);
+    if (br.sawPlayer && br.seenFor >= br.reaction && token(w, a, true)) {
+      out.aim = toP;
+      out.firing = Math.abs(angleDiff(a.facing, toP)) < B.fireToleranceDeg * DEG && Math.hypot(p.x - a.x, p.y - a.y) <= range
+        && shotClear(w.level, a.x, a.y, p.x, p.y, a.weapon.piercesCover, TUNING.combat.coverLean);
+    } else token(w, a, false);
+    return out;
+  }
+  if (br.zoneRun) { br.zoneRun = false; br.goal = null; br.path.length = 0; }
 
   if (br.state !== 'engage' || !a.alive) token(w, a, false);
   switch (br.state) {

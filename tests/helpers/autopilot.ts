@@ -11,8 +11,8 @@ import type { Sidegrade } from '../../src/sim/operators';
 
 export interface AutoResult { unseenDmg: number; seenDmg: number; won: boolean; seconds: number; kills: number; shots: number; hits: number; hpLeft: number }
 
-export function autopilot(hero: string, seed: number, opts: { maxSeconds?: number; sidegrade?: Sidegrade; aimErrDeg?: number; bots?: BotSpawn[] } = {}): AutoResult {
-  const w: World = createWorld({ hero, seed, sidegrade: opts.sidegrade, bots: opts.bots });
+export function autopilot(hero: string, seed: number, opts: { maxSeconds?: number; sidegrade?: Sidegrade; aimErrDeg?: number; bots?: BotSpawn[]; zone?: boolean } = {}): AutoResult {
+  const w: World = createWorld({ hero, seed, sidegrade: opts.sidegrade, bots: opts.bots, zone: opts.zone ?? true }); // RC-8: the shipping game has the zone
   const p = w.actors[0];
   const ap = createAutopilot(seed, opts.aimErrDeg ?? 3);
   let seenDmg = 0, unseenDmg = 0;

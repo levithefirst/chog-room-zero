@@ -4,6 +4,7 @@ import { createWorld, stepWorld, IDLE_INPUT, type World } from '../src/sim/world
 import { findPath, shotClear, sightClear, parseLevel, markDynamic } from '../src/sim/level';
 import { COVER_RULES, coverStops } from '../src/sim/cover';
 import { TUNING } from '../src/config/tuning';
+import { WEAPONS } from '../src/config/weapons';
 import type { Brain } from '../src/sim/bots';
 
 const M = TUNING.movement;
@@ -106,13 +107,17 @@ describe('cover rules (src/sim/cover.ts is the single source)', () => {
     expect(COVER_RULES.crate.blocksSight).toBe(false);
     expect(sightClear(l, 1.5, 2.5, 7.5, 2.5)).toBe(true);
   });
-  it('a crate stops a rifle bullet from range, not from a shooter leaning on it, not a marksman', () => {
+  // RC-8 (owner 2026-10-13, "solid boxes block sniper shots"): the marksman no longer pierces crates or slabs.
+  // Before RC-8 this test asserted the opposite (pierce passes); the rule changed, the check is as strict.
+  it('a crate stops a rifle bullet from range, not from a shooter leaning on it; it stops the marksman too', () => {
     expect(shotClear(l, 1.5, 2.5, 7.5, 2.5, false, TUNING.combat.coverLean)).toBe(false);
     expect(shotClear(l, 3.2, 2.5, 7.5, 2.5, false, TUNING.combat.coverLean)).toBe(true);
-    expect(shotClear(l, 1.5, 2.5, 7.5, 2.5, true, TUNING.combat.coverLean)).toBe(true);
+    expect(shotClear(l, 1.5, 2.5, 7.5, 2.5, WEAPONS.marksman.piercesCover, TUNING.combat.coverLean)).toBe(false);
+    expect(Object.values(WEAPONS).some((w) => w.piercesCover)).toBe(false);
     expect(coverStops('crate', false, 5)).toBe(true);
     expect(coverStops('crate', false, 1)).toBe(false);
-    expect(coverStops('slab', true, 5)).toBe(false);
+    expect(coverStops('slab', true, 5)).toBe(true);
+    expect(coverStops('crate', true, 5)).toBe(true);
     expect(coverStops('wall', true, 0)).toBe(true);
   });
   it("a bullet stopped by a crate emits a 'blocked' impact (client shows the blocked spark)", () => {

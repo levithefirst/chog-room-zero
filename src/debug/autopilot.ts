@@ -6,6 +6,8 @@
 import { IDLE_INPUT, type ActorInput, type World } from '../sim/world';
 import { canSee } from '../sim/vision';
 import { findPath, shotClear, sightClear } from '../sim/level';
+import { safeSpot, zoneAt, zoneGoal } from '../sim/zone';
+import { TUNING } from '../config/tuning';
 
 export interface Autopilot { next(w: World): ActorInput }
 
@@ -28,6 +30,10 @@ export function createAutopilot(seed: number, aimErrDeg = 3): Autopilot {
       // Shot at from somewhere I can see along: turn toward it (the damage arc says where).
       const hitBy = p.lastHitFrom && sightClear(w.level, p.x, p.y, p.lastHitFrom.x, p.lastHitFrom.y) ? p.lastHitFrom : null;
       if (i % 18 === 0) aimNoise = (rnd() * 2 - 1) * errRad;
+      // Danger zone (RC-8): like a player reading the countdown and the circle, it walks in before the edge reaches it.
+      const zv = w.zone ? zoneAt(w.zone, w.tick * TUNING.simStepSeconds) : null;
+      const zg = zv ? zoneGoal(zv) : null;
+      const zoneSpot = zg && Math.hypot(p.x - zg.x, p.y - zg.y) > zg.r - TUNING.zone.moveInMargin ? safeSpot(w.level, zg, p.x, p.y, TUNING.zone.moveInMargin + 1.5) : null;
       if (seen) {
         inp.aim = Math.atan2(seen.y - p.y, seen.x - p.x) + aimNoise;
         const d = Math.hypot(seen.x - p.x, seen.y - p.y);
@@ -40,6 +46,12 @@ export function createAutopilot(seed: number, aimErrDeg = 3): Autopilot {
         inp.firing = clear && d <= want + 0.5 && p.ammo > 0 && p.reloadLeft <= 0;
         if (p.ammo === 0) inp.reload = true;
         if (p.hero.ability.kind !== 'mend' && p.abilityCd === 0) inp.ability = true;
+        if (zoneSpot) {
+          // Fight on the way in: keep shooting what it sees, but the feet go to the zone.
+          if (--repath <= 0 || path.length === 0) { path = findPath(w.level, p.x, p.y, zoneSpot.x, zoneSpot.y); repath = 30; }
+          while (path.length && Math.hypot(path[0].x - p.x, path[0].y - p.y) < 0.35) path.shift();
+          if (path.length) { const n = path[0], dn = Math.hypot(n.x - p.x, n.y - p.y); inp.moveX = (n.x - p.x) / dn; inp.moveY = (n.y - p.y) / dn; }
+        }
       } else {
         if (hitBy) inp.aim = Math.atan2(hitBy.y - p.y, hitBy.x - p.x);
         if (p.ammo < p.weapon.magazine && p.reserve > 0) inp.reload = true;
@@ -48,7 +60,7 @@ export function createAutopilot(seed: number, aimErrDeg = 3): Autopilot {
         // Patch up first: health when below 60%, armour when low and close.
         const heal = p.hp < p.maxHp * 0.6 ? w.pickups.filter((k) => k.active && k.kind === 'health').sort((a, b) => near(a) - near(b))[0] : undefined;
         const arm = !heal && p.maxArmor > 0 && p.armor < p.maxArmor * 0.4 ? w.pickups.filter((k) => k.active && k.kind === 'armor' && near(k) < 12)[0] : undefined;
-        const target = heal ?? arm ?? nearestBot;
+        const target = zoneSpot ?? heal ?? arm ?? nearestBot;
         // Creep when a hostile is close and unseen: they hear running at 8 m.
         inp.quiet = !!nearestBot && near(nearestBot) < 10;
         if (target && (--repath <= 0 || path.length === 0)) { path = findPath(w.level, p.x, p.y, target.x, target.y); repath = 30; }

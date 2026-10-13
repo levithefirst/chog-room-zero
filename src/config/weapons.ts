@@ -20,7 +20,8 @@ export interface WeaponDef {
   bulletLife: number;
   // Share of damage that ignores armour (0..1).
   armorPen: number;
-  // Passes through half cover (crates, barriers). Never through walls.
+  // Passes through half cover (crates, barriers). Never through walls. RC-8 (owner, 2026-10-13: "solid boxes and walls
+  // block sniper shots"): false for every weapon. The flag stays so the rule is explicit and tested, not implied.
   piercesCover: boolean;
   sound: WeaponSound;
   // Presentation: barrel length (u) and tracer width so each gun reads differently.
@@ -44,11 +45,11 @@ export const WEAPONS: Record<string, WeaponDef> = {
     fireInterval: 0.8, spreadDeg: 7.5, magazine: 5, reserve: 20, reloadSeconds: 2.2,
     bulletSpeed: 26, bulletLife: 0.4, armorPen: 0, piercesCover: false, sound: 'shotgun', barrel: 0.65, tracer: 0.05,
   },
-  // Marksman: slow, heavy, punches through crates. Punishes anyone who peeks a long lane.
+  // Marksman: slow, heavy, long reach. Punishes anyone who peeks a long lane. Crates and slabs stop it (RC-8).
   marksman: {
     id: 'marksman', name: 'Marksman rifle', damage: 55, pellets: 1, falloffStart: 22, falloffEnd: 30, minDamageMul: 0.85,
     fireInterval: 0.75, spreadDeg: 0.5, magazine: 5, reserve: 20, reloadSeconds: 2.1,
-    bulletSpeed: 46, bulletLife: 0.65, armorPen: 0.5, piercesCover: true, sound: 'marksman', barrel: 1.05, tracer: 0.09,
+    bulletSpeed: 46, bulletLife: 0.65, armorPen: 0.5, piercesCover: false, sound: 'marksman', barrel: 1.05, tracer: 0.09,
   },
   // SMG: fast and loose, strong when moving close, falls apart at range.
   smg: {

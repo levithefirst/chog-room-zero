@@ -4,6 +4,7 @@ import { Container, Graphics, RenderTexture, Texture, type Renderer as PixiRende
 import { TUNING } from '../config/tuning';
 import { ZONES, type Material } from '../config/map';
 import { BARRIER, COVER, DOOR, WALL, walkable, type Level } from '../sim/level';
+import { coverDrawBox } from './footprint';
 
 // Material base colours (lit). Floors sit in the middle of the value range; walls are dark masses with a lit rim.
 export const MAT = {
@@ -155,16 +156,21 @@ function drawMap(g: Graphics, l: Level): void {
     for (let x = 0; x < w; x++) {
       const t = tiles[y * w + x];
       if (t === COVER) {
-        g.rect(x + 0.06, y + 0.06, 0.88, 0.88).fill(MAT.crateEdge);
-        g.rect(x + 0.1, y + 0.1, 0.8, 0.8).fill(MAT.crate);
-        g.rect(x + 0.18, y + 0.16, 0.64, 0.6).fill(MAT.crateLid);
-        g.moveTo(x + 0.18, y + 0.16).lineTo(x + 0.82, y + 0.76).moveTo(x + 0.82, y + 0.16).lineTo(x + 0.18, y + 0.76)
+        // Fills the collision tile (footprint.ts): wood box, lid, cross braces.
+        const d = coverDrawBox('crate', x, y);
+        g.rect(d.x0, d.y0, d.x1 - d.x0, d.y1 - d.y0).fill(MAT.crateEdge);
+        g.rect(x + 0.07, y + 0.07, 0.86, 0.86).fill(MAT.crate);
+        g.rect(x + 0.16, y + 0.14, 0.68, 0.64).fill(MAT.crateLid);
+        g.moveTo(x + 0.16, y + 0.14).lineTo(x + 0.84, y + 0.78).moveTo(x + 0.84, y + 0.14).lineTo(x + 0.16, y + 0.78)
           .stroke({ width: 0.05, color: MAT.crateEdge, alpha: 0.7 });
-        g.rect(x + 0.1, y + 0.78, 0.8, 0.12).fill({ color: 0x000000, alpha: 0.25 });
+        g.rect(x + 0.07, y + 0.8, 0.86, 0.13).fill({ color: 0x000000, alpha: 0.25 });
       } else if (t === BARRIER) {
-        g.rect(x + 0.04, y + 0.22, 0.92, 0.6).fill(MAT.barrierEdge);
-        g.rect(x + 0.06, y + 0.2, 0.88, 0.48).fill(MAT.barrier);
-        for (let k = 0; k < 3; k++) g.poly([x + 0.1 + k * 0.3, y + 0.2, x + 0.25 + k * 0.3, y + 0.2, x + 0.12 + k * 0.3, y + 0.68, x - 0.03 + k * 0.3, y + 0.68]).fill({ color: MAT.stripe, alpha: 0.8 });
+        // Concrete block filling the collision tile, hazard stripes on the top face.
+        const d = coverDrawBox('barrier', x, y);
+        g.rect(d.x0, d.y0, d.x1 - d.x0, d.y1 - d.y0).fill(MAT.barrierEdge);
+        g.rect(x + 0.07, y + 0.07, 0.86, 0.72).fill(MAT.barrier);
+        for (let k = 0; k < 3; k++) g.poly([x + 0.1 + k * 0.3, y + 0.1, x + 0.25 + k * 0.3, y + 0.1, x + 0.12 + k * 0.3, y + 0.76, x - 0.03 + k * 0.3, y + 0.76]).fill({ color: MAT.stripe, alpha: 0.8 });
+        g.rect(x + 0.07, y + 0.79, 0.86, 0.14).fill({ color: 0x000000, alpha: 0.28 });
       }
     }
   }

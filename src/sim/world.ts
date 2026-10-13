@@ -1,6 +1,6 @@
 // The match simulation. Deterministic: fixed step, seeded random, no wall-clock time, no rendering.
 import { TUNING } from '../config/tuning';
-import { BOT_SPAWNS, ROOM_ZERO, type BotSpawn } from '../config/map';
+import { BOT_SPAWNS, ROOM_ZERO, ZONE_CENTRES, type BotSpawn } from '../config/map';
 import { heroById, type HeroDef } from '../config/heroes';
 import { WEAPONS, damageAt, type WeaponDef } from '../config/weapons';
 import { angleDiff, cornerAssistDir, resolveCircle, segmentCircleT, type Box } from './geom';
@@ -9,10 +9,15 @@ import { stepVelocity, type Vec2 } from './sim';
 import { NO_SIDEGRADE, type Sidegrade } from './operators';
 import type { ViewShape } from './vision';
 import { botThink, createBrain, type Brain, type PerceptionEvent } from './bots';
+import { outsideCircle, planZone, zoneAt, type ZoneState } from './zone';
 
 const DEG = Math.PI / 180;
 
-export type Team = 'player' | 'bot';
+/** 'player' and 'bot' in solo play; 'alpha' and 'bravo' are the two human teams of an online match (RC-8). */
+export type Team = 'player' | 'bot' | 'alpha' | 'bravo';
+
+/** Driven by a person (solo player or an online client), not by a bot brain. */
+export const isHuman = (a: { team: Team }) => a.team !== 'bot';
 
 export interface ActorInput {
   moveX: number;
@@ -67,6 +72,10 @@ export interface Actor {
   kills: number;
   damageDealt: number;
   damageTaken: number;
+  /** How this actor went down (RC-8: every actor, so an online client can show its own death). */
+  death: KillInfo | null;
+  /** Tick of the last danger-zone damage (client feedback). */
+  zoneTick: number;
 }
 
 export interface Bullet {
@@ -113,6 +122,8 @@ export interface HitEvent {
 }
 
 export interface KillInfo {
+  /** 'shot': killed by `killerId`'s bullet. 'zone': the danger zone (killerId -1, from = where the actor stood). */
+  cause: 'shot' | 'zone';
   killerId: number;
   weapon: string;
   fromX: number;
@@ -156,6 +167,14 @@ export interface World {
   perceptionLog: PerceptionEvent[] | null;
   outcome: 'playing' | 'dead' | 'won';
   playerKill: KillInfo | null;
+  /** 'solo': one player (actor 0) against bots. 'versus': human teams only (online, server-run). */
+  mode: 'solo' | 'versus';
+  /** Online: the team left standing when the match ended; null for a draw or in solo. */
+  winner: Team | null;
+  /** Bullets hit teammates. Off everywhere today (CHOG-AI-002); a server room may turn it on. */
+  friendlyFire: boolean;
+  /** Shrinking danger zone, or null when off (unit tests that isolate other rules). */
+  zone: ZoneState | null;
 }
 
 /** Mulberry32. Returns [0,1) and advances world.rng. */
@@ -190,7 +209,7 @@ function makeActor(id: number, team: Team, name: string, hero: HeroDef, sg: Side
     hp: hero.maxHp, maxHp: hero.maxHp, armor: hero.maxArmor, maxArmor: Math.max(hero.maxArmor, 50), alive: true,
     ammo: weapon.magazine, reserve: weapon.reserve, cooldown: 0, reloadLeft: 0, abilityCd: 0, dashLeft: 0, dashX: 0, dashY: 0,
     revealLeft: 0, stepAcc: 0, hitFlash: 0, muzzle: 0, deadFor: 0, lastSpread: weapon.spreadDeg, lastHitTick: -999, lastHitFrom: null,
-    shots: 0, bullets: 0, hits: 0, kills: 0, damageDealt: 0, damageTaken: 0,
+    shots: 0, bullets: 0, hits: 0, kills: 0, damageDealt: 0, damageTaken: 0, death: null, zoneTick: -999,
   };
 }
 
@@ -201,12 +220,32 @@ export interface WorldOptions {
   map?: readonly string[];
   bots?: BotSpawn[];
   log?: boolean;
+  /** Danger zone on (the game and the server turn it on; most unit tests leave it off to isolate a rule). */
+  zone?: boolean;
+  /** Online match: these humans instead of the solo player and bots (actor ids follow the array order). */
+  versus?: { name: string; hero: string; team: 'alpha' | 'bravo'; x: number; y: number; facing: number }[];
+  friendlyFire?: boolean;
 }
 
 export function createWorld(opts: WorldOptions = {}): World {
   const level = parseLevel(opts.map ?? ROOM_ZERO);
-  const actors: Actor[] = [makeActor(0, 'player', 'You', heroById(opts.hero ?? 'kettle'), opts.sidegrade ?? NO_SIDEGRADE, level.playerSpawn.x, level.playerSpawn.y, 0)];
+  const seed = (opts.seed ?? TUNING.seed) | 0;
   const brains = new Map<number, Brain>();
+  if (opts.versus) {
+    const actors = opts.versus.map((v, i) => makeActor(i, v.team, v.name, heroById(v.hero), NO_SIDEGRADE, v.x, v.y, v.facing));
+    const spawns = (['alpha', 'bravo'] as const).map((t) => {
+      const m = opts.versus!.filter((v) => v.team === t);
+      return { x: m.reduce((a, v) => a + v.x, 0) / Math.max(1, m.length), y: m.reduce((a, v) => a + v.y, 0) / Math.max(1, m.length) };
+    });
+    return {
+      tick: 0, rng: seed, level, actors, bullets: [], sounds: [], prevSounds: [], hits: [],
+      pickups: level.pickupSpawns.map((p) => ({ ...p, active: true, respawnLeft: 0 })), barriers: [],
+      brains, attackTokens: [], perceptionLog: null, outcome: 'playing', playerKill: null,
+      mode: 'versus', winner: null, friendlyFire: !!opts.friendlyFire,
+      zone: opts.zone === false ? null : planZone(level, seed, ZONE_CENTRES, TUNING.zone, spawns),
+    };
+  }
+  const actors: Actor[] = [makeActor(0, 'player', 'You', heroById(opts.hero ?? 'kettle'), opts.sidegrade ?? NO_SIDEGRADE, level.playerSpawn.x, level.playerSpawn.y, 0)];
   (opts.bots ?? BOT_SPAWNS).forEach((b, i) => {
     const [tx, ty] = b.patrol[0];
     const a = makeActor(i + 1, 'bot', b.name, heroById(b.hero), NO_SIDEGRADE, tx + 0.5, ty + 0.5, Math.PI);
@@ -214,9 +253,11 @@ export function createWorld(opts: WorldOptions = {}): World {
     brains.set(a.id, createBrain(b));
   });
   return {
-    tick: 0, rng: (opts.seed ?? TUNING.seed) | 0, level, actors, bullets: [], sounds: [], prevSounds: [], hits: [],
+    tick: 0, rng: seed, level, actors, bullets: [], sounds: [], prevSounds: [], hits: [],
     pickups: level.pickupSpawns.map((p) => ({ ...p, active: true, respawnLeft: 0 })), barriers: [],
     brains, attackTokens: [], perceptionLog: opts.log ? [] : null, outcome: 'playing', playerKill: null,
+    mode: 'solo', winner: null, friendlyFire: !!opts.friendlyFire,
+    zone: opts.zone ? planZone(level, seed, ZONE_CENTRES) : null,
   };
 }
 
@@ -314,7 +355,7 @@ function useAbility(w: World, a: Actor, inp: ActorInput): void {
 
 function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
   const M = TUNING.movement;
-  if (a.team === 'player') a.facing = inp.aim;
+  if (isHuman(a)) a.facing = inp.aim;
   else {
     const turn = TUNING.bots.turnRateDegPerSec * DEG * dt;
     const d = angleDiff(a.facing, inp.aim);
@@ -411,8 +452,9 @@ function stepBullets(w: World, dt: number): void {
     const team = w.actors[b.owner].team;
     for (const a of w.actors) {
       // No friendly fire, either team (CHOG-AI-002): a bullet passes through the shooter's teammates, so every
-      // hostile elimination is a player kill and "Hostiles down" always equals the player's kills.
-      if (!a.alive || a.id === b.owner || a.team === team) continue;
+      // hostile elimination is a player kill and "Hostiles down" always equals the player's kills. An online room
+      // can switch it on (w.friendlyFire); the shooter itself is never hit by its own bullet.
+      if (!a.alive || a.id === b.owner || (a.team === team && !w.friendlyFire)) continue;
       // Damage range cap: a bot bullet fired from beyond the player's sight distance never hurts the player.
       if (team === 'bot' && a.team === 'player' && Math.hypot(b.ox - a.x, b.oy - a.y) > playerSightRange(w)) continue;
       const t = segmentCircleT(b.x, b.y, nx, ny, a.x, a.y, r);
@@ -463,13 +505,38 @@ function damage(w: World, t: Actor, by: Actor, b: Bullet, hx: number, hy: number
   w.hits.push({ target: t.id, by: by.id, x: hx, y: hy, fromX: b.ox, fromY: b.oy, hpDamage: m.hp, armorDamage: m.armor, killed });
   emit(w, 'hit', hx, hy, TUNING.sound.impact, by);
   if (killed) {
-    t.hp = 0;
-    t.alive = false;
-    { const ti = w.attackTokens.indexOf(t.id); if (ti >= 0) w.attackTokens.splice(ti, 1); }
-    t.vx = t.vy = 0;
-    by.kills++;
-    emit(w, 'death', t.x, t.y, TUNING.sound.death, t);
-    if (t.team === 'player') w.playerKill = { killerId: by.id, weapon: b.weapon.name, fromX: b.ox, fromY: b.oy, toX: t.x, toY: t.y, tick: w.tick };
+    if (by.team !== t.team) by.kills++;
+    down(w, t, { cause: 'shot', killerId: by.id, weapon: b.weapon.name, fromX: b.ox, fromY: b.oy, toX: t.x, toY: t.y, tick: w.tick });
+  }
+}
+
+function down(w: World, t: Actor, info: KillInfo): void {
+  t.hp = 0;
+  t.alive = false;
+  { const ti = w.attackTokens.indexOf(t.id); if (ti >= 0) w.attackTokens.splice(ti, 1); }
+  t.vx = t.vy = 0;
+  t.death = info;
+  emit(w, 'death', t.x, t.y, TUNING.sound.death, t);
+  if (t.team === 'player') w.playerKill = info;
+}
+
+/** Match time in seconds (the zone clock). */
+export function matchSeconds(w: World): number {
+  return w.tick * TUNING.simStepSeconds;
+}
+
+/** Danger zone damage (RC-8): health only (armour does not soak it), escalating by stage. Same for every actor. */
+function stepZone(w: World, dt: number): void {
+  if (!w.zone) return;
+  const v = zoneAt(w.zone, matchSeconds(w));
+  if (v.dps <= 0) return;
+  for (const a of w.actors) {
+    if (!a.alive || !outsideCircle(v.circle, a.x, a.y)) continue;
+    const d = Math.min(a.hp, v.dps * dt);
+    a.hp -= d;
+    a.damageTaken += d;
+    a.zoneTick = w.tick;
+    if (a.hp <= 0) down(w, a, { cause: 'zone', killerId: -1, weapon: 'Danger zone', fromX: a.x, fromY: a.y, toX: a.x, toY: a.y, tick: w.tick });
   }
 }
 
@@ -478,6 +545,16 @@ export function wants(a: Actor, kind: PickupKind): boolean {
   if (kind === 'health') return a.hp < a.maxHp;
   if (kind === 'armor') return a.armor < a.maxArmor;
   return a.reserve < a.weapon.reserve + a.weapon.magazine * 2;
+}
+
+/**
+ * A pickup the actor is standing on but does not take because it is full (RC-8). Collection itself needs no button
+ * or second step: stepPickups takes it on the first step of contact. This only lets the client say why not.
+ */
+export function touchingFull(w: World, a: Actor): Pickup | null {
+  if (!a.alive) return null;
+  for (const p of w.pickups) if (p.active && Math.hypot(a.x - p.x, a.y - p.y) <= TUNING.pickups.radius && !wants(a, p.kind)) return p;
+  return null;
 }
 
 function stepPickups(w: World, dt: number): void {
@@ -536,7 +613,10 @@ export function revealed(w: World, viewer: Actor): Actor[] {
 
 /** Advance one fixed step with the player's input. Bots decide their own input from what they perceive. */
 export function stepWorld(
-  w: World, playerInput: ActorInput, dt: number = TUNING.simStepSeconds,
+  w: World,
+  /** Solo: the player's input. Online (versus): a function giving each human actor's latest input. */
+  playerInput: ActorInput | ((a: Actor) => ActorInput),
+  dt: number = TUNING.simStepSeconds,
   /** Test harness only (duel scenarios): script a bot's input instead of its brain. Return null to let it think. */
   botInput?: (a: Actor) => ActorInput | null,
 ): void {
@@ -548,14 +628,24 @@ export function stepWorld(
       a.deadFor += dt;
       continue;
     }
-    const inp = a.team === 'player' ? playerInput : (botInput?.(a) ?? botThink(w, a, w.brains.get(a.id)!, dt));
+    const inp = isHuman(a)
+      ? (typeof playerInput === 'function' ? playerInput(a) : playerInput)
+      : (botInput?.(a) ?? botThink(w, a, w.brains.get(a.id)!, dt));
     applyInput(w, a, inp, dt);
   }
   stepBullets(w, dt);
+  stepZone(w, dt);
   stepPickups(w, dt);
   stepBarriers(w, dt);
   if (w.outcome === 'playing') {
-    if (!player(w).alive) w.outcome = 'dead';
+    if (w.mode === 'versus') {
+      // Online: the match ends when at most one team has anyone standing. Nobody standing is a draw.
+      const teams = new Set(w.actors.filter((a) => a.alive).map((a) => a.team));
+      if (teams.size <= 1) {
+        w.outcome = 'won';
+        w.winner = teams.size === 1 ? [...teams][0] : null;
+      }
+    } else if (!player(w).alive) w.outcome = 'dead';
     else if (w.actors.every((a) => a.team === 'player' || !a.alive)) w.outcome = 'won';
   }
   w.tick++;

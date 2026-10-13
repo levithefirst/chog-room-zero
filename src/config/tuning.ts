@@ -51,7 +51,9 @@ export const TUNING = {
     armor: { amount: 35, respawn: 25 },
     // Ammo: one magazine's worth x2 into reserve, back after 15 s.
     ammo: { mags: 2, respawn: 15 },
-    // Grab radius 0.7 u: walk over it, no button.
+    // Collect on touch, no button, no second step: 0.7 u from the centre = the body (0.35 u) meeting the pickup
+    // crate (0.3 u half-width) with 0.05 u to spare. RC-8 draws the body at its true 0.35 u (it was drawn 1.45x), so
+    // the pickup is taken on the same step the drawn body touches the drawn pickup (tests/rc8-pickups.test.ts).
     radius: 0.7,
   },
 
@@ -141,6 +143,24 @@ export const TUNING = {
     // Minimum seconds between path requests per bot, unless the goal moved more than repathDistance.
     repathSeconds: 0.35,
     repathDistance: 1.5,
+  },
+
+  // Shrinking danger zone (RC-8, src/sim/zone.ts). 97 s to the last circle: 45 s of open play, then three stages,
+  // each shown for a few seconds before it closes. 45 s, not 30: with 30 s the scripted Mop won 0 of 40 solo runs
+  // (bots leave patrol for the zone during the hunt); 45 s kept every hero near its no-zone rate (docs/design/zone.md). Damage outside escalates so lingering gets worse, never
+  // instant: 4/s gives ~25 s to get back in at full health, the final 20/s about 5 s.
+  zone: {
+    safeSeconds: 45,
+    stages: [
+      { warn: 8, shrink: 15, radius: 14, dps: 4 },
+      { warn: 6, shrink: 10, radius: 7, dps: 8 },
+      { warn: 5, shrink: 8, radius: 3.5, dps: 14 },
+    ],
+    finalDps: 20,
+    // The last circle's centre keeps this much open floor around it (no crate or wall to camp in it).
+    clearance: 1.5,
+    // Bots (and the test autopilot) head in once they are within this many u of the closing circle's edge.
+    moveInMargin: 1,
   },
 
   render: {

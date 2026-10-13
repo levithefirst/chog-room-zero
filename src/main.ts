@@ -3,7 +3,7 @@ import { createInput, touchStick } from './input/input';
 import { createSummaryGate, overlayInputAllowed } from './input/gate';
 import { createAudio } from './audio/audio';
 import { fixedSteps } from './sim/sim';
-import { createWorld, hears, player, stepWorld, wants, IDLE_INPUT, type PickupKind, type World } from './sim/world';
+import { createWorld, hears, player, stepWorld, touchingFull, wants, IDLE_INPUT, type Pickup, type PickupKind, type World } from './sim/world';
 import { ROOM_ZERO } from './config/map';
 import { sightClear, walkable } from './sim/level';
 import { clampMarker } from './render/visibility';
@@ -130,7 +130,7 @@ async function start() {
   let runIndex = 0;
   let autopilot: Autopilot | null = null;
   let suggestPilot: Autopilot | null = null;
-  let world: World = createWorld({ seed: TUNING.seed, hero: heroId, sidegrade: identity.sidegrade });
+  let world: World = createWorld({ seed: TUNING.seed, hero: heroId, sidegrade: identity.sidegrade, zone: true });
   let acc = 0;
   let recapLeft = 0;
   let playTime = 0;
@@ -378,6 +378,7 @@ async function start() {
 
   function showRecap() {
     const k = world.playerKill!;
+    if (k.cause === 'zone') { card('<h2 class="bad">Down</h2><p>The danger zone got you. Stay inside the circle when it closes.</p>', 'layer clear'); return; }
     const killer = world.actors[k.killerId];
     const p = player(world);
     const d = Math.hypot(k.fromX - p.x, k.fromY - p.y);
@@ -391,7 +392,7 @@ async function start() {
     const k = world.playerKill;
     return {
       won, hero: heroById(heroId), weaponName: p.weapon.name,
-      why: !won && k ? `<p class="bad">${esc(world.actors[k.killerId].name)} got you with a ${esc(k.weapon.toLowerCase())}, ${Math.hypot(k.fromX - p.x, k.fromY - p.y).toFixed(0)} m ${compass(k.fromX - p.x, k.fromY - p.y)}.</p>` : '<p class="good">Every hostile is down.</p>',
+      why: !won && k?.cause === 'zone' ? '<p class="bad">The danger zone got you. The circle was closing.</p>' : !won && k ? `<p class="bad">${esc(world.actors[k.killerId].name)} got you with a ${esc(k.weapon.toLowerCase())}, ${Math.hypot(k.fromX - p.x, k.fromY - p.y).toFixed(0)} m ${compass(k.fromX - p.x, k.fromY - p.y)}.</p>` : '<p class="good">Every hostile is down.</p>',
       time: playTime, kills: p.kills, bots: world.actors.length - 1, left: world.actors.filter((a) => a.team === 'bot' && a.alive).length,
       // Per bullet, so a shotgun's 8 pellets per shot can never read above 100% (RC-3: Brick showed 59/16).
       hits: p.hits, bullets: p.bullets, dealt: p.damageDealt, taken: p.damageTaken, pickups: runPickups, abilities: runAbilities,
@@ -581,7 +582,7 @@ async function start() {
 
   function beginWorld() {
     runIndex++;
-    world = createWorld({ seed: TUNING.seed + runIndex, hero: heroId, sidegrade: identity.sidegrade });
+    world = createWorld({ seed: TUNING.seed + runIndex, hero: heroId, sidegrade: identity.sidegrade, zone: true });
     autopilot = AUTOPLAY_SEED !== null ? createAutopilot(AUTOPLAY_SEED + runIndex) : null;
     suggestPilot = null;
     renderer.reset(world);
@@ -694,6 +695,14 @@ async function start() {
     toast(`${amount}${PICKUP_LABEL[pk.kind]}`);
     const pal = TUNING.palette;
     fx.collects.push({ x: p.x, y: p.y, age: 0, color: pk.kind === 'health' ? pal.heal : pk.kind === 'armor' ? pal.armor : pal.ammo });
+  }
+
+  // Standing on a pickup you cannot use (full): say so once per contact, so it never reads as "needs another step".
+  let fullOn: Pickup | null = null;
+  function checkFull() {
+    const q = touchingFull(world, player(world));
+    if (q && q !== fullOn) toast(`${PICKUP_LABEL[q.kind]} FULL`);
+    fullOn = q;
   }
 
   // Contextual tips (src/ui/tips.ts): what is true this frame.
@@ -841,7 +850,7 @@ async function start() {
         afterStep();
         playTime += TUNING.simStepSeconds;
       }
-      if (r.steps > 0 && world.outcome === 'playing') maybeTip();
+      if (r.steps > 0 && world.outcome === 'playing') { maybeTip(); checkFull(); }
       if (world.outcome === 'dead') {
         recapLeft = TUNING.render.deathFreeze;
         endRun(false);

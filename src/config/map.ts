@@ -64,3 +64,10 @@ export const BOT_SPAWNS: BotSpawn[] = [
   { name: 'Boiler', hero: 'kettle', patrol: [[37, 16], [40, 20], [34, 19]], flanker: false },
   { name: 'Hatch', hero: 'mop', patrol: [[15, 20], [17, 16], [13, 15]], flanker: true },
 ];
+
+// Danger zone (RC-8): where the last circle may settle, one is drawn per match. Each is open floor with 1.5 u clear
+// all round (checked by src/sim/zone.ts openSpot and tests/rc8-zone.test.ts): north rooms, the concourse, the south
+// rooms. Online, only the ones about equally far from both team spawns are used.
+export const ZONE_CENTRES: { x: number; y: number }[] = [
+  [7, 3], [13, 3], [19, 3], [39, 3], [7, 10], [12, 10], [29, 10], [31, 10], [15, 19], [24, 19], [35, 18], [36, 21],
+].map(([x, y]) => ({ x: x + 0.5, y: y + 0.5 }));

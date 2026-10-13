@@ -61,9 +61,11 @@ describe('weapons behave differently', () => {
     expect(dNear).toBeGreaterThan(60);
     expect(dFar).toBeLessThan(dNear * 0.5);
   });
-  it('marksman goes through a crate; the rifle does not (penetration rule)', () => {
+  // RC-8 (owner 2026-10-13, "solid boxes block sniper shots"): this asserted the old penetration rule (the marksman
+  // went through). The rule was reversed on purpose; the check is as strict, with the opposite outcome.
+  it('a crate stops the marksman and the rifle alike (no weapon pierces cover, RC-8)', () => {
     const m = shootAt('wick', 3.5, 15.5, 40);
-    expect(m.t.hp).toBeLessThan(1e6);
+    expect(m.t.hp).toBe(1e6);
     const r = shootAt('kettle', 3.5, 15.5, 40);
     expect(r.t.hp).toBe(1e6);
   });

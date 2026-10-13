@@ -560,7 +560,10 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       }
 
       recapG.clear();
-      if (opts.recap && w.playerKill) {
+      if (opts.recap && w.playerKill?.cause === 'zone') {
+        // Taken by the danger zone: a red ring where the player fell, nothing pointing at a shooter.
+        circle(recapG, w.playerKill.toX, w.playerKill.toY, 0.7).stroke({ width: 0.08, color: P.hostile });
+      } else if (opts.recap && w.playerKill) {
         const kk = w.playerKill;
         const killer = w.actors[kk.killerId];
         const from = clampMarker(level, kk.fromX, kk.fromY, killer.x, killer.y, walkable);

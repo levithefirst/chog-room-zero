@@ -47,7 +47,7 @@ export const HEROES: HeroDef[] = [
     weapon: 'shotgun', maxHp: 120, maxArmor: 50, speed: 0.9, vision: { range: 7.5, coneDeg: 80 }, ability: ABILITIES.barrier, accent: 0xa58f84,
   },
   {
-    id: 'wick', name: 'Wick', role: 'Lane', blurb: 'Long narrow sight. Finds them first, shoots through crates.',
+    id: 'wick', name: 'Wick', role: 'Lane', blurb: 'Long narrow sight. Finds them first and owns the long lanes.',
     weapon: 'marksman', maxHp: 85, maxArmor: 15, speed: 0.95, vision: { range: 12, coneDeg: 48 }, ability: ABILITIES.sonar, accent: 0x93a0b4,
   },
 ];
