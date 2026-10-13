@@ -6,7 +6,7 @@ Last verified: 2026-10-13 by claude (RC-6).
 ## Snapshot (EVIDENCE)
 - Repo `levithefirst/chog-room-zero` (private). Default/base branch `setup/skill-system` (LOCKED, owner 2026-10-11: no `main`). Never merge without the owner.
 - Open PRs, stacked: #1 S2; #2 P0-1; #3 P0-2; #4 P1 MVP; #5 P2; #6 P0F; #7 P1F; #8 P1FT; #9 RC-1/RC-2 (head 43f5a5d). RC-3 to RC-6 are branch `ccr-e7fadb8f-qtochk` on top of #9 (no PR yet). Merge in order. #1 adds a skill-system README.md; RC-3 adds the game README.md (conflict to resolve at merge: keep the game README).
-- Vercel project `chog-room-zero` (protection off). Production: `chog-room-zero.vercel.app` AND `chogroomzero.xyz` both alias `dpl_98JQWcLkHkKF2iBaiZwc8a2sZ3Lf` (0ca9f76, RC-4, bundle index-BYEZY6NN.js), checked 2026-10-13 via get_alias. chogroomzero.xyz: verified, Vercel nameservers, not misconfigured. Rollback: `dpl_96e1NN2ggi4XyoXP2WPrHtNJtgGG` (969de1c). RC-6 candidate: see H14 (not promoted; needs the owner's yes).
+- Vercel project `chog-room-zero` (protection off). Production: `chog-room-zero.vercel.app` AND `chogroomzero.xyz` both alias `dpl_FDwxDzTdcg83ySTYeJEY6yXjnUKa`, built from 62bccd8 (RC-6) with target production, serving bundle index-DyIkGcjU.js (= the tested build), verified 2026-10-13 07:55 UTC (get_alias on both, HTTPS 200 + HSTS, same ETag, real-browser render of both). Promotion approved by the owner in chat 2026-10-13. Rollback, both READY: `dpl_98JQWcLkHkKF2iBaiZwc8a2sZ3Lf` (0ca9f76, RC-4) then `dpl_96e1NN2ggi4XyoXP2WPrHtNJtgGG` (969de1c, P1). Later branch commits are docs only.
 - Hackathon: Chogathon 2026 (chogathon.chog.xyz, read 2026-10-12 from a 2026-10-11 cache). Deliverables and weights in `docs/SUBMISSION.md`. Judges gate on "the Chog NFT must be essential". Deadline: UNKNOWN (the page says both Oct 11 13:00 UTC and Oct 9 15:00 UTC). Project start date: UNKNOWN.
 
 ## LOCKED (owner; 2026-10-07, 2026-10-11, 2026-10-12, 2026-10-13)
@@ -59,7 +59,7 @@ Core Feel Gate: BLOCKED on owner playtests. G10 interface + mock only (BLOCKER: 
 | Id | Owner | Branch | Files | Done when | Status |
 |---|---|---|---|---|---|
 | RC-5 | claude | ccr-e7fadb8f-qtochk | see H13 | Portrait-first mobile (owner 2026-10-12) | superseded by RC-6 (owner 2026-10-13); never in production |
-| RC-6 | claude | ccr-e7fadb8f-qtochk (from fff49e2) | `index.html`, `src/{main.ts,input/input.ts,ui/{stage,orientation}.ts,config/tuning.ts}`, `tests/rc6-stage.test.ts`, `tools/{rc6-launch,rc4-matrix,rc5-touchplay,p1ft-e2e}.mjs`, `README.md`, `docs/{DEV,RELEASE,STATE,HANDOFFS}.md` | Landscape launch on phones (owner 2026-10-13): no portrait play, no prompt; fullscreen + lock where supported; verified preview; production only with the owner's yes | done; candidate = branch head at H14; production still 0ca9f76 |
+| RC-6 | claude | ccr-e7fadb8f-qtochk (from fff49e2) | `index.html`, `src/{main.ts,input/input.ts,ui/{stage,orientation}.ts,config/tuning.ts}`, `tests/rc6-stage.test.ts`, `tools/{rc6-launch,rc4-matrix,rc5-touchplay,p1ft-e2e}.mjs`, `README.md`, `docs/{DEV,RELEASE,STATE,HANDOFFS}.md` | Landscape launch on phones (owner 2026-10-13): no portrait play, no prompt; fullscreen + lock where supported; verified preview; production only with the owner's yes | done; 62bccd8 is in production on both domains (owner approved 2026-10-13) |
 
 Done rows P1-RC-4 moved to `docs/HANDOFFS.md` (H11, H14 trim notes).
 
