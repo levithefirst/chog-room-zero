@@ -1,0 +1,2005 @@
+{
+ "source": "https://sourcify-api-monad.blockvision.org/v2/contract/143/0xc96d31f8626c6d03fae5dcd3d61e3fb9f4a73763?fields=all",
+ "retrievedAt": "2026-10-13",
+ "chainId": "143",
+ "address": "0xc96d31F8626c6D03Fae5dCD3d61e3FB9F4a73763",
+ "match": "exact_match",
+ "creationMatch": "exact_match",
+ "runtimeMatch": "exact_match",
+ "verifiedAt": "2026-09-03T20:00:52Z",
+ "matchId": "1556885",
+ "compilation": {
+  "language": "Solidity",
+  "compiler": "solc",
+  "compilerVersion": "0.8.28+commit.7893614a",
+  "name": "ChogMint",
+  "fullyQualifiedName": "src/ChogMint.sol:ChogMint"
+ },
+ "deployment": {
+  "transactionHash": "0x23347f41b8c921039de31853994b29f21b2c9f2547d97145e64acc93a09ae4bd",
+  "blockNumber": "101704036",
+  "transactionIndex": "6",
+  "deployer": "0x79bbEc62F13BF1756e2F29F465240814EC1876F4"
+ },
+ "proxyResolution": {
+  "isProxy": false,
+  "proxyType": null,
+  "implementations": []
+ },
+ "sourceFiles": [
+  "lib/openzeppelin-contracts/contracts/access/AccessControl.sol",
+  "lib/openzeppelin-contracts/contracts/access/IAccessControl.sol",
+  "lib/openzeppelin-contracts/contracts/interfaces/IERC2981.sol",
+  "lib/openzeppelin-contracts/contracts/interfaces/draft-IERC6093.sol",
+  "lib/openzeppelin-contracts/contracts/token/ERC721/ERC721.sol",
+  "lib/openzeppelin-contracts/contracts/token/ERC721/IERC721.sol",
+  "lib/openzeppelin-contracts/contracts/token/ERC721/IERC721Receiver.sol",
+  "lib/openzeppelin-contracts/contracts/token/ERC721/extensions/IERC721Metadata.sol",
+  "lib/openzeppelin-contracts/contracts/token/ERC721/utils/ERC721Utils.sol",
+  "lib/openzeppelin-contracts/contracts/token/common/ERC2981.sol",
+  "lib/openzeppelin-contracts/contracts/utils/Context.sol",
+  "lib/openzeppelin-contracts/contracts/utils/Panic.sol",
+  "lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol",
+  "lib/openzeppelin-contracts/contracts/utils/Strings.sol",
+  "lib/openzeppelin-contracts/contracts/utils/cryptography/Hashes.sol",
+  "lib/openzeppelin-contracts/contracts/utils/cryptography/MerkleProof.sol",
+  "lib/openzeppelin-contracts/contracts/utils/introspection/ERC165.sol",
+  "lib/openzeppelin-contracts/contracts/utils/introspection/IERC165.sol",
+  "lib/openzeppelin-contracts/contracts/utils/math/Math.sol",
+  "lib/openzeppelin-contracts/contracts/utils/math/SafeCast.sol",
+  "lib/openzeppelin-contracts/contracts/utils/math/SignedMath.sol",
+  "src/ChogMint.sol"
+ ],
+ "abi": [
+  {
+   "type": "constructor",
+   "inputs": [
+    {
+     "name": "p",
+     "type": "tuple",
+     "components": [
+      {
+       "name": "name",
+       "type": "string",
+       "internalType": "string"
+      },
+      {
+       "name": "symbol",
+       "type": "string",
+       "internalType": "string"
+      },
+      {
+       "name": "maxSupply",
+       "type": "uint256",
+       "internalType": "uint256"
+      },
+      {
+       "name": "reserveMax",
+       "type": "uint256",
+       "internalType": "uint256"
+      },
+      {
+       "name": "treasury",
+       "type": "address",
+       "internalType": "address"
+      },
+      {
+       "name": "teamMain",
+       "type": "address",
+       "internalType": "address"
+      },
+      {
+       "name": "royaltyBps",
+       "type": "uint96",
+       "internalType": "uint96"
+      },
+      {
+       "name": "placeholderURI",
+       "type": "string",
+       "internalType": "string"
+      },
+      {
+       "name": "admins",
+       "type": "address[]",
+       "internalType": "address[]"
+      },
+      {
+       "name": "caps",
+       "type": "uint16[6]",
+       "internalType": "uint16[6]"
+      },
+      {
+       "name": "maxPerWallet",
+       "type": "uint8[6]",
+       "internalType": "uint8[6]"
+      },
+      {
+       "name": "prices",
+       "type": "uint96[6]",
+       "internalType": "uint96[6]"
+      }
+     ],
+     "internalType": "struct ChogMint.InitParams"
+    }
+   ],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "name": "AccessControlBadConfirmation",
+   "type": "error",
+   "inputs": []
+  },
+  {
+   "name": "AccessControlUnauthorizedAccount",
+   "type": "error",
+   "inputs": [
+    {
+     "name": "account",
+     "type": "address",
+     "internalType": "address"
+    },
+    {
+     "name": "neededRole",
+     "type": "bytes32",
+     "internalType": "bytes32"
+    }
+   ]
+  },
+  {
+   "name": "AlreadyRevealed",
+   "type": "error",
+   "inputs": []
+  },
+  {
+   "name": "CapsExceedSupply",
+   "type": "error",
+   "inputs": []
+  },
+  {
+   "name": "ERC2981InvalidDefaultRoyalty",
+   "type": "error",
+   "inputs": [
+    {
+     "name": "numerator",
+     "type": "uint256",
+     "internalType": "uint256"
+    },
+    {
+     "name": "denominator",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ]
+  },
+  {
+   "name": "ERC2981InvalidDefaultRoyaltyReceiver",
+   "type": "error",
+   "inputs": [
+    {
+     "name": "receiver",
+     "type": "address",
+     "internalType": "address"
+    }
+   ]
+  },
+  {
+   "name": "ERC2981InvalidTokenRoyalty",
+   "type": "error",
+   "inputs": [
+    {
+     "name": "tokenId",
+     "type": "uint256",
+     "internalType": "uint256"
+    },
+    {
+     "name": "numerator",
+     "type": "uint256",
+     "internalType": "uint256"
+    },
+    {
+     "name": "denominator",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ]
+  },
+  {
+   "name": "ERC2981InvalidTokenRoyaltyReceiver",
+   "type": "error",
+   "inputs": [
+    {
+     "name": "tokenId",
+     "type": "uint256",
+     "internalType": "uint256"
+    },
+    {
+     "name": "receiver",
+     "type": "address",
+     "internalType": "address"
+    }
+   ]
+  },
+  {
+   "name": "ERC721IncorrectOwner",
+   "type": "error",
+   "inputs": [
+    {
+     "name": "sender",
+     "type": "address",
+     "internalType": "address"
+    },
+    {
+     "name": "tokenId",
+     "type": "uint256",
+     "internalType": "uint256"
+    },
+    {
+     "name": "owner",
+     "type": "address",
+     "internalType": "address"
+    }
+   ]
+  },
+  {
+   "name": "ERC721InsufficientApproval",
+   "type": "error",
+   "inputs": [
+    {
+     "name": "operator",
+     "type": "address",
+     "internalType": "address"
+    },
+    {
+     "name": "tokenId",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ]
+  },
+  {
+   "name": "ERC721InvalidApprover",
+   "type": "error",
+   "inputs": [
+    {
+     "name": "approver",
+     "type": "address",
+     "internalType": "address"
+    }
+   ]
+  },
+  {
+   "name": "ERC721InvalidOperator",
+   "type": "error",
+   "inputs": [
+    {
+     "name": "operator",
+     "type": "address",
+     "internalType": "address"
+    }
+   ]
+  },
+  {
+   "name": "ERC721InvalidOwner",
+   "type": "error",
+   "inputs": [
+    {
+     "name": "owner",
+     "type": "address",
+     "internalType": "address"
+    }
+   ]
+  },
+  {
+   "name": "ERC721InvalidReceiver",
+   "type": "error",
+   "inputs": [
+    {
+     "name": "receiver",
+     "type": "address",
+     "internalType": "address"
+    }
+   ]
+  },
+  {
+   "name": "ERC721InvalidSender",
+   "type": "error",
+   "inputs": [
+    {
+     "name": "sender",
+     "type": "address",
+     "internalType": "address"
+    }
+   ]
+  },
+  {
+   "name": "ERC721NonexistentToken",
+   "type": "error",
+   "inputs": [
+    {
+     "name": "tokenId",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ]
+  },
+  {
+   "name": "InvalidAllotment",
+   "type": "error",
+   "inputs": []
+  },
+  {
+   "name": "InvalidProvenance",
+   "type": "error",
+   "inputs": []
+  },
+  {
+   "name": "InvalidSchedule",
+   "type": "error",
+   "inputs": []
+  },
+  {
+   "name": "InvalidStage",
+   "type": "error",
+   "inputs": []
+  },
+  {
+   "name": "InvalidSupply",
+   "type": "error",
+   "inputs": []
+  },
+  {
+   "name": "MetadataFrozen",
+   "type": "error",
+   "inputs": []
+  },
+  {
+   "name": "NotEligible",
+   "type": "error",
+   "inputs": []
+  },
+  {
+   "name": "ProvenanceAlreadySet",
+   "type": "error",
+   "inputs": []
+  },
+  {
+   "name": "ProvenanceNotSet",
+   "type": "error",
+   "inputs": []
+  },
+  {
+   "name": "ReentrancyGuardReentrantCall",
+   "type": "error",
+   "inputs": []
+  },
+  {
+   "name": "ReserveExceeded",
+   "type": "error",
+   "inputs": []
+  },
+  {
+   "name": "StageNotOpen",
+   "type": "error",
+   "inputs": []
+  },
+  {
+   "name": "SupplyExceeded",
+   "type": "error",
+   "inputs": []
+  },
+  {
+   "name": "WalletLimitExceeded",
+   "type": "error",
+   "inputs": []
+  },
+  {
+   "name": "WithdrawFailed",
+   "type": "error",
+   "inputs": []
+  },
+  {
+   "name": "WrongPayment",
+   "type": "error",
+   "inputs": []
+  },
+  {
+   "name": "ZeroAddress",
+   "type": "error",
+   "inputs": []
+  },
+  {
+   "name": "ZeroQuantity",
+   "type": "error",
+   "inputs": []
+  },
+  {
+   "name": "Approval",
+   "type": "event",
+   "inputs": [
+    {
+     "name": "owner",
+     "type": "address",
+     "indexed": true,
+     "internalType": "address"
+    },
+    {
+     "name": "approved",
+     "type": "address",
+     "indexed": true,
+     "internalType": "address"
+    },
+    {
+     "name": "tokenId",
+     "type": "uint256",
+     "indexed": true,
+     "internalType": "uint256"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "name": "ApprovalForAll",
+   "type": "event",
+   "inputs": [
+    {
+     "name": "owner",
+     "type": "address",
+     "indexed": true,
+     "internalType": "address"
+    },
+    {
+     "name": "operator",
+     "type": "address",
+     "indexed": true,
+     "internalType": "address"
+    },
+    {
+     "name": "approved",
+     "type": "bool",
+     "indexed": false,
+     "internalType": "bool"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "name": "BaseURISet",
+   "type": "event",
+   "inputs": [
+    {
+     "name": "baseURI",
+     "type": "string",
+     "indexed": false,
+     "internalType": "string"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "name": "Minted",
+   "type": "event",
+   "inputs": [
+    {
+     "name": "to",
+     "type": "address",
+     "indexed": true,
+     "internalType": "address"
+    },
+    {
+     "name": "stage",
+     "type": "uint8",
+     "indexed": true,
+     "internalType": "uint8"
+    },
+    {
+     "name": "qty",
+     "type": "uint256",
+     "indexed": false,
+     "internalType": "uint256"
+    },
+    {
+     "name": "firstTokenId",
+     "type": "uint256",
+     "indexed": false,
+     "internalType": "uint256"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "name": "PlaceholderURISet",
+   "type": "event",
+   "inputs": [
+    {
+     "name": "uri",
+     "type": "string",
+     "indexed": false,
+     "internalType": "string"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "name": "ProvenanceHashSet",
+   "type": "event",
+   "inputs": [
+    {
+     "name": "hash",
+     "type": "bytes32",
+     "indexed": false,
+     "internalType": "bytes32"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "name": "Revealed",
+   "type": "event",
+   "inputs": [
+    {
+     "name": "baseURI",
+     "type": "string",
+     "indexed": false,
+     "internalType": "string"
+    },
+    {
+     "name": "startingIndex",
+     "type": "uint256",
+     "indexed": false,
+     "internalType": "uint256"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "name": "RoleAdminChanged",
+   "type": "event",
+   "inputs": [
+    {
+     "name": "role",
+     "type": "bytes32",
+     "indexed": true,
+     "internalType": "bytes32"
+    },
+    {
+     "name": "previousAdminRole",
+     "type": "bytes32",
+     "indexed": true,
+     "internalType": "bytes32"
+    },
+    {
+     "name": "newAdminRole",
+     "type": "bytes32",
+     "indexed": true,
+     "internalType": "bytes32"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "name": "RoleGranted",
+   "type": "event",
+   "inputs": [
+    {
+     "name": "role",
+     "type": "bytes32",
+     "indexed": true,
+     "internalType": "bytes32"
+    },
+    {
+     "name": "account",
+     "type": "address",
+     "indexed": true,
+     "internalType": "address"
+    },
+    {
+     "name": "sender",
+     "type": "address",
+     "indexed": true,
+     "internalType": "address"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "name": "RoleRevoked",
+   "type": "event",
+   "inputs": [
+    {
+     "name": "role",
+     "type": "bytes32",
+     "indexed": true,
+     "internalType": "bytes32"
+    },
+    {
+     "name": "account",
+     "type": "address",
+     "indexed": true,
+     "internalType": "address"
+    },
+    {
+     "name": "sender",
+     "type": "address",
+     "indexed": true,
+     "internalType": "address"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "name": "RoyaltySet",
+   "type": "event",
+   "inputs": [
+    {
+     "name": "receiver",
+     "type": "address",
+     "indexed": false,
+     "internalType": "address"
+    },
+    {
+     "name": "bps",
+     "type": "uint96",
+     "indexed": false,
+     "internalType": "uint96"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "name": "ScheduleSet",
+   "type": "event",
+   "inputs": [
+    {
+     "name": "start",
+     "type": "uint40",
+     "indexed": false,
+     "internalType": "uint40"
+    },
+    {
+     "name": "durations",
+     "type": "uint32[6]",
+     "indexed": false,
+     "internalType": "uint32[6]"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "name": "StageConfigSet",
+   "type": "event",
+   "inputs": [
+    {
+     "name": "stage",
+     "type": "uint8",
+     "indexed": true,
+     "internalType": "uint8"
+    },
+    {
+     "name": "cap",
+     "type": "uint16",
+     "indexed": false,
+     "internalType": "uint16"
+    },
+    {
+     "name": "maxPerWallet",
+     "type": "uint8",
+     "indexed": false,
+     "internalType": "uint8"
+    },
+    {
+     "name": "price",
+     "type": "uint96",
+     "indexed": false,
+     "internalType": "uint96"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "name": "StageOpened",
+   "type": "event",
+   "inputs": [
+    {
+     "name": "stage",
+     "type": "uint8",
+     "indexed": true,
+     "internalType": "uint8"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "name": "StageRootSet",
+   "type": "event",
+   "inputs": [
+    {
+     "name": "stage",
+     "type": "uint8",
+     "indexed": true,
+     "internalType": "uint8"
+    },
+    {
+     "name": "root",
+     "type": "bytes32",
+     "indexed": false,
+     "internalType": "bytes32"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "name": "StageWindowSet",
+   "type": "event",
+   "inputs": [
+    {
+     "name": "stage",
+     "type": "uint8",
+     "indexed": true,
+     "internalType": "uint8"
+    },
+    {
+     "name": "start",
+     "type": "uint40",
+     "indexed": false,
+     "internalType": "uint40"
+    },
+    {
+     "name": "end",
+     "type": "uint40",
+     "indexed": false,
+     "internalType": "uint40"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "name": "TeamAllotmentSet",
+   "type": "event",
+   "inputs": [
+    {
+     "name": "account",
+     "type": "address",
+     "indexed": true,
+     "internalType": "address"
+    },
+    {
+     "name": "amount",
+     "type": "uint8",
+     "indexed": false,
+     "internalType": "uint8"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "name": "TeamMainSet",
+   "type": "event",
+   "inputs": [
+    {
+     "name": "teamMain",
+     "type": "address",
+     "indexed": false,
+     "internalType": "address"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "name": "Transfer",
+   "type": "event",
+   "inputs": [
+    {
+     "name": "from",
+     "type": "address",
+     "indexed": true,
+     "internalType": "address"
+    },
+    {
+     "name": "to",
+     "type": "address",
+     "indexed": true,
+     "internalType": "address"
+    },
+    {
+     "name": "tokenId",
+     "type": "uint256",
+     "indexed": true,
+     "internalType": "uint256"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "name": "TreasurySet",
+   "type": "event",
+   "inputs": [
+    {
+     "name": "treasury",
+     "type": "address",
+     "indexed": false,
+     "internalType": "address"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "name": "Withdrawn",
+   "type": "event",
+   "inputs": [
+    {
+     "name": "to",
+     "type": "address",
+     "indexed": false,
+     "internalType": "address"
+    },
+    {
+     "name": "amount",
+     "type": "uint256",
+     "indexed": false,
+     "internalType": "uint256"
+    }
+   ],
+   "anonymous": false
+  },
+  {
+   "name": "ADMIN_ROLE",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "bytes32",
+     "internalType": "bytes32"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "DEFAULT_ADMIN_ROLE",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "bytes32",
+     "internalType": "bytes32"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "NO_STAGE",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint8",
+     "internalType": "uint8"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "STAGE_CHEST",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint8",
+     "internalType": "uint8"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "STAGE_COUNT",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint8",
+     "internalType": "uint8"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "STAGE_FCFS",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint8",
+     "internalType": "uint8"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "STAGE_GTD",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint8",
+     "internalType": "uint8"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "STAGE_PUBLIC",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint8",
+     "internalType": "uint8"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "STAGE_ROLES",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint8",
+     "internalType": "uint8"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "STAGE_TEAM",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint8",
+     "internalType": "uint8"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "TEAM_MAIN_MAX",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint8",
+     "internalType": "uint8"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "TEAM_MEMBER_MAX",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint8",
+     "internalType": "uint8"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "adminMint",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "to",
+     "type": "address",
+     "internalType": "address"
+    },
+    {
+     "name": "qty",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "name": "approve",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "to",
+     "type": "address",
+     "internalType": "address"
+    },
+    {
+     "name": "tokenId",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "name": "balanceOf",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "owner",
+     "type": "address",
+     "internalType": "address"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "baseURI",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "string",
+     "internalType": "string"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "currentStage",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint8",
+     "internalType": "uint8"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "getApproved",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "tokenId",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "",
+     "type": "address",
+     "internalType": "address"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "getRoleAdmin",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "role",
+     "type": "bytes32",
+     "internalType": "bytes32"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "",
+     "type": "bytes32",
+     "internalType": "bytes32"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "grantRole",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "role",
+     "type": "bytes32",
+     "internalType": "bytes32"
+    },
+    {
+     "name": "account",
+     "type": "address",
+     "internalType": "address"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "name": "hasRole",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "role",
+     "type": "bytes32",
+     "internalType": "bytes32"
+    },
+    {
+     "name": "account",
+     "type": "address",
+     "internalType": "address"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "",
+     "type": "bool",
+     "internalType": "bool"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "isApprovedForAll",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "owner",
+     "type": "address",
+     "internalType": "address"
+    },
+    {
+     "name": "operator",
+     "type": "address",
+     "internalType": "address"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "",
+     "type": "bool",
+     "internalType": "bool"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "maxSupply",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "metadataId",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "id",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "mint",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "stage",
+     "type": "uint8",
+     "internalType": "uint8"
+    },
+    {
+     "name": "qty",
+     "type": "uint256",
+     "internalType": "uint256"
+    },
+    {
+     "name": "allotment",
+     "type": "uint8",
+     "internalType": "uint8"
+    },
+    {
+     "name": "proof",
+     "type": "bytes32[]",
+     "internalType": "bytes32[]"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "payable"
+  },
+  {
+   "name": "mintedBy",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "account",
+     "type": "address",
+     "internalType": "address"
+    },
+    {
+     "name": "stage",
+     "type": "uint8",
+     "internalType": "uint8"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "mintedByAll",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "account",
+     "type": "address",
+     "internalType": "address"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "counts",
+     "type": "uint256[6]",
+     "internalType": "uint256[6]"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "name",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "string",
+     "internalType": "string"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "openStage",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "stage",
+     "type": "uint8",
+     "internalType": "uint8"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "name": "ownerOf",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "tokenId",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "",
+     "type": "address",
+     "internalType": "address"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "placeholderURI",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "string",
+     "internalType": "string"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "provenanceHash",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "bytes32",
+     "internalType": "bytes32"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "renounceRole",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "role",
+     "type": "bytes32",
+     "internalType": "bytes32"
+    },
+    {
+     "name": "callerConfirmation",
+     "type": "address",
+     "internalType": "address"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "name": "reserveMax",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "reserveMinted",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint128",
+     "internalType": "uint128"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "reveal",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "uri",
+     "type": "string",
+     "internalType": "string"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "name": "revealed",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "bool",
+     "internalType": "bool"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "revokeRole",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "role",
+     "type": "bytes32",
+     "internalType": "bytes32"
+    },
+    {
+     "name": "account",
+     "type": "address",
+     "internalType": "address"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "name": "royaltyInfo",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "tokenId",
+     "type": "uint256",
+     "internalType": "uint256"
+    },
+    {
+     "name": "salePrice",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "receiver",
+     "type": "address",
+     "internalType": "address"
+    },
+    {
+     "name": "amount",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "safeTransferFrom",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "from",
+     "type": "address",
+     "internalType": "address"
+    },
+    {
+     "name": "to",
+     "type": "address",
+     "internalType": "address"
+    },
+    {
+     "name": "tokenId",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "name": "safeTransferFrom",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "from",
+     "type": "address",
+     "internalType": "address"
+    },
+    {
+     "name": "to",
+     "type": "address",
+     "internalType": "address"
+    },
+    {
+     "name": "tokenId",
+     "type": "uint256",
+     "internalType": "uint256"
+    },
+    {
+     "name": "data",
+     "type": "bytes",
+     "internalType": "bytes"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "name": "setApprovalForAll",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "operator",
+     "type": "address",
+     "internalType": "address"
+    },
+    {
+     "name": "approved",
+     "type": "bool",
+     "internalType": "bool"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "name": "setBaseURI",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "uri",
+     "type": "string",
+     "internalType": "string"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "name": "setPlaceholderURI",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "uri",
+     "type": "string",
+     "internalType": "string"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "name": "setPrice",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "price",
+     "type": "uint96",
+     "internalType": "uint96"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "name": "setProvenanceHash",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "hash",
+     "type": "bytes32",
+     "internalType": "bytes32"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "name": "setRoyalty",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "receiver",
+     "type": "address",
+     "internalType": "address"
+    },
+    {
+     "name": "bps",
+     "type": "uint96",
+     "internalType": "uint96"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "name": "setSchedule",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "start",
+     "type": "uint40",
+     "internalType": "uint40"
+    },
+    {
+     "name": "durations",
+     "type": "uint32[6]",
+     "internalType": "uint32[6]"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "name": "setStageConfig",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "stage",
+     "type": "uint8",
+     "internalType": "uint8"
+    },
+    {
+     "name": "cap",
+     "type": "uint16",
+     "internalType": "uint16"
+    },
+    {
+     "name": "maxPerWallet_",
+     "type": "uint8",
+     "internalType": "uint8"
+    },
+    {
+     "name": "price",
+     "type": "uint96",
+     "internalType": "uint96"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "name": "setStageRoot",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "stage",
+     "type": "uint8",
+     "internalType": "uint8"
+    },
+    {
+     "name": "root",
+     "type": "bytes32",
+     "internalType": "bytes32"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "name": "setStageWindow",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "stage",
+     "type": "uint8",
+     "internalType": "uint8"
+    },
+    {
+     "name": "start",
+     "type": "uint40",
+     "internalType": "uint40"
+    },
+    {
+     "name": "end",
+     "type": "uint40",
+     "internalType": "uint40"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "name": "setTeamAllotment",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "account",
+     "type": "address",
+     "internalType": "address"
+    },
+    {
+     "name": "amount",
+     "type": "uint8",
+     "internalType": "uint8"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "name": "setTeamAllotments",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "accounts",
+     "type": "address[]",
+     "internalType": "address[]"
+    },
+    {
+     "name": "amounts",
+     "type": "uint8[]",
+     "internalType": "uint8[]"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "name": "setTeamMain",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "newMain",
+     "type": "address",
+     "internalType": "address"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "name": "setTreasury",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "newTreasury",
+     "type": "address",
+     "internalType": "address"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "name": "stageInfo",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "stage",
+     "type": "uint8",
+     "internalType": "uint8"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "",
+     "type": "tuple",
+     "components": [
+      {
+       "name": "merkleRoot",
+       "type": "bytes32",
+       "internalType": "bytes32"
+      },
+      {
+       "name": "start",
+       "type": "uint40",
+       "internalType": "uint40"
+      },
+      {
+       "name": "end",
+       "type": "uint40",
+       "internalType": "uint40"
+      },
+      {
+       "name": "cap",
+       "type": "uint16",
+       "internalType": "uint16"
+      },
+      {
+       "name": "minted",
+       "type": "uint16",
+       "internalType": "uint16"
+      },
+      {
+       "name": "maxPerWallet",
+       "type": "uint8",
+       "internalType": "uint8"
+      },
+      {
+       "name": "price",
+       "type": "uint96",
+       "internalType": "uint96"
+      }
+     ],
+     "internalType": "struct ChogMint.Stage"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "stageMinted",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint128",
+     "internalType": "uint128"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "startingIndex",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "supportsInterface",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "interfaceId",
+     "type": "bytes4",
+     "internalType": "bytes4"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "",
+     "type": "bool",
+     "internalType": "bool"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "symbol",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "string",
+     "internalType": "string"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "teamAllotment",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "",
+     "type": "address",
+     "internalType": "address"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint8",
+     "internalType": "uint8"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "teamMain",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "address",
+     "internalType": "address"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "tokenURI",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "id",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "",
+     "type": "string",
+     "internalType": "string"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "tokensOfOwner",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "owner",
+     "type": "address",
+     "internalType": "address"
+    }
+   ],
+   "outputs": [
+    {
+     "name": "ids",
+     "type": "uint256[]",
+     "internalType": "uint256[]"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "totalSupply",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "transferFrom",
+   "type": "function",
+   "inputs": [
+    {
+     "name": "from",
+     "type": "address",
+     "internalType": "address"
+    },
+    {
+     "name": "to",
+     "type": "address",
+     "internalType": "address"
+    },
+    {
+     "name": "tokenId",
+     "type": "uint256",
+     "internalType": "uint256"
+    }
+   ],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  },
+  {
+   "name": "treasury",
+   "type": "function",
+   "inputs": [],
+   "outputs": [
+    {
+     "name": "",
+     "type": "address",
+     "internalType": "address"
+    }
+   ],
+   "stateMutability": "view"
+  },
+  {
+   "name": "withdraw",
+   "type": "function",
+   "inputs": [],
+   "outputs": [],
+   "stateMutability": "nonpayable"
+  }
+ ]
+}

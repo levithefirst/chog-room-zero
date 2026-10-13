@@ -1,0 +1,747 @@
+{
+ "generatedBy": "tools/nft/build-catalogue.ts",
+ "validation": {
+  "rawErrors": 0,
+  "catalogueErrors": 0,
+  "warnings": [
+   {
+    "severity": "warning",
+    "code": "no-body",
+    "message": "143 tokens say Naked=No but have no Body trait (metadata ids 1479, 1490, 1491, 1492, 1515, 1534, 1537, 1557, ...)"
+   },
+   {
+    "severity": "warning",
+    "code": "near-duplicate",
+    "message": "Body: \"Stripe Shirt\" (4) / \"Stripe shirts\" (3) differ only by case, spacing or plural",
+    "subject": "Body"
+   },
+   {
+    "severity": "warning",
+    "code": "near-duplicate",
+    "message": "Head: \"Boob Cap\" (46) / \"BOOB Cap\" (3) differ only by case, spacing or plural",
+    "subject": "Head"
+   },
+   {
+    "severity": "warning",
+    "code": "near-duplicate",
+    "message": "Head: \"JEET Cap\" (30) / \"Jeet Cap\" (1) differ only by case, spacing or plural",
+    "subject": "Head"
+   }
+  ]
+ },
+ "unverified": [
+  {
+   "id": "starting-index",
+   "claim": "startingIndex is 1461",
+   "status": "derived",
+   "evidence": "the verified contract rule (metadataId = ((id - 1 + startingIndex) % maxSupply) + 1) fits all 50 token/name pairs read from OpenSea only for 1461",
+   "notEvidence": "not read from the chain",
+   "howToClose": "node tools/nft/read-chain.ts (reads startingIndex, and with --all checks metadataId for all 1,969 tokens)"
+  },
+  {
+   "id": "base-uri",
+   "claim": "baseURI is ipfs://bafybeid4ybujnscdipkno7ps5utqelp5ry5ryreqhay3zhgk3a6x4jruqu/",
+   "status": "inferred",
+   "evidence": "OpenSea reports tokenUri .../ipfs/<this CID>/1246.json for token 1754, and the contract builds tokenURI as baseURI + metadataId + \".json\"",
+   "notEvidence": "not read from the chain",
+   "howToClose": "node tools/nft/read-chain.ts"
+  },
+  {
+   "id": "metadata-bytes",
+   "claim": "the 1,969 files in data/chog-genesis/raw are exactly what the CID names",
+   "status": "not verified",
+   "evidence": "fetched as one CAR through a text-only scraping service from OpenSea's gateway; all 1,969 parse, the directory lists exactly 1.json to 1969.json, file 1246.json is identical on two gateways, 12 of 12 trait counts match OpenSea",
+   "notEvidence": "blocks were not hashed against their content ids (the transport turned bytes into text), and each object was assigned to its file number by the number in its own name and image URI, not by the directory entry that points at it (those entries are binary)",
+   "howToClose": "node tools/nft/verify-ipfs.ts (hashes every block, compares every file)"
+  },
+  {
+   "id": "total-supply",
+   "claim": "totalSupply() is 1,969 (fully minted)",
+   "status": "reported",
+   "evidence": "mint.chog.xyz shows \"Minted 1,969 / 1,969\" and says phase counts are read from the contract; OpenSea lists 1,969 items",
+   "notEvidence": "not read by this project",
+   "howToClose": "node tools/nft/read-chain.ts"
+  },
+  {
+   "id": "official-address",
+   "claim": "this contract is the official CHOG Genesis contract",
+   "status": "strong, not cryptographic",
+   "evidence": "official mint site mint.chog.xyz links to the OpenSea collection chog-genesis, whose items use this address; the source is verified on Sourcify as ChogMint (exact match, 2026-09-03); supply and metadata description (1969 pieces) agree",
+   "notEvidence": "no ChogLabs page found that prints the address; the official site renders it with JavaScript this project could not run",
+   "howToClose": "owner or ChogLabs confirms the address in an official channel"
+  },
+  {
+   "id": "mint-accounting",
+   "claim": "every minted token is accounted for by the published mint phases",
+   "status": "gap",
+   "evidence": "mint site phases: GTD 1,206, FCFS Chest 350, FCFS Roles 157, FCFS 0, Public 0 = 1,713 of 1,969",
+   "notEvidence": "256 tokens are not explained by the phase list (probably the reserve / team mint, which the contract supports)",
+   "howToClose": "read reserveMinted() and the Minted events"
+  },
+  {
+   "id": "ownership",
+   "claim": "who owns each token",
+   "status": "not acquired",
+   "evidence": "ownerOf(uint256) is in the verified ABI",
+   "notEvidence": "no owner was read; ownership changes and is not catalogue data",
+   "howToClose": "at bind time, server side, with ownerOf (design in docs/design/nft.md)"
+  },
+  {
+   "id": "art-rights",
+   "claim": "what the game may do with the artwork",
+   "status": "UNKNOWN",
+   "evidence": "no collection-specific terms were found (only general articles on NFT licensing)",
+   "notEvidence": "the contract source is MIT licensed; that is the code, not the art",
+   "howToClose": "owner asks ChogLabs for written terms; until then use no Chog art in the build"
+  },
+  {
+   "id": "images",
+   "claim": "image files exist and match their names",
+   "status": "not checked",
+   "evidence": "image URIs follow ipfs://<image CID>/<n>.webp for all 1,969 records",
+   "notEvidence": "no image was downloaded or looked at, so every visual statement in the docs comes from trait names only",
+   "howToClose": "download from the image CID and view a sample"
+  },
+  {
+   "id": "third-party-rank",
+   "claim": "OpenSea rarity rank for all tokens",
+   "status": "sample only",
+   "evidence": "50 ranks read from one listing page, all reproduced exactly by calculated score M5; OpenSea says its ranking follows OpenRarity with Double Sort and Trait Count updates",
+   "notEvidence": "the ranks of the other 1,919 tokens were not read and OpenSea's full formula is not published",
+   "howToClose": "not needed for the game; the OpenSea API with a key would list every rank"
+  }
+ ],
+ "missingRecords": {
+  "metadataFiles": 0,
+  "tokenRecords": 0,
+  "note": "all 1,969 metadata files present; the IPFS directory node lists exactly 1.json to 1969.json"
+ },
+ "missingData": [
+  {
+   "id": "owners",
+   "what": "current owner of each token",
+   "why": "ownership changes; it must be read with ownerOf at bind time, not stored in a catalogue",
+   "status": "not acquired"
+  },
+  {
+   "id": "onchain-token-uri",
+   "what": "tokenURI(id) read from the contract",
+   "why": "this container cannot reach a Monad RPC; baseURI inferred from OpenSea",
+   "status": "not acquired; tools/nft/read-chain.ts closes it"
+  },
+  {
+   "id": "images",
+   "what": "the 1,969 image files",
+   "why": "not downloaded; image URIs recorded only. Art rights are UNKNOWN, so no art was copied into the repo",
+   "status": "not acquired by design"
+  },
+  {
+   "id": "rankings-other",
+   "what": "rarity rankings from sites other than OpenSea",
+   "why": "none was fetched",
+   "status": "not acquired"
+  },
+  {
+   "id": "rarity-all-opensea",
+   "what": "OpenSea rank for every token",
+   "why": "only the 50 shown on one listing page were read",
+   "status": "sample only (50 of 1,969)"
+  }
+ ],
+ "conflicts": {
+  "betweenSources": [],
+  "checked": [
+   {
+    "check": "supply",
+    "sources": [
+     "OpenSea collection page: 1,969 items",
+     "mint.chog.xyz: minted 1,969 / 1,969",
+     "IPFS metadata folder: 1,969 files",
+     "metadata description: 1969-piece collection"
+    ],
+    "result": "agree"
+   },
+   {
+    "check": "token page traits (token 1754, 12 traits)",
+    "sources": [
+     "IPFS 1246.json",
+     "OpenSea item page"
+    ],
+    "result": "agree, 12 of 12 values"
+   },
+   {
+    "check": "trait counts (the 12 counts OpenSea shows for token 1754)",
+    "sources": [
+     "this catalogue",
+     "OpenSea item page"
+    ],
+    "result": "agree, 12 of 12 counts"
+   },
+   {
+    "check": "file 1246.json bytes",
+    "sources": [
+     "ipfs2.seadn.io gateway",
+     "gateway.pinata.cloud gateway"
+    ],
+    "result": "identical"
+   },
+   {
+    "check": "token id to displayed number",
+    "sources": [
+     "Sourcify-verified contract rule with startingIndex 1461",
+     "50 OpenSea listing pairs"
+    ],
+    "result": "agree, 50 of 50"
+   }
+  ],
+  "internal": "no conflicting records; the inconsistencies below are naming inconsistencies inside the metadata itself"
+ },
+ "nearDuplicateTraitValues": [
+  {
+   "category": "Body",
+   "values": [
+    {
+     "value": "Stripe Shirt",
+     "count": 4
+    },
+    {
+     "value": "Stripe shirts",
+     "count": 3
+    }
+   ],
+   "basis": "same text after lower-casing, removing punctuation and a trailing s"
+  },
+  {
+   "category": "Head",
+   "values": [
+    {
+     "value": "Boob Cap",
+     "count": 46
+    },
+    {
+     "value": "BOOB Cap",
+     "count": 3
+    }
+   ],
+   "basis": "same text after lower-casing, removing punctuation and a trailing s"
+  },
+  {
+   "category": "Head",
+   "values": [
+    {
+     "value": "JEET Cap",
+     "count": 30
+    },
+    {
+     "value": "Jeet Cap",
+     "count": 1
+    }
+   ],
+   "basis": "same text after lower-casing, removing punctuation and a trailing s"
+  }
+ ],
+ "semanticNearDuplicateCandidates": [
+  {
+   "category": "Eyes",
+   "values": [
+    "Normal",
+    "Normal Eye",
+    "Base"
+   ],
+   "counts": [
+    2,
+    74,
+    33
+   ]
+  },
+  {
+   "category": "Eyes",
+   "values": [
+    "Round",
+    "Round Eye"
+   ],
+   "counts": [
+    77,
+    61
+   ]
+  },
+  {
+   "category": "Aura",
+   "values": [
+    "Royal Blue",
+    "Royal Blue Aura",
+    "Royal Aura"
+   ],
+   "counts": [
+    3,
+    57,
+    45
+   ]
+  },
+  {
+   "category": "Aura",
+   "values": [
+    "Rose Aura",
+    "Rose Scent"
+   ],
+   "counts": [
+    65,
+    5
+   ]
+  },
+  {
+   "category": "Aura",
+   "values": [
+    "Purple",
+    "Light Purple",
+    "Violet"
+   ],
+   "counts": [
+    62,
+    60,
+    52
+   ]
+  },
+  {
+   "category": "Background",
+   "values": [
+    "Rose Pink",
+    "Rosy Pink",
+    "Rosie"
+   ],
+   "counts": [
+    1,
+    47,
+    127
+   ]
+  },
+  {
+   "category": "Background",
+   "values": [
+    "Aqua",
+    "Aqua Blue",
+    "Aqua Mint"
+   ],
+   "counts": [
+    133,
+    1,
+    69
+   ]
+  },
+  {
+   "category": "Head",
+   "values": [
+    "Peace hat",
+    "Peace Cap",
+    "Red Peace Cap"
+   ],
+   "counts": [
+    38,
+    1,
+    38
+   ]
+  },
+  {
+   "category": "Head",
+   "values": [
+    "MCGA",
+    "MCGA Cap",
+    "MMGA Cap"
+   ],
+   "counts": [
+    35,
+    21,
+    34
+   ]
+  },
+  {
+   "category": "Body",
+   "values": [
+    "Squid Game",
+    "Squid Game Guard"
+   ],
+   "counts": [
+    18,
+    37
+   ]
+  },
+  {
+   "category": "Body",
+   "values": [
+    "Jesus",
+    "Jesus Robe"
+   ],
+   "counts": [
+    24,
+    2
+   ]
+  }
+ ],
+ "displayReview": [
+  {
+   "id": "third-party-reference",
+   "reason": "names a third-party franchise or character; art rights need a look",
+   "category": "Body",
+   "value": "Squid Game Guard",
+   "tokens": 37
+  },
+  {
+   "id": "religious",
+   "reason": "refers to a religious figure",
+   "category": "Body",
+   "value": "Jesus",
+   "tokens": 24
+  },
+  {
+   "id": "crude",
+   "reason": "crude or sexual wording; use a curated display name",
+   "category": "Body",
+   "value": "MILF Lover",
+   "tokens": 22
+  },
+  {
+   "id": "third-party-reference",
+   "reason": "names a third-party franchise or character; art rights need a look",
+   "category": "Body",
+   "value": "Squid Game",
+   "tokens": 18
+  },
+  {
+   "id": "crude",
+   "reason": "crude or sexual wording; use a curated display name",
+   "category": "Body",
+   "value": "Virgin",
+   "tokens": 14
+  },
+  {
+   "id": "crude",
+   "reason": "crude or sexual wording; use a curated display name",
+   "category": "Body",
+   "value": "Zero THOTS",
+   "tokens": 11
+  },
+  {
+   "id": "crude",
+   "reason": "crude or sexual wording; use a curated display name",
+   "category": "Body",
+   "value": "BBC",
+   "tokens": 9
+  },
+  {
+   "id": "third-party-reference",
+   "reason": "names a third-party franchise or character; art rights need a look",
+   "category": "Body",
+   "value": "Guko",
+   "tokens": 9
+  },
+  {
+   "id": "third-party-reference",
+   "reason": "names a third-party franchise or character; art rights need a look",
+   "category": "Body",
+   "value": "Gojo",
+   "tokens": 4
+  },
+  {
+   "id": "crude",
+   "reason": "crude or sexual wording; use a curated display name",
+   "category": "Body",
+   "value": "Boner",
+   "tokens": 2
+  },
+  {
+   "id": "religious",
+   "reason": "refers to a religious figure",
+   "category": "Body",
+   "value": "Jesus Robe",
+   "tokens": 2
+  },
+  {
+   "id": "slur",
+   "reason": "contains a slur; use a curated display name",
+   "category": "Eyes",
+   "value": "Retard",
+   "tokens": 24
+  },
+  {
+   "id": "slur",
+   "reason": "contains a slur; use a curated display name",
+   "category": "Eyes",
+   "value": "Blue Retard",
+   "tokens": 3
+  },
+  {
+   "id": "slur",
+   "reason": "contains a slur; use a curated display name",
+   "category": "Eyes",
+   "value": "Mixed Retard",
+   "tokens": 2
+  },
+  {
+   "id": "slur",
+   "reason": "contains a slur; use a curated display name",
+   "category": "Eyes",
+   "value": "Green Retard",
+   "tokens": 1
+  },
+  {
+   "id": "slur",
+   "reason": "contains a slur; use a curated display name",
+   "category": "Eyes",
+   "value": "Red Retard",
+   "tokens": 1
+  },
+  {
+   "id": "crude",
+   "reason": "crude or sexual wording; use a curated display name",
+   "category": "Head",
+   "value": "Balls Cap",
+   "tokens": 62
+  },
+  {
+   "id": "crude",
+   "reason": "crude or sexual wording; use a curated display name",
+   "category": "Head",
+   "value": "Horny Cap",
+   "tokens": 58
+  },
+  {
+   "id": "crude",
+   "reason": "crude or sexual wording; use a curated display name",
+   "category": "Head",
+   "value": "Boob Cap",
+   "tokens": 46
+  },
+  {
+   "id": "slur",
+   "reason": "contains a slur; use a curated display name",
+   "category": "Head",
+   "value": "RETARD Cap",
+   "tokens": 27
+  },
+  {
+   "id": "crude",
+   "reason": "crude or sexual wording; use a curated display name",
+   "category": "Head",
+   "value": "BOOB Cap",
+   "tokens": 3
+  },
+  {
+   "id": "religious",
+   "reason": "refers to a religious figure",
+   "category": "Head",
+   "value": "Holy Seal",
+   "tokens": 3
+  }
+ ],
+ "notNakedWithoutBody": {
+  "count": 143,
+  "metadataIds": [
+   14,
+   26,
+   39,
+   48,
+   59,
+   60,
+   79,
+   80,
+   86,
+   106,
+   147,
+   152,
+   175,
+   185,
+   230,
+   276,
+   286,
+   288,
+   290,
+   291,
+   329,
+   339,
+   351,
+   362,
+   367,
+   385,
+   398,
+   401,
+   403,
+   406,
+   430,
+   433,
+   436,
+   479,
+   528,
+   549,
+   570,
+   579,
+   585,
+   596,
+   635,
+   652,
+   659,
+   661,
+   677,
+   689,
+   696,
+   715,
+   719,
+   722,
+   734,
+   778,
+   796,
+   803,
+   844,
+   854,
+   859,
+   883,
+   884,
+   896,
+   905,
+   924,
+   931,
+   932,
+   937,
+   938,
+   941,
+   943,
+   946,
+   958,
+   991,
+   997,
+   1003,
+   1013,
+   1032,
+   1034,
+   1039,
+   1052,
+   1094,
+   1096,
+   1098,
+   1099,
+   1103,
+   1121,
+   1132,
+   1139,
+   1191,
+   1287,
+   1297,
+   1304,
+   1318,
+   1342,
+   1344,
+   1369,
+   1392,
+   1400,
+   1401,
+   1403,
+   1420,
+   1421,
+   1429,
+   1435,
+   1437,
+   1459,
+   1479,
+   1490,
+   1491,
+   1492,
+   1515,
+   1534,
+   1537,
+   1557,
+   1562,
+   1570,
+   1587,
+   1604,
+   1612,
+   1619,
+   1669,
+   1671,
+   1674,
+   1694,
+   1699,
+   1711,
+   1724,
+   1740,
+   1747,
+   1766,
+   1767,
+   1772,
+   1799,
+   1805,
+   1815,
+   1830,
+   1835,
+   1893,
+   1912,
+   1914,
+   1926,
+   1951,
+   1955,
+   1958,
+   1965
+  ],
+  "note": "Naked=No but no Body trait. Unexplained by the metadata; check the art before treating Body as always present"
+ },
+ "specialTokens": [
+  {
+   "tokenId": 561,
+   "metadataId": 53,
+   "name": "CHOG #53 — Blaze",
+   "specialName": "Blaze"
+  },
+  {
+   "tokenId": 900,
+   "metadataId": 392,
+   "name": "CHOG #392 — Burning Skully",
+   "specialName": "Burning Skully"
+  },
+  {
+   "tokenId": 942,
+   "metadataId": 434,
+   "name": "CHOG #434 — Chog Scream",
+   "specialName": "Chog Scream"
+  },
+  {
+   "tokenId": 1002,
+   "metadataId": 494,
+   "name": "CHOG #494 — Chogbomination",
+   "specialName": "Chogbomination"
+  },
+  {
+   "tokenId": 1481,
+   "metadataId": 973,
+   "name": "CHOG #973 — Frogger",
+   "specialName": "Frogger"
+  },
+  {
+   "tokenId": 1514,
+   "metadataId": 1006,
+   "name": "CHOG #1006 — Grim",
+   "specialName": "Grim"
+  },
+  {
+   "tokenId": 1667,
+   "metadataId": 1159,
+   "name": "CHOG #1159 — Halo",
+   "specialName": "Halo"
+  },
+  {
+   "tokenId": 1798,
+   "metadataId": 1290,
+   "name": "CHOG #1290 — Krown",
+   "specialName": "Krown"
+  },
+  {
+   "tokenId": 1881,
+   "metadataId": 1373,
+   "name": "CHOG #1373 — Midas",
+   "specialName": "Midas"
+  },
+  {
+   "tokenId": 1884,
+   "metadataId": 1376,
+   "name": "CHOG #1376 — Redd",
+   "specialName": "Redd"
+  }
+ ]
+}

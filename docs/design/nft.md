@@ -76,3 +76,13 @@ Deterministic mapping (`src/nft/traits.ts`, Option B above): token number, then 
 Sidegrades only: health, armour, damage and speed never change (`tests/operators.test.ts`). Seeded duel parity: each sidegrade vs the standard kit (Kettle, slot-swapped, strafing, 3/6/9 u, 80 duels per cell) must win between 25% and 75% (`tests/rc-nft-demo.test.ts`).
 
 The owner's RC-1 brief changes two earlier notes. Guests now keep device-local personal bests; this is not Chog operator history, so the LOCKED guest rule still holds for token history. The DEMO screen is reachable from the title before any room is finished.
+
+## NFT-R1 research result (2026-10-13, EVIDENCE; full package in `docs/research/chog-genesis/`)
+Answers to "Verify before relying on anything", checked from public sources, not from the chain (this environment had no RPC access):
+1. Chain: Monad mainnet, chain id 143.
+2. Contract: `0xc96d31F8626c6D03Fae5dCD3d61e3FB9F4a73763`, `ChogMint`, source verified on Sourcify (exact match). Supply 1,969.
+3. Standard ERC-721 (+ ERC-2981). Ownership reads: `ownerOf(uint256)` and `tokensOfOwner(address)` (one call lists a wallet's tokens). Not called yet. Monad RPCs reject `eth_getLogs` over more than 100 blocks, so do not rebuild ownership from logs.
+4. Metadata: IPFS folder, 13 trait categories, permanent after the contract's reveal. All 1,969 records are in `data/chog-genesis/` (complete and consistent, not yet hash-verified). **Token id and the number shown in the name are different** (`metadataId = ((tokenId - 1 + startingIndex) % 1969) + 1`, `startingIndex` derived as 1461, not yet read). Key history by token id; show the metadata id.
+5. Art rights: still UNKNOWN. No Chog art in the build until the owner has written terms.
+6. RPC: five public endpoints listed at docs.monad.xyz/developer-essentials/network-information.
+Option A (real traits mapped by a hand-written table) is now possible. A proposal is in `IDENTITY-AND-MAPPING.md`; it needs a `/brief`, the Core Feel Gate, and the two network checks (`tools/nft/read-chain.ts`, `tools/nft/verify-ipfs.ts`) run once with internet access. The gate and all rules above are unchanged.
