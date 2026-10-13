@@ -1,6 +1,6 @@
 # Online multiplayer (RC-8)
 
-Status 2026-10-13: **built and tested locally, not deployed.** Hosting the game server is an owner decision (below).
+Status 2026-10-13: **built and tested locally; Render Free chosen by the owner, service not created yet** (below).
 Solo play against bots is unchanged and needs no server.
 
 ## Before RC-8
@@ -89,6 +89,28 @@ controls as in solo, but no online run used it), more than one match at a time o
 build:server`, start `npm run server`, env `ALLOWED_ORIGINS=https://chogroomzero.xyz,https://chog-room-zero.vercel.app`.
 Then set `VITE_GAME_SERVER_URL=wss://<service>.onrender.com/ws` in the Vercel project and redeploy the client. Until
 then Online says plainly that the server is not deployed. Owner: create the service (needs an account) and approve.
+
+## Render Free deployment (owner approved 2026-10-13)
+
+`render.yaml` (repo root) is a Render Blueprint for exactly one service: `room-zero-game`, **plan free** (Render's
+default for an omitted plan is the paid 0.5c-512mb), region frankfurt, branch `ccr-e7fadb8f-qtochk`, build
+`npm ci && npm run build:server`, start `npm run server`, health check `/`. Environment variable names:
+`NODE_VERSION` (22.22.0, the tested runtime; `package.json` engines has no upper bound) and `ALLOWED_ORIGINS` (the
+RC-8 preview's stable branch URL only). `PORT` is provided by Render. No database, no disk, no secrets.
+
+Owner steps (this agent has no Render access, and this environment's network blocks render.com and onrender.com):
+1. dashboard.render.com > New > Blueprint > connect GitHub repo `levithefirst/chog-room-zero` > branch
+   `ccr-e7fadb8f-qtochk` > Render reads `render.yaml` > check it says **Free** > Apply. No card is needed for Free.
+2. Copy the service URL (`https://room-zero-game....onrender.com`). `GET /` must answer `room-zero game server ok`.
+3. Then the agent sets `VITE_GAME_SERVER_URL=wss://<that host>/ws` on Vercel, Preview, branch
+   `ccr-e7fadb8f-qtochk` only (production builds never see it), and redeploys the branch preview.
+4. Testers use the branch URL https://chog-room-zero-git-ccr-e7fad-e59a4d-levithefirst-1227s-projects.vercel.app
+   (the per-deployment preview URLs are not in `ALLOWED_ORIGINS`; the server answers them with HTTP 401).
+
+Free-tier behaviour the client handles: the service sleeps after 15 minutes with no traffic and takes about a minute
+to wake. Opening Online sends an HTTP request that wakes it and retries the socket every 3 s for up to 90 s, showing
+"Waking the game server (free hosting, up to a minute)". An open game page pings every 2 s, which keeps it awake.
+750 free instance hours a month per workspace; rooms live in memory, so a restart or redeploy ends running matches.
 
 ## Run it locally
 

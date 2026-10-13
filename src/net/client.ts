@@ -44,6 +44,8 @@ export class OnlineSession {
   private seq = 0;
   private pendingEvents: { sounds: SoundEvent[]; hits: HitEvent[] }[] = [];
   private retryUntil = 0;
+  /** Render Free sleeps after 15 idle minutes and takes about a minute to wake; until then a socket is refused. */
+  private wakeUntil = 0;
   rtt = 0;
 
   constructor(readonly url: string, private name: () => string, private hero: () => string, private store: Storage | null) {
@@ -53,6 +55,11 @@ export class OnlineSession {
   connect(): void {
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
     if (this.state !== 'reconnecting') this.state = 'connecting';
+    if (this.state === 'connecting' && this.wakeUntil === 0) {
+      // A plain HTTP request is what wakes a sleeping free host; the socket is retried below until it answers.
+      this.wakeUntil = performance.now() + 90000;
+      try { void fetch(this.url.replace(/^ws/, 'http').replace(/\/ws$/, '/'), { mode: 'no-cors', cache: 'no-store' }).catch(() => undefined); } catch { /* no fetch */ }
+    }
     const ws = new WebSocket(this.url);
     this.ws = ws;
     ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', v: PROTOCOL, name: this.name(), hero: this.hero(), ...(this.token ? { token: this.token } : {}) }));
@@ -67,8 +74,12 @@ export class OnlineSession {
         this.message = 'Connection lost. Reconnecting...';
         if (performance.now() < this.retryUntil) setTimeout(() => this.connect(), 1500);
         else { this.state = 'error'; this.message = 'Could not reconnect. The match went on without you.'; }
+      } else if (this.state === 'connecting' && performance.now() < this.wakeUntil) {
+        this.message = 'Waking the game server (free hosting, up to a minute)...';
+        setTimeout(() => { if (this.state === 'connecting') this.connect(); }, 3000);
       } else if (this.state !== 'over' && this.state !== 'offline') {
         this.state = 'error';
+        this.wakeUntil = 0;
         this.message = 'Could not reach the game server.';
       }
     };
@@ -76,6 +87,7 @@ export class OnlineSession {
 
   close(): void {
     this.state = 'offline';
+    this.wakeUntil = 0;
     const ws = this.ws;
     this.ws = null;
     ws?.close();
@@ -124,6 +136,7 @@ export class OnlineSession {
       case 'welcome':
         this.token = m.token;
         try { this.store?.setItem('chog-room-zero:net-token', m.token); } catch { /* storage blocked */ }
+        this.wakeUntil = 0;
         if (this.state === 'reconnecting' && !m.resumed) { this.state = 'error'; this.message = 'The match ended while you were away.'; return; }
         if (this.state !== 'reconnecting') this.state = 'idle';
         this.message = '';

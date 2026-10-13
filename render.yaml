@@ -1,0 +1,25 @@
+# Render Blueprint for the Room Zero game server (RC-8). One FREE web service, nothing else: no database (rooms live
+# in memory), no disk, no paid plan. `plan: free` must stay: Render's default for an omitted plan is the paid 0.5c-512mb.
+# Docs: docs/MULTIPLAYER.md. The browser game stays on Vercel; it finds this server through VITE_GAME_SERVER_URL.
+services:
+  - type: web
+    name: room-zero-game
+    runtime: node
+    plan: free
+    # Frankfurt: nearest Render region to West Africa (the owner's time zone). Cannot be changed after creation.
+    region: frankfurt
+    branch: ccr-e7fadb8f-qtochk
+    buildCommand: npm ci && npm run build:server
+    startCommand: npm run server
+    # GET / answers "room-zero game server ok" (server/index.ts).
+    healthCheckPath: /
+    envVars:
+      # The Node version every test ran on. package.json allows >=26 without an upper bound, which Render would
+      # resolve to the newest release.
+      - key: NODE_VERSION
+        value: 22.22.0
+      # Browser origins allowed to open a game socket (exact match on the Origin header; empty would allow any site).
+      # The RC-8 preview's stable branch URL. Add https://chogroomzero.xyz,https://chog-room-zero.vercel.app only when
+      # production carries the online client (RC-7 in production has none).
+      - key: ALLOWED_ORIGINS
+        value: https://chog-room-zero-git-ccr-e7fad-e59a4d-levithefirst-1227s-projects.vercel.app
