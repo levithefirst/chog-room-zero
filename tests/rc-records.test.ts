@@ -12,8 +12,11 @@ describe('RC-1 personal bests', () => {
     r = recordBest(s, { hero: 'kettle', won: true, seconds: 95, kills: 5 });
     expect(r.newBest).toEqual({ time: false, kills: false });
     r = recordBest(s, { hero: 'wick', won: true, seconds: 60, kills: 5 });
-    expect(r.records.heroes.kettle).toEqual({ bestWinSeconds: 80, mostKills: 5, runs: 3, wins: 2 });
-    expect(r.records.overall).toEqual({ bestWinSeconds: 60, mostKills: 5, runs: 4, wins: 3 });
+    expect(r.records.heroes.kettle).toMatchObject({ bestWinSeconds: 80, mostKills: 5, runs: 3, wins: 2 });
+    expect(r.records.overall).toMatchObject({ bestWinSeconds: 60, mostKills: 5, runs: 4, wins: 3 });
+    // RC-7 career totals: every run adds up (kills 2+5+5 for Kettle, time played 30+80+95).
+    expect(r.records.heroes.kettle).toMatchObject({ kills: 12, seconds: 205 });
+    expect(r.records.overall).toMatchObject({ kills: 17, seconds: 265 });
   });
   it('persists across a reload (fresh load from the same store) and works for guests (no token needed)', () => {
     const s = mem();
@@ -28,4 +31,13 @@ describe('RC-1 personal bests', () => {
     expect(() => recordBest(blocked as never, { hero: 'mop', won: false, seconds: 1, kills: 0 })).not.toThrow();
   });
   it('formats times', () => { expect(fmtTime(75)).toBe('1:15'); expect(fmtTime(null)).toBe('--'); });
+  it('RC-7: adds career totals per run, and loads an older save without them as zeros', () => {
+    const s = mem();
+    s.m.set(RECORDS_KEY, JSON.stringify({ overall: { bestWinSeconds: 50, mostKills: 4, runs: 2, wins: 1 }, heroes: { wick: { bestWinSeconds: 50, mostKills: 4, runs: 2, wins: 1 } } }));
+    const old = loadRecords(s);
+    expect(old.overall).toMatchObject({ bestWinSeconds: 50, runs: 2, kills: 0, bullets: 0, pickups: 0 });
+    const r = recordBest(s, { hero: 'wick', won: true, seconds: 40, kills: 5, bullets: 20, hits: 12, damageDealt: 400, damageTaken: 30, pickups: 2, abilities: 1 });
+    expect(r.records.heroes.wick).toMatchObject({ runs: 3, wins: 2, bestWinSeconds: 40, kills: 5, bullets: 20, hits: 12, damageDealt: 400, damageTaken: 30, pickups: 2, abilities: 1, seconds: 40 });
+    expect(r.records.overall.hits).toBe(12);
+  });
 });

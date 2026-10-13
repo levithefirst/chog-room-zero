@@ -62,6 +62,7 @@ export function layoutStage(el: HTMLElement): StageLayout {
     ? `right:auto;bottom:auto;width:${L.w}px;height:${L.h}px;transform:translate(${L.screenW}px,0) rotate(90deg)`
     : '';
   const b = document.body.classList;
+  b.toggle('staged', true); // from here stage.ts, not the pre-script CSS rule, positions the stage
   b.toggle('rot', L.rotated);
   b.toggle('compact', L.h <= 460);
   b.toggle('narrow', L.h > L.w && L.w < 600);

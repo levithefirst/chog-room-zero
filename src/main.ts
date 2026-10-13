@@ -1,9 +1,9 @@
-import { createRenderer, createFx, COVER_FLASH_SECONDS } from './render/render';
-import { createInput } from './input/input';
+import { createRenderer, createFx, COVER_FLASH_SECONDS, COLLECT_SECONDS } from './render/render';
+import { createInput, touchStick } from './input/input';
 import { createSummaryGate, overlayInputAllowed } from './input/gate';
 import { createAudio } from './audio/audio';
 import { fixedSteps } from './sim/sim';
-import { createWorld, hears, player, stepWorld, IDLE_INPUT, type World } from './sim/world';
+import { createWorld, hears, player, stepWorld, wants, IDLE_INPUT, type PickupKind, type World } from './sim/world';
 import { ROOM_ZERO } from './config/map';
 import { sightClear, walkable } from './sim/level';
 import { clampMarker } from './render/visibility';
@@ -16,12 +16,16 @@ import { heroForKey } from './ui/heroKeys';
 import { orientationOf, ORIENTATION_QUERY } from './ui/orientation';
 import { fullscreenSupported, isFullscreen, layoutStage, rectToStage, requestLandscape, stage, type LaunchResult } from './ui/stage';
 import { coverBoxAt } from './sim/cover';
-import { WEAPONS } from './config/weapons';
 import { adapterFromUrl, resolveIdentity, GUEST, type Identity } from './nft/identity';
 import { recordRun, type TokenHistory } from './nft/history';
 import { boundIdentity } from './nft/identity';
 import { DEMO_COPY, TRAIT_INFO, isTokenId, sampleTokens, traitsFor } from './nft/traits';
-import { fmtTime, loadRecords, recordBest, type Records } from './ui/records';
+import { RECORDS_KEY, loadRecords, recordBest, type Records } from './ui/records';
+import { PROFILE_KEY, QUALITY_DPR, STICK_PX, linkIdentity, loadProfile, loadSettings, saveProfile, saveSettings, togglePin, validateNickname, type Profile, type Settings } from './ui/profile';
+import { MEDALS_KEY, awardMedals, loadMedals, type MedalDef, type Unlocked } from './ui/medals';
+import { TIPS_KEY, loadShownTips, nextTip, saveShownTips, tipText, type TipId } from './ui/tips';
+import { esc, howtoHtml, nickHtml, profileHtml, resultsHtml, selectHtml, settingsHtml, titleHtml, type AuthView, type ProfileTab, type ScreenCtx } from './ui/screens';
+import { discoverWallets, fetchAuthConfig, fetchSession, googleSignIn, signOut, walletSignIn, type ServerIdentity } from './ui/auth';
 import { SIDEGRADES } from './sim/operators';
 import { createAutopilot, type Autopilot } from './debug/autopilot';
 
@@ -44,20 +48,39 @@ function compass(dx: number, dy: number): string {
   return names[i];
 }
 
-function esc(s: string): string {
-  return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-}
-
 const SPEAKER_ON = '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9c1.5 1.5 1.5 4.5 0 6M18.5 6.5c3 3 3 8 0 11"/></svg>';
 const SPEAKER_OFF = '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9l5 6M21 9l-5 6"/></svg>';
 
+// The build's commit (Vercel sets VERCEL_GIT_COMMIT_SHA at build time; vite.config.ts injects it), shown in Settings.
+declare const __BUILD_SHA__: string;
+
+// Boot screen (RC-7): the real start-up steps, in order, so a slow phone shows progress instead of black. There is
+// no server to connect to: every step is local work. A failure shows the reason and a Retry button.
+const BOOT_STEPS = ['Loading fonts', 'Starting the renderer', 'Checking your Chog', 'Building the basement'];
+function boot(i: number) {
+  const fill = document.getElementById('bootfill'), step = document.getElementById('bootstep');
+  if (fill) fill.style.width = `${Math.round((i / BOOT_STEPS.length) * 100)}%`;
+  if (step) step.textContent = `${i + 1}/${BOOT_STEPS.length} ${BOOT_STEPS[i] ?? ''}`;
+}
+function bootDone() {
+  const b = document.getElementById('boot');
+  if (!b) return;
+  boot(BOOT_STEPS.length - 1);
+  (document.getElementById('bootfill') as HTMLElement).style.width = '100%';
+  b.classList.add('done');
+  setTimeout(() => b.remove(), 400);
+}
+
 async function start() {
-  await Promise.all([document.fonts.load('600 20px "Plex Mono"'), document.fonts.load('600 20px "Barlow Cond"')]).catch(() => undefined);
-  // Lay the stage out before the canvas is created, so the first frame is already landscape on a phone held upright.
+  // Lay the stage out first, so the boot screen and the first frame are already landscape on a phone held upright.
   layoutStage(stageEl);
+  boot(0);
+  await Promise.all([document.fonts.load('600 20px "Plex Mono"'), document.fonts.load('600 20px "Barlow Cond"')]).catch(() => undefined);
+  boot(1);
   const renderer = await createRenderer(root);
   const input = createInput(root);
   const audio = createAudio();
+  boot(2);
   const resolved = await resolveIdentity(adapterFromUrl(location.search)).catch(() => ({ identity: GUEST, note: 'Playing as guest.' }));
   let identity: Identity = resolved.identity;
   const DEMO_KEY = 'chog.demoToken';
@@ -74,9 +97,24 @@ async function start() {
     : 'Guest';
   // Onboarding: shown once on first launch, re-openable from the title.
   const ONBOARD_KEY = 'chog.onboarded';
-  let titleView: 'main' | 'howto' | 'demo' = (() => { try { return localStorage.getItem(ONBOARD_KEY) === '1' ? 'main' : 'howto'; } catch { return 'main'; } })();
+  type TitleView = 'main' | 'howto' | 'demo' | 'profile' | 'settings' | 'nick';
+  let titleView: TitleView = (() => { try { return localStorage.getItem(ONBOARD_KEY) === '1' ? 'main' : 'howto'; } catch { return 'main'; } })();
   let records: Records = loadRecords(localStorage);
-  let lastRun: { newBest: { time: boolean; kills: boolean } } | null = null;
+  let lastRun: { newBest: { time: boolean; kills: boolean }; earned: MedalDef[] } | null = null;
+  // RC-7: guest profile, settings, medals and tips, all on this device.
+  let profile: Profile = loadProfile(localStorage);
+  let settings: Settings = loadSettings(localStorage);
+  let medals: Unlocked = loadMedals(localStorage);
+  let shownTips = loadShownTips(localStorage);
+  let profileTab: ProfileTab = 'player';
+  let confirmReset = false;
+  let nickError = '';
+  let nickSaved = false;
+  let nickReturn: TitleView = 'profile';
+  const auth: AuthView = { config: null, session: [], wallets: [], busy: false, message: '' };
+  const canVibrate = typeof navigator.vibrate === 'function';
+  // Per-run counters for the results screen and medals (the sim does not track these).
+  let runPickups = 0, runAbilities = 0;
 
   let phase: Phase = 'title';
   let heroId = (() => {
@@ -100,7 +138,22 @@ async function start() {
   let toastLeft = 0;
   const fx = createFx();
   const debugStats = { blockedCues: 0 };
+  boot(3);
   renderer.reset(world);
+
+  // Settings that reach into running systems: volume, render sharpness, touch stick travel.
+  function applySettings() {
+    audio.volume = settings.volume;
+    touchStick.radius = STICK_PX[settings.stick];
+    const res = Math.min(window.devicePixelRatio || 1, QUALITY_DPR[settings.quality]);
+    if (renderer.app.renderer.resolution !== res) renderer.app.renderer.resolution = res;
+  }
+  applySettings();
+  function setSettings(next: Settings) {
+    settings = next;
+    saveSettings(localStorage, settings);
+    applySettings();
+  }
 
   const mute = $('mute') as HTMLButtonElement;
   const paintMute = () => {
@@ -115,6 +168,7 @@ async function start() {
     e.stopPropagation();
     audio.muted = !audio.muted;
     paintMute();
+    if (phase === 'title' && titleView === 'settings') render();
   };
   $('pause').onpointerdown = (e) => {
     e.stopPropagation();
@@ -163,6 +217,7 @@ async function start() {
   function showHint(html: string, seconds: number) {
     hint.innerHTML = html;
     hintLeft = seconds;
+    sinceHint = 0;
     hint.style.opacity = seconds > 0 ? '1' : '0';
   }
   // First-match explanation of sound rings, shown once ever (persisted).
@@ -231,18 +286,31 @@ async function start() {
     $('hud').classList.toggle('on', phase === 'play' || phase === 'pause' || phase === 'recap');
     switch (phase) {
       case 'title': return showTitle();
-      case 'select': return showSelect();
+      case 'select': return show(selectHtml(ctx()));
       case 'loading': return showLoading();
       case 'play': overlay.className = 'layer hidden'; return;
       case 'pause': return showPause();
       case 'recap': return showRecap();
-      case 'results': return showResults();
+      case 'results': return show(resultsHtml(ctx(), report()));
     }
   }
 
   function card(html: string, cls = 'layer') {
     overlay.className = cls;
     overlay.innerHTML = `<div class="card">${html}</div>`;
+  }
+  // Full-overlay screens (menu, select, profile, settings) bring their own layout.
+  function show(html: string) {
+    overlay.className = 'layer';
+    overlay.innerHTML = html;
+  }
+
+  // Everything a screen may show, read fresh each render.
+  function ctx(): ScreenCtx {
+    return {
+      touch: input.mode === 'touch', profile, settings, records, medals, heroId, demoChip: demoChip(), marking: identity.marking,
+      muted: audio.muted, canFs: canFs && !isFullscreen(), canVibrate, build: __BUILD_SHA__, auth,
+    };
   }
 
   function closeHowto() {
@@ -251,27 +319,20 @@ async function start() {
   }
 
   function showTitle() {
-    if (titleView === 'howto') return showHowto();
-    if (titleView === 'demo') return showDemo();
-    const o = records.overall;
-    card(`<div class="kicker">Chog squad · basement level · lights out</div>
-      <h1>CHOG <em>/</em> ROOM ZERO</h1>
-      <p style="margin-top:14px">Five hostiles somewhere below. You see only what your lamp touches. Everyone hears everything.</p>
-      <div class="btns"><button class="btn primary" data-go="start">Enter</button><button class="btn" data-act="howto">How to play</button><button class="btn" data-act="demo">Chog <span class="demo">DEMO</span></button>${fsButton()}</div>
-      <div class="mock" id="idchip">${demoChip()}</div>
-      <p class="pb" id="titlepb">Best clear ${fmtTime(o.bestWinSeconds)} · most kills ${o.mostKills} · ${o.runs} runs <span>· saved on this device only</span></p>`);
-  }
-
-  function showHowto() {
-    card(`<div class="kicker">How to play</div><h2>Clear Room Zero</h2>
-      <table class="howto">
-      <tr><td>Move</td><td>${input.mode === 'touch' ? 'Left thumb' : 'WASD'}</td></tr>
-      <tr><td>Aim / shoot</td><td>${input.mode === 'touch' ? 'Right thumb; push past the ring to fire' : 'Mouse; hold left click'}</td></tr>
-      <tr><td>Creep (quiet)</td><td>${input.mode === 'touch' ? 'Half push on the left stick' : 'Hold Shift'}</td></tr>
-      <tr><td>Ability</td><td>${input.mode === 'touch' ? 'Ability button' : 'Space'} · reload ${input.mode === 'touch' ? 'button' : 'R'}</td></tr>
-      <tr><td>Gold rings</td><td>A noise you heard, not saw. Running is loud; enemies hear you too.</td></tr>
-      <tr><td>Win</td><td>Down all five hostiles. Bots only shoot from inside your sight range.</td></tr></table>
-      <div class="btns"><button class="btn primary" data-act="howto-close">Got it</button></div>`);
+    const c = ctx();
+    switch (titleView) {
+      case 'howto': return show(howtoHtml(c));
+      case 'demo': return showDemo();
+      case 'profile': return show(profileHtml(c, profileTab));
+      case 'settings': return show(settingsHtml(c, confirmReset));
+      case 'nick': {
+        show(nickHtml(c, nickError, nickSaved));
+        const inp = document.getElementById('nickin') as HTMLInputElement | null;
+        if (inp && !c.touch) { inp.focus(); inp.select(); }
+        return;
+      }
+      default: return show(titleHtml(c));
+    }
   }
 
   function showDemo() {
@@ -283,24 +344,6 @@ async function start() {
       <p style="font-size:13px">Token # maps to a trait (hash of the number, mod 4) and a cosmetic marking colour. Health, armour, damage and speed never change.</p>
       <div class="btns">${picks}<button class="btn" data-demo="">Play as guest</button></div>
       <div class="btns"><button class="btn primary" data-act="demo-close">Back</button></div>`);
-  }
-
-  function statBar(label: string, v: number) {
-    return `<div class="stat">${label}<s style="--v:${Math.round(Math.max(0.08, Math.min(1, v)) * 100)}%"></s></div>`;
-  }
-
-  function showSelect() {
-    const cards = HEROES.map((h, i) => {
-      const w = WEAPONS[h.weapon];
-      const dps = (w.damage * w.pellets) / w.fireInterval;
-      return `<button class="hero${h.id === heroId ? ' sel' : ''}" data-hero="${h.id}" style="--accent:#${h.accent.toString(16).padStart(6, '0')}">
-        <div class="role">${i + 1} · ${esc(h.role)}</div><b><i></i>${esc(h.name)}</b><p>${esc(h.blurb)}</p>
-        ${statBar('Health', h.maxHp / 120)}${statBar('Armour', h.maxArmor / 50)}${statBar('Speed', (h.speed - 0.8) / 0.32)}${statBar('Sight', h.vision.range / 12)}${statBar('Punch', dps / 170)}
-        <div class="wp">${esc(w.name)}</div>
-        <div class="ab">${esc(h.ability.name)} <span>· ${esc(h.ability.text)}</span></div></button>`;
-    }).join('');
-    card(`<h2>Pick a Chog</h2><div class="mock" id="selchip">${demoChip()}</div><div class="heroes">${cards}</div>
-      <div class="btns"><button class="btn" data-go="quit">Back</button><button class="btn primary" data-go="pick">Deploy</button></div>`);
   }
 
   function selectHero(id: string) {
@@ -341,42 +384,125 @@ async function start() {
     card(`<h2 class="bad">Down</h2><p>${esc(killer.name)} (${esc(killer.hero.name)}, ${esc(k.weapon)}) from ${d.toFixed(0)} m ${compass(k.fromX - p.x, k.fromY - p.y)}.</p>`, 'layer clear');
   }
 
-  function showResults() {
+  // The after-action report: only numbers the game tracked this run.
+  function report() {
     const won = world.outcome === 'won';
     const p = player(world);
-    // Per bullet, so a shotgun's 8 pellets per shot can never read above 100% (RC-3: Brick showed 59/16).
-    const accPct = p.bullets ? Math.round((p.hits / p.bullets) * 100) : 0;
-    const left = world.actors.filter((a) => a.team === 'bot' && a.alive).length;
     const k = world.playerKill;
-    const why = !won && k ? `<p class="bad">${esc(world.actors[k.killerId].name)} got you with a ${esc(k.weapon.toLowerCase())}, ${Math.hypot(k.fromX - p.x, k.fromY - p.y).toFixed(0)} m ${compass(k.fromX - p.x, k.fromY - p.y)}.</p>` : '<p class="good">Every hostile is down.</p>';
-    const hb = records.heroes[heroId] ?? { bestWinSeconds: null, mostKills: 0, runs: 0, wins: 0 };
-    const nb = lastRun?.newBest;
-    const hist = `<p class="pb" id="resultpb">${esc(heroById(heroId).name)} best clear ${fmtTime(hb.bestWinSeconds)}${nb?.time ? ' <b>NEW</b>' : ''} · most kills ${hb.mostKills}${nb?.kills ? ' <b>NEW</b>' : ''} · overall best ${fmtTime(records.overall.bestWinSeconds)} <span>· saved on this device only</span></p>`
-      + (history ? `<p style="font-size:13px"><span class="demo">DEMO</span> Chog #${esc(history.tokenId)} on this device: ${history.runs} runs, ${history.wins} cleared, ${history.kills} kills. No ownership checked.</p>` : '');
-    card(`<div class="kicker">${esc(heroById(heroId).name)} · ${esc(p.weapon.name)}</div><h2 class="${won ? 'good' : 'bad'}">${won ? 'Room cleared' : 'Run over'}</h2>${why}
-      <table class="stats"><tr><td>Chog</td><td>${esc(heroById(heroId).name)}${identity.kind === 'bound' ? ` · <span class="demo">DEMO</span> #${esc(identity.tokenId!)}` : ''}</td></tr>
-      <tr><td>Time</td><td>${fmtTime(Math.round(playTime))}</td></tr>
-      <tr><td>Hostiles down</td><td>${p.kills} / ${world.actors.length - 1}${won ? '' : ` (${left} left)`}</td></tr>
-      <tr><td>Hits / bullets</td><td>${p.hits} / ${p.bullets} · ${accPct}%</td></tr>
-      <tr><td>Damage dealt / taken</td><td>${Math.round(p.damageDealt)} / ${Math.round(p.damageTaken)}</td></tr></table>${hist}
-      <div class="btns"><button class="btn primary" data-go="restart">Again</button><button class="btn" data-go="quit">Change Chog</button></div>`);
+    return {
+      won, hero: heroById(heroId), weaponName: p.weapon.name,
+      why: !won && k ? `<p class="bad">${esc(world.actors[k.killerId].name)} got you with a ${esc(k.weapon.toLowerCase())}, ${Math.hypot(k.fromX - p.x, k.fromY - p.y).toFixed(0)} m ${compass(k.fromX - p.x, k.fromY - p.y)}.</p>` : '<p class="good">Every hostile is down.</p>',
+      time: playTime, kills: p.kills, bots: world.actors.length - 1, left: world.actors.filter((a) => a.team === 'bot' && a.alive).length,
+      // Per bullet, so a shotgun's 8 pellets per shot can never read above 100% (RC-3: Brick showed 59/16).
+      hits: p.hits, bullets: p.bullets, dealt: p.damageDealt, taken: p.damageTaken, pickups: runPickups, abilities: runAbilities,
+      newBest: lastRun?.newBest ?? null, earned: lastRun?.earned ?? [],
+      demoRow: identity.kind === 'bound' ? ` · <span class="demo">DEMO</span> #${esc(identity.tokenId!)}` : '',
+      history: history ? `<p style="font-size:13px"><span class="demo">DEMO</span> Chog #${esc(history.tokenId)} on this device: ${history.runs} runs, ${history.wins} cleared, ${history.kills} kills. No ownership checked.</p>` : '',
+    };
+  }
+
+  // ---- Menu actions ----
+  function setProfile(next: Profile) {
+    profile = next;
+    saveProfile(localStorage, profile);
+  }
+
+  function saveNick() {
+    const inp = document.getElementById('nickin') as HTMLInputElement | null;
+    const v = validateNickname(inp?.value ?? '');
+    if (!v.ok) { nickError = v.error; nickSaved = false; render(); return; }
+    setProfile({ ...profile, nickname: v.value });
+    nickError = '';
+    nickSaved = true;
+    render();
+    setTimeout(() => { if (titleView === 'nick' && nickSaved) { nickSaved = false; titleView = nickReturn; render(); } }, 700);
+  }
+
+  function resetProgress() {
+    try {
+      for (const k of [RECORDS_KEY, MEDALS_KEY, PROFILE_KEY, TIPS_KEY, DEMO_KEY, RING_HINT_KEY]) localStorage.removeItem(k);
+      for (let i = localStorage.length - 1; i >= 0; i--) { const k = localStorage.key(i); if (k?.startsWith('chog-room-zero:history:')) localStorage.removeItem(k); }
+    } catch { /* storage blocked */ }
+    records = loadRecords(localStorage);
+    medals = loadMedals(localStorage);
+    profile = loadProfile(localStorage);
+    shownTips = loadShownTips(localStorage);
+    ringHintDone = false;
+    setDemo(null);
+    confirmReset = false;
+  }
+
+  function menuAct(a: string) {
+    switch (a) {
+      case 'howto': titleView = 'howto'; break;
+      case 'howto-close': closeHowto(); break;
+      case 'demo': titleView = 'demo'; break;
+      case 'demo-close': titleView = 'main'; break;
+      case 'profile': titleView = 'profile'; profileTab = 'player'; break;
+      case 'medals': titleView = 'profile'; profileTab = 'medals'; break;
+      case 'settings': titleView = 'settings'; confirmReset = false; refreshAuth(); break;
+      case 'nick': nickReturn = titleView === 'nick' ? nickReturn : titleView; titleView = 'nick'; nickError = ''; nickSaved = false; break;
+      case 'back': titleView = titleView === 'nick' ? nickReturn : 'main'; confirmReset = false; break;
+      case 'replay':
+        shownTips = new Set();
+        saveShownTips(localStorage, shownTips);
+        ringHintDone = false;
+        try { localStorage.removeItem(RING_HINT_KEY); } catch { /* ignore */ }
+        if (!settings.tips) setSettings({ ...settings, tips: true });
+        titleView = 'howto';
+        break;
+      case 'reset': confirmReset = true; break;
+      case 'reset-no': confirmReset = false; break;
+      case 'reset-yes': resetProgress(); break;
+      case 'signin-google': googleSignIn(); return;
+      case 'signout':
+        void signOut().then(() => { auth.session = []; auth.message = 'Signed out on this browser. Your player card keeps its linked names.'; render(); });
+        return;
+    }
+    render();
+  }
+
+  function settingAct(name: string, val: string) {
+    const s = { ...settings };
+    if (name === 'volume') s.volume = Math.round(Math.max(0, Math.min(1, s.volume + (val === 'up' ? 0.1 : -0.1))) * 10) / 10;
+    else if (name === 'sound') { audio.muted = val === 'off'; paintMute(); }
+    else if (name === 'vibration') s.vibration = val === 'on';
+    else if (name === 'tips') s.tips = val === 'on';
+    else if (name === 'quality' && (val === 'low' || val === 'medium' || val === 'high')) s.quality = val;
+    else if (name === 'stick' && (val === 'small' || val === 'medium' || val === 'large')) s.stick = val;
+    setSettings(s);
+    if (name === 'vibration' && s.vibration && canVibrate) navigator.vibrate(30);
+    render();
   }
 
   overlay.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'touch') input.mode = 'touch';
     if (!overlayInputAllowed(phase, summaryGate)) return;
     const t = e.target as HTMLElement;
+    if ((t as HTMLButtonElement).disabled) return;
     const act = t.closest('[data-act]') as HTMLElement | null;
     if (act) {
+      // Apply is a submit button: the form's submit event saves (Enter in the field does too).
+      if (act.dataset.act === 'nick-save') return;
       e.preventDefault();
-      const a = act.dataset.act;
-      if (a === 'howto') titleView = 'howto';
-      else if (a === 'howto-close') closeHowto();
-      else if (a === 'demo') titleView = 'demo';
-      else if (a === 'demo-close') titleView = 'main';
+      menuAct(act.dataset.act!);
+      return;
+    }
+    const tab = t.closest('[data-tab]') as HTMLElement | null;
+    if (tab) { e.preventDefault(); profileTab = tab.dataset.tab as ProfileTab; render(); return; }
+    const fav = t.closest('[data-fav]') as HTMLElement | null;
+    if (fav) {
+      e.preventDefault();
+      setProfile({ ...profile, favourite: profile.favourite === fav.dataset.fav ? null : fav.dataset.fav! });
       render();
       return;
     }
+    const pin = t.closest('[data-pin]') as HTMLElement | null;
+    if (pin) { e.preventDefault(); setProfile(togglePin(profile, pin.dataset.pin!)); render(); return; }
+    const set = t.closest('[data-set]') as HTMLElement | null;
+    if (set) { e.preventDefault(); settingAct(set.dataset.set!, set.dataset.val!); return; }
+    const wal = t.closest('[data-wallet]') as HTMLElement | null;
+    if (wal) { e.preventDefault(); void doWalletSignIn(wal.dataset.wallet!); return; }
     const demo = t.closest('[data-demo]') as HTMLElement | null;
     if (demo) {
       e.preventDefault();
@@ -405,6 +531,53 @@ async function start() {
   overlay.addEventListener('click', (e) => {
     if ((e.target as HTMLElement).closest('[data-fs]')) goLandscape();
   });
+  overlay.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if ((e.target as HTMLElement).matches('[data-form="nick"]')) saveNick();
+  });
+
+  // ---- Sign-in (optional; the game never waits on it) ----
+  function linkAll(ids: ServerIdentity[]) {
+    let p = profile;
+    for (const id of ids) p = linkIdentity(p, id);
+    if (p !== profile) setProfile(p);
+  }
+  async function refreshAuth() {
+    const [config, session, wallets] = await Promise.all([fetchAuthConfig(), fetchSession(), discoverWallets()]);
+    auth.config = config;
+    auth.session = config ? session : [];
+    auth.wallets = wallets;
+    linkAll(auth.session);
+    if (phase === 'title' && titleView === 'settings') render();
+  }
+  async function doWalletSignIn(id: string) {
+    auth.busy = true;
+    auth.message = 'Check your wallet: sign the message to prove this address. It is free and sends nothing.';
+    render();
+    try {
+      const identity = await walletSignIn(id);
+      linkAll([identity]);
+      auth.session = await fetchSession();
+      auth.message = `Signed in as ${identity.label}.`;
+    } catch (err) {
+      auth.message = err instanceof Error ? err.message : 'Wallet sign-in failed.';
+    }
+    auth.busy = false;
+    if (phase === 'title' && titleView === 'settings') render();
+  }
+  // Back from Google (?signedin=google or ?signin_error=...): link the identity, open Settings, clean the URL.
+  if (QS.has('signedin') || QS.has('signin_error')) {
+    titleView = 'settings';
+    auth.message = QS.has('signin_error') ? `Google sign-in did not finish (${QS.get('signin_error')}).` : 'Signed in with Google.';
+    history_replace();
+    void refreshAuth();
+  }
+  function history_replace() {
+    const u = new URL(location.href);
+    u.searchParams.delete('signedin');
+    u.searchParams.delete('signin_error');
+    window.history.replaceState(null, '', u.pathname + (u.search ? u.search : '') + u.hash);
+  }
 
   function beginWorld() {
     runIndex++;
@@ -412,12 +585,15 @@ async function start() {
     autopilot = AUTOPLAY_SEED !== null ? createAutopilot(AUTOPLAY_SEED + runIndex) : null;
     suggestPilot = null;
     renderer.reset(world);
-    fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = 0;
+    fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = 0;
     for (const s of fx.sparks) s.age = 1;
     fx.shake = 0;
     acc = 0;
     playTime = 0;
     history = null;
+    runPickups = runAbilities = 0;
+    hurtNow = blockedNow = false;
+    sinceHint = 0;
     const h = heroById(heroId);
     $('hero').innerHTML = `${esc(h.name)} · ${identity.kind === 'bound' ? `<span class="demo">DEMO</span> #${esc(identity.tokenId!)} ${esc(identity.sidegrade.name)}` : 'Guest'}`;
     $('wname').textContent = world.actors[0].weapon.name;
@@ -429,15 +605,23 @@ async function start() {
     showHint(hint.innerHTML, runIndex === 1 ? 6 : 0);
   }
 
+  // Match end: the one place a run is saved (records, medals, demo token history). Never per frame.
   function endRun(won: boolean) {
     const p = player(world);
-    history = recordRun(localStorage, identity.tokenId, { won, seconds: Math.round(playTime), kills: p.kills, shots: p.shots, hits: p.hits, at: new Date().toISOString() });
-    const r = recordBest(localStorage, { hero: heroId, won, seconds: Math.round(playTime), kills: p.kills });
+    const seconds = Math.round(playTime);
+    history = recordRun(localStorage, identity.tokenId, { won, seconds, kills: p.kills, shots: p.shots, hits: p.hits, at: new Date().toISOString() });
+    const facts = { hero: heroId, won, seconds, kills: p.kills, bullets: p.bullets, hits: p.hits, damageDealt: p.damageDealt, damageTaken: p.damageTaken, pickups: runPickups, abilities: runAbilities };
+    const r = recordBest(localStorage, facts);
     records = r.records;
-    lastRun = { newBest: r.newBest };
+    const m = awardMedals(localStorage, records, { ...facts, hpLeft: Math.max(0, p.hp) });
+    medals = m.unlocked;
+    lastRun = { newBest: r.newBest, earned: m.earned };
   }
 
+  applySettings();
   render();
+  bootDone();
+  // The auth server is asked only when Settings opens or Google sends the player back: no request on a normal launch.
   // Leaving the tab pauses the match: the sim must never run while nobody is watching.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && phase === 'play') go('pause');
@@ -497,6 +681,50 @@ async function start() {
     }
   }
 
+  // A pickup the player just took: what it gave, in its colour, at the player (pages 6-9 of the reference: a named
+  // pickup with a ring), instead of a generic "Picked up".
+  const PICKUP_LABEL: Record<PickupKind, string> = { health: 'HEALTH', armor: 'ARMOUR', ammo: 'AMMO' };
+  function collected(x: number, y: number) {
+    const pk = world.pickups.find((q) => q.x === x && q.y === y);
+    const p = player(world);
+    runPickups++;
+    if (!pk) { toast('Picked up'); return; }
+    const P = TUNING.pickups;
+    const amount = pk.kind === 'health' ? `+${P.health.amount} ` : pk.kind === 'armor' ? `+${P.armor.amount} ` : `+${P.ammo.mags * p.weapon.magazine} `;
+    toast(`${amount}${PICKUP_LABEL[pk.kind]}`);
+    const pal = TUNING.palette;
+    fx.collects.push({ x: p.x, y: p.y, age: 0, color: pk.kind === 'health' ? pal.heal : pk.kind === 'armor' ? pal.armor : pal.ammo });
+  }
+
+  // Contextual tips (src/ui/tips.ts): what is true this frame.
+  let hurtNow = false, blockedNow = false, sinceHint = 0;
+  function wantedPickup(): PickupKind | null {
+    const p = player(world);
+    let best: PickupKind | null = null, bestD = 6;
+    for (const q of world.pickups) {
+      if (!q.active || !wants(p, q.kind)) continue;
+      const d = Math.hypot(q.x - p.x, q.y - p.y);
+      // Only a pickup in the player's light: a tip about something you cannot see would only confuse.
+      if (d < bestD && canSee(world.level, p.x, p.y, p.facing, p.view, q.x, q.y)) { best = q.kind; bestD = d; }
+    }
+    return best;
+  }
+  function maybeTip() {
+    if (!settings.tips || AUTOPLAY_SEED !== null) { hurtNow = blockedNow = false; return; }
+    const p = player(world);
+    const id: TipId | null = nextTip({
+      t: playTime, sinceLastHint: sinceHint, hintShowing: hintLeft > 0, wantedPickup: world.tick % 6 === 0 ? wantedPickup() : null,
+      ammo: p.ammo, magazine: p.weapon.magazine, reserve: p.reserve, reloading: p.reloadLeft > 0, abilityReady: p.abilityCd === 0,
+      hurt: hurtNow, blockedShot: blockedNow,
+    }, shownTips);
+    hurtNow = blockedNow = false;
+    if (!id) return;
+    shownTips.add(id);
+    saveShownTips(localStorage, shownTips);
+    showHint(tipText(id, input.mode === 'touch', p.hero.ability), 5);
+    sinceHint = 0;
+  }
+
   // Per-step presentation: sounds feed audio and heard markers, hits feed feedback.
   function afterStep() {
     const p = player(world);
@@ -509,6 +737,10 @@ async function start() {
       // briefly, at any range. Bots get the same signal from the player's flash.
       if (s.type === 'shot' && !own && s.team === 'bot' && muzzleFlashSeen(world.level, p.x, p.y, s.x, s.y))
         fx.threats[s.sourceId] = TUNING.perception.flashSeconds;
+      // RC-7 run facts (results, medals, tips): own ability uses, pickups, shots stopped by cover.
+      if (own && (s.type === 'dash' || s.type === 'sonar' || s.type === 'barrier' || s.type === 'mend')) runAbilities++;
+      if (own && s.type === 'pickup') collected(s.x, s.y);
+      if (own && s.type === 'impact' && s.blocked) blockedNow = true;
       const heard = own || hears(world.level, p.x, p.y, s);
       if (!heard) continue;
       if (s.type === 'impact' && s.blocked) debugStats.blockedCues++;
@@ -522,7 +754,6 @@ async function start() {
           if (box) fx.coverFlashes.push({ box, age: 0 });
         }
       }
-      if (own && s.type === 'pickup') toast('Picked up');
       if (own || s.team !== 'bot') continue;
       const src = world.actors[s.sourceId];
       if (src.alive && canSee(world.level, p.x, p.y, p.facing, view, src.x, src.y)) continue;
@@ -538,6 +769,8 @@ async function start() {
         if (h.killed) toast(`${world.actors[h.target].name} down`);
       }
       if (h.target === 0) {
+        hurtNow = true;
+        if (settings.vibration && canVibrate) navigator.vibrate(h.killed ? 80 : 25);
         fx.shake = TUNING.render.shakeSeconds;
         fx.damageArcs.push({ ang: Math.atan2(h.fromY - p.y, h.fromX - p.x), age: 0 });
         // Fairness rule: every hit comes from within your sight range with line of sight, so the shooter is
@@ -558,12 +791,16 @@ async function start() {
     Object.defineProperties(hook, { world: { get: () => world }, phase: { get: () => phase } });
     Object.assign(hook, { renderer, go, setHero: (h: string) => (heroId = h), fx, records: () => records, identity: () => identity, resultsAt: () => resultsAt, autoplay: AUTOPLAY_SEED, hero: () => heroId, stats: debugStats,
       // Debug lab: the bundled sim, so headless checks can run sim sweeps against the exact deployed code.
-      lab: { createWorld, stepWorld, IDLE_INPUT, ROOM_ZERO, HEROES },
+      lab: { createWorld, stepWorld, IDLE_INPUT, ROOM_ZERO, HEROES, walkable, sightClear },
       // RC-5 touch-play check: what the scripted autopilot would do now (NOT applied). tools/rc5-touchplay.mjs turns it
       // into real touch gestures, so a full fight runs through the real touch input. Debug builds/?debug only.
       suggest: () => (suggestPilot ??= createAutopilot(Number(QS.get('pilot')) || 7)).next(world),
       // Landscape stage and launch state (tools/rc6-launch.mjs): how the stage sits on the screen, fullscreen, lock.
-      stage: () => ({ ...stage(), fullscreen: isFullscreen(), canFs, launch, orientation: screen.orientation?.type ?? null }) });
+      stage: () => ({ ...stage(), fullscreen: isFullscreen(), canFs, launch, orientation: screen.orientation?.type ?? null }),
+      // RC-7 menus and progression (tools/rc7-menus.mjs): device profile, settings, medals, shown tips, the open view.
+      profile: () => profile, settings: () => settings, medals: () => medals, tips: () => [...shownTips],
+      view: () => titleView, runFacts: () => ({ pickups: runPickups, abilities: runAbilities }), stick: () => touchStick.radius,
+      resolution: () => renderer.app.renderer.resolution, volume: () => audio.volume });
     (window as unknown as { __chog: unknown }).__chog = hook;
   }
 
@@ -604,6 +841,7 @@ async function start() {
         afterStep();
         playTime += TUNING.simStepSeconds;
       }
+      if (r.steps > 0 && world.outcome === 'playing') maybeTip();
       if (world.outcome === 'dead') {
         recapLeft = TUNING.render.deathFreeze;
         endRun(false);
@@ -648,7 +886,9 @@ async function start() {
     if (hintLeft > 0 && phase === 'play') {
       hintLeft -= dt;
       if (hintLeft <= 0) hint.style.opacity = '0';
-    }
+    } else if (phase === 'play') sinceHint += dt;
+    for (const c of fx.collects) c.age += dt;
+    fx.collects = fx.collects.filter((c) => c.age < COLLECT_SECONDS);
     $('toast').style.opacity = toastLeft > 0 ? '1' : '0';
 
     renderer.draw(world, fx, input, dt, { recap: phase === 'recap' || (phase === 'results' && world.outcome === 'dead'), marking: identity.marking, showSticks: phase === 'play' && input.mode === 'touch', playing: phase === 'play', debug: DEBUG_OVERLAY, hud: hudRects() });
@@ -684,5 +924,11 @@ async function start() {
 
 start().catch((err) => {
   console.error('Game failed to start', err);
-  overlay.innerHTML = `<div class="card"><p>The game could not start: ${esc(String(err))}. Reload the page to try again.</p></div>`;
+  // Keep the boot screen up with the reason and a way out, instead of a black page.
+  const e = document.getElementById('booterr');
+  if (e) {
+    const webgl = /webgl|context/i.test(String(err));
+    e.innerHTML = `The game could not start: ${esc(String(err))}.${webgl ? ' This browser could not open WebGL; try another browser or turn hardware acceleration on.' : ''}
+      <div class="btns"><button class="btn primary" onclick="location.reload()">Retry</button></div>`;
+  } else overlay.innerHTML = `<div class="card"><p>The game could not start: ${esc(String(err))}. Reload the page to try again.</p></div>`;
 });

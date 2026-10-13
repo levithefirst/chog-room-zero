@@ -35,6 +35,8 @@ export function stickVector(s: Stick, radiusPx: number): Vec2 {
 export const AIM_DEADZONE = 0.35;
 // Stick travel in px for full push. 56 px: a comfortable thumb movement on a phone.
 export const STICK_RADIUS = 56;
+/** The stick travel in use: STICK_RADIUS unless Settings picked another size (RC-7). Read live by input and render. */
+export const touchStick = { radius: STICK_RADIUS };
 
 export interface Input {
   mode: 'pc' | 'touch';
@@ -65,6 +67,12 @@ export interface Input {
    */
   releaseAll(): void;
   dispose(): void;
+}
+
+/** A key typed into a text field (RC-7 callsign) belongs to the field. */
+export function typing(e: Event): boolean {
+  const t = e.target as { tagName?: string; isContentEditable?: boolean } | null;
+  return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || !!t.isContentEditable);
 }
 
 const MOVE_CODES = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ShiftLeft', 'ShiftRight', 'KeyR', 'Space', 'KeyQ']);
@@ -105,12 +113,12 @@ export function createInput(el: HTMLElement): Input {
         out.firing = firing || fireLatched;
         fireLatched = false;
       } else {
-        const m = stickVector(left, STICK_RADIUS);
+        const m = stickVector(left, touchStick.radius);
         out.moveX = m.x;
         out.moveY = m.y;
         const push = Math.hypot(m.x, m.y);
         out.quiet = push > 0 && push < TUNING.movement.quietStickThreshold;
-        const a = stickVector(right, STICK_RADIUS);
+        const a = stickVector(right, touchStick.radius);
         const now = performance.now();
         if (Math.hypot(a.x, a.y) > AIM_DEADZONE) {
           lastAim = out.aim = Math.atan2(a.y, a.x);
@@ -136,7 +144,7 @@ export function createInput(el: HTMLElement): Input {
     },
     fireHeld() {
       if (inp.mode === 'pc') return firing;
-      const a = stickVector(right, STICK_RADIUS);
+      const a = stickVector(right, touchStick.radius);
       return right.active && Math.hypot(a.x, a.y) > AIM_DEADZONE;
     },
     takePause() {
@@ -176,6 +184,7 @@ export function createInput(el: HTMLElement): Input {
   };
 
   const down = (e: KeyboardEvent) => {
+    if (typing(e)) return; // the callsign field: letters, Space and Enter are text, not game input
     if (MOVE_CODES.has(e.code)) held.add(e.code);
     if (e.code === 'KeyR') reloadQueued = true;
     // R is reload only; it never restarts a run (CHOG-FLOW-001). Enter confirms menus.
@@ -228,12 +237,12 @@ export function createInput(el: HTMLElement): Input {
       s.y = pt.y;
       // Floating base: follow the thumb if it drifts past the rim, so the stick never "runs out".
       const dx = s.x - s.baseX, dy = s.y - s.baseY, d = Math.hypot(dx, dy);
-      if (d > STICK_RADIUS * 1.4) {
-        s.baseX = s.x - (dx / d) * STICK_RADIUS * 1.4;
-        s.baseY = s.y - (dy / d) * STICK_RADIUS * 1.4;
+      if (d > touchStick.radius * 1.4) {
+        s.baseX = s.x - (dx / d) * touchStick.radius * 1.4;
+        s.baseY = s.y - (dy / d) * touchStick.radius * 1.4;
       }
       if (s === right) {
-        const a = stickVector(right, STICK_RADIUS);
+        const a = stickVector(right, touchStick.radius);
         if (Math.hypot(a.x, a.y) > AIM_DEADZONE) {
           fireLatched = true;
           latchAim = Math.atan2(a.y, a.x);

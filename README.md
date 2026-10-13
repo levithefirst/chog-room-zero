@@ -7,11 +7,12 @@ Plays in the browser on desktops and laptops (keyboard and mouse), and on phones
 ## How to test it (5 minutes)
 
 1. Open the game link. On a phone the game is always landscape: if you open it upright, it is already drawn sideways, so turn the phone and play. Your first tap also asks for full screen in landscape (Android Chrome; iPhone Safari cannot do this, so there you just hold the phone sideways). If you leave full screen, the run pauses and **Full screen** on the pause card brings it back. Turning the phone mid-run pauses the same run (nothing is lost), then Resume.
-2. First launch shows **How to play**. Press **Got it**.
+2. First launch shows **How to play** with a controls diagram. Press **Got it**. The main menu has **Play**, your player card (tap the chip top-left to pick a callsign), **Medals**, **How to play**, **Chog DEMO** and **Settings**.
 3. Optional: **Chog DEMO** and pick a token number (#1 to #4). This shows how a Chog changes play. It is a demo: no wallet and no ownership check.
 4. **Enter**, pick a hero (keys 1 to 4, or tap a card), then **Deploy**.
 5. Clear the room: down all five hostiles. If you die, the summary waits 0.75 s before any input counts, then **Again** restarts.
-6. The results screen shows time, kills, accuracy, damage dealt and taken, and your best for that hero. Bests are saved on this device only.
+6. The results screen shows time, rooms cleared, kills, accuracy, damage dealt and taken, pickups and abilities, any medals earned, and your best for that hero. Bests, medals and the player card are saved on this device only (personal records, not a leaderboard).
+7. In your first runs, short tips explain a mechanic the first time you meet it (a pickup you need, a low magazine, being hit, a shot stopped by a crate, your ability). Settings turns them off or replays them.
 
 ### Controls
 
@@ -32,6 +33,14 @@ Plays in the browser on desktops and laptops (keyboard and mouse), and on phones
 - **Nothing hides past the edge.** A hostile you can see (in your light, by its muzzle flash, or by Ping) but that sits past the screen edge gets a red arrow at the edge, pointing at it.
 - **Fair fights.** A bot only shoots you from inside your own sight range with line of sight, and the shooter is ringed whenever it hits you.
 - **Four heroes, four weapons:** Kettle (rifle, Patch heal), Mop (SMG, Slip dash), Brick (shotgun, Slab cover), Wick (marksman, Ping sonar).
+
+## Player card, medals, settings, sign-in
+
+- **Player card:** callsign, profile id, favourite operator, three pinned medals, career stats on this device, per-operator stats, and the real loadout numbers.
+- **Medals:** 12, earned only from tracked play (first kill, first clear, clear untouched, clear under 60 s, 50% accuracy, ...). No rewards or currency.
+- **Settings:** volume, sound, touch stick size, vibration (where the browser has it), tips, replay tutorial, graphics quality, full screen, reset progress, build id.
+- **Sign-in (optional):** Google, MetaMask, Rabby or Zerion prove who you are and link that to your card. Progress stays on the device; there is no cloud save yet. It never checks Chog ownership. Setup: `docs/AUTH.md`.
+- The Bullet Echo screenshots used as a reference, and what was built, adapted or left out: `docs/REFERENCE-MAP.md`.
 
 ## Why the Chog matters (and its current limit)
 

@@ -9,6 +9,8 @@ export interface Audio {
   unlock(): void;
   play(type: CueType, dx: number, dy: number, radius: number, muffled: boolean, own: boolean, weapon?: string): void;
   muted: boolean;
+  /** Master volume 0..1 (Settings, RC-7). Applied to the sum before the limiter. */
+  volume: number;
 }
 
 // Mix: per-cue level so guns sit on top, feet under, UI quiet.
@@ -25,6 +27,8 @@ export function createAudio(): Audio {
   let voices = 0;
   // Master limiter (RC-1): up to 24 voices can stack in a firefight; a compressor keeps the sum from clipping.
   let master: AudioNode | null = null;
+  let level: GainNode | null = null;
+  let volume = 1;
 
   let muted = false;
   try {
@@ -44,13 +48,23 @@ export function createAudio(): Audio {
         /* ignore */
       }
     },
+    get volume() {
+      return volume;
+    },
+    set volume(v: number) {
+      volume = Math.max(0, Math.min(1, v));
+      if (level && ctx) level.gain.setTargetAtTime(volume, ctx.currentTime, 0.02);
+    },
     unlock() {
       if (!ctx) {
         ctx = new AudioContext({ latencyHint: 'interactive' });
         const comp = ctx.createDynamicsCompressor();
         comp.threshold.value = -10; comp.knee.value = 6; comp.ratio.value = 12; comp.attack.value = 0.003; comp.release.value = 0.15;
         comp.connect(ctx.destination);
-        master = comp;
+        level = ctx.createGain();
+        level.gain.value = volume;
+        level.connect(comp);
+        master = level;
         noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
         const d = noise.getChannelData(0);
         // Fixed LCG so the noise texture is the same every session.

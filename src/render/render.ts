@@ -11,9 +11,9 @@ import { WALL, walkable, type Level } from '../sim/level';
 import { pointInPolygon } from '../sim/geom';
 import { visibilityPolygon } from '../sim/vision';
 import { createLightMesh, type LightMesh, type LightParams } from './lightmesh';
-import { player, revealed, type Actor, type World } from '../sim/world';
+import { player, revealed, wants, type Actor, type World } from '../sim/world';
 import type { Brain } from '../sim/bots';
-import { STICK_RADIUS, AIM_DEADZONE, type Input } from '../input/input';
+import { touchStick, AIM_DEADZONE, type Input } from '../input/input';
 import { bakeMap, type Baked } from './bake';
 import { clampMarker, edgeAnchor, enemyDrawMode } from './visibility';
 
@@ -74,11 +74,16 @@ export interface Fx {
   pings: { x: number; y: number; age: number; hostile: boolean }[];
   // Seconds left that each actor id stays drawn after shooting at the player (see visibility.ts).
   threats: number[];
+  /** Pickups the player just took: a ring in the pickup's colour expands from the player (RC-7). */
+  collects: { x: number; y: number; age: number; color: number }[];
 }
+
+/** How long the pickup ring lasts (s). */
+export const COLLECT_SECONDS = 0.5;
 
 export function createFx(): Fx {
   return {
-    markers: [], impacts: [], coverFlashes: [], hitMarks: [], shake: 0, corpses: [], damageArcs: [], pings: [], threats: [],
+    markers: [], impacts: [], coverFlashes: [], hitMarks: [], shake: 0, corpses: [], damageArcs: [], pings: [], threats: [], collects: [],
     sparks: Array.from({ length: R.maxSparks }, () => ({ x: 0, y: 0, vx: 0, vy: 0, age: 1, hostile: false })),
   };
 }
@@ -324,6 +329,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
 
   function drawPickups(w: World, hud: readonly Rect[]) {
     props.clear();
+    const me = player(w);
     w.pickups.forEach((p, i) => {
       const lbl = pickupLabels[i];
       const known = explored[Math.floor(p.y) * level.w + Math.floor(p.x)];
@@ -344,6 +350,12 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       }
       lbl.alpha = 1;
       const bob = Math.sin(w.tick / 20 + i) * 0.04;
+      // RC-7: a pickup the player would actually take (wants(): not full) gets a slow pulsing ring, so "you need
+      // this" reads at a glance. Full health/armour/ammo: no ring, the pickup just sits there.
+      if (me.alive && wants(me, p.kind)) {
+        const pulse = 0.5 + 0.5 * Math.sin(w.tick / 9);
+        circle(props, p.x, p.y + bob, 0.48 + pulse * 0.08, 28).stroke({ width: 0.05, color: col, alpha: 0.35 + pulse * 0.4 });
+      }
       props.ellipse(p.x + 0.05, p.y + 0.12, 0.34, 0.24).fill({ color: 0x000000, alpha: 0.35 });
       props.roundRect(p.x - 0.3, p.y - 0.3 + bob, 0.6, 0.6, 0.1).fill(0x1d1f20).stroke({ width: 0.05, color: col });
       if (p.kind === 'health') props.rect(p.x - 0.18, p.y - 0.06 + bob, 0.36, 0.12).rect(p.x - 0.06, p.y - 0.18 + bob, 0.12, 0.36).fill(col);
@@ -542,6 +554,10 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
         const t = pg.age / 0.7;
         circle(fxG, pg.x, pg.y, 0.5 + t * TUNING.abilities.sonarRadius, 48).stroke({ width: 0.08, color: pg.hostile ? P.hostile : P.armor, alpha: 0.7 * (1 - t) });
       }
+      for (const c of fx.collects) {
+        const t = c.age / COLLECT_SECONDS;
+        circle(fxG, c.x, c.y, 0.45 + t * 0.9, 32).stroke({ width: 0.1 * (1 - t) + 0.02, color: c.color, alpha: 0.9 * (1 - t) });
+      }
 
       recapG.clear();
       if (opts.recap && w.playerKill) {
@@ -572,8 +588,8 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       if (opts.showSticks) {
         for (const s of [input.left, input.right]) {
           if (!s.active) continue;
-          screen.circle(s.baseX, s.baseY, STICK_RADIUS).stroke({ width: 2, color: P.team, alpha: 0.25 });
-          if (s === input.right) screen.circle(s.baseX, s.baseY, STICK_RADIUS * AIM_DEADZONE).stroke({ width: 1.5, color: P.signal, alpha: 0.4 });
+          screen.circle(s.baseX, s.baseY, touchStick.radius).stroke({ width: 2, color: P.team, alpha: 0.25 });
+          if (s === input.right) screen.circle(s.baseX, s.baseY, touchStick.radius * AIM_DEADZONE).stroke({ width: 1.5, color: P.signal, alpha: 0.4 });
           screen.circle(s.x, s.y, 18).fill({ color: P.team, alpha: 0.35 });
         }
       }

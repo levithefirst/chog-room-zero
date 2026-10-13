@@ -85,6 +85,16 @@ Known limitations: see docs/RELEASE.md.
 - Orientation rule (RC-6): touch devices always play on a landscape stage; an upright browser gets it turned 90 deg (`src/ui/stage.ts`).
   An orientation flip mid-run pauses the same run and releases held input. The matrix writes every touch in stage coordinates.
 
+## RC-7: menus, profile, medals, settings, tips
+- `node tools/rc7-menus.mjs <baseUrl> <out.json> [shotDir]` (`ONLY=desktop,phone-portrait` to pick): 7 viewports (1440x900, 1280x720,
+  1180x820 touch, 844x390, 667x375, upright 390x844 and 375x667 on the turned stage). Boot screen, How to play diagram, menu, player
+  card, callsign validation + save, favourite, medals tab, loadout, settings applied live and saved (volume, stick size, quality,
+  tips), reset confirm, operator select, a forced clear with medals on the results screen, Menu, persistence after reload, pinning;
+  on desktop and 844x390 also an in-match tip for a needed pickup in the lamp and the named pickup toast. Screenshots per screen.
+- Build id: `BUILD_SHA=$(git rev-parse --short HEAD) npm run build` locally (Vercel uses `VERCEL_GIT_COMMIT_SHA`); shown in Settings > About.
+- Sign-in functions live in `api/` (Vercel). A plain `vite preview` has no `/api`, so Settings says sign-in is not available there.
+  Unit tests call the handlers directly: `npx vitest run tests/rc7-auth.test.ts`.
+
 ## RC-6: landscape launch flow
 - `node tools/rc6-launch.mjs <baseUrl> <out.json> [shotDir]` (`VARIANTS=android:390x844,iphone:375x667,...`): opens upright, checks the
   turned landscape stage (drawn, no prompt), the first tap's fullscreen + `lock('landscape')` (and that both ran inside the tap's user
