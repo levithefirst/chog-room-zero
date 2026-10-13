@@ -38,7 +38,8 @@ const ob3 = await ev(`document.querySelector('#overlay h2')?.textContent ?? 'tit
 await click('[data-act="howto"]'); await sleep(300);
 const ob4 = await ev(`document.querySelector('#overlay h2')?.textContent`);
 const obRows = await ev(`[...document.querySelectorAll('table.howto td:first-child')].map(e=>e.textContent)`);
-check('Onboarding: first launch only, dismissible, re-openable from title, covers move/aim/shoot/creep/ability/rings', ob1 === 'Clear Room Zero' && ob2 && ob3 === 'title' && ob4 === 'Clear Room Zero' && ['Move', 'Aim / shoot', 'Creep (quiet)', 'Ability', 'Gold rings'].every((x) => obRows.includes(x)), { first: ob1, dismissed: ob2, afterReload: ob3, reopened: ob4, rows: obRows });
+// RC-8: sound rings are cream since the PROVISIONAL palette, so the copy says "Pale rings" (was "Gold rings").
+check('Onboarding: first launch only, dismissible, re-openable from title, covers move/aim/shoot/creep/ability/rings', ob1 === 'Clear Room Zero' && ob2 && ob3 === 'title' && ob4 === 'Clear Room Zero' && ['Move', 'Aim / shoot', 'Creep (quiet)', 'Ability', 'Pale rings'].every((x) => obRows.includes(x)), { first: ob1, dismissed: ob2, afterReload: ob3, reopened: ob4, rows: obRows });
 await click('[data-act="howto-close"]'); await sleep(200);
 
 // 1b. RC-2: clicking Resume never fires; fire works after release + a fresh press.

@@ -103,7 +103,8 @@ const ring2 = await ev(`(async()=>{const w=__chog.world,p=w.actors[0];p.hp=1e9;p
   const t1=w.tick; for(let i=0;i<300&&w.tick-t1<240;i++)await new Promise(r=>setTimeout(r,100));return {text:document.getElementById('hint').textContent.slice(0,40),opacity:getComputedStyle(document.getElementById('hint')).opacity}})()`);
 check('Tutorial pill shows on the first run, fades by ~6 s; second run no tutorial', +pill1 > 0.9 && +pill2 < 0.1, { atStart: pill1, after7_5s: pill2 });
 check('Ring hint setup precondition: desktop pointer, PC input mode, player facing west (away from the bot)', !ringPre.coarse && !ringPre.touchMode && Math.abs(Math.abs(ringPre.facing) - Math.PI) < 0.3, ringPre);
-check('Ring hint shows once on the first heard ring, persisted; not shown again after reload', ringSet.persisted === '1' && /Gold rings/.test(ringSet.hint) && !(+ring2.opacity > 0.5 && /Gold rings/.test(ring2.text)), { first: ringSet, afterReload: ring2 });
+// RC-8: sound rings are cream since the PROVISIONAL palette, so the copy says "Pale rings" (was "Gold rings").
+check('Ring hint shows once on the first heard ring, persisted; not shown again after reload', ringSet.persisted === '1' && /Pale rings/.test(ringSet.hint) && !(+ring2.opacity > 0.5 && /Pale rings/.test(ring2.text)), { first: ringSet, afterReload: ring2 });
 
 // 5. HUD layout at 844x390 and 667x375 (with the tutorial pill visible): no panel overlaps, all inside the viewport.
 for (const [W, H] of [[844, 390], [667, 375]]) {
