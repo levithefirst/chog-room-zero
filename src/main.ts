@@ -14,6 +14,7 @@ import { TUNING } from './config/tuning';
 import { HEROES, heroById } from './config/heroes';
 import { heroForKey } from './ui/heroKeys';
 import { orientationOf, ORIENTATION_QUERY } from './ui/orientation';
+import { fullscreenSupported, isFullscreen, layoutStage, rectToStage, requestLandscape, stage, type LaunchResult } from './ui/stage';
 import { coverBoxAt } from './sim/cover';
 import { WEAPONS } from './config/weapons';
 import { adapterFromUrl, resolveIdentity, GUEST, type Identity } from './nft/identity';
@@ -26,6 +27,7 @@ import { createAutopilot, type Autopilot } from './debug/autopilot';
 
 const $ = (id: string) => document.getElementById(id)!;
 const root = $('app');
+const stageEl = $('stage');
 const overlay = $('overlay');
 const hint = $('hint');
 // ?debug shows the bot perception overlay; add &nooverlay to keep the debug hook without it.
@@ -51,6 +53,8 @@ const SPEAKER_OFF = '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><
 
 async function start() {
   await Promise.all([document.fonts.load('600 20px "Plex Mono"'), document.fonts.load('600 20px "Barlow Cond"')]).catch(() => undefined);
+  // Lay the stage out before the canvas is created, so the first frame is already landscape on a phone held upright.
+  layoutStage(stageEl);
   const renderer = await createRenderer(root);
   const input = createInput(root);
   const audio = createAudio();
@@ -125,6 +129,26 @@ async function start() {
     input.ability();
   };
 
+  // Fullscreen + landscape lock (src/ui/stage.ts). Tried by itself once, on the first tap of a touch device (the
+  // earliest moment a browser allows it: touchend/click carry the user gesture, touchstart does not). Afterwards only
+  // the Full screen buttons (HUD, title, pause) ask again, so a player who leaves fullscreen is never fought.
+  const canFs = fullscreenSupported();
+  let launch: LaunchResult = 'not-tried';
+  const goLandscape = () => void requestLandscape().then((r) => { launch = r; paintFs(); });
+  const paintFs = () => document.body.classList.toggle('canfs', canFs && !isFullscreen());
+  paintFs();
+  let launchTried = false;
+  const autoLaunch = (e: Event) => {
+    if (launchTried || !canFs || !matchMedia('(pointer: coarse)').matches) return;
+    if (e instanceof PointerEvent && e.pointerType === 'mouse') return;
+    launchTried = true; // the click that follows this pointerup does not ask twice
+    goLandscape();
+  };
+  document.addEventListener('pointerup', autoLaunch, { capture: true });
+  document.addEventListener('click', autoLaunch, { capture: true });
+  $('fs').onpointerdown = (e) => e.stopPropagation();
+  $('fs').onclick = goLandscape;
+
   // Small top hint pill: shown for `seconds`, then fades. Never covers the play centre.
   let hintLeft = 0;
   function showHint(html: string, seconds: number) {
@@ -142,12 +166,12 @@ async function start() {
     showHint('Gold rings: a noise you <b>heard</b>, not saw. Enemies hear you too: running is loud, creeping is quiet.', 6);
   }
 
-  // HUD panel rects for label avoidance (CHOG-HUD-002). Measured from the DOM, so safe-area insets count; cached
-  // and refreshed on resize/orientation change and every 30 frames (cheap) so layout changes are picked up.
+  // HUD panel rects for label avoidance (CHOG-HUD-002). Measured from the DOM, so safe-area insets count, and turned
+  // into stage coordinates (the stage may be rotated); cached and refreshed on resize/orientation change and every 30
+  // frames (cheap) so layout changes are picked up.
   const HUD_IDS = ['vitals', 'foes', 'sys', 'weapon', 'ability', 'reload'];
   let hudCache: { x: number; y: number; w: number; h: number }[] = [];
   let hudAge = 1e9;
-  window.addEventListener('resize', () => (hudAge = 1e9));
   function hudRects() {
     if (++hudAge < 30) return hudCache;
     hudAge = 0;
@@ -156,7 +180,7 @@ async function start() {
       const el = document.getElementById(id);
       if (!el || el.offsetParent === null) continue;
       const r = el.getBoundingClientRect();
-      if (r.width && r.height) hudCache.push({ x: r.left, y: r.top, w: r.width, h: r.height });
+      if (r.width && r.height) hudCache.push(rectToStage(stage(), r));
     }
     return hudCache;
   }
@@ -224,7 +248,7 @@ async function start() {
     card(`<div class="kicker">Chog squad · basement level · lights out</div>
       <h1>CHOG <em>/</em> ROOM ZERO</h1>
       <p style="margin-top:14px">Five hostiles somewhere below. You see only what your lamp touches. Everyone hears everything.</p>
-      <div class="btns"><button class="btn primary" data-go="start">Enter</button><button class="btn" data-act="howto">How to play</button><button class="btn" data-act="demo">Chog <span class="demo">DEMO</span></button></div>
+      <div class="btns"><button class="btn primary" data-go="start">Enter</button><button class="btn" data-act="howto">How to play</button><button class="btn" data-act="demo">Chog <span class="demo">DEMO</span></button>${fsButton()}</div>
       <div class="mock" id="idchip">${demoChip()}</div>
       <p class="pb" id="titlepb">Best clear ${fmtTime(o.bestWinSeconds)} · most kills ${o.mostKills} · ${o.runs} runs <span>· saved on this device only</span></p>`);
   }
@@ -289,9 +313,14 @@ async function start() {
     }, 30));
   }
 
+  // Only on touch devices whose browser can go fullscreen and is not fullscreen now. Acts on click (user gesture).
+  function fsButton() {
+    return input.mode === 'touch' && canFs && !isFullscreen() ? '<button class="btn" data-fs>Full screen</button>' : '';
+  }
+
   function showPause() {
     card(`<h2>Paused</h2><p>The basement waits.</p>
-      <div class="btns"><button class="btn primary" data-go="resume">Resume</button><button class="btn" data-go="restart">Restart</button><button class="btn" data-go="quit">Quit</button></div>
+      <div class="btns"><button class="btn primary" data-go="resume">Resume</button><button class="btn" data-go="restart">Restart</button><button class="btn" data-go="quit">Quit</button>${fsButton()}</div>
       <p style="font-size:13px">${input.mode === 'touch' ? '' : 'Esc or P to resume.'}</p>`);
   }
 
@@ -364,6 +393,10 @@ async function start() {
     }
   });
 
+  overlay.addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).closest('[data-fs]')) goLandscape();
+  });
+
   function beginWorld() {
     runIndex++;
     world = createWorld({ seed: TUNING.seed + runIndex, hero: heroId, sidegrade: identity.sidegrade });
@@ -400,20 +433,34 @@ async function start() {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && phase === 'play') go('pause');
   });
-  // Orientation flip mid-run (RC-5): both orientations play, but the layout, camera and thumb positions all move, so
-  // the run pauses (same run, nothing lost; Resume continues) and every held stick/key is released: their screen
-  // coordinates belong to the old layout. Plain resizes (address bar, window drag) just re-lay out.
+  // Every resize re-lays the stage out first (a phone turning upright turns the stage, src/ui/stage.ts), then the
+  // canvas follows at once. An orientation flip of the browser mid-run moves every thumb position on the glass, so the
+  // run pauses (same run, nothing lost; Resume continues) and every held stick/key is released: their coordinates
+  // belong to the old layout. Plain resizes (address bar, window drag) just re-lay out.
   let lastOrientation = orientationOf(window.innerWidth, window.innerHeight);
-  const checkRotate = () => {
+  const onResize = () => {
+    layoutStage(stageEl);
+    renderer.app.resize();
+    hudAge = 1e9;
     const o = orientationOf(window.innerWidth, window.innerHeight);
     if (o === lastOrientation) return;
     lastOrientation = o;
     input.releaseAll();
-    hudAge = 1e9;
     if (phase === 'play') go('pause');
   };
-  window.addEventListener('resize', checkRotate);
-  window.matchMedia?.(ORIENTATION_QUERY).addEventListener?.('change', checkRotate);
+  window.addEventListener('resize', onResize);
+  window.matchMedia?.(ORIENTATION_QUERY).addEventListener?.('change', onResize);
+  // Entering or leaving fullscreen resizes everything under the thumbs: release all held input. Leaving it mid-run
+  // (back gesture, Esc, the system bar) pauses, and the pause card offers Full screen to go back.
+  const onFullscreen = () => {
+    input.releaseAll();
+    hudAge = 1e9;
+    paintFs();
+    if (!isFullscreen() && phase === 'play') go('pause');
+    else if (phase === 'pause' || phase === 'title') render();
+  };
+  document.addEventListener('fullscreenchange', onFullscreen);
+  document.addEventListener('webkitfullscreenchange', onFullscreen);
   // Losing window focus (alt-tab, notification shade, another window) pauses too.
   window.addEventListener('blur', () => {
     if (phase === 'play') go('pause');
@@ -505,7 +552,9 @@ async function start() {
       lab: { createWorld, stepWorld, IDLE_INPUT, ROOM_ZERO, HEROES },
       // RC-5 touch-play check: what the scripted autopilot would do now (NOT applied). tools/rc5-touchplay.mjs turns it
       // into real touch gestures, so a full fight runs through the real touch input. Debug builds/?debug only.
-      suggest: () => (suggestPilot ??= createAutopilot(Number(QS.get('pilot')) || 7)).next(world) });
+      suggest: () => (suggestPilot ??= createAutopilot(Number(QS.get('pilot')) || 7)).next(world),
+      // Landscape stage and launch state (tools/rc6-launch.mjs): how the stage sits on the screen, fullscreen, lock.
+      stage: () => ({ ...stage(), fullscreen: isFullscreen(), canFs, launch, orientation: screen.orientation?.type ?? null }) });
     (window as unknown as { __chog: unknown }).__chog = hook;
   }
 

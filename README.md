@@ -2,11 +2,11 @@
 
 A dark top-down tactical shooter for the Chogathon. One basement, five bots, about 90 seconds a run. You see only what your lamp touches; everyone hears everything.
 
-Plays in the browser on desktops and laptops (keyboard and mouse), and on phones and tablets held upright or sideways (touch). No wallet or account is needed to play.
+Plays in the browser on desktops and laptops (keyboard and mouse), and on phones and tablets in landscape (touch). No wallet or account is needed to play.
 
 ## How to test it (5 minutes)
 
-1. Open the game link. On a phone just hold it upright: portrait is the main mobile layout. Landscape works too; turning the phone mid-run pauses the same run (nothing is lost), then Resume.
+1. Open the game link. On a phone the game is always landscape: if you open it upright, it is already drawn sideways, so turn the phone and play. Your first tap also asks for full screen in landscape (Android Chrome; iPhone Safari cannot do this, so there you just hold the phone sideways). If you leave full screen, the run pauses and **Full screen** on the pause card brings it back. Turning the phone mid-run pauses the same run (nothing is lost), then Resume.
 2. First launch shows **How to play**. Press **Got it**.
 3. Optional: **Chog DEMO** and pick a token number (#1 to #4). This shows how a Chog changes play. It is a demo: no wallet and no ownership check.
 4. **Enter**, pick a hero (keys 1 to 4, or tap a card), then **Deploy**.
@@ -15,7 +15,7 @@ Plays in the browser on desktops and laptops (keyboard and mouse), and on phones
 
 ### Controls
 
-| | PC | Phone / tablet (portrait or landscape) |
+| | PC | Phone / tablet (landscape) |
 |---|---|---|
 | Move | WASD | Left thumb |
 | Creep (quiet) | Hold Shift | Half push on the left stick |

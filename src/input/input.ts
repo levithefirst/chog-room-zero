@@ -2,6 +2,7 @@
 import type { Vec2 } from '../sim/sim';
 import type { ActorInput } from '../sim/world';
 import { TUNING } from '../config/tuning';
+import { stage, toStage } from '../ui/stage';
 
 /** Pure: held KeyboardEvent.code values -> move vector. Opposites cancel; diagonals normalized. +y is down. */
 export function keysToMove(held: ReadonlySet<string>): Vec2 {
@@ -59,8 +60,8 @@ export interface Input {
    */
   holdFireUntilRelease(): void;
   /**
-   * Drop every held key, stick and pointer (orientation flip): a stick base recorded in the old orientation's
-   * coordinates means nothing after a rotation, and some browsers never send the release for a finger held through it.
+   * Drop every held key, stick and pointer (orientation flip, fullscreen change): a stick base recorded in the old
+   * layout's coordinates means nothing after it, and some browsers never send the release for a finger held through it.
    */
   releaseAll(): void;
   dispose(): void;
@@ -197,14 +198,17 @@ export function createInput(el: HTMLElement): Input {
   const onVis = () => {
     if (document.visibilityState !== 'visible') clear();
   };
+  // Sticks, mouse and aim all work in stage coordinates (src/ui/stage.ts): on a phone held upright the stage is the
+  // landscape game turned 90 deg, so a viewport point is turned back before it means anything.
   const pdown = (e: PointerEvent) => {
     action = true;
+    const pt = toStage(stage(), e.clientX, e.clientY);
     if (e.pointerType === 'touch') {
       inp.mode = 'touch';
-      const s = e.clientX < window.innerWidth / 2 ? left : right;
+      const s = pt.x < stage().w / 2 ? left : right;
       if (s.active) return;
       if (s === right && blocked.has(e.pointerId)) return; // the menu touch never becomes the aim/fire thumb
-      Object.assign(s, { active: true, id: e.pointerId, baseX: e.clientX, baseY: e.clientY, x: e.clientX, y: e.clientY });
+      Object.assign(s, { active: true, id: e.pointerId, baseX: pt.x, baseY: pt.y, x: pt.x, y: pt.y });
     } else {
       inp.mode = 'pc';
       if (e.button === 0 && !blocked.has(e.pointerId)) firing = fireLatched = true;
@@ -212,15 +216,16 @@ export function createInput(el: HTMLElement): Input {
     e.preventDefault();
   };
   const pmove = (e: PointerEvent) => {
+    const pt = toStage(stage(), e.clientX, e.clientY);
     if (e.pointerType !== 'touch') {
-      inp.mouseX = e.clientX;
-      inp.mouseY = e.clientY;
+      inp.mouseX = pt.x;
+      inp.mouseY = pt.y;
       return;
     }
     for (const s of [left, right]) {
       if (!s.active || s.id !== e.pointerId) continue;
-      s.x = e.clientX;
-      s.y = e.clientY;
+      s.x = pt.x;
+      s.y = pt.y;
       // Floating base: follow the thumb if it drifts past the rim, so the stick never "runs out".
       const dx = s.x - s.baseX, dy = s.y - s.baseY, d = Math.hypot(dx, dy);
       if (d > STICK_RADIUS * 1.4) {

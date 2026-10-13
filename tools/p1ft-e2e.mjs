@@ -135,21 +135,22 @@ const st3 = await ev(`(()=>{const p=__chog.world.actors[0];return {x:p.x,y:p.y,s
 const moved = Math.hypot(st1.x - st0.x, st1.y - st0.y);
 check('3 simultaneous touches: moves, aims, fires and uses the ability; nothing sticks after release', moved > 0.5 && st1.cd > 0 && st1.shots > st0.shots && Math.hypot(st3.x - st2.x, st3.y - st2.y) < 0.05 && st3.shots === st2.shots, { moved: +moved.toFixed(2), facing: [st0.f, st1.f], abilityCd: st1.cd, shots: [st0.shots, st1.shots, st2.shots, st3.shots], driftAfterRelease: +Math.hypot(st3.x - st2.x, st3.y - st2.y).toFixed(3) });
 
-// 7. Rotation (RC-5, portrait-first mobile; was: a rotate prompt): landscape -> portrait pauses the same run with no
-// prompt; the canvas fills the portrait screen and the run resumes in portrait; back to landscape likewise.
+// 7. Rotation (RC-6, landscape game; was RC-5 portrait play, and before that a rotate prompt): landscape -> portrait
+// pauses the same run with no prompt; the stage stays landscape (844x390 canvas, turned 90 deg to fill the upright
+// screen) and the run resumes there; back to landscape likewise, unturned.
 const rot0 = await ev(`({phase:__chog.phase,w:__chog.world.tick>=0&&(window.__rw=__chog.world,1)})`);
 const canv = `(()=>{const c=document.querySelector('canvas');return [c.clientWidth,c.clientHeight]})()`;
 await view(390, 844, true); await sleep(800);
-const rot1 = await ev(`({phase:__chog.phase,prompt:!!document.getElementById('rotate'),canvas:${canv}})`);
+const rot1 = await ev(`({phase:__chog.phase,prompt:!!document.getElementById('rotate'),canvas:${canv},rotated:__chog.stage().rotated})`);
 await ev(`__chog.go('resume')`); await sleep(400);
 const rot1b = await ev(`({phase:__chog.phase,sameRun:__chog.world===window.__rw})`);
 await view(844, 390, true); await sleep(800);
-const rot2 = await ev(`({phase:__chog.phase,prompt:!!document.getElementById('rotate'),canvas:${canv}})`);
+const rot2 = await ev(`({phase:__chog.phase,prompt:!!document.getElementById('rotate'),canvas:${canv},rotated:__chog.stage().rotated})`);
 await ev(`__chog.go('resume')`); await sleep(400);
 const rot3 = await ev(`({phase:__chog.phase,sameRun:__chog.world===window.__rw})`);
-check('Rotation: no prompt; each flip pauses the same run, the canvas fills the new shape, and it resumes in portrait and in landscape',
-  !rot1.prompt && rot1.phase === 'pause' && rot1.canvas[0] === 390 && rot1.canvas[1] === 844 && rot1b.phase === 'play' && rot1b.sameRun
-  && !rot2.prompt && rot2.phase === 'pause' && rot2.canvas[0] === 844 && rot3.phase === 'play' && rot3.sameRun,
+check('Rotation: no prompt; each flip pauses the same run; upright the stage stays landscape (turned), and it resumes both ways',
+  !rot1.prompt && rot1.phase === 'pause' && rot1.rotated && rot1.canvas[0] === 844 && rot1.canvas[1] === 390 && rot1b.phase === 'play' && rot1b.sameRun
+  && !rot2.prompt && rot2.phase === 'pause' && !rot2.rotated && rot2.canvas[0] === 844 && rot2.canvas[1] === 390 && rot3.phase === 'play' && rot3.sameRun,
   { before: rot0, portrait: rot1, portraitResumed: rot1b, landscape: rot2, afterResume: rot3 });
 
 // 8. Background/resume: hidden tab pauses with no sim steps; resume does not burst-step.

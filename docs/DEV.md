@@ -35,7 +35,7 @@ Dev flags: `?mockChog=1234` binds a mock Chog (not a real ownership check). `?de
 
 ## Owner playtest: phone (BLOCKED until done on Pixel 7 and iPhone 13)
 1. On the dev machine: `npm run dev -- --host`; note the `Network:` URL (http://<LAN-IP>:5173).
-2. Phone on the same Wi-Fi, open that URL, turn to landscape, tap to enter. Tap the speaker icon to check audio (the choice is remembered).
+2. Phone on the same Wi-Fi, open that URL, tap to enter (the game is landscape; the first tap asks for fullscreen + landscape where the browser allows it). Tap the speaker icon to check audio (the choice is remembered).
 3. Left thumb anywhere on the left half: move (half push creeps). Right thumb on the right half: aim; push past the inner ring to fire. Ability and Reload buttons sit at the right edge; pause and mute top-right.
 4. Report: device, browser, smooth or stuttering, sticks comfortable, sound works after the first tap, text readable, anything cut off by the notch.
 
@@ -82,11 +82,18 @@ Known limitations: see docs/RELEASE.md.
   (canvas = viewport, HUD panels inside and not overlapping, player on screen), move, aim, fire, reload, ability, pause, resume (no
   shot), restart; desktop window resizes and focus loss; touch rotation x3 mid-run with a finger held. Console errors and failed requests.
 - Scripted full loop at a touch size: `VIEWPORT=820x1180 TOUCH=1 node tools/rc-autoplay.mjs <baseUrl> <out.json> 30 kettle,mop` (menus by tap).
-- Orientation rule: phones (portrait, under 600 px wide) show the turn-sideways screen and pause the run; tablets play in portrait.
-  `src/ui/orientation.ts` and the `#rotate` media query in `index.html` must match.
+- Orientation rule (RC-6): touch devices always play on a landscape stage; an upright browser gets it turned 90 deg (`src/ui/stage.ts`).
+  An orientation flip mid-run pauses the same run and releases held input. The matrix writes every touch in stage coordinates.
 
-## RC-5: portrait touch play
-- `node tools/rc5-touchplay.mjs <baseUrl> <out.json> [WxH=390x844] [hero] [maxSimSeconds] [shotDir]`: a full match through REAL touch
+## RC-6: landscape launch flow
+- `node tools/rc6-launch.mjs <baseUrl> <out.json> [shotDir]` (`VARIANTS=android:390x844,iphone:375x667,...`): opens upright, checks the
+  turned landscape stage (drawn, no prompt), the first tap's fullscreen + `lock('landscape')` (and that both ran inside the tap's user
+  gesture), the turn to landscape, play controls, pause/resume, leaving fullscreen mid-run and coming back via Full screen, an
+  orientation flip mid-run and back with a finger held. Browser behaviour per variant: `android` (fullscreen real, lock stubbed to
+  succeed, then the viewport turns), `denied` (headless refuses the lock), `iphone` (no Fullscreen API, no lock). Emulation only.
+
+## RC-5: touch play (since RC-6 on the landscape stage)
+- `node tools/rc5-touchplay.mjs <baseUrl> <out.json> [WxH=390x844] [hero] [maxSimSeconds] [shotDir]` (an upright size plays on the turned stage): a full match through REAL touch
   events only (menu taps, left stick, right stick aim + fire, Reload/Ability buttons), with decisions from the debug-only
   `__chog.suggest()` (the autopilot's intended input, not applied). Then results, Again, and the saved record. SCRIPTED, emulated touch.
 - CDP touch rule: `Input.dispatchTouchEvent` `touchEnd` must carry no points (it ends all). To lift one finger and keep others, send a

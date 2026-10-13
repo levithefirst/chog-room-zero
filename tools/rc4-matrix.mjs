@@ -4,6 +4,9 @@
 // fire, reload, ability, pause/resume (no shot), restart. Desktop also resizes the window and loses focus; touch
 // viewports rotate three times mid-run with a finger held down. Bots are parked off the map during input checks
 // so the player cannot die mid-check (input and layout only; gameplay and victory are covered by rc-autoplay).
+// RC-6: touch devices always play on a landscape stage. A portrait touch viewport gets the landscape stage turned
+// 90 deg (src/ui/stage.ts), so every touch here is written in stage coordinates and turned into viewport
+// coordinates the same way the CSS transform does; layout is measured in stage coordinates too.
 // Usage: node tools/rc4-matrix.mjs <baseUrl> <outJson> [shotDir] [ONLY=name,name]
 import { spawn } from 'node:child_process'; import fs from 'node:fs';
 const [base, outFile, shotDir] = process.argv.slice(2);
@@ -32,8 +35,14 @@ const phase = () => ev('__chog.phase');
 async function waitPhase(want, ms = 8000) { const t0 = Date.now(); while (Date.now() - t0 < ms) { if ((await phase()) === want) return true; await sleep(25); } return false; }
 const ticks = (n) => ev(`(async()=>{const w=__chog.world,t0=w.tick;for(let i=0;i<400&&w.tick-t0<${n};i++)await new Promise(r=>setTimeout(r,25));return w.tick-t0})()`);
 const P0 = (f) => ev(`(()=>{const p=__chog.world.actors[0];return ${f}})()`);
-const center = (sel) => ev(`(()=>{const e=document.querySelector(${JSON.stringify(sel)});if(!e||e.offsetParent===null&&getComputedStyle(e).position!=='fixed')return null;const b=e.getBoundingClientRect();if(!b.width)return null;return [b.left+b.width/2,b.top+b.height/2]})()`);
-const touch = (type, pts) => cmd('Input.dispatchTouchEvent', { type, touchPoints: pts });
+// Stage geometry (RC-6): { rotated, w, h, screenW }. Refreshed after every viewport change.
+let S = { rotated: false, w: 0, h: 0, screenW: 0 };
+const readStage = async () => (S = await ev('__chog.stage()'));
+const toScr = (x, y) => (S.rotated ? { x: S.screenW - y, y: x } : { x, y });
+// Element centre in stage coordinates.
+const center = (sel) => ev(`(()=>{const e=document.querySelector(${JSON.stringify(sel)});if(!e||e.offsetParent===null&&getComputedStyle(e).position!=='fixed'&&getComputedStyle(e).position!=='absolute')return null;const b=e.getBoundingClientRect();if(!b.width)return null;const S=__chog.stage(),x=b.left+b.width/2,y=b.top+b.height/2;return S.rotated?[y,S.screenW-x]:[x,y]})()`);
+// Touch points are given in stage coordinates.
+const touch = (type, pts) => cmd('Input.dispatchTouchEvent', { type, touchPoints: pts.map((p) => ({ ...p, ...toScr(p.x, p.y) })) });
 const mouse = (type, x, y) => cmd('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1, ...(type === 'mousePressed' ? { buttons: 1 } : {}) });
 const keyDown = (code, key, vk) => cmd('Input.dispatchKeyEvent', { type: 'keyDown', code, key, windowsVirtualKeyCode: vk });
 const keyUp = (code, key, vk) => cmd('Input.dispatchKeyEvent', { type: 'keyUp', code, key, windowsVirtualKeyCode: vk });
@@ -43,18 +52,21 @@ async function press(sel, isTouch) { const c = await center(sel); if (!c) return
   return true; }
 const parkBots = `(()=>{for(const b of __chog.world.actors.slice(1)){b.x=b.y=-40;b.vx=b.vy=0}})()`;
 const angDiff = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
-// Layout: canvas fills the viewport; HUD panels visible, inside, not overlapping; player on screen and not under any
-// HUD panel (RC-5: the portrait camera keeps it clear of the top and bottom bands).
-const layout = () => ev(`(()=>{const W=innerWidth,H=innerHeight,c=document.querySelector('canvas').getBoundingClientRect(),s=__chog.renderer.app.screen;
-  const ids=['vitals','foes','sys','weapon','ability','reload'];const rs=ids.map(i=>{const e=document.getElementById(i);if(!e||e.offsetParent===null)return null;const b=e.getBoundingClientRect();return b.width?{i,x:b.left,y:b.top,r:b.right,b:b.bottom}:null}).filter(Boolean);
+// Layout: canvas fills the stage, and the stage fills the viewport; HUD panels visible, inside, not overlapping;
+// player on screen and not under any HUD panel. All in stage coordinates (RC-6); touch stages must be landscape.
+const layout = () => ev(`(()=>{const S=__chog.stage(),W=S.w,H=S.h,st=document.getElementById('stage').getBoundingClientRect(),s=__chog.renderer.app.screen;
+  const R=(b)=>S.rotated?{x:b.top,y:S.screenW-b.right,r:b.bottom,b:S.screenW-b.left}:{x:b.left,y:b.top,r:b.right,b:b.bottom};
+  const cb=R(document.querySelector('canvas').getBoundingClientRect()),c={width:cb.r-cb.x,height:cb.b-cb.y};
+  const ids=['vitals','foes','sys','weapon','ability','reload'];const rs=ids.map(i=>{const e=document.getElementById(i);if(!e||e.offsetParent===null)return null;const b=e.getBoundingClientRect();return b.width?{i,...R(b)}:null}).filter(Boolean);
   const ov=[];for(let a=0;a<rs.length;a++)for(let k=a+1;k<rs.length;k++){const A=rs[a],B=rs[k];if(A.x<B.r&&B.x<A.r&&A.y<B.b&&B.y<A.b)ov.push(A.i+'/'+B.i)}
   const p=__chog.world.actors[0],ps=__chog.renderer.toScreen(p.x,p.y);const pr={x:ps.x-18,y:ps.y-24,r:ps.x+18,b:ps.y+18};
   const under=rs.filter(R=>R.x<pr.r&&pr.x<R.r&&R.y<pr.b&&pr.y<R.b).map(R=>R.i);
-  return {W,H,canvas:[Math.round(c.width),Math.round(c.height)],screen:[s.width,s.height],panels:rs.map(r=>r.i),overlaps:ov,outside:rs.filter(r=>r.x<0||r.y<0||r.r>W+1||r.b>H+1).map(r=>r.i),
+  return {W,H,rotated:S.rotated,viewport:[innerWidth,innerHeight],stageFillsViewport:Math.abs(st.left)<1&&Math.abs(st.top)<1&&Math.abs(st.right-innerWidth)<1&&Math.abs(st.bottom-innerHeight)<1,
+    landscapeStage:W>=H,canvas:[Math.round(c.width),Math.round(c.height)],screen:[s.width,s.height],panels:rs.map(r=>r.i),overlaps:ov,outside:rs.filter(r=>r.x<0||r.y<0||r.r>W+1||r.b>H+1).map(r=>r.i),
     player:[Math.round(ps.x),Math.round(ps.y)],playerOnScreen:ps.x>0&&ps.y>0&&ps.x<W&&ps.y<H,playerUnderHud:under,prompt:!!document.getElementById('rotate'),touchMode:document.body.classList.contains('touch'),hud:document.getElementById('hud').classList.contains('on')}})()`);
 // Canvas/screen within 1 px: at DPR 1.5 Pixi reports e.g. 667.33 for a 667 px viewport (device-pixel rounding).
 const near = (a, b) => Math.abs(a - b) < 1;
-const layoutOk = (L) => near(L.canvas[0], L.W) && near(L.canvas[1], L.H) && near(L.screen[0], L.W) && near(L.screen[1], L.H) && L.overlaps.length === 0 && L.outside.length === 0 && L.playerOnScreen && L.playerUnderHud.length === 0 && !L.prompt && L.hud && L.panels.length >= 5;
+const layoutOk = (L) => near(L.canvas[0], L.W) && near(L.canvas[1], L.H) && near(L.screen[0], L.W) && near(L.screen[1], L.H) && L.stageFillsViewport && (!L.touchMode || L.landscapeStage) && L.overlaps.length === 0 && L.outside.length === 0 && L.playerOnScreen && L.playerUnderHud.length === 0 && !L.prompt && L.hud && L.panels.length >= 5;
 const shot = async (name) => { if (!shotDir) return; const s = await cmd('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(`${shotDir}/rc4-${name}.png`, Buffer.from(s.data, 'base64')); };
 
 const VIEWPORTS = [
@@ -81,12 +93,13 @@ for (const V of VIEWPORTS.filter((v) => !only.length || only.some((o) => v.name.
     await freshTab(); await view(V.w, V.h, V.touch);
     await cmd('Page.navigate', { url: `${base}/?debug&nooverlay` }); await sleep(2500);
     await ev('localStorage.clear()'); await cmd('Page.navigate', { url: `${base}/?debug&nooverlay` }); await sleep(3000);
-    const pre = await ev(`({h2:document.querySelector('#overlay h2')?.textContent,prompt:!!document.getElementById('rotate')})`);
+    const pre = await ev(`({h2:document.querySelector('#overlay h2')?.textContent,prompt:!!document.getElementById('rotate'),stage:__chog.stage(),screen:[__chog.renderer.app.screen.width,__chog.renderer.app.screen.height]})`);
+    await readStage();
     ok('loads (How to play card)', pre.h2 === 'Clear Room Zero', pre);
-    ok('no turn-sideways prompt (RC-5: every orientation plays)', !pre.prompt, pre);
+    ok('no turn-sideways prompt; touch draws a landscape stage at once (RC-6)', !pre.prompt && (!V.touch || (pre.stage.w >= pre.stage.h && pre.screen[0] >= pre.screen[1] && pre.stage.rotated === V.h > V.w)), pre);
     await shot(`${V.name}-howto`);
     const T = V.touch;
-    const [W, H] = [V.w, V.h];
+    const [W, H] = [S.w, S.h]; // stage size: a turned portrait phone is W x H landscape
     ok('How to play: Got it', await press('[data-act="howto-close"]', T)); await sleep(300);
     ok('Title: Enter', await press('[data-go="start"]', T)); await sleep(400);
     await shot(`${V.name}-select`);
@@ -131,7 +144,7 @@ for (const V of VIEWPORTS.filter((v) => !only.length || only.some((o) => v.name.
     if (!T) {
       const sizes = [];
       for (const [w, h] of V.resize) {
-        await view(w, h, false); await sleep(500);
+        await view(w, h, false); await sleep(500); await readStage();
         const phResize = await phase(); // an orientation flip pauses the run; a same-orientation resize does not
         if (phResize === 'pause') { await press('[data-go="resume"]', false); await waitPhase('play', 2000); }
         await ticks(5);
@@ -155,13 +168,13 @@ for (const V of VIEWPORTS.filter((v) => !only.length || only.some((o) => v.name.
     } else {
       // Rotation x3 during an active run, a finger held on the move stick each time (no release event is sent).
       const cycles = [];
-      let [cw, ch] = [W, H];
+      let [cw, ch] = [W, H], [vw, vh] = [V.w, V.h];
       for (let c = 0; c < 3; c++) {
         const before = await P0('({tick:__chog.world.tick,hp:p.hp,kills:p.kills,shots:p.shots})');
         await ev('window.__w1=__chog.world');
         const lx = cw * 0.18, ly = ch * 0.72;
         await touch('touchStart', [{ x: lx, y: ly, id: 5 }]); await touch('touchMove', [{ x: lx + 50, y: ly, id: 5 }]); await ticks(5);
-        [cw, ch] = [ch, cw]; await view(cw, ch, true); await sleep(700);
+        [vw, vh] = [vh, vw]; await view(vw, vh, true); await sleep(700); await readStage(); [cw, ch] = [S.w, S.h];
         const rot = await layout(); const phR = await phase();
         // Play in the new orientation: Resume, move with the left thumb, aim west with the right thumb.
         let rotPlay = null;
@@ -180,7 +193,7 @@ for (const V of VIEWPORTS.filter((v) => !only.length || only.some((o) => v.name.
         }
         const hx = cw * 0.18, hy = ch * 0.72;
         await touch('touchStart', [{ x: hx, y: hy, id: 5 }]); // a finger on the glass as the device turns back
-        [cw, ch] = [ch, cw]; await view(cw, ch, true); await sleep(700);
+        [vw, vh] = [vh, vw]; await view(vw, vh, true); await sleep(700); await readStage(); [cw, ch] = [S.w, S.h];
         const back = await layout(); const phB = await phase();
         const held = { x: Math.min(hx, cw - 2), y: Math.min(hy, ch - 2), id: 5 }; // still on the glass through the turn
         if (phB === 'pause') { const r = await center('[data-go="resume"]'); await touch('touchStart', [held, { x: r[0], y: r[1], id: 91 }]); await touch('touchMove', [held]); /* lift only the Resume finger: CDP touchEnd must carry no points */ await waitPhase('play', 2000); }
@@ -191,8 +204,8 @@ for (const V of VIEWPORTS.filter((v) => !only.length || only.some((o) => v.name.
         await touch('touchStart', [{ x: rx, y: ry, id: 6 }]); await touch('touchMove', [{ x: rx - 50, y: ry, id: 6 }]); await ticks(10);
         const fW = await P0('p.facing'); await touch('touchEnd', []); await ticks(5);
         const same = await ev('__chog.world===window.__w1');
-        cycles.push({ cycle: c + 1, rotatedTo: `${rot.W}x${rot.H}`, phaseRotated: phR, rotatedLayoutOk: layoutOk(rot), rotPlay,
-          backTo: `${back.W}x${back.H}`, phaseBack: phB, backLayoutOk: layoutOk(back), sameRun: same,
+        cycles.push({ cycle: c + 1, rotatedTo: `${rot.viewport.join('x')} (stage ${rot.W}x${rot.H}${rot.rotated ? ' turned' : ''})`, phaseRotated: phR, rotatedLayoutOk: layoutOk(rot), rotPlay,
+          backTo: `${back.viewport.join('x')} (stage ${back.W}x${back.H}${back.rotated ? ' turned' : ''})`, phaseBack: phB, backLayoutOk: layoutOk(back), sameRun: same,
           drift: +Math.hypot(pos1.x - pos0.x, pos1.y - pos0.y).toFixed(3), speedAfter: +pos1.speed.toFixed(3), aimWestOk: angDiff(fW, Math.PI) < 0.15, hpKept: before.hp });
       }
       ok('rotation x3 mid-run (finger held): each flip pauses the same run, layout follows, play works in the new orientation (move + aim), back again: no stuck move, touch aim aligned',

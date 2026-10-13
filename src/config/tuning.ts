@@ -150,9 +150,9 @@ export const TUNING = {
     maxResolution: 1.5,
     viewWidthUnits: 22,
     minViewHeightUnits: 11,
-    // Portrait (phones held upright, RC-5): ~15 u across, so a 390 px phone draws the player ~27 px wide (as big as
-    // phone landscape) and sees ~32 u top to bottom. Never wider than 22 u, never closer than portraitMaxPpu (so a
-    // 600-800 px portrait tablet keeps phone-landscape scale instead of zooming in).
+    // Portrait canvas (RC-5; since RC-6 only a tall, narrow desktop window: phones and tablets always get the
+    // landscape stage): ~15 u across, so a 390 px window draws the player ~27 px wide and sees ~32 u top to bottom.
+    // Never wider than 22 u, never closer than portraitMaxPpu (a 600-800 px wide window keeps landscape scale).
     portraitViewWidthUnits: 15,
     portraitMaxPpu: 30,
     // Portrait lookahead toward the aim: with 7.5 u to each side, 3 u of lead shows ~10.5 u ahead of the player.
