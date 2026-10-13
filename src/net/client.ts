@@ -46,6 +46,14 @@ export class OnlineSession {
   private retryUntil = 0;
   /** Render Free sleeps after 15 idle minutes and takes about a minute to wake; until then a socket is refused. */
   private wakeUntil = 0;
+  /** Keep-alive ping on a timer, not the render loop: a slow or backgrounded page must not be kicked as idle (10 s). */
+  private pingTimer: ReturnType<typeof setInterval> | null = null;
+  /** Connection events, newest last (debug builds show it; tools/hosted checks read it). */
+  readonly log: string[] = [];
+  private note(e: string): void {
+    this.log.push(`${(performance.now() / 1000).toFixed(1)} ${e}`);
+    if (this.log.length > 40) this.log.shift();
+  }
   rtt = 0;
 
   constructor(readonly url: string, private name: () => string, private hero: () => string, private store: Storage | null) {
@@ -62,10 +70,18 @@ export class OnlineSession {
     }
     const ws = new WebSocket(this.url);
     this.ws = ws;
-    ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', v: PROTOCOL, name: this.name(), hero: this.hero(), ...(this.token ? { token: this.token } : {}) }));
+    this.note(`connect ${this.state}`);
+    ws.onopen = () => {
+      this.note('open');
+      ws.send(JSON.stringify({ t: 'hello', v: PROTOCOL, name: this.name(), hero: this.hero(), ...(this.token ? { token: this.token } : {}) }));
+      if (this.pingTimer) clearInterval(this.pingTimer);
+      this.pingTimer = setInterval(() => { if (this.ws === ws) this.ping(performance.now()); }, 2000);
+    };
     ws.onmessage = (e) => { try { this.onMsg(JSON.parse(String(e.data)) as ServerMsg); } catch { /* ignore a bad frame */ } };
-    ws.onclose = () => {
+    ws.onclose = (e) => {
+      this.note(`close ${e.code} ${e.reason || ''}`.trim());
       if (this.ws !== ws) return;
+      if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = null; }
       this.ws = null;
       // Dropped mid-match: try to come back with the same token (the server keeps the operator for 20 s).
       if (this.state === 'match' || this.state === 'reconnecting') {
@@ -86,6 +102,7 @@ export class OnlineSession {
   }
 
   close(): void {
+    if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = null; }
     this.state = 'offline';
     this.wakeUntil = 0;
     const ws = this.ws;
@@ -132,6 +149,7 @@ export class OnlineSession {
   ping(now: number): void { this.send({ t: 'ping', at: now }); }
 
   private onMsg(m: ServerMsg): void {
+    if (m.t !== 'snap' && m.t !== 'pong') this.note(m.t === 'error' ? `error ${m.code}` : m.t === 'queued' ? `queued ${m.have}/${m.need}` : m.t);
     switch (m.t) {
       case 'welcome':
         this.token = m.token;

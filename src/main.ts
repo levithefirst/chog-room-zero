@@ -675,7 +675,11 @@ async function start() {
   function pollOnline() {
     if (!net) return;
     const now = performance.now();
-    if ((net.state === 'match' || net.state === 'queued' || net.state === 'idle') && now - lastPing > 2000) { lastPing = now; net.ping(now); }
+    // Keep-alive pings run on the session's own timer (client.ts). Debug: the connection log on <body data-netlog>.
+    if (QS.has('debug')) {
+      const nl = `${phase} fps${Math.round(hook.fps)} | ${net.log.slice(-14).join(' | ')}`;
+      if (document.body.dataset.netlog !== nl && now - lastPing > 500) { lastPing = now; document.body.dataset.netlog = nl; }
+    }
     const key = `${net.state}|${net.queue?.have}|${net.message}|${Math.round(net.rtt / 20)}`;
     if (key !== netKey) {
       netKey = key;
