@@ -551,7 +551,14 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       shownHostiles.length = 0;
       const rev = revealed(w, p);
       for (const a of w.actors) {
-        if (a.team === 'bot') {
+        // Teammates (online) are allies: always drawn, round green ring. Anyone on another team is a hostile.
+        if (a !== p && a.team === p.team) {
+          if (!a.alive && a.deadFor > R.deathAnimSeconds) continue;
+          drawBody(actors, a, false, null, false);
+          if (a.alive) drawBar(a, false);
+          continue;
+        }
+        if (a !== p) {
           if (!a.alive && a.deadFor > R.deathAnimSeconds) continue;
           const mode = enemyDrawMode(level, p, view, a, {
             recapKiller: !!opts.recap && w.playerKill?.killerId === a.id,
@@ -573,8 +580,8 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
             circle(actors, a.x, a.y, 0.62).stroke({ width: 0.08, color: P.hostile, alpha: 0.9 });
           }
           if (a.alive) visBots++;
-          const br = w.brains.get(a.id) as Brain;
-          drawBody(actors, a, true, null, br.state === 'alert');
+          const br = w.brains.get(a.id) as Brain | undefined;
+          drawBody(actors, a, true, null, br?.state === 'alert');
           if (a.alive) drawBar(a, true);
         }
       }
@@ -596,7 +603,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
         const travelled = Math.hypot(b.x - b.ox, b.y - b.oy);
         const len = Math.min(b.weapon.id === 'marksman' ? 2.2 : b.weapon.pellets > 1 ? 0.5 : 0.9, travelled);
         fxG.moveTo(b.x - b.dx * len, b.y - b.dy * len).lineTo(b.x, b.y)
-          .stroke({ width: b.weapon.tracer, color: b.owner !== 0 ? P.hostileTracer : P.signal });
+          .stroke({ width: b.weapon.tracer, color: w.actors[b.owner]?.team !== p.team ? P.hostileTracer : P.signal });
       }
       for (const s of fx.sparks) {
         if (s.age >= 1 || !pointInPolygon(s.x, s.y, poly)) continue;

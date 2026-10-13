@@ -122,8 +122,9 @@ export interface HitEvent {
 }
 
 export interface KillInfo {
-  /** 'shot': killed by `killerId`'s bullet. 'zone': the danger zone (killerId -1, from = where the actor stood). */
-  cause: 'shot' | 'zone';
+  /** 'shot': killed by `killerId`'s bullet. 'zone': the danger zone. 'left': an online player who did not come back.
+   * For 'zone' and 'left' killerId is -1 and from = where the actor stood. */
+  cause: 'shot' | 'zone' | 'left';
   killerId: number;
   weapon: string;
   fromX: number;
@@ -510,7 +511,7 @@ function damage(w: World, t: Actor, by: Actor, b: Bullet, hx: number, hy: number
   }
 }
 
-function down(w: World, t: Actor, info: KillInfo): void {
+export function down(w: World, t: Actor, info: KillInfo): void {
   t.hp = 0;
   t.alive = false;
   { const ti = w.attackTokens.indexOf(t.id); if (ti >= 0) w.attackTokens.splice(ti, 1); }

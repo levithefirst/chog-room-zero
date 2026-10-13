@@ -5,8 +5,10 @@ import { createAudio } from './audio/audio';
 import { fixedSteps } from './sim/sim';
 import { createWorld, hears, matchSeconds, player, stepWorld, touchingFull, wants, IDLE_INPUT, type Pickup, type PickupKind, type World } from './sim/world';
 import { outsideCircle, zoneAt } from './sim/zone';
+import { OnlineSession, serverUrl } from './net/client';
+import { MODE_SIZE, type Mode } from './net/protocol';
 import { ROOM_ZERO } from './config/map';
-import { sightClear, walkable } from './sim/level';
+import { findPath, sightClear, walkable } from './sim/level';
 import { clampMarker } from './render/visibility';
 import { muzzleFlashSeen } from './sim/vision';
 import { canSee } from './sim/vision';
@@ -22,10 +24,10 @@ import { recordRun, type TokenHistory } from './nft/history';
 import { boundIdentity } from './nft/identity';
 import { DEMO_COPY, TRAIT_INFO, isTokenId, sampleTokens, traitsFor } from './nft/traits';
 import { RECORDS_KEY, loadRecords, recordBest, type Records } from './ui/records';
-import { PROFILE_KEY, QUALITY_DPR, STICK_PX, linkIdentity, loadProfile, loadSettings, saveProfile, saveSettings, togglePin, validateNickname, type Profile, type Settings } from './ui/profile';
+import { PROFILE_KEY, QUALITY_DPR, STICK_PX, displayName, linkIdentity, loadProfile, loadSettings, saveProfile, saveSettings, togglePin, validateNickname, type Profile, type Settings } from './ui/profile';
 import { MEDALS_KEY, awardMedals, loadMedals, type MedalDef, type Unlocked } from './ui/medals';
 import { TIPS_KEY, loadShownTips, nextTip, saveShownTips, tipText, type TipId } from './ui/tips';
-import { esc, howtoHtml, nickHtml, profileHtml, resultsHtml, selectHtml, settingsHtml, titleHtml, type AuthView, type ProfileTab, type ScreenCtx } from './ui/screens';
+import { esc, howtoHtml, nickHtml, onlineHtml, onlineResultsHtml, profileHtml, resultsHtml, selectHtml, settingsHtml, titleHtml, type AuthView, type ProfileTab, type ScreenCtx } from './ui/screens';
 import { discoverWallets, fetchAuthConfig, fetchSession, googleSignIn, signOut, walletSignIn, type ServerIdentity } from './ui/auth';
 import { SIDEGRADES } from './sim/operators';
 import { createAutopilot, type Autopilot } from './debug/autopilot';
@@ -98,7 +100,7 @@ async function start() {
     : 'Guest';
   // Onboarding: shown once on first launch, re-openable from the title.
   const ONBOARD_KEY = 'chog.onboarded';
-  type TitleView = 'main' | 'howto' | 'demo' | 'profile' | 'settings' | 'nick';
+  type TitleView = 'main' | 'howto' | 'demo' | 'profile' | 'settings' | 'nick' | 'online';
   let titleView: TitleView = (() => { try { return localStorage.getItem(ONBOARD_KEY) === '1' ? 'main' : 'howto'; } catch { return 'main'; } })();
   let records: Records = loadRecords(localStorage);
   let lastRun: { newBest: { time: boolean; kills: boolean }; earned: MedalDef[] } | null = null;
@@ -116,6 +118,14 @@ async function start() {
   const canVibrate = typeof navigator.vibrate === 'function';
   // Per-run counters for the results screen and medals (the sim does not track these).
   let runPickups = 0, runAbilities = 0;
+  // RC-8 online play: the server address (?server=... or the build's VITE_GAME_SERVER_URL; null = not deployed),
+  // the session, and whether the current world is an online match (then it is the server's view, not a local sim).
+  const NET_URL = serverUrl(location.search, import.meta.env.VITE_GAME_SERVER_URL as string | undefined);
+  let net: OnlineSession | null = null;
+  let online = false;
+  let onlineMode: Mode = '1v1';
+  let netKey = '';
+  let lastPing = 0;
 
   let phase: Phase = 'title';
   let heroId = (() => {
@@ -292,7 +302,7 @@ async function start() {
       case 'play': overlay.className = 'layer hidden'; return;
       case 'pause': return showPause();
       case 'recap': return showRecap();
-      case 'results': return show(resultsHtml(ctx(), report()));
+      case 'results': return online ? showOnlineResults() : show(resultsHtml(ctx(), report()));
     }
   }
 
@@ -326,6 +336,7 @@ async function start() {
       case 'demo': return showDemo();
       case 'profile': return show(profileHtml(c, profileTab));
       case 'settings': return show(settingsHtml(c, confirmReset));
+      case 'online': return show(onlineHtml(c, { url: NET_URL, state: net?.state ?? 'offline', message: net?.message ?? '', queue: net?.queue ?? null, rtt: net?.rtt ?? 0 }));
       case 'nick': {
         show(nickHtml(c, nickError, nickSaved));
         const inp = document.getElementById('nickin') as HTMLInputElement | null;
@@ -361,7 +372,7 @@ async function start() {
     card(`<div class="kicker">Deploying ${esc(heroById(heroId).name)}</div><h2>Room Zero</h2><div class="loadbar"><i></i></div>`);
     // Build the world (and bake the map if needed) after the loading card has painted.
     requestAnimationFrame(() => setTimeout(() => {
-      beginWorld();
+      if (online) beginOnlineWorld(); else beginWorld();
       setTimeout(() => go('loaded'), 350);
     }, 30));
   }
@@ -372,6 +383,11 @@ async function start() {
   }
 
   function showPause() {
+    if (online) {
+      card(`<h2>Paused</h2><p>Online: the match keeps going and your operator stands still.</p>
+      <div class="btns"><button class="btn primary" data-go="resume">Resume</button><button class="btn" data-go="quit">Leave match</button>${fsButton()}</div>`);
+      return;
+    }
     card(`<h2>Paused</h2><p>The basement waits.</p>
       <div class="btns"><button class="btn primary" data-go="resume">Resume</button><button class="btn" data-go="restart">Restart</button><button class="btn" data-go="quit">Quit</button>${fsButton()}</div>
       <p style="font-size:13px">${input.mode === 'touch' ? '' : 'Esc or P to resume.'}</p>`);
@@ -438,13 +454,16 @@ async function start() {
     switch (a) {
       case 'howto': titleView = 'howto'; break;
       case 'howto-close': closeHowto(); break;
+      case 'online': titleView = 'online'; if (NET_URL && !net) net = new OnlineSession(NET_URL, () => displayName(profile), () => heroId, sessionStorage); if (net && net.state === 'offline') net.connect(); break;
+      case 'online-cancel': net?.leave(); break;
+      case 'online-again': online = false; go('menu'); titleView = 'online'; joinOnline(onlineMode); break;
       case 'demo': titleView = 'demo'; break;
       case 'demo-close': titleView = 'main'; break;
       case 'profile': titleView = 'profile'; profileTab = 'player'; break;
       case 'medals': titleView = 'profile'; profileTab = 'medals'; break;
       case 'settings': titleView = 'settings'; confirmReset = false; refreshAuth(); break;
       case 'nick': nickReturn = titleView === 'nick' ? nickReturn : titleView; titleView = 'nick'; nickError = ''; nickSaved = false; break;
-      case 'back': titleView = titleView === 'nick' ? nickReturn : 'main'; confirmReset = false; break;
+      case 'back': if (titleView === 'online') net?.leave(); titleView = titleView === 'nick' ? nickReturn : 'main'; confirmReset = false; break;
       case 'replay':
         shownTips = new Set();
         saveShownTips(localStorage, shownTips);
@@ -522,8 +541,11 @@ async function start() {
       hero.dataset.armed = '1';
       return;
     }
+    const om = t.closest('[data-online]') as HTMLElement | null;
+    if (om) { e.preventDefault(); joinOnline(om.dataset.online as Mode); return; }
     const b = t.closest('[data-go]') as HTMLElement | null;
     if (b) {
+      if (b.dataset.go === 'menu' || b.dataset.go === 'quit') { if (online) net?.leave(); online = false; }
       e.preventDefault();
       e.stopPropagation(); // a menu press is consumed here and never reaches the game input
       go(b.dataset.go as MatchEvent);
@@ -607,6 +629,63 @@ async function start() {
     showHint(hint.innerHTML, runIndex === 1 ? 6 : 0);
   }
 
+  // ---- Online (RC-8) ----
+  function joinOnline(mode: Mode) {
+    if (!NET_URL) return;
+    onlineMode = mode;
+    net ??= new OnlineSession(NET_URL, () => displayName(profile), () => heroId, sessionStorage);
+    const code = ((document.getElementById('roomcode') as HTMLInputElement | null)?.value ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    net.joinQueue(mode, code.length >= 4 ? code.slice(0, 8) : undefined);
+    render();
+  }
+
+  // The online match's world is the session's view world (you are actor 0); the server moves everything in it.
+  function beginOnlineWorld() {
+    world = net!.world!;
+    renderer.reset(world);
+    fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = 0;
+    for (const sp of fx.sparks) sp.age = 1;
+    fx.shake = 0;
+    fx.threats.length = 0;
+    playTime = 0;
+    hurtNow = blockedNow = false;
+    const me = world.actors[0];
+    $('hero').innerHTML = `${esc(me.hero.name)} · <b>Online ${esc(onlineMode)}</b>`;
+    $('wname').textContent = me.weapon.name;
+    $('abl').innerHTML = `${esc(me.hero.ability.name)}<small class="keyhint">Space</small>`;
+    $('pips').innerHTML = world.actors.filter((a) => a.team !== me.team).map(() => '<i></i>').join('');
+    lastHud = '';
+    showHint(`Online ${esc(onlineMode)}: ${MODE_SIZE[onlineMode] / 2} a side, real players. Your side is ringed green.`, 5);
+  }
+
+  function showOnlineResults() {
+    const o = net?.over;
+    if (!o) { show('<div class="card"><h2>Match over</h2><div class="btns"><button class="btn" data-go="menu">Menu</button></div></div>'); return; }
+    const rows = o.results.map((x) => ({ name: x.name, hero: x.hero, team: x.team, kills: x.kills, damageDealt: x.damageDealt, damageTaken: x.damageTaken, alive: x.alive, cause: x.cause, you: x.id === o.you }));
+    show(onlineResultsHtml({ mode: o.mode, won: o.winner === null ? null : o.winner === o.team, reason: o.reason, team: o.team, rows }));
+  }
+
+  // Watches the session from the frame loop: refreshes the Online screen, enters a found match, ends a finished one.
+  function pollOnline() {
+    if (!net) return;
+    const now = performance.now();
+    if ((net.state === 'match' || net.state === 'queued' || net.state === 'idle') && now - lastPing > 2000) { lastPing = now; net.ping(now); }
+    const key = `${net.state}|${net.queue?.have}|${net.message}|${Math.round(net.rtt / 20)}`;
+    if (key !== netKey) {
+      netKey = key;
+      if (phase === 'title' && titleView === 'online') render();
+    }
+    if (net.state === 'match' && !online && net.world && phase === 'title') {
+      online = true;
+      go('start');
+      go('pick');
+    }
+    if (online && net.over && (phase === 'play' || phase === 'pause')) {
+      if (phase === 'pause') go('resume');
+      go('won');
+    }
+  }
+
   // Match end: the one place a run is saved (records, medals, demo token history). Never per frame.
   function endRun(won: boolean) {
     const p = player(world);
@@ -623,6 +702,14 @@ async function start() {
   applySettings();
   render();
   bootDone();
+  // Reload or crash mid online match: this tab still holds its session token, so it quietly asks the server to
+  // resume. If the match is still on, the server hands the operator back (pollOnline enters it); if not, nothing shows.
+  try {
+    if (NET_URL && sessionStorage.getItem('chog-room-zero:net-token')) {
+      net = new OnlineSession(NET_URL, () => displayName(profile), () => heroId, sessionStorage);
+      net.connect();
+    }
+  } catch { /* storage blocked: no resume */ }
   // The auth server is asked only when Settings opens or Google sends the player back: no request on a normal launch.
   // Leaving the tab pauses the match: the sim must never run while nobody is watching.
   document.addEventListener('visibilitychange', () => {
@@ -745,7 +832,7 @@ async function start() {
       if (s.type === 'sonar') fx.pings.push({ x: s.x, y: s.y, age: 0, hostile: !own });
       // The one reveal rule (docs/design/bots.md): a muzzle flash with wall line of sight shows the shooter
       // briefly, at any range. Bots get the same signal from the player's flash.
-      if (s.type === 'shot' && !own && s.team === 'bot' && muzzleFlashSeen(world.level, p.x, p.y, s.x, s.y))
+      if (s.type === 'shot' && !own && s.team !== p.team && muzzleFlashSeen(world.level, p.x, p.y, s.x, s.y))
         fx.threats[s.sourceId] = TUNING.perception.flashSeconds;
       // RC-7 run facts (results, medals, tips): own ability uses, pickups, shots stopped by cover.
       if (own && (s.type === 'dash' || s.type === 'sonar' || s.type === 'barrier' || s.type === 'mend')) runAbilities++;
@@ -764,7 +851,7 @@ async function start() {
           if (box) fx.coverFlashes.push({ box, age: 0 });
         }
       }
-      if (own || s.team !== 'bot') continue;
+      if (own || s.team === p.team) continue;
       const src = world.actors[s.sourceId];
       if (src.alive && canSee(world.level, p.x, p.y, p.facing, view, src.x, src.y)) continue;
       const err = Math.hypot(dx, dy) * 0.08;
@@ -790,7 +877,7 @@ async function start() {
         ($('hurt') as HTMLElement).style.opacity = '1';
         setTimeout(() => (($('hurt') as HTMLElement).style.opacity = '0'), 90);
       }
-      if (h.killed) fx.corpses.push({ x: world.actors[h.target].x, y: world.actors[h.target].y, hostile: h.target !== 0 });
+      if (h.killed) fx.corpses.push({ x: world.actors[h.target].x, y: world.actors[h.target].y, hostile: world.actors[h.target].team !== p.team });
     }
   }
 
@@ -801,7 +888,7 @@ async function start() {
     Object.defineProperties(hook, { world: { get: () => world }, phase: { get: () => phase } });
     Object.assign(hook, { renderer, go, setHero: (h: string) => (heroId = h), fx, records: () => records, identity: () => identity, resultsAt: () => resultsAt, autoplay: AUTOPLAY_SEED, hero: () => heroId, stats: debugStats,
       // Debug lab: the bundled sim, so headless checks can run sim sweeps against the exact deployed code.
-      lab: { createWorld, stepWorld, IDLE_INPUT, ROOM_ZERO, HEROES, walkable, sightClear },
+      lab: { createWorld, stepWorld, IDLE_INPUT, ROOM_ZERO, HEROES, walkable, sightClear, findPath },
       // RC-5 touch-play check: what the scripted autopilot would do now (NOT applied). tools/rc5-touchplay.mjs turns it
       // into real touch gestures, so a full fight runs through the real touch input. Debug builds/?debug only.
       suggest: () => (suggestPilot ??= createAutopilot(Number(QS.get('pilot')) || 7)).next(world),
@@ -810,7 +897,9 @@ async function start() {
       // RC-7 menus and progression (tools/rc7-menus.mjs): device profile, settings, medals, shown tips, the open view.
       profile: () => profile, settings: () => settings, medals: () => medals, tips: () => [...shownTips],
       view: () => titleView, runFacts: () => ({ pickups: runPickups, abilities: runAbilities }), stick: () => touchStick.radius,
-      resolution: () => renderer.app.renderer.resolution, volume: () => audio.volume });
+      resolution: () => renderer.app.renderer.resolution, volume: () => audio.volume,
+      // RC-8 online (tools/rc8-online.mjs): the session and whether the shown world is an online match.
+      net: () => net, online: () => online });
     (window as unknown as { __chog: unknown }).__chog = hook;
   }
 
@@ -836,7 +925,23 @@ async function start() {
       else if (phase === 'pause') go('resume');
     }
 
-    if (simRuns(phase)) {
+    pollOnline();
+    if (simRuns(phase) && online && net) {
+      // Online: send controls, show the server's state. Nothing here decides a hit, damage or the result.
+      const p = player(world);
+      const ps = renderer.toScreen(p.x, p.y);
+      const inp = input.read(ps.x, ps.y);
+      net.sendInput(p.alive ? inp : { ...inp, firing: false, moveX: 0, moveY: 0 }, performance.now());
+      net.update(p.alive ? inp.aim : null);
+      for (const ev of net.takeEvents()) { world.sounds = ev.sounds; world.hits = ev.hits; afterStep(); }
+      playTime += dt;
+      if (!p.alive && hintLeft <= 0) showHint('You are down. Your side plays on; the result comes when it ends.', 4);
+      if (net.state === 'reconnecting' || net.state === 'error') showHint(esc(net.message), 1);
+    } else if (online && net && phase === 'pause') {
+      // Paused online, the match goes on: let go of every control so the operator stands still (the server keeps
+      // the last controls it got, so a held W would otherwise keep walking).
+      net.sendInput({ ...IDLE_INPUT, aim: player(world).facing }, performance.now());
+    } else if (simRuns(phase)) {
       const p = player(world);
       const ps = renderer.toScreen(p.x, p.y);
       const r = fixedSteps(acc, resumeSkip ? 0 : dt, TUNING.simStepSeconds, TUNING.maxStepsPerFrame);
@@ -907,7 +1012,7 @@ async function start() {
 
     // HUD: only touch the DOM when a value changed.
     const p = player(world);
-    const left = world.actors.filter((a) => a.team === 'bot' && a.alive).length;
+    const left = world.actors.filter((a) => a.team !== p.team && a.alive).length;
     const cdShare = p.abilityCd / p.hero.ability.cooldown;
     const reloadShare = p.reloadLeft > 0 ? 1 - p.reloadLeft / p.weapon.reloadSeconds : 0;
     const key = `${Math.ceil(p.hp)}|${Math.ceil(p.armor)}|${p.ammo}|${p.reserve}|${left}|${Math.round(cdShare * 60)}|${Math.round(reloadShare * 40)}`;
@@ -924,7 +1029,8 @@ async function start() {
       ammo.classList.toggle('empty', p.ammo === 0 && p.reserve === 0);
       ringFill.style.strokeDashoffset = String(107 * (1 - (p.reloadLeft > 0 ? reloadShare : p.ammo / p.weapon.magazine)));
       $('foesn').textContent = String(left);
-      pipsEl.querySelectorAll('i').forEach((el, i) => el.classList.toggle('down', !world.actors[i + 1].alive));
+      const foes = world.actors.filter((a) => a.team !== p.team);
+      pipsEl.querySelectorAll('i').forEach((el, i) => el.classList.toggle('down', !foes[i]?.alive));
       const ab = $('ability');
       ab.style.setProperty('--cd', `${(1 - cdShare) * 360}deg`);
       ab.classList.toggle('ready', cdShare === 0);

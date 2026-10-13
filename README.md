@@ -29,10 +29,14 @@ Plays in the browser on desktops and laptops (keyboard and mouse), and on phones
 ### What to look for
 
 - **Bullets travel and walls stop them.** Waist-high crates and slabs stop shots unless the shooter leans over from right behind them (no weapon shoots through a box, Wick's marksman included, since RC-8). A blocked shot sparks, clanks, and the cover outline flashes.
-- **Sound is information.** Gold rings mark a noise you heard but did not see. Running is loud, creeping is quiet, and bots hear you the same way.
+- **Sound is information.** Pale rings mark a noise you heard but did not see. Running is loud, creeping is quiet, and bots hear you the same way.
 - **Nothing hides past the edge.** A hostile you can see (in your light, by its muzzle flash, or by Ping) but that sits past the screen edge gets a red arrow at the edge, pointing at it.
 - **Fair fights.** A bot only shoots you from inside your own sight range with line of sight, and the shooter is ringed whenever it hits you.
-- **Four heroes, four weapons:** Kettle (rifle, Patch heal), Mop (SMG, Slip dash), Brick (shotgun, Slab cover), Wick (marksman, Ping sonar).
+- **Four heroes, four weapons:** Kettle (rifle, Patch heal), Mop (SMG, Slip dash), Brick (shotgun, Slab cover), Wick (marksman, Ping sonar). Each is drawn at its true hitbox size as an original CHOG-inspired operator (`docs/BRAND.md`).
+- **Pickups on touch.** Walk into health, armour or ammo and it is yours that step, no button. Full? It says so and stays for later.
+- **The danger zone.** After 45 s a red zone closes in three warned stages (words, countdown, a dashed ring for the next circle). Outside it you lose health, faster each stage. `docs/design/zone.md`.
+- **Online (RC-8, server not deployed yet).** 1v1, 3v3 and 5v5 against real players on an authoritative server, built and tested locally. `docs/MULTIPLAYER.md`.
+- **Colours are PROVISIONAL.** The palette comes from a proposed brand guide; there is no official CHOG colour system (`docs/BRAND.md`).
 
 ## Player card, medals, settings, sign-in
 

@@ -1,0 +1,116 @@
+# Online multiplayer (RC-8)
+
+Status 2026-10-13: **built and tested locally, not deployed.** Hosting the game server is an owner decision (below).
+Solo play against bots is unchanged and needs no server.
+
+## Before RC-8
+
+Everything was local: one browser ran the whole sim (`src/sim`) against five bots. No server, no network code.
+`api/auth/*` (Vercel Functions) only proves identities; it holds no game state.
+
+## Approach (lowest cost that is genuinely authoritative)
+
+One small Node process runs every match with the **same deterministic sim** the solo game uses, at its fixed 60 Hz
+step. Browsers send controls only and draw what the server sends.
+
+| Piece | File | What it does |
+|---|---|---|
+| Protocol | `src/net/protocol.ts` | JSON messages; `parseClientMsg` validates every client message (size, types, ranges); move vector clamped to 1, aim normalised. |
+| Lobby and rooms | `server/room.ts` | Guest hello (callsign validated, unknown operator -> Kettle), session token, queues per mode and optional private code, rooms of 2 / 6 / 10, teams alternate in join order (west vs east spawns), 3 s countdown, sim step, snapshots, results. Transport-free, unit-tested. |
+| Host | `server/index.ts` | `ws` WebSocket server on `/ws`, health text on `/`, `/stats`, 512-byte message cap, text frames only, optional `ALLOWED_ORIGINS`. |
+| Client | `src/net/client.ts` | Connect, queue, controls at 30 Hz (taps sent at once), snapshot buffer, interpolation, reconnect with the token, a "view world" the normal renderer and HUD draw (you are actor 0). |
+| Game UI | `src/main.ts`, `src/ui/screens.ts` | Menu > Online: mode (1v1 / 3v3 / 5v5), private code, queue status, cancel; online pause (match goes on, you stand still); online results (not mixed into solo records or medals). |
+
+### What the server decides (the browser never does)
+
+Movement (from controls, at the hero's speed; a longer move vector is clamped), firing, bullet travel, cover, hits,
+damage, armour, kills, pickups, abilities, the danger zone and its damage, eliminations, the winner, the time limit.
+A client message cannot carry a position, a hit, damage or a result: unknown fields are dropped by the validator.
+
+### Fair information
+
+A snapshot to a player holds their own team, and an enemy only when a teammate can see it (cone + walls), its muzzle
+flash was seen in the last 0.7 s, a teammate's Ping shows it, or it is down. Bullets: own team's, or ones a teammate
+can see. Sounds: those the player can hear (same hearing rule as solo). So a modified client cannot draw hidden enemies.
+
+### Rules
+
+- Modes 1v1, 3v3, 5v5; even teams; same map, operators, weapons, pickups and danger zone as solo. The zone's last
+  circle is drawn from centres about equally far from both team spawns.
+- Friendly fire **off** (as solo, CHOG-AI-002). A server can switch it on with `FRIENDLY_FIRE=1` (tested both ways).
+- A match ends when one side has nobody standing (draw if neither does), or at 240 s: more health standing wins.
+- Queue timeout 90 s (the client says so and offers solo). Idle socket 10 s -> closed (clients ping every 2 s).
+- Disconnect in a match: the operator stands still for 20 s; the same tab (or a reload of it) resumes with its
+  session token. Not back in time: out of the match (`left`), counted like any elimination.
+- Rate limit: token bucket, 90 messages/s, burst 60; a sustained flood closes the socket.
+- No accounts, no database, no NFT, no payments. Online names are callsigns (or Guest-XXXX); nothing is stored.
+
+## Evidence (all on one machine, loopback network)
+
+- `tests/rc8-online.test.ts`: 20 unit tests (validation, clamping, matchmaking for all three sizes, private codes,
+  guest names, queue timeout, spawns, countdown, visibility filtering, server-decided kill and win with a forged
+  `damage` field ignored, friendly fire off/on, time limit, rate limit, idle timeout, hello-first, resume, grace
+  expiry, leaving).
+- `tools/rc8-online.mjs`: the real server process plus one **separate headless Chrome process per player** (own
+  profile directory), each running the real built game and driven only by real keyboard and mouse events. A scripted
+  player in each walks to the final circle and fires at what its own screen shows. Results in `docs/HANDOFFS.md` H16.
+
+## Status matrix
+
+| Mode | Implemented | Tested with independent clients in one authoritative match | Deployed |
+|---|---|---|---|
+| 1v1 | yes | yes: 2 browser processes, loopback, incl. mid-match reload and resume | no (needs a host) |
+| 3v3 | yes | yes: 6 browser processes, loopback | no (needs a host) |
+| 5v5 | yes | yes: 10 browser processes, loopback (4-core machine at load ~36: slow frames, match still completed) | no (needs a host) |
+
+Not tested: real internet latency and packet loss, phones or touch input online (the touch path produces the same
+controls as in solo, but no online run used it), more than one match at a time on the server, a hosted server.
+
+## Known limits
+
+- No client-side prediction: your own operator moves when the server says so (about one round trip plus up to
+  50 ms). Fine on loopback; on a phone network it will feel delayed. Next step if playtests say so.
+- Others are drawn 100 ms in the past (interpolation), so on your screen a target is slightly behind where the
+  server has it. No lag compensation: you lead your shots by your ping.
+- One server process holds every room in memory; a restart ends running matches. Fine for a hackathon.
+- Bots are never added online and nothing online is labelled as a person unless it is one.
+
+## Hosting (owner decision; nothing is deployed or paid for)
+
+| Option | Cost | Fit | Checked |
+|---|---|---|---|
+| Vercel (this project) | already paid by the project's plan | **No** for rooms: Functions can upgrade a WebSocket, but each connection is pinned to whichever function instance it reached, so two players are not guaranteed the same in-memory room or tick loop. | Vercel docs, `experimental_upgradeWebSocket`, 2026-10-13 |
+| Render, free web service | $0 | Runs `server/index.ts` as is. Spins down after 15 min with no traffic (WebSocket messages count since Feb 2026); the first visitor waits about a minute; 750 free instance hours a month. | render.com/docs/free and changelog, 2026-10-13 |
+| Cloudflare Durable Objects (Workers free plan) | $0 within daily limits | One object per room fits well, but needs a port of the host to the Workers runtime (the sim is plain TS). Free tier: 100k requests/day, WebSocket messages counted 20:1. | developers.cloudflare.com pricing, 2026-10-13 |
+| Railway | trial credit, then a paid plan | Runs the Node server as is; an MCP tool is connected in this environment. Ongoing cost. | not priced here; needs the owner's yes |
+| Fly.io | pay as you go (card) | Runs the Node server as is. Ongoing cost. | not checked this session |
+
+**Recommendation:** Render free web service for the hackathon ($0, no code change): build `npm ci && npm run
+build:server`, start `npm run server`, env `ALLOWED_ORIGINS=https://chogroomzero.xyz,https://chog-room-zero.vercel.app`.
+Then set `VITE_GAME_SERVER_URL=wss://<service>.onrender.com/ws` in the Vercel project and redeploy the client. Until
+then Online says plainly that the server is not deployed. Owner: create the service (needs an account) and approve.
+
+## Run it locally
+
+```
+npm run build:server && PORT=8787 npm run server      # game server
+npm run build && npx vite preview --port 4332          # game
+open two browsers at http://localhost:4332/?server=ws://127.0.0.1:8787/ws  -> Online -> 1v1
+node tools/rc8-online.mjs http://127.0.0.1:4332 out.json [shotDir]   # MODES=1v1,3v3,5v5
+```
+
+## Brief
+
+```
+BRIEF: Online multiplayer 1v1 / 3v3 / 5v5 (RC-8)
+PURPOSE      Owner mandate: real players against each other, not only bots.
+GAMEPLAY     Same choices as solo (cover, angles, sound, the zone) against people; team play in 3v3 and 5v5.
+NFT RELATION Not NFT related. No wallet, no token, no gating; guests play.
+PLAYER FEEL  The same game; on loopback no visible delay. On real networks: one round trip before you move (no prediction yet).
+TECH COST    ~1 day; server/{room,index}.ts, src/net/{protocol,client}.ts, main/render/screens hooks; dependency: ws (server only).
+RISK         Cheating, desync, hosting cost, latency. Server authority, visibility filtering, validation; host is the owner's call.
+SCOPE        Changes LOCKED 11/12 (owner, RC-8). Cuts: no ranked play, accounts, chat, friends, parties, spectating,
+             bots online, prediction or lag compensation, second map, persistent online stats.
+QUALITY BAR  Fake "online" with bots, or results the browser decides, would be worse than none. Neither exists here.
+VERDICT      MODIFY: built and tested locally; deploy after the owner picks a host.
+```

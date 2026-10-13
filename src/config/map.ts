@@ -71,3 +71,10 @@ export const BOT_SPAWNS: BotSpawn[] = [
 export const ZONE_CENTRES: { x: number; y: number }[] = [
   [7, 3], [13, 3], [19, 3], [39, 3], [7, 10], [12, 10], [29, 10], [31, 10], [15, 19], [24, 19], [35, 18], [36, 21],
 ].map(([x, y]) => ({ x: x + 0.5, y: y + 0.5 }));
+
+// Online spawns (RC-8): team alpha on the west side, bravo mirrored on the east, five each, in join order. 1v1 uses
+// the first of each. Checked walkable and mirrored in tests/rc8-online.test.ts.
+export const VERSUS_SPAWNS: Record<'alpha' | 'bravo', { x: number; y: number }[]> = {
+  alpha: [[2, 8], [2, 12], [4, 15], [3, 20], [5, 23]].map(([x, y]) => ({ x: x + 0.5, y: y + 0.5 })),
+  bravo: [[41, 8], [41, 12], [39, 16], [41, 20], [38, 23]].map(([x, y]) => ({ x: x + 0.5, y: y + 0.5 })),
+};

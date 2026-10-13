@@ -78,6 +78,7 @@ export function titleHtml(c: ScreenCtx): string {
   <nav class="menu-nav">
     <button class="navbtn" data-act="profile">Player card</button>
     <button class="navbtn" data-act="medals">Medals <span class="num">${medalCount(c.medals)}</span></button>
+    <button class="navbtn" data-act="online">Online <span class="num">1v1 · 3v3 · 5v5</span></button>
     <button class="navbtn" data-act="howto">How to play</button>
     <button class="navbtn" data-act="demo">Chog <span class="demo">DEMO</span></button>
     <button class="navbtn" data-act="settings">Settings</button>
@@ -317,4 +318,59 @@ export function resultsHtml(c: ScreenCtx, r: RunReport): string {
 <tr><td>Pickups · abilities</td><td>${r.pickups} · ${r.abilities}</td></tr></table>
 <div class="res-side">${medals}<p class="pb" id="resultpb">${esc(r.hero.name)} best clear ${fmtTime(hb?.bestWinSeconds ?? null)}${nb?.time ? ' <b>NEW</b>' : ''} · most kills ${hb?.mostKills ?? 0}${nb?.kills ? ' <b>NEW</b>' : ''} · overall best ${fmtTime(c.records.overall.bestWinSeconds)} <span>· saved on this device only · personal records, not a global leaderboard</span></p>${r.history}</div></div>
 <div class="btns"><button class="btn primary" data-go="restart">Again</button><button class="btn" data-go="quit">Change Chog</button><button class="btn" data-go="menu">Menu</button></div></div>`;
+}
+
+// ---- Online (RC-8) ----
+export interface OnlineView {
+  /** Null when this build has no game server address (not deployed): the screen says so and offers nothing fake. */
+  url: string | null;
+  state: string;
+  message: string;
+  queue: { mode: string; have: number; need: number; code: string | null } | null;
+  rtt: number;
+}
+
+const MODE_TEXT: Record<string, string> = { '1v1': 'One against one', '3v3': 'Three a side', '5v5': 'Five a side' };
+
+export function onlineHtml(c: ScreenCtx, v: OnlineView): string {
+  const h = heroById(c.heroId);
+  if (!v.url) {
+    return `<div class="screen online">${topbar('Online')}<div class="online-body"><section class="online-card">
+<h3>Online play is not switched on in this build</h3>
+<p class="note">Online matches need the Room Zero game server running somewhere that keeps a connection open. It is
+built and tested, but not deployed: hosting it is the owner's decision (free and paid options in the project notes).</p>
+<p class="note">Everything else works without it: play solo against bots from the menu.</p>
+<div class="btns"><button class="btn primary" data-go="start">Play solo</button></div></section></div></div>`;
+  }
+  const busy = v.state === 'queued' || v.state === 'connecting';
+  const modes = (['1v1', '3v3', '5v5'] as const).map((m) => `<button class="btn mode${v.queue?.mode === m ? ' on' : ''}" data-online="${m}"${busy ? ' disabled' : ''}><b>${m}</b><small>${MODE_TEXT[m]}</small></button>`).join('');
+  const status = v.state === 'queued' && v.queue
+    ? `<p class="status num">Finding a ${esc(v.queue.mode)} match: ${v.queue.have} / ${v.queue.need} players${v.queue.code ? ` · code ${esc(v.queue.code)}` : ''}</p><div class="loadbar"><i></i></div>
+<div class="btns"><button class="btn" data-act="online-cancel">Cancel</button></div>`
+    : v.state === 'connecting' ? '<p class="status">Connecting to the game server...</p><div class="loadbar"><i></i></div>'
+    : v.state === 'match' ? '<p class="status good">Match found. Deploying...</p>' : '';
+  return `<div class="screen online">${topbar('Online', `<span class="linkchip">${esc(displayName(c.profile))} · ${esc(h.name)}</span>`)}
+<div class="online-body"><section class="online-card">
+<div class="kicker">Real players only · no bots online · the server decides every hit</div>
+<div class="modes">${modes}</div>
+<label class="row2 code"><span>Private code <small>(optional: friends with the same code play together)</small></span>
+<input id="roomcode" class="field small" maxlength="8" placeholder="e.g. CHOG7" autocomplete="off" spellcheck="false"${busy ? ' disabled' : ''} /></label>
+${status}${v.message ? `<p class="note warn">${esc(v.message)}</p>` : ''}
+<p class="note">You play ${esc(h.name)}; change operator from Play. Teams are split evenly, west against east, with the
+same rules, danger zone and pickups as solo. Guest play: no account needed${v.rtt ? ` · ping ${Math.round(v.rtt)} ms` : ''}.</p>
+</section></div></div>`;
+}
+
+export interface OnlineResult { name: string; hero: string; team: string; kills: number; damageDealt: number; damageTaken: number; alive: boolean; cause: string | null; you: boolean }
+
+export function onlineResultsHtml(r: { mode: string; won: boolean | null; reason: string; team: string; rows: OnlineResult[] }): string {
+  const title = r.won === null ? 'Draw' : r.won ? 'Victory' : 'Defeat';
+  const why = r.reason === 'time' ? 'Time ran out: the side with more health standing takes it.' : r.won === null ? 'Nobody was left standing.' : r.won ? 'The other side is down.' : 'Your side is down.';
+  const row = (x: OnlineResult) => `<tr class="${x.you ? 'me' : ''}"><td>${esc(x.name)}${x.you ? ' (you)' : ''}</td><td>${esc(heroById(x.hero).name)}</td><td class="num">${x.kills}</td><td class="num">${x.damageDealt}</td><td class="num">${x.damageTaken}</td><td>${x.alive ? 'standing' : x.cause === 'zone' ? 'zone' : x.cause === 'left' ? 'left' : 'down'}</td></tr>`;
+  const side = (team: string, label: string) => `<h3>${label}</h3><table class="kv online-res"><tr><th>Player</th><th>Operator</th><th>Kills</th><th>Dealt</th><th>Taken</th><th></th></tr>${r.rows.filter((x) => x.team === team).map(row).join('')}</table>`;
+  const other = r.team === 'alpha' ? 'bravo' : 'alpha';
+  return `<div class="card results"><div class="kicker">Online ${esc(r.mode)} · real players</div><h2 class="${r.won === null ? '' : r.won ? 'good' : 'bad'}">${title}</h2><p>${why}</p>
+<div class="res-grid"><div>${side(r.team, 'Your side')}</div><div>${side(other, 'Other side')}</div></div>
+<p class="pb">Online matches are not saved to your solo records or medals.</p>
+<div class="btns"><button class="btn primary" data-act="online-again">Play ${esc(r.mode)} again</button><button class="btn" data-go="menu">Menu</button></div></div>`;
 }

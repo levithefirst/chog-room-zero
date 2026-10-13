@@ -8,14 +8,18 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:server": "vite build --ssr server/index.ts --outDir dist-server --emptyOutDir",
+    "server": "node dist-server/index.js"
   },
   "dependencies": {
     "@noble/curves": "^2.4.0",
     "@noble/hashes": "^2.4.0",
-    "pixi.js": "^8.22.0"
+    "pixi.js": "^8.22.0",
+    "ws": "^8.22.0"
   },
   "devDependencies": {
+    "@types/ws": "^8.18.2",
     "typescript": "^7.0.2",
     "vite": "^8.3.4",
     "vitest": "^5.0.3"

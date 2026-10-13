@@ -108,3 +108,15 @@ Known limitations: see docs/RELEASE.md.
   `__chog.suggest()` (the autopilot's intended input, not applied). Then results, Again, and the saved record. SCRIPTED, emulated touch.
 - CDP touch rule: `Input.dispatchTouchEvent` `touchEnd` must carry no points (it ends all). To lift one finger and keep others, send a
   `touchMove` listing only the fingers that stay.
+
+## RC-8: combat, zone, brand, online
+- Unit tests: `tests/rc8-{cover,pickups,zone,brand,operators,online}.test.ts` (in `npx vitest run`).
+- `node tools/rc8-shots.mjs <baseUrl> <out.json> [shotDir]` (`ONLY=desktop,phone`): CSS tokens in the browser, the drawn operator
+  measured against its hitbox from canvas pixels, pickup taken on the contact step, every zone phase in the HUD, outside-zone
+  state, a zone death through recap to results. Screenshots `rc8-*.png`.
+- Game server: `npm run build:server` then `PORT=8787 npm run server` (env `ALLOWED_ORIGINS`, `FRIENDLY_FIRE=1`). Point a client at
+  it with `?server=ws://127.0.0.1:8787/ws`, or build the client with `VITE_GAME_SERVER_URL`.
+- `node tools/rc8-online.mjs <baseUrl> <out.json> [shotDir]` (`MODES=1v1,3v3,5v5`; needs `dist-server`): starts the server and one
+  separate headless Chrome process per player, all driven by real key and mouse events, and checks one room, even teams, a
+  mid-match reload resuming (1v1), the server's result on every client. Loopback, one machine, scripted players.
+- Kill helpers with a self-safe pattern (`pkill -f "[d]ist-server/index.js"`): a plain pattern also matches the shell running it.
