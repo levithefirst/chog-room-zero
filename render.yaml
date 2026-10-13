@@ -19,7 +19,6 @@ services:
       - key: NODE_VERSION
         value: 22.22.0
       # Browser origins allowed to open a game socket (exact match on the Origin header; empty would allow any site).
-      # The RC-8 preview's stable branch URL. Add https://chogroomzero.xyz,https://chog-room-zero.vercel.app only when
-      # production carries the online client (RC-7 in production has none).
+      # The two production domains and the RC-8 preview's stable branch URL. Nothing else: no wildcard.
       - key: ALLOWED_ORIGINS
-        value: https://chog-room-zero-git-ccr-e7fad-e59a4d-levithefirst-1227s-projects.vercel.app
+        value: https://chogroomzero.xyz,https://chog-room-zero.vercel.app,https://chog-room-zero-git-ccr-e7fad-e59a4d-levithefirst-1227s-projects.vercel.app

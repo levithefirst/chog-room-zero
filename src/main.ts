@@ -57,6 +57,8 @@ const SPEAKER_OFF = '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><
 
 // The build's commit (Vercel sets VERCEL_GIT_COMMIT_SHA at build time; vite.config.ts injects it), shown in Settings.
 declare const __BUILD_SHA__: string;
+// False in production builds (vite.config.ts): the online test hooks below are then compiled out.
+declare const __TEST_HOOKS__: boolean;
 
 // Boot screen (RC-7): the real start-up steps, in order, so a slow phone shows progress instead of black. There is
 // no server to connect to: every step is local work. A failure shows the reason and a Retry button.
@@ -121,17 +123,19 @@ async function start() {
   let runPickups = 0, runAbilities = 0;
   // RC-8 online play: the server address (?server=... or the build's VITE_GAME_SERVER_URL; null = not deployed),
   // the session, and whether the current world is an online match (then it is the server's view, not a local sim).
-  const NET_URL = serverUrl(location.search, import.meta.env.VITE_GAME_SERVER_URL as string | undefined);
+  // ?server= points the client at another game server; test builds only, so a link can never send players elsewhere.
+  const NET_URL = serverUrl(__TEST_HOOKS__ ? location.search : '', import.meta.env.VITE_GAME_SERVER_URL as string | undefined);
   let net: OnlineSession | null = null;
   let online = false;
   let onlineMode: Mode = '1v1';
   let netKey = '';
   let lastPing = 0;
-  // Hosted online tests (debug only): ?debug&online=1v1|3v3|5v5&code=XXXX&drive=1 joins that queue at boot and lets a
-  // scripted player (src/debug/onlineDriver.ts) send the controls. A browser service that cannot click can then play.
-  const ONLINE_AUTO = QS.has('debug') ? (QS.get('online') as Mode | null) : null;
-  const ONLINE_CODE = QS.has('debug') ? (QS.get('code') ?? '') : '';
-  const onlineDriver = QS.has('debug') && QS.get('drive') === '1' ? createOnlineDriver() : null;
+  // Invite link: ?online=1v1|3v3|5v5[&code=XXXX] opens Online and joins that queue (private room with a code); the player
+  // still plays with their own controls. Hosted tests (test builds only, never production): &debug&drive=1 lets a
+  // scripted player (src/debug/onlineDriver.ts) send the controls, so a browser service that cannot click can play.
+  const ONLINE_AUTO = (Object.keys(MODE_SIZE) as Mode[]).find((m) => m === QS.get('online')) ?? null;
+  const ONLINE_CODE = QS.get('code') ?? '';
+  const onlineDriver = __TEST_HOOKS__ && QS.has('debug') && QS.get('drive') === '1' ? createOnlineDriver() : null;
 
   let phase: Phase = 'title';
   let heroId = (() => {
@@ -676,7 +680,7 @@ async function start() {
     if (!net) return;
     const now = performance.now();
     // Keep-alive pings run on the session's own timer (client.ts). Debug: the connection log on <body data-netlog>.
-    if (QS.has('debug')) {
+    if (__TEST_HOOKS__ && QS.has('debug')) {
       const nl = `${phase} fps${Math.round(hook.fps)} | ${net.log.slice(-14).join(' | ')}`;
       if (document.body.dataset.netlog !== nl && now - lastPing > 500) { lastPing = now; document.body.dataset.netlog = nl; }
     }
@@ -714,7 +718,7 @@ async function start() {
   bootDone();
   // Reload or crash mid online match: this tab still holds its session token, so it quietly asks the server to
   // resume. If the match is still on, the server hands the operator back (pollOnline enters it); if not, nothing shows.
-  if (NET_URL && ONLINE_AUTO && MODE_SIZE[ONLINE_AUTO]) { titleView = 'online'; joinOnline(ONLINE_AUTO); }
+  if (NET_URL && ONLINE_AUTO) { titleView = 'online'; joinOnline(ONLINE_AUTO); }
   // Hosted checks run in browsers that may render at a few frames per second: in drive mode the scripted player and
   // the snapshot view run on a timer, not the render loop, and the server-reported state goes on <body data-netlog>.
   if (onlineDriver) setInterval(() => {
@@ -921,8 +925,8 @@ async function start() {
       profile: () => profile, settings: () => settings, medals: () => medals, tips: () => [...shownTips],
       view: () => titleView, runFacts: () => ({ pickups: runPickups, abilities: runAbilities }), stick: () => touchStick.radius,
       resolution: () => renderer.app.renderer.resolution, volume: () => audio.volume,
-      // RC-8 online (tools/rc8-online.mjs): the session and whether the shown world is an online match.
-      net: () => net, online: () => online });
+      // RC-8 online (tools/rc8-online.mjs): the session and whether the shown world is an online match. Test builds only.
+      ...(__TEST_HOOKS__ ? { net: () => net, online: () => online } : {}) });
     (window as unknown as { __chog: unknown }).__chog = hook;
   }
 
