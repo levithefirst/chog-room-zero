@@ -715,6 +715,18 @@ async function start() {
   // Reload or crash mid online match: this tab still holds its session token, so it quietly asks the server to
   // resume. If the match is still on, the server hands the operator back (pollOnline enters it); if not, nothing shows.
   if (NET_URL && ONLINE_AUTO && MODE_SIZE[ONLINE_AUTO]) { titleView = 'online'; joinOnline(ONLINE_AUTO); }
+  // Hosted checks run in browsers that may render at a few frames per second: in drive mode the scripted player and
+  // the snapshot view run on a timer, not the render loop, and the server-reported state goes on <body data-netlog>.
+  if (onlineDriver) setInterval(() => {
+    if (!net) return;
+    if (net.state === 'match' && net.world) { net.update(null); net.sendInput(onlineDriver(net.world), performance.now()); }
+    const me = net.world?.actors[0];
+    const o = net.over;
+    document.body.dataset.netlog = `${phase} fps${Math.round(hook.fps)} state:${net.state} snaps:${net.snapCount} rtt:${Math.round(net.rtt)}`
+      + ` me:${me ? `${me.team} ${me.alive ? 'up' : 'down'} hp${Math.round(me.hp)} k${me.kills} @${me.x.toFixed(1)},${me.y.toFixed(1)}` : '-'}`
+      + ` over:${o ? `winner=${o.winner} ${o.reason} ${o.results.map((r) => `${r.team}:k${r.kills}:dealt${r.damageDealt}:${r.alive ? 'alive' : r.cause}`).join(',')}` : '-'}`
+      + ` | ${net.log.slice(-10).join(' | ')}`;
+  }, 50);
   else try {
     if (NET_URL && sessionStorage.getItem('chog-room-zero:net-token')) {
       net = new OnlineSession(NET_URL, () => displayName(profile), () => heroId, sessionStorage);

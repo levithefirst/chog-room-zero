@@ -55,6 +55,8 @@ export class OnlineSession {
     if (this.log.length > 40) this.log.shift();
   }
   rtt = 0;
+  /** Snapshots received this session (debug and hosted checks). */
+  snapCount = 0;
 
   constructor(readonly url: string, private name: () => string, private hero: () => string, private store: Storage | null) {
     try { this.token = store?.getItem('chog-room-zero:net-token') ?? null; } catch { this.token = null; }
@@ -210,6 +212,7 @@ export class OnlineSession {
   private onSnap(m: Extract<ServerMsg, { t: 'snap' }>): void {
     const w = this.world;
     if (!w) return;
+    this.snapCount++;
     this.snaps.push({ tick: m.tick, at: performance.now(), byId: new Map(m.actors.map((a) => [a.id, a])), msg: m });
     if (this.snaps.length > 12) this.snaps.shift();
     const v = (id: number) => this.toView.get(id) ?? 0;
