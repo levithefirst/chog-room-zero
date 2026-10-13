@@ -162,6 +162,9 @@ to wake. Opening Online sends an HTTP request that wakes it and retries the sock
 - PR #10 not merged: its base `grokbot/rc-1` is PR #9's head in the stacked chain #1-#9 to `setup/skill-system`, not a
   production branch; every production deployment (RC-4, RC-6, RC-7 and now RC-8) is built from this branch's commit.
   Merging #10 alone would fold RC-8 into PR #9 and break the "merge in order" rule. Owner decision.
+- Hosted gameplay on the released code (branch preview 88d3f53, test build, same Render server, after the redeploy):
+  two external browsers with `&drive=1`, code REL18B: matched at 1.0 s, 202 snapshots each, rtt 98 / 94 ms, alpha won
+  by elimination at 11.1 s (126 vs 72 damage), identical result on both. PASS.
 
 ## Run it locally
 
