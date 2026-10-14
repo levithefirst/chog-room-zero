@@ -15,12 +15,23 @@ Until then every account endpoint answers "progression offline" and the game pla
 ## What it creates
 
 Only schema `room_zero` (nothing in `public`, nothing else touched): `schema_migrations`, `accounts`, `identities`,
-`upgrades`, `ledger`, `matches`, `match_players`, `token_history`, `ownership_checks`. Definitions: `api/_lib/db.ts`.
+`upgrades`, `ledger`, `matches`, `match_players`, `token_history`, `ownership_checks`, `medals`, `practice_runs`. Definitions: `api/_lib/db.ts`.
 
 | Version | What it adds |
 |---|---|
 | 1 | the nine tables above |
 | 2 | leaderboard: `accounts.display_name`, `accounts.nft_tier` / `nft_token_id` / `nft_checked_at` (display only), index `match_players(account_id)` |
+| 3 | account-owned profile (master integration pass, owner 2026-10-14): `accounts.callsign` / `favourite_hero` / `pins`; `match_players.hero` / `survived`; tables `medals` (account, medal, earned_at) and `practice_runs` (one row per solo practice run, unique per account + run id); indexes `practice_runs(account_id, created_at)`, `matches(settled_at)` |
+
+## What lives on the account (nothing in the browser)
+
+Callsign, favourite operator, pinned medals, medals, practice career (aggregated from `practice_runs`), online career
+(from `match_players`), XP, level, shards, upgrades, rating, wins, matches. `GET /api/game/profile` returns all of it;
+`POST callsign`, `POST prefs`, `POST practice` change it (same-origin, signed-in only). A practice run is reported by
+the browser (solo is simulated there), so it is bounded (`validPractice`), rate limited (6 a minute), stored once per
+run id, and pays no XP, shards or rating and never reaches the leaderboard; medals are awarded on the server from the
+stored runs. A guest's progress lives in the page's memory for the session only. localStorage keeps preferences only
+(settings, tips, onboarding, last operator, last mode, the demo pick).
 
 Live check: `GET /api/game/health` lists the applied migrations and the tables (no rows, no connection details).
 

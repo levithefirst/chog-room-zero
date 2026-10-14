@@ -12,9 +12,9 @@ How to use:
 Playtest record format (copy into STATE, Manual playtest results):
 `date | device | build hash | tester | gate | questions asked | answers | verdict`
 
-## Core Feel Gate (blocks switching on NFT combat power for real holders)
+## Core Feel Gate (tunes the class numbers; owner 2026-10-14 switched NFT combat power on before it)
 
-Passes only when G1, G2, G3, G4, G6, G7 are PASS, the G8 baseline is recorded, and the owner has played the combat prototype on BOTH the Pixel 7 and the iPhone 13. Until then the server flag `NFT_COMBAT` stays off in production, so verified holders get identity, history and 5v5 access but no starting-power advantage. Accounts, the database and ownership verification may be built before the gate (owner 2026-10-13). Agents never mark the human half passed.
+Passes only when G1, G2, G3, G4, G6, G7 are PASS, the G8 baseline is recorded, and the owner has played the combat prototype on BOTH the Pixel 7 and the iPhone 13. Owner 2026-10-14 (master integration pass): verified holders get their tier's power now (`NFT_COMBAT` defaults on, `=0` turns it off); this gate's playtest decides whether the numbers stay. Accounts, the database and ownership verification may be built before the gate (owner 2026-10-13). Agents never mark the human half passed.
 
 ## G1 Movement. Human playtest: YES (phones + PC)
 

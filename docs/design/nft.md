@@ -2,7 +2,7 @@
 
 Status: the rules below marked LOCKED come from the owner. Chain, contract, metadata and ownership method are EVIDENCE from NFT-R1 (`docs/research/chog-genesis/`) and are re-checked live by the server before any benefit applies. Art and name rights are UNKNOWN: placeholders only.
 
-The owner's master build prompt (2026-10-13) replaced "sidegrades only" with a class system. NFT combat power for real holders stays switched off (`NFT_COMBAT`) until the Core Feel Gate passes (`docs/GATES.md`); the database, verification and demo mode may be built before it.
+The owner's master build prompt (2026-10-13) replaced "sidegrades only" with a class system. Owner 2026-10-14 (master integration pass): NFT combat power is on for verified holders (`NFT_COMBAT=0` turns it off); the Core Feel Gate playtest tunes the numbers. The ten 1:1s are shown by their real names (Blaze, Burning Skully, Chog Scream, Chogbomination, Frogger, Grim, Halo, Krown, Midas, Redd).
 
 ## LOCKED rules (owner, 2026-10-13 master build prompt)
 - Anyone can play solo, 1v1 and 3v3 with no NFT, no wallet and no $CHOG.
@@ -75,7 +75,7 @@ Any Chog number (1 to 1,969) can be tried without a wallet: the DEMO screen, `?m
 Sidegrades never touch health, armour, damage or speed (`tests/operators.test.ts`); duel parity 25% to 75% vs the standard kit (`tests/rc-nft-demo.test.ts`).
 
 ## Verified holders (built 2026-10-14)
-Wallet sign-in (SIWE) -> the site reads `tokensOfOwner` and `metadataId` on Monad -> a signed single-use ticket -> the game server checks it with the site. Holders get 5v5, a verified identity, token history, and (once `NFT_COMBAT=1`, after the Core Feel Gate) their tier's power. Details: `docs/AUTH.md`, `docs/MULTIPLAYER.md`, `docs/DATABASE.md`.
+Wallet sign-in (SIWE) -> the site reads `tokensOfOwner` and `metadataId` on Monad -> a signed single-use ticket -> the game server checks it with the site. Holders get 5v5, a verified identity, token history, and their tier's power (on by default since 2026-10-14). Details: `docs/AUTH.md`, `docs/MULTIPLAYER.md`, `docs/DATABASE.md`.
 
 ## NFT-R1 research result (2026-10-13, EVIDENCE; full package in `docs/research/chog-genesis/`)
 Answers to "Verify before relying on anything", checked from public sources, not from the chain (this environment had no RPC access):

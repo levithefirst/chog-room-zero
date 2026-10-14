@@ -39,11 +39,11 @@ Rules of honesty:
 - Hit direction, projectiles, deaths, and sound must tell the player useful things. Screen shake and effects are purposeful, never decoration.
 - Bots use cover, hold angles, break line of sight, investigate sound, reposition. They do not just rush the player.
 - Anyone can play solo, online 1v1 and online 3v3 with no wallet and no NFT. Online 5v5 is for verified CHOG Genesis holders only, enforced on the game server (owner, 2026-10-13 MASTER BUILD PROMPT).
-- Guest runs are disposable and create no persistent history. A signed-in account keeps server-side progression (XP, level, shards, upgrades, rating) whether or not it holds an NFT.
+- Guest runs are disposable and create no persistent history. A signed-in account keeps server-side progression (XP, level, shards, upgrades, rating, callsign, medals, career) whether or not it holds an NFT. No progression in localStorage: it keeps preferences only (owner, 2026-10-14).
 - Binding a Chog Genesis NFT creates a persistent operator identity with token-specific history, kept separate from account progression.
 - Class system (owner, 2026-10-13): NFT rarity sets starting power, and the ten 1:1 tokens are the top tier with a signature ability in the single ability slot. Every number lives in `src/config/power.ts` and stays inside the caps in `docs/design/power.md`. Free players reach more power through earned upgrades. No combat power is ever sold.
 - NFT removal test (`docs/design/nft.md`): if removing ownership changes neither the play experience nor what persists, the integration fails.
-- NFT benefits need server-verified ownership. A browser-supplied token or address is never trusted. NFT combat power for real holders stays switched off in production (`NFT_COMBAT`) until the Core Feel Gate passes; accounts, the database and ownership verification may be built before it (owner, 2026-10-13).
+- NFT benefits need server-verified ownership. A browser-supplied token or address is never trusted. NFT combat power for verified holders is ON in production (owner, 2026-10-14 MASTER INTEGRATION PASS: "NFT holders start with power... This is not cosmetic"); `NFT_COMBAT=0` switches it off. The Core Feel Gate playtest still decides the numbers (`docs/design/power.md`).
 - Never invent chain, contract, metadata, ownership method, or art-rights details. Verify first.
 - Out of scope for the MVP: Railway worker, custom smart contract, paid inference, $CHOG economy, real-money purchases and paid currency (monetization is decided later), second map, a second simultaneous ability, loot chests, gear grid, clans, season pass. (Online multiplayer was added by the owner in RC-8.)
 - Gameplay never depends on $CHOG. Wallet connect is never required for solo, 1v1 or 3v3.
