@@ -104,6 +104,17 @@ export const MIGRATIONS: { version: number; name: string; sql: string }[] = [
       );
     `,
   },
+  {
+    version: 2,
+    name: 'leaderboard: display name, current NFT tier (display only), kills index',
+    sql: `
+      ALTER TABLE room_zero.accounts ADD COLUMN IF NOT EXISTS display_name text;
+      ALTER TABLE room_zero.accounts ADD COLUMN IF NOT EXISTS nft_tier text;
+      ALTER TABLE room_zero.accounts ADD COLUMN IF NOT EXISTS nft_token_id integer;
+      ALTER TABLE room_zero.accounts ADD COLUMN IF NOT EXISTS nft_checked_at timestamptz;
+      CREATE INDEX IF NOT EXISTS match_players_account ON room_zero.match_players(account_id)
+    `,
+  },
 ];
 
 /** Applies every migration not yet recorded. Safe to call on every cold start: concurrent callers wait on the lock. */
@@ -122,6 +133,13 @@ export async function migrate(db: Db): Promise<number[]> {
     }
     return applied;
   });
+}
+
+/** Read-only evidence for /api/game/health: applied migrations and this game's tables. No data rows, no secrets. */
+export async function schemaStatus(db: Db): Promise<{ migrations: { version: number; name: string; appliedAt: string }[]; tables: string[] }> {
+  const m = await db.query<{ version: number; name: string; applied_at: Date | string }>(`SELECT version, name, applied_at FROM room_zero.schema_migrations ORDER BY version`);
+  const t = await db.query<{ table_name: string }>(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'room_zero' ORDER BY table_name`);
+  return { migrations: m.map((r) => ({ version: Number(r.version), name: r.name, appliedAt: new Date(r.applied_at).toISOString() })), tables: t.map((r) => r.table_name) };
 }
 
 /** Neon over WebSockets (interactive transactions). One pool per function invocation; call close() when done. */

@@ -537,7 +537,7 @@ async function start() {
       return;
     }
     const tab = t.closest('[data-tab]') as HTMLElement | null;
-    if (tab) { e.preventDefault(); profileTab = tab.dataset.tab as ProfileTab; if (profileTab === 'progress') void refreshAccount(); render(); return; }
+    if (tab) { e.preventDefault(); profileTab = tab.dataset.tab as ProfileTab; if (profileTab === 'progress' || profileTab === 'ranks') void refreshAccount(); render(); return; }
     const tk = t.closest('[data-token]') as HTMLElement | null;
     if (tk) { e.preventDefault(); setChoice(tk.dataset.token ? { tokenId: Number(tk.dataset.token) } : null); render(); return; }
     const up = t.closest('[data-upgrade]') as HTMLElement | null;
@@ -693,7 +693,8 @@ async function start() {
       acct.progression = !!p?.progression;
       acct.profile = p?.profile ?? null;
       acct.hasWallet = ids.some((i) => i.provider === 'wallet');
-      if (acct.progression) acct.board = (await account.leaderboard())?.rows ?? null;
+      // The leaderboard is public: loaded whenever the database is on, signed in or not.
+      if (acct.config.db) { const b = await account.leaderboard(); acct.board = b?.rows ?? []; acct.boardMe = b?.me ?? null; }
       if (acct.hasWallet) {
         const t = await account.loadTokens();
         acct.tokens = t?.tokens ?? [];

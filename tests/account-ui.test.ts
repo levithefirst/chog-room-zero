@@ -1,6 +1,6 @@
 // Stage E: what the account and class-system screens say, from plain data.
 import { describe, expect, it } from 'vitest';
-import { emptyAcct, fiveLock, onlineIdentityHtml, progressTabHtml, rewardLine, tierEffect } from '../src/ui/account';
+import { emptyAcct, fiveLock, leaderboardHtml, onlineIdentityHtml, progressTabHtml, rewardLine, tierEffect } from '../src/ui/account';
 import { NO_UPGRADES } from '../src/config/power';
 
 const cfg = { db: true, nftCombat: false, demo: true };
@@ -53,5 +53,25 @@ describe('progress tab and rewards', () => {
     expect(rewardLine({ settle: false }, false, false, null, false, '')).toMatch(/Sign in/);
     expect(rewardLine({ settle: true }, false, true, null, true, '')).toMatch(/Saving/);
     expect(rewardLine({ settle: true }, false, true, { xp: 110, shards: 15, ratingBefore: 1000, ratingAfter: 1012 }, false, '')).toMatch(/\+110 XP · \+15 shards · rating 1000 → 1012/);
+  });
+});
+
+describe('leaderboard view', () => {
+  const row = (o: object) => ({ rank: 1, name: 'Ace', kills: 12, matches: 5, wins: 3, xp: 400, level: 3, rating: 1030, nftTier: null, you: false, ...o });
+  it('shows kills first with wins, matches, level, rating and Chog tier, and says tier does not rank', () => {
+    const html = leaderboardHtml({ ...emptyAcct(), config: cfg, board: [row({}), row({ rank: 2, name: 'Bo', kills: 7, nftTier: 'legendary' })] });
+    expect(html).toMatch(/<th>#<\/th><th>Player<\/th><th>Kills<\/th><th>Wins<\/th><th>Matches<\/th><th>Level<\/th><th>Rating<\/th><th>Chog<\/th>/);
+    expect(html).toMatch(/Ranked by opponents killed/);
+    expect(html).toMatch(/does not move you up/);
+    expect(html).toMatch(/tier-legendary/);
+    expect(html).toMatch(/Sign in/);
+  });
+  it('adds your row below the top when you are further down; handles offline and empty', () => {
+    const html = leaderboardHtml({ ...emptyAcct(), config: cfg, signedIn: true, board: [row({})], boardMe: row({ rank: 40, name: 'Me', you: true }) });
+    expect(html).toMatch(/Me \(you\)/);
+    expect(html).toMatch(/>40</);
+    expect(leaderboardHtml({ ...emptyAcct(), config: { ...cfg, db: false } })).toMatch(/offline/);
+    expect(leaderboardHtml({ ...emptyAcct(), config: cfg, board: [] })).toMatch(/Nobody has finished/);
+    expect(leaderboardHtml({ ...emptyAcct(), config: cfg, board: [row({ name: '<img src=x onerror=alert(1)>' })] })).not.toMatch(/<img/);
   });
 });

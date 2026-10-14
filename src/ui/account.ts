@@ -3,7 +3,7 @@
 // shown comes from the site or the game server, never from the browser's own guess.
 import { TIER_DEFS, UPGRADES, UPGRADE_IDS, powerFor, tierOfMetadataId, signatureFor, type Tier } from '../config/power';
 import { REWARDS } from '../config/progression';
-import type { AccountProfile, GameConfig, OwnedToken, Reward, TicketProfile } from '../net/account';
+import type { AccountProfile, BoardRow, GameConfig, OwnedToken, Reward, TicketProfile } from '../net/account';
 import type { NetProfile } from '../net/protocol';
 import { esc } from './screens';
 
@@ -21,14 +21,16 @@ export interface AcctView {
   choice: { tokenId?: number; demo?: number } | null;
   ticket: TicketProfile | null;
   ticketWarning: string | null;
-  board: { rank: number; account: string; rating: number; level: number; wins: number; matches: number }[] | null;
+  /** The kills leaderboard (null = not loaded), and your own row when you are outside the shown ranks. */
+  board: BoardRow[] | null;
+  boardMe: BoardRow | null;
   busy: boolean;
   message: string;
 }
 
 export const emptyAcct = (): AcctView => ({
   config: null, signedIn: false, progression: false, profile: null, tokens: null, tokensError: null, hasWallet: false,
-  choice: null, ticket: null, ticketWarning: null, board: null, busy: false, message: '',
+  choice: null, ticket: null, ticketWarning: null, board: null, boardMe: null, busy: false, message: '',
 });
 
 export const tierBadge = (t: Tier, demo = false) =>
@@ -98,9 +100,6 @@ export function progressTabHtml(a: AcctView): string {
       : `<button class="btn small" data-upgrade="${id}"${p.shards < cost || a.busy ? ' disabled' : ''}>${cost} shards</button>`;
     return `<tr><td><b>${esc(d.name)}</b><br><small>${esc(d.text)}</small></td><td class="num">${rank}/${d.ranks}</td><td>${btn}</td></tr>`;
   }).join('');
-  const board = a.board?.length
-    ? `<table class="kv board"><tr><th>#</th><th>Player</th><th>Rating</th><th>Level</th><th>Wins</th></tr>${a.board.map((r) => `<tr class="${p.account.startsWith(r.account) ? 'me' : ''}"><td class="num">${r.rank}</td><td>${esc(r.account)}</td><td class="num">${r.rating}</td><td class="num">${r.level}</td><td class="num">${r.wins}/${r.matches}</td></tr>`).join('')}</table>`
-    : '<p class="note">No rated matches yet.</p>';
   return `<section class="prog"><h3>Level ${p.level}</h3>
 <div class="xpbar"><i style="width:${Math.round((p.into / p.next) * 100)}%"></i></div>
 <p class="num">${p.into} / ${p.next} XP · <b>${p.shards}</b> shards · rating <b>${p.rating}</b> · ${p.wins} wins in ${p.matches} matches</p>
@@ -108,7 +107,21 @@ export function progressTabHtml(a: AcctView): string {
 <h3>Upgrades</h3><table class="kv ups">${ups}</table>
 <p class="note">Free players can reach the starting power of a Common Chog. Shards are earned only by playing; they cannot be bought.</p>
 ${a.message ? `<p class="note warn">${esc(a.message)}</p>` : ''}
-<h3>Ratings</h3>${board}</section>`;
+<p class="note">Your place on the leaderboard: Player card, Leaderboard tab.</p></section>`;
+}
+
+/** The leaderboard: ranked by opponents killed. Tier, level and rating are shown, never used to rank. */
+export function leaderboardHtml(a: AcctView): string {
+  if (!a.config) return '<section class="prog"><p class="note">The leaderboard needs the account service, which is not reachable here.</p></section>';
+  if (!a.config.db) return '<section class="prog"><h3>Leaderboard</h3><p class="note warn">Saved progression is offline, so there is no leaderboard yet.</p></section>';
+  if (a.board === null) return '<section class="prog"><h3>Leaderboard</h3><p class="note">Loading…</p></section>';
+  const row = (r: BoardRow) => `<tr class="${r.you ? 'me' : ''}"><td class="num">${r.rank}</td><td>${esc(r.name)}${r.you ? ' (you)' : ''}</td><td class="num"><b>${r.kills}</b></td><td class="num">${r.wins}</td><td class="num">${r.matches}</td><td class="num">${r.level}</td><td class="num">${r.rating}</td><td>${r.nftTier ? tierBadge(r.nftTier) : '<span class="note">none</span>'}</td></tr>`;
+  const head = '<tr><th>#</th><th>Player</th><th>Kills</th><th>Wins</th><th>Matches</th><th>Level</th><th>Rating</th><th>Chog</th></tr>';
+  const body = a.board.length ? `<table class="kv board">${head}${a.board.map(row).join('')}${a.boardMe && !a.board.some((r) => r.you) ? `<tr class="gap"><td colspan="8">…</td></tr>${row(a.boardMe)}` : ''}</table>`
+    : '<p class="note">Nobody has finished a saved online match yet. Sign in and play 1v1, 3v3 or 5v5 to get on it.</p>';
+  return `<section class="prog"><h3>Leaderboard</h3>
+<p class="note">Ranked by opponents killed in saved online matches (20 s or longer), then wins, then fewer matches. Owning a Chog does not move you up: the Chog column is the tier of your Chog at its last check, shown for information. Rating is matchmaking skill, kept separate.</p>
+${body}${a.signedIn ? '' : '<p class="note">Sign in (Settings) to appear here. Guests and demo matches are not ranked.</p>'}</section>`;
 }
 
 export function rewardLine(over: { settle: boolean }, demo: boolean, signedIn: boolean, r: Reward | null | undefined, pending: boolean, note: string): string {

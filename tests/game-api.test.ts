@@ -160,6 +160,38 @@ describe('settlement pulled from the game server', () => {
   });
 });
 
+describe('leaderboard and health endpoints', () => {
+  it('leaderboard is public, ranked by kills, marks your row; health lists migrations and tables', async () => {
+    const a = (await accountFor(db!, [{ provider: 'google', subject: 'a', label: 'a' }]))!;
+    const b = (await accountFor(db!, [{ provider: 'google', subject: 'b', label: 'b' }]))!;
+    records['0123456789abcdee'] = { id: '0123456789abcdee', mode: '1v1', demo: false, winner: 'bravo', reason: 'eliminated', seconds: 80, endedAt: 1_760_000_000, players: [
+      { acc: a, team: 'alpha', tier: 'free', tok: null, mid: null, own: null, kills: 0, damage: 10, left: false, name: 'Alpha' },
+      { acc: b, team: 'bravo', tier: 'free', tok: null, mid: null, own: null, kills: 1, damage: 90, left: false, name: 'Bravo' }] };
+    await call('POST', 'settle', { body: { matchId: '0123456789abcdee' } });
+    const guest = await call('GET', 'leaderboard');
+    expect(guest.j).toMatchObject({ progression: true, rankedBy: 'kills', me: null });
+    expect(guest.j.rows.map((r: { name: string; kills: number }) => [r.name, r.kills])).toEqual([['Bravo', 1], ['Alpha', 0]]);
+    const mine = await call('GET', 'leaderboard', { cookie: await cookieFor([{ provider: 'google', subject: 'a', label: 'a' }]) });
+    expect(mine.j.me).toMatchObject({ name: 'Alpha', rank: 2, you: true });
+    const h = await call('GET', 'health');
+    expect(h.j.migrations.map((m: { version: number }) => m.version)).toEqual([1, 2]);
+    expect(h.j.tables).toContain('match_players');
+    db = null;
+    expect((await call('GET', 'health')).j).toEqual({ db: false });
+    expect((await call('GET', 'leaderboard')).j).toEqual({ progression: false, rows: [], me: null });
+  });
+  it('a live wallet read sets the account\'s displayed Chog tier to its best held Chog', async () => {
+    await call('POST', 'ticket', { cookie: await cookieFor([{ provider: 'wallet', subject: WALLET, label: 'w' }]), body: {} });
+    const acc = (await accountFor(db!, [{ provider: 'wallet', subject: WALLET, label: 'w' }]))!;
+    const r = await db!.query<{ nft_tier: string; nft_token_id: number }>('SELECT nft_tier, nft_token_id FROM room_zero.accounts WHERE id = $1', [acc]);
+    expect(r[0]).toMatchObject({ nft_tier: 'legendary', nft_token_id: 5 });
+    chain.owned[WALLET] = [];
+    await call('POST', 'ticket', { cookie: await cookieFor([{ provider: 'wallet', subject: WALLET, label: 'w' }]), body: {} });
+    const r2 = await db!.query<{ nft_tier: string | null }>('SELECT nft_tier FROM room_zero.accounts WHERE id = $1', [acc]);
+    expect(r2[0].nft_tier).toBeNull();
+  });
+});
+
 describe('upgrades endpoint', () => {
   it('needs a session and the game origin; spends shards', async () => {
     const cookie = await cookieFor([{ provider: 'google', subject: 'u', label: 'u' }]);

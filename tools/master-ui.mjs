@@ -55,8 +55,12 @@ await click('[data-act=profile]'); await sleep(300);
 await click('[data-tab=progress]'); await sleep(800);
 const prog = await ev(`document.getElementById('overlay').innerText`);
 check('Progress tab says what is saved and where', /Progress|not reachable|Sign in/.test(prog ?? ''));
+await click('[data-tab=ranks]'); await sleep(800);
+const ranks = await ev(`document.getElementById('overlay').innerText`);
+check('Leaderboard tab opens for a guest and says honestly whether the service is reachable', /leaderboard/i.test(ranks ?? '') && /not reachable|ranked by opponents killed|offline/i.test(ranks ?? ''));
+await shot('leaderboard.png');
 await shot('progress.png');
 check('no page errors', errors.length === 0, errors.join(' | '));
-proc.kill(); fs.rmSync(dir, { recursive: true, force: true });
+proc.kill(); await new Promise((r) => { proc.once('exit', r); setTimeout(r, 3000); }); try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* Chrome may still hold files */ }
 console.log(JSON.stringify({ pass: results.every((r) => r.ok), results }));
 process.exit(results.every((r) => r.ok) ? 0 : 1);

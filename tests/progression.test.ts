@@ -127,7 +127,7 @@ describe('settlement', () => {
     await settleMatch(db, rec({ id: 'dddddddd', players: [pl(buyer, 'alpha', { tok: 7, mid: 1468, own: '0xB', tier: 'common' }), pl(foe, 'bravo')] }));
     expect(await tokenHistory(db, 7)).toEqual({ matches: 2, wins: 2, kills: 2 });
     expect((await profileOf(db, seller))!.xp).toBe((await profileOf(db, buyer))!.xp);
-    expect((await leaderboard(db)).length).toBe(3);
+    expect((await leaderboard(db)).rows.length).toBe(3);
   });
 });
 

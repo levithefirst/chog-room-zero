@@ -10,7 +10,7 @@
 // - Account progression and token history are separate tables. A token transfer moves no XP, shards or rating.
 import type { Db, Tx } from './db.js';
 import { b64url, sign, unsign, type Identity } from './auth.js';
-import { NO_UPGRADES, UPGRADES, UPGRADE_IDS, clampUpgrades, type Tier, type UpgradeId, type Upgrades } from '../../src/config/power.js';
+import { NO_UPGRADES, UPGRADES, UPGRADE_IDS, clampUpgrades, tierOfMetadataId, type Tier, type UpgradeId, type Upgrades } from '../../src/config/power.js';
 import { RATING, levelOf, matchRewards, ratingDelta, REWARDS } from '../../src/config/progression.js';
 
 export const TICKET_SECONDS = 10 * 60;
@@ -139,7 +139,14 @@ export interface MatchRecord {
   reason: string;
   seconds: number;
   endedAt: number;
-  players: { acc: string | null; team: string; tier: Tier; tok: number | null; mid: number | null; own: string | null; kills: number; damage: number; left: boolean }[];
+  players: { acc: string | null; team: string; tier: Tier; tok: number | null; mid: number | null; own: string | null; kills: number; damage: number; left: boolean; name?: string }[];
+}
+
+/** A callsign as the game server validated it, made safe again for storage and display (length, no control characters). */
+export function cleanName(n: unknown): string | null {
+  if (typeof n !== 'string') return null;
+  const s = n.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 20);
+  return s || null;
 }
 
 export function validRecord(r: unknown): r is MatchRecord {
@@ -190,8 +197,11 @@ export async function settleMatch(db: Db, m: MatchRecord): Promise<SettleResult>
       const recent = await tx.query<{ n: string }>(`SELECT count(*) AS n FROM room_zero.match_players mp JOIN room_zero.matches mt ON mt.id = mp.match_id
         WHERE mp.account_id = $1 AND mp.xp > 0 AND mt.settled_at > now() - interval '24 hours'`, [acc]);
       const r = matchRewards({ won, kills: p.kills, leftEarly: p.left, seconds: m.seconds, capped: Number(recent[0].n) >= REWARDS.dailyCap });
-      await tx.query(`UPDATE room_zero.accounts SET xp = xp + $2, shards = shards + $3, rating = rating + $4, matches = matches + 1, wins = wins + $5 WHERE id = $1`,
-        [acc, r.xp, r.shards, delta, won ? 1 : 0]);
+      await tx.query(`UPDATE room_zero.accounts SET xp = xp + $2, shards = shards + $3, rating = rating + $4, matches = matches + 1, wins = wins + $5,
+        display_name = coalesce($6, display_name) WHERE id = $1`,
+        [acc, r.xp, r.shards, delta, won ? 1 : 0, cleanName(p.name)]);
+      // A verified holding in this match refreshes the account's displayed Chog tier (display only, never ranking).
+      if (p.tok && p.mid && tierOfMetadataId(p.mid)) await setNftTier(tx, acc, { tokenId: p.tok, metadataId: p.mid });
       if (r.xp) await tx.query(`INSERT INTO room_zero.ledger (account_id, kind, delta, reason, ref) VALUES ($1, 'xp', $2, 'match', $3) ON CONFLICT DO NOTHING`, [acc, r.xp, m.id]);
       if (r.shards) await tx.query(`INSERT INTO room_zero.ledger (account_id, kind, delta, reason, ref) VALUES ($1, 'shards', $2, 'match', $3) ON CONFLICT DO NOTHING`, [acc, r.shards, m.id]);
       await tx.query(`INSERT INTO room_zero.match_players (match_id, account_id, team, tier, token_id, kills, damage, won, left_early, xp, shards, rating_before, rating_after)
@@ -207,10 +217,55 @@ export async function settleMatch(db: Db, m: MatchRecord): Promise<SettleResult>
   });
 }
 
-export async function leaderboard(db: Db, limit = 20): Promise<{ rank: number; account: string; rating: number; level: number; wins: number; matches: number }[]> {
-  const rows = await db.query<{ id: string; rating: number; xp: string; wins: number; matches: number }>(
-    `SELECT id, rating, xp, wins, matches FROM room_zero.accounts WHERE matches > 0 ORDER BY rating DESC, wins DESC, id LIMIT $1`, [limit]);
-  return rows.map((r, i) => ({ rank: i + 1, account: r.id.slice(0, 6), rating: Number(r.rating), level: levelOf(Number(r.xp)).level, wins: Number(r.wins), matches: Number(r.matches) }));
+/**
+ * Current Chog tier shown next to an account, as of the last live ownership read (ticket) or verified match. Null means
+ * the last read found no Chog. It is a label: the leaderboard never sorts or filters by it.
+ */
+export async function setNftTier(q: Tx, acc: string, holding: { tokenId: number; metadataId: number } | null): Promise<void> {
+  const tier = holding ? tierOfMetadataId(holding.metadataId) : null;
+  await q.query(`UPDATE room_zero.accounts SET nft_tier = $2, nft_token_id = $3, nft_checked_at = now() WHERE id = $1`, [acc, tier, holding?.tokenId ?? null]);
+}
+
+export interface BoardRow {
+  rank: number;
+  name: string;
+  kills: number;
+  matches: number;
+  wins: number;
+  xp: number;
+  level: number;
+  rating: number;
+  /** Current Chog tier (display only), or null for no verified Chog. */
+  nftTier: Tier | null;
+  you: boolean;
+}
+
+/**
+ * The leaderboard (owner requirement 2026-10-14): ranked by opponents killed in validated online matches, then wins,
+ * then fewer matches played, then account id (stable). Kills are summed from persisted match rows of matches that
+ * paid rewards (at least REWARDS.minSeconds long), so a quit-and-requeue loop adds nothing. Rating, XP and NFT tier
+ * are shown but never decide the order. Account-based: guests and demo matches never appear.
+ */
+export async function leaderboard(db: Tx, limit = 20, me: string | null = null): Promise<{ rows: BoardRow[]; me: BoardRow | null }> {
+  const rows = await db.query<{ id: string; display_name: string | null; xp: string; rating: number; matches: number; wins: number; nft_tier: string | null; kills: string; rank: string }>(
+    `WITH k AS (
+       SELECT mp.account_id, coalesce(sum(mp.kills) FILTER (WHERE m.rewarded), 0) AS kills
+       FROM room_zero.match_players mp JOIN room_zero.matches m ON m.id = mp.match_id GROUP BY mp.account_id
+     ), ranked AS (
+       SELECT a.id, a.display_name, a.xp, a.rating, a.matches, a.wins, a.nft_tier, coalesce(k.kills, 0) AS kills,
+         row_number() OVER (ORDER BY coalesce(k.kills, 0) DESC, a.wins DESC, a.matches ASC, a.id) AS rank
+       FROM room_zero.accounts a LEFT JOIN k ON k.account_id = a.id
+       WHERE a.matches > 0
+     )
+     SELECT * FROM ranked WHERE rank <= $1 OR id = $2 ORDER BY rank`, [limit, me]);
+  const toRow = (r: (typeof rows)[number]): BoardRow => ({
+    rank: Number(r.rank), name: r.display_name ?? `Player ${r.id.slice(0, 4)}`, kills: Number(r.kills), matches: Number(r.matches), wins: Number(r.wins),
+    xp: Number(r.xp), level: levelOf(Number(r.xp)).level, rating: Number(r.rating),
+    nftTier: r.nft_tier && ['common', 'uncommon', 'rare', 'epic', 'legendary'].includes(r.nft_tier) ? (r.nft_tier as Tier) : null,
+    you: !!me && r.id === me,
+  });
+  const all = rows.map(toRow);
+  return { rows: all.filter((r) => r.rank <= limit), me: all.find((r) => r.you) ?? null };
 }
 
 export async function tokenHistory(db: Db, tokenId: number): Promise<{ matches: number; wins: number; kills: number }> {

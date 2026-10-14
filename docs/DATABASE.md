@@ -17,6 +17,23 @@ Until then every account endpoint answers "progression offline" and the game pla
 Only schema `room_zero` (nothing in `public`, nothing else touched): `schema_migrations`, `accounts`, `identities`,
 `upgrades`, `ledger`, `matches`, `match_players`, `token_history`, `ownership_checks`. Definitions: `api/_lib/db.ts`.
 
+| Version | What it adds |
+|---|---|
+| 1 | the nine tables above |
+| 2 | leaderboard: `accounts.display_name`, `accounts.nft_tier` / `nft_token_id` / `nft_checked_at` (display only), index `match_players(account_id)` |
+
+Live check: `GET /api/game/health` lists the applied migrations and the tables (no rows, no connection details).
+
+## Leaderboard (owner requirement 2026-10-14)
+
+`GET /api/game/leaderboard`, public, account-based, persistent. Ranked by opponents killed, summed from `match_players`
+of matches that paid rewards (20 s or longer; a quit-and-requeue loop adds nothing), then wins, then fewer matches,
+then account id. Shows kills, wins, matches, XP and level, rating, and the account's Chog tier as of its last live
+ownership read or verified match. The Chog tier, rating and XP never decide the order (`tests/leaderboard.test.ts`
+proves a 1:1 holder with more wins and a higher rating ranks below a free player with more kills, and that changing a
+tier moves nobody). Guests and demo matches never appear. Kills come from the authoritative server's record, never
+from the browser.
+
 - Account progression (`accounts`, `upgrades`, `ledger`) and token history (`token_history`) are separate: a token
   transfer moves no XP, shards or rating.
 - Every shard movement is a `ledger` row, unique per (account, kind, reason, ref), so a match can pay an account once.

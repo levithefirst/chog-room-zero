@@ -8,12 +8,13 @@
 //   POST ticket-check  the game server asks whether a ticket is genuine (no cookie, no origin: the ticket is the proof)
 //   POST upgrade       spend shards on an upgrade rank
 //   POST settle        pull a finished match from the game server and settle it once
-//   GET  leaderboard   top ratings
+//   GET  leaderboard   ranked by kills in validated matches (then wins); shows matches, XP/level, rating, Chog tier
+//   GET  health        database reachable, applied migrations, this game's tables (no data, no secrets)
 //   GET  chain         read-only live check of the ownership path on Monad (cached 60 s; no player data)
 import { env as authEnv, json, readSession, sameOrigin, secretOk, type Env, type Identity } from './auth.js';
-import type { Db } from './db.js';
+import { schemaStatus, type Db } from './db.js';
 import { readOwnership, selfCheck, type Fetch, type Holding, type SelfCheck } from './chain.js';
-import { accountFor, buyUpgrade, checkTicket, issueTicket, leaderboard, profileOf, settleMatch, ticketSecret, tokenHistory, upgradesOf, validRecord, type GameTicket } from './game.js';
+import { setNftTier, accountFor, buyUpgrade, checkTicket, issueTicket, leaderboard, profileOf, settleMatch, ticketSecret, tokenHistory, upgradesOf, validRecord, type GameTicket } from './game.js';
 import { NO_UPGRADES, SIGNATURES, TIER_DEFS, TIERS, tierOfMetadataId, type Tier } from '../../src/config/power.js';
 
 export interface GameEnv extends Env {
@@ -128,6 +129,11 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
           holding = h.list.find((x) => x.tokenId === want)
             ?? (b.tokenId === undefined ? h.list.sort((x, y) => tierRank(tierOfMetadataId(y.metadataId)!) - tierRank(tierOfMetadataId(x.metadataId)!))[0] ?? null : null);
           if (b.tokenId !== undefined && !holding && h.ok) chain = 'not_owned';
+          // Refresh the account's displayed Chog tier from this live read: its best held Chog, or none. Display only.
+          if (db && acc && h.ok) {
+            const best = [...h.list].sort((x, y) => tierRank(tierOfMetadataId(y.metadataId)!) - tierRank(tierOfMetadataId(x.metadataId)!))[0] ?? null;
+            await setNftTier(db, acc, best);
+          }
         }
         const tokTier = holding ? tierOfMetadataId(holding.metadataId) : null;
         const t = await issueTicket({
@@ -177,8 +183,16 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
         return json({ ...chainCache.r, checkedAt: new Date(chainCache.at).toISOString() });
       }
 
-      case 'GET leaderboard':
-        return json({ progression: !!db, rows: db ? await leaderboard(db) : [] });
+      case 'GET leaderboard': {
+        if (!db) return json({ progression: false, rows: [], me: null });
+        const s = await readSession(req, e);
+        const me = s?.ids.length ? await accountFor(db, s.ids) : null;
+        return json({ progression: true, rankedBy: 'kills', ...(await leaderboard(db, 50, me)) });
+      }
+
+      case 'GET health':
+        // Read-only proof that the database answers and which migrations are applied. No rows, no connection details.
+        return json(db ? { db: true, ...(await schemaStatus(db)) } : { db: false });
 
       default:
         return json({ error: 'not_found' }, 404);

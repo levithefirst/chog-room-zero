@@ -11,7 +11,7 @@ The judges' scoring sheet on that site says: "Gate = NFT essentiality (must pass
 ## 02 What you built
 A dark top-down tactical shooter in the browser, for PC and phones. One basement, five bots, about 90 seconds a run. You only see what your lamp touches, and sound is the other half of the information: gold rings mark noises you heard but did not see, and bots hear you the same way. Bullets travel and walls stop them. Bots take cover, investigate noises and only shoot you from inside your own sight range, so every death can be explained. Four heroes with one ability each (Kettle rifle and heal, Mop SMG and dash, Brick shotgun and portable cover, Wick marksman and sonar). Results and per-hero personal bests give a reason to replay.
 
-Online: 1v1 and 3v3 for everyone, 5v5 for verified Chog holders, on an authoritative server (the server decides every hit).
+Online: 1v1 and 3v3 for everyone, 5v5 for verified Chog holders, on an authoritative server (the server decides every hit). A persistent, account-based leaderboard ranks players by opponents killed in saved matches; owning a Chog never moves anyone up it.
 
 What is new: the Chog decides what you can play and how you start. Rarity sets starting power, the ten 1:1 Chogs each carry their own signature ability, and 5v5 is for holders only. Free players earn shards to climb to Common power; rating is separate from power.
 
@@ -25,7 +25,7 @@ Built and tested (2026-10-14, see `docs/design/power.md` and `docs/HANDOFFS.md`)
 
 Honest limits (say them in the submission):
 - NFT combat power for real holders is switched off in production until a person has playtested the feel (the project's own Core Feel Gate). Holders already get 5v5 and verified identity; the tier power can be seen in the labelled DEMO (any Chog number, solo or demo-only online rooms, no rewards).
-- Saved progression (XP, shards, rating, token history) needs the owner's Neon database connected to the site (`docs/DATABASE.md`). Until then it says "offline" and nothing is credited.
+- Saved progression and the leaderboard run on the owner's Neon database (connected 2026-10-14). They fill only from signed-in online matches; no match had been saved yet at the time of writing.
 - A real holder signing in and playing 5v5 has not been tried yet. The holder flow is tested against a simulated chain, and the live chain path is checked on the deployed site by a read-only self-check (`/api/game/chain`).
 - No Chog artwork or token titles are shown: their rights are not confirmed. The game uses its own operators and shows "Chog #N".
 

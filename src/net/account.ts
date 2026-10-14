@@ -24,7 +24,8 @@ async function api<T>(action: string, body?: object): Promise<T | null> {
 export const gameConfig = () => api<GameConfig>('config');
 export const loadProfile = () => api<{ signedIn: boolean; progression?: boolean; profile?: AccountProfile }>('profile');
 export const loadTokens = () => api<{ wallet: boolean; ok?: boolean; error?: string; tokens: OwnedToken[] }>('tokens');
-export const leaderboard = () => api<{ progression: boolean; rows: { rank: number; account: string; rating: number; level: number; wins: number; matches: number }[] }>('leaderboard');
+export interface BoardRow { rank: number; name: string; kills: number; matches: number; wins: number; xp: number; level: number; rating: number; nftTier: Tier | null; you: boolean }
+export const leaderboard = () => api<{ progression: boolean; rows: BoardRow[]; me: BoardRow | null }>('leaderboard');
 export const buyUpgrade = (id: string) => api<{ ok: boolean; rank?: number; shards?: number; reason?: string }>('upgrade', { id });
 export const settle = (matchId: string) => api<{ ok: boolean; already?: boolean; reason?: string; error?: string; mine?: Reward | null }>('settle', { matchId });
 

@@ -10,7 +10,7 @@ import { fmtTime, type Best, type Records } from './records';
 import { MEDALS, medalProgress, type MedalDef, type Unlocked } from './medals';
 import { displayName, NICK_MAX, STICK_PX, type Profile, type Settings } from './profile';
 import { controlsSvg, medalSvg, portraitSvg, RARITY_LABEL, tokenSvg } from './art';
-import { fiveLock, onlineIdentityHtml, progressTabHtml, tierBadge, type AcctView } from './account';
+import { fiveLock, leaderboardHtml, onlineIdentityHtml, progressTabHtml, tierBadge, type AcctView } from './account';
 import type { NetProfile } from '../net/protocol';
 import type { Tier } from '../config/power';
 
@@ -18,7 +18,7 @@ export function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
 
-export type ProfileTab = 'player' | 'progress' | 'operators' | 'medals' | 'loadout';
+export type ProfileTab = 'player' | 'progress' | 'ranks' | 'operators' | 'medals' | 'loadout';
 
 export interface AuthView {
   /** null while asking the server; false when there is no auth server at this address. */
@@ -225,8 +225,8 @@ ${rows([
 }
 
 export function profileHtml(c: ScreenCtx, tab: ProfileTab): string {
-  const tabs: [ProfileTab, string][] = [['player', 'Player'], ['progress', 'Progress'], ['operators', 'Operators'], ['medals', 'Medals'], ['loadout', 'Loadout']];
-  const body = tab === 'progress' ? progressTabHtml(c.acct) : tab === 'operators' ? operatorsTab(c) : tab === 'medals' ? medalsTab(c) : tab === 'loadout' ? loadoutTab(c) : playerTab(c);
+  const tabs: [ProfileTab, string][] = [['player', 'Player'], ['progress', 'Progress'], ['ranks', 'Leaderboard'], ['operators', 'Operators'], ['medals', 'Medals'], ['loadout', 'Loadout']];
+  const body = tab === 'progress' ? progressTabHtml(c.acct) : tab === 'ranks' ? leaderboardHtml(c.acct) : tab === 'operators' ? operatorsTab(c) : tab === 'medals' ? medalsTab(c) : tab === 'loadout' ? loadoutTab(c) : playerTab(c);
   return `<div class="screen profile">${topbar('Player card')}
 <nav class="tabs" role="tablist">${tabs.map(([id, label]) => `<button class="tab${id === tab ? ' on' : ''}" role="tab" aria-selected="${id === tab}" data-tab="${id}">${label}</button>`).join('')}</nav>
 <div class="prof-body">${playerCard(c)}${body}</div></div>`;

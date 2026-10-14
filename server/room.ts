@@ -395,7 +395,7 @@ export class Lobby {
       id: room.id, mode: room.mode, demo: room.demo, winner: w.winner, reason, seconds: Math.round(matchSeconds(w)), endedAt: Math.floor(Date.now() / 1000),
       players: w.actors.map((a) => {
         const t = room.members[a.id].ticket;
-        return { acc: t?.acc ?? null, team: a.team, tier: a.power.tier, tok: t?.holder ? t.tok : null, mid: t?.holder ? t.mid : null, own: t?.holder ? t.own : null, kills: a.kills, damage: Math.round(a.damageDealt), left: room.left[a.id] };
+        return { acc: t?.acc ?? null, team: a.team, tier: a.power.tier, tok: t?.holder ? t.tok : null, mid: t?.holder ? t.mid : null, own: t?.holder ? t.own : null, kills: a.kills, damage: Math.round(a.damageDealt), left: room.left[a.id], name: a.name };
       }),
     };
     this.results.set(room.id, { at: this.opts.now(), record });

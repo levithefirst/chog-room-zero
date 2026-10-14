@@ -177,7 +177,7 @@ to wake. Opening Online sends an HTTP request that wakes it and retries the sock
 - **Demo** tickets queue in their own queues (`|demo`), so demo power never meets a real match, and earn nothing.
 - **Power** comes from the ticket (`src/config/power.ts`); the roster sent to every client carries each player's tier
   and ability, so power is never hidden from the other side.
-- **Results.** A finished match's record (accounts, tiers, kills, who left) is kept for 2 hours at
+- **Results.** A finished match's record (accounts, callsigns, tiers, kills, who left) is kept for 2 hours at
   `GET /results/<matchId>`. The site pulls it (`POST /api/game/settle`) and settles it once. The browser never reports
   a result. Render Free restarts lose unsettled records (the client settles straight after the match).
 - Tests: `tests/master-online.test.ts` (server rules), `tests/game-api.test.ts` (site side), `tools/rc8-online.mjs`
