@@ -10,16 +10,16 @@ NFT combat power is ON for verified holders (`NFT_COMBAT` unset or anything but 
 
 Tier is the token's `Tier` trait from the verified catalogue, looked up by the metadata id the contract itself returns (`metadataId(tokenId)`). Never a hash or anything the browser says.
 
-| Tier | Tokens | Health | Armour | Damage | Ability |
-|---|---|---|---|---|---|
-| Free | everyone | x1.00 | +0 | x1.00 | hero ability |
-| Common | 1,279 | x1.15 | +8 | x1.00 | hero ability |
-| Uncommon | 590 | x1.22 | +12 | x1.02 | hero ability |
-| Rare | 60 | x1.32 | +18 | x1.04 | hero ability |
-| Epic | 30 | x1.42 | +24 | x1.06 | hero ability |
-| 1:1 | 10 | x1.75 | +35 | x1.12 | its own signature (replaces the hero ability) |
+| Tier | Tokens | Health | Armour | Damage | Grenades | Ability |
+|---|---|---|---|---|---|---|
+| Free | everyone | x1.00 | +0 | x1.00 | 3 | character ability |
+| Common | 1,279 | x1.15 | +8 | x1.00 | 5 | character ability |
+| Uncommon | 590 | x1.22 | +12 | x1.02 | 7 | character ability |
+| Rare | 60 | x1.32 | +18 | x1.04 | 9 | character ability |
+| Epic | 30 | x1.42 | +24 | x1.06 | 11 | character ability |
+| 1:1 | 10 | x1.75 | +35 | x1.12 | 13 | its own signature (replaces the character ability) |
 
-Speed never changes with tier or upgrade. Armour is added to both the starting armour and the armour cap.
+Speed never changes with tier or upgrade. Armour is added to both the starting armour and the armour cap. Grenade capacity (owner 2026-10-14, `docs/design/roster-grenades.md`) is a tier advantage only: upgrades never raise it, and online the server sets it from the verified ticket.
 
 ## Upgrades (shards, earned only in saved online matches; never sold)
 

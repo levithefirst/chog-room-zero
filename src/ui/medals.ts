@@ -4,6 +4,7 @@
 // last for the session. No rewards, currency or random drops: a medal is a record of play.
 import type { KeyValueStore } from '../nft/history';
 import type { Records } from './records';
+import { HEROES } from '../config/heroes';
 
 export type Rarity = 'common' | 'rare' | 'epic';
 
@@ -31,7 +32,8 @@ export interface MedalDef {
   progress(r: Records, run: RunFacts | null): number;
 }
 
-const OPERATORS = ['kettle', 'mop', 'brick', 'wick'];
+// Full Squad: a clear with every roster character.
+const OPERATORS = HEROES.map((h) => h.id);
 
 export const MEDALS: MedalDef[] = [
   { id: 'first-blood', name: 'First Blood', rarity: 'common', text: 'Down your first hostile.', goal: 1, progress: (r) => r.overall.kills },
@@ -46,7 +48,7 @@ export const MEDALS: MedalDef[] = [
     progress: (_r, run) => (run?.won && run.bullets >= 10 && run.hits / run.bullets >= 0.5 ? 1 : 0) },
   { id: 'close-call', name: 'Close Call', rarity: 'rare', text: 'Clear the room with 15 health or less.', goal: 1, progress: (_r, run) => (run?.won && run.hpLeft <= 15 ? 1 : 0) },
   { id: 'untouched', name: 'Untouched', rarity: 'epic', text: 'Clear the room without taking any damage.', goal: 1, progress: (_r, run) => (run?.won && run.damageTaken === 0 ? 1 : 0) },
-  { id: 'full-squad', name: 'Full Squad', rarity: 'epic', text: 'Clear the room once with each operator.', goal: OPERATORS.length,
+  { id: 'full-squad', name: 'Full Squad', rarity: 'epic', text: 'Clear the room once with each roster character.', goal: OPERATORS.length,
     progress: (r) => OPERATORS.filter((h) => (r.heroes[h]?.wins ?? 0) > 0).length },
 ];
 

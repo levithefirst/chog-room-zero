@@ -22,12 +22,12 @@ describe('RC-8 operator bodies', () => {
       }
     }
   });
-  it('Kettle, Mop, Brick and Wick have different silhouettes (spike count and gear), not just colours', () => {
+  it('the seven roster characters have different silhouettes (spike count and gear), not just colours', () => {
     const sig = HEROES.map((h) => { const p = chogParts(h.id); return `${p.body.length}|${p.gear.map((g) => (g.poly ? 'p' : 'd') + g.fill).join(',')}`; });
     expect(new Set(sig).size).toBe(HEROES.length);
   });
   it('the face and eyes point where the operator faces', () => {
-    const p = chogParts('kettle');
+    const p = chogParts('benja');
     for (const facing of [0, Math.PI / 2, Math.PI, -2]) {
       const [ex, ey] = place([p.face.x, p.face.y], 10, 10, facing, 0.35);
       const dir = Math.atan2(ey - 10, ex - 10);

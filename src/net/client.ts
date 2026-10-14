@@ -166,11 +166,12 @@ export class OnlineSession {
   /** Controls, throttled to 30 Hz; taps (fire, reload, ability) are sent at once so none is lost. */
   sendInput(inp: ActorInput, now: number): void {
     if (this.state !== 'match') return;
-    const urgent = inp.reload || inp.ability || (inp.firing && !this.lastFire);
+    const urgent = inp.reload || inp.ability || !!inp.grenade || (inp.firing && !this.lastFire);
     this.lastFire = inp.firing;
     if (!urgent && now - this.lastSent < 1000 / INPUT_HZ) return;
     this.lastSent = now;
-    this.send({ t: 'input', seq: ++this.seq, mx: inp.moveX, my: inp.moveY, aim: inp.aim, fire: inp.firing, quiet: inp.quiet, reload: inp.reload, ability: inp.ability });
+    this.send({ t: 'input', seq: ++this.seq, mx: inp.moveX, my: inp.moveY, aim: inp.aim, fire: inp.firing, quiet: inp.quiet, reload: inp.reload, ability: inp.ability,
+      ...(inp.grenade ? { nade: true, nd: Math.round((inp.throwDist ?? TUNING.grenade.touchThrow) * 100) / 100 } : {}) });
   }
   private lastFire = false;
 
@@ -253,7 +254,7 @@ export class OnlineSession {
     const v = (id: number) => this.toView.get(id) ?? 0;
     this.pendingEvents.push({
       sounds: m.sounds.map((s) => ({ type: s.type as SoundType, x: s.x, y: s.y, radius: s.radius, sourceId: v(s.source), team: s.team, tick: m.tick, weapon: s.weapon, blocked: s.blocked, sig: s.sig })),
-      hits: m.hits.map((h) => ({ target: v(h.target), by: v(h.by), x: h.x, y: h.y, fromX: h.fromX, fromY: h.fromY, hpDamage: 0, armorDamage: 0, killed: h.killed, downed: h.downed })),
+      hits: m.hits.map((h) => ({ target: v(h.target), by: v(h.by), x: h.x, y: h.y, fromX: h.fromX, fromY: h.fromY, hpDamage: 0, armorDamage: 0, killed: h.killed, downed: h.downed, grenade: h.grenade })),
     });
     m.pickups.forEach((on, i) => { if (w.pickups[i]) w.pickups[i].active = on; });
     w.barriers = m.barriers.map((b) => ({ box: { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 }, left: b.left, owner: -1 }));
@@ -304,6 +305,11 @@ export class OnlineSession {
       const weapon = WEAPONS[x.weapon] ?? WEAPONS.rifle;
       return { x: x.x + x.dx * weapon.bulletSpeed * ahead, y: x.y + x.dy * weapon.bulletSpeed * ahead, dx: x.dx, dy: x.dy, ox: x.ox, oy: x.oy, life: 1, owner: this.toView.get(x.owner) ?? 1, weapon, alive: true };
     });
+    // Grenades: the newest server state, rolled forward along their velocity to now (drawn with the fuse ring).
+    w.grenades = (newest.msg.grenades ?? []).map((g) => {
+      const owner = this.toView.get(g.owner) ?? 1;
+      return { id: g.id, x: g.x + g.vx * ahead, y: g.y + g.vy * ahead, vx: g.vx, vy: g.vy, fuse: Math.max(0, g.fuse - ahead), owner, team: w.actors[owner]?.team ?? 'bravo', alive: true };
+    });
   }
 
   /** The newest server state of you (for the HUD), or null before the first snapshot. */
@@ -317,4 +323,6 @@ function copy(act: Actor, s: NetActor): void {
   act.muzzle = s.muzzle; act.hitFlash = s.hitFlash; act.deadFor = s.deadFor; act.lastSpread = s.lastSpread; act.stepAcc = s.stepAcc; act.kills = s.kills;
   act.shieldLeft = s.shieldLeft ?? 0; act.frenzyLeft = s.frenzyLeft ?? 0; act.slowLeft = s.slowLeft ?? 0; act.burstLeft = s.burstLeft ?? 0;
   act.downed = !!s.downed; act.reviveProgress = s.reviveProgress ?? 0;
+  if (s.nades !== undefined) act.grenades = s.nades;
+  if (s.maxNades !== undefined) act.maxGrenades = s.maxNades;
 }

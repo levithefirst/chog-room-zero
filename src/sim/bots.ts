@@ -5,7 +5,7 @@
 import { TUNING } from '../config/tuning';
 import type { BotSpawn } from '../config/map';
 import { angleDiff } from './geom';
-import { findPath, shotClear, sightClear } from './level';
+import { findPath, shotClear, sightClear, tileAt, walkable } from './level';
 import { canSee, muzzleFlashSeen } from './vision';
 import { safeSpot, zoneAt, zoneGoal } from './zone';
 import { hears, player, rand, revealed, viewOf, type Actor, type ActorInput, type World } from './world';
@@ -49,6 +49,12 @@ export interface Brain {
   pathAt: number;
   /** Heading into the danger zone (RC-8), which overrides its state until it is inside. */
   zoneRun: boolean;
+  /** Sim time (s) before which it will not throw another grenade. */
+  nadeAt: number;
+  /** AI teammates: seconds until it picks a new spot near the player (loose follow, not a shadow). */
+  anchorLeft: number;
+  /** Flankers: strafe direction (+1 / -1) while trading shots, flipped now and then. */
+  strafe: number;
 }
 
 export type PerceptionSource = 'seen' | 'flash' | 'heard' | 'shot' | 'sonar' | 'memory';
@@ -75,10 +81,11 @@ export function createBrain(spawn: BotSpawn): Brain {
     patrolIndex: 0, flanker: spawn.flanker, timer: 0, seenFor: 0, engagedFor: 0, aimOffset: 0, aimTimer: 0,
     lastKnown: null, goal: null, path: [], stuckTimer: 0, stuckRepaths: 0, avoid: [], stuckFrom: { x: 0, y: 0 }, lookBase: 0, sawPlayer: false, heardAt: null,
     source: null, suspicion: 0, reaction: TUNING.perception.reactionMax, pathAt: -1e9, zoneRun: false,
+    nadeAt: 0, anchorLeft: 0, strafe: 1,
   };
 }
 
-const out: ActorInput = { moveX: 0, moveY: 0, quiet: false, aim: 0, firing: false, reload: false, ability: false };
+const out: ActorInput = { moveX: 0, moveY: 0, quiet: false, aim: 0, firing: false, reload: false, ability: false, grenade: false };
 
 function setGoal(w: World, a: Actor, br: Brain, gx: number, gy: number): void {
   if (br.goal && Math.floor(br.goal.x) === Math.floor(gx) && Math.floor(br.goal.y) === Math.floor(gy) && br.path.length) return;
@@ -199,7 +206,58 @@ function pickFlank(w: World, a: Actor, target: { x: number; y: number }): { x: n
   return best;
 }
 
+/**
+ * One bot's input this step: the state machine below (perception, states, department style), then two reflexes that
+ * apply in every state: step out of a live hostile grenade's ring, and throw one of its own when it has a reason.
+ */
 export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput {
+  think(w, a, br, dt);
+  dodgeGrenades(w, a);
+  maybeThrow(w, a, br);
+  return out;
+}
+
+/** A grenade it can see (or that landed within a step of it) whose ring it stands in: move straight out of it. */
+function dodgeGrenades(w: World, a: Actor): void {
+  const R = TUNING.grenade.radius + 0.6;
+  for (const g of w.grenades) {
+    if (!g.alive || (g.team === a.team && g.owner !== a.id)) continue;
+    const d = Math.hypot(a.x - g.x, a.y - g.y);
+    if (d > R || (d > 1.5 && !canSee(w.level, a.x, a.y, a.facing, viewOf(a), g.x, g.y))) continue;
+    const ux = d > 0.01 ? (a.x - g.x) / d : Math.cos(a.facing + Math.PI), uy = d > 0.01 ? (a.y - g.y) / d : Math.sin(a.facing + Math.PI);
+    out.moveX = ux;
+    out.moveY = uy;
+    out.quiet = false;
+    return;
+  }
+}
+
+/**
+ * Grenade use (TUNING.grenade bot*): at a believed position 4-9 u away, never inside its own blast, when the target
+ * hugs cover it cannot shoot through, two hostiles stand together, or it only heard them (flush them out).
+ */
+function maybeThrow(w: World, a: Actor, br: Brain): void {
+  const G = TUNING.grenade;
+  const now = w.tick * TUNING.simStepSeconds;
+  if (a.grenades <= 0 || a.nadeCd > 0 || now < br.nadeAt || a.downed || a.shieldLeft > 0) return;
+  const seen = br.sawPlayer ? seenTarget(w, a) : null;
+  const spot = seen ?? (br.lastKnown && br.suspicion > 0.55 && br.source !== 'memory' ? br.lastKnown : null);
+  if (!spot) return;
+  const d = Math.hypot(spot.x - a.x, spot.y - a.y);
+  if (d < Math.max(G.botMin, G.radius + 0.8) || d > G.botMax || !sightClear(w.level, a.x, a.y, spot.x, spot.y)) return;
+  const covered = !!seen && !shotClear(w.level, a.x, a.y, spot.x, spot.y, a.weapon.piercesCover, TUNING.combat.coverLean);
+  const pair = w.actors.filter((t) => t.alive && t.team !== a.team && Math.hypot(t.x - spot.x, t.y - spot.y) <= G.radius * 0.8
+    && canSee(w.level, a.x, a.y, a.facing, viewOf(a), t.x, t.y)).length >= 2;
+  const unseen = !seen && (br.source === 'heard' || br.source === 'shot' || br.source === 'flash');
+  if (!covered && !pair && !unseen) return;
+  out.grenade = true;
+  out.throwDist = d;
+  out.aim = Math.atan2(spot.y - a.y, spot.x - a.x);
+  out.firing = false;
+  br.nadeAt = now + G.botCooldown;
+}
+
+function think(w: World, a: Actor, br: Brain, dt: number): void {
   const B = TUNING.bots;
   const seen = seenTarget(w, a);
   // Only read when br.sawPlayer is true (then it is the seen hostile); `a` is a harmless stand-in otherwise.
@@ -207,6 +265,8 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
   out.firing = false;
   out.reload = false;
   out.ability = false;
+  out.grenade = false;
+  out.throwDist = undefined;
   out.quiet = false;
   out.aim = a.facing;
   out.moveX = out.moveY = 0;
@@ -299,6 +359,12 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
     if (k === 'dash' && br.state === 'cover' && br.path.length > 2) out.ability = true;
     if (k === 'sonar' && (br.state === 'investigate' || br.state === 'search') && br.timer > 0.5) out.ability = true;
     if (k === 'barrier' && br.state === 'engage' && (justHit || a.hp < a.maxHp * 0.7)) out.ability = true;
+    // Snare when the hostile it sees is inside its reach; Shell when hit and hurt (it cannot shoot inside it); Rush
+    // when it is trading shots within its weapon's range.
+    const dSeen = br.sawPlayer ? Math.hypot(p.x - a.x, p.y - a.y) : Infinity;
+    if (k === 'scream' && dSeen <= (a.ability.radius ?? 0)) out.ability = true;
+    if (k === 'shield' && justHit && a.hp < a.maxHp * 0.55) out.ability = true;
+    if (k === 'frenzy' && br.state === 'engage' && dSeen <= a.weapon.falloffEnd) out.ability = true;
   }
   // Its own sonar shows the player like it shows bots to the player: a fair, telegraphed reveal.
   const pinged = a.revealLeft > 0 ? revealed(w, a) : [];
@@ -318,7 +384,7 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
       if (Math.hypot(down.x - a.x, down.y - a.y) > TUNING.revive.range * 0.6) { setGoal(w, a, br, down.x, down.y); follow(w, a, br, dt); }
       out.aim = Math.atan2(down.y - a.y, down.x - a.x);
       out.firing = false;
-      return out;
+      return;
     }
   }
 
@@ -338,10 +404,16 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
       out.firing = Math.abs(angleDiff(a.facing, toP)) < B.fireToleranceDeg * DEG && Math.hypot(p.x - a.x, p.y - a.y) <= range
         && shotClear(w.level, a.x, a.y, p.x, p.y, a.weapon.piercesCover, TUNING.combat.coverLean);
     } else token(w, a, false);
-    return out;
+    return;
   }
   if (br.zoneRun) { br.zoneRun = false; br.goal = null; br.path.length = 0; }
 
+  // AI teammates hunt what they hear, but on a leash: more than 12 u from the player with nothing in sight, regroup.
+  if (a.team !== 'bot' && !br.sawPlayer && (br.state === 'investigate' || br.state === 'search' || br.state === 'pursue')
+    && Math.hypot(player(w).x - a.x, player(w).y - a.y) > 12) {
+    br.state = 'patrol';
+    br.goal = null;
+  }
   if (br.state !== 'engage' || !a.alive) token(w, a, false);
   switch (br.state) {
     case 'heal': {
@@ -358,13 +430,28 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
     case 'patrol': {
       out.quiet = B.patrolQuiet;
       if (a.team !== 'bot') {
-        // Nothing to chase: move with the player, a couple of metres off to one side, and watch the flanks.
+        // Nothing to chase: move with the squad, not on top of the player. Every few seconds pick a fresh spot 2.5-6 u
+        // from the player, mostly ahead of where it faces, that the player can see (no wandering off behind walls);
+        // walk there, then watch the flanks. Too far behind (over 9 u) and it regroups at once.
         const lead = player(w);
-        const side = a.id % 2 ? 1 : -1;
-        const gx = lead.x - Math.cos(lead.facing) * 1.6 + Math.cos(lead.facing + side * Math.PI / 2) * 1.3;
-        const gy = lead.y - Math.sin(lead.facing) * 1.6 + Math.sin(lead.facing + side * Math.PI / 2) * 1.3;
-        if (Math.hypot(lead.x - a.x, lead.y - a.y) > 2.6) { setGoal(w, a, br, gx, gy); follow(w, a, br, dt); br.lookBase = out.aim; }
-        else { br.timer += dt; out.aim = lead.facing + side * 0.9 + Math.sin(br.timer * 1.3) * 0.5; br.goal = null; }
+        br.anchorLeft -= dt;
+        const far = Math.hypot(lead.x - a.x, lead.y - a.y) > 9;
+        if (br.anchorLeft <= 0 || far || !br.goal) {
+          br.anchorLeft = 2.5 + rand(w) * 2.5;
+          for (let i = 0; i < 8; i++) {
+            const ang = lead.facing + (rand(w) - 0.5) * Math.PI * 1.5, r = 2.5 + rand(w) * 3.5;
+            const gx = Math.floor(lead.x + Math.cos(ang) * r) + 0.5, gy = Math.floor(lead.y + Math.sin(ang) * r) + 0.5;
+            if (!walkable(tileAt(w.level, gx, gy)) || !sightClear(w.level, lead.x, lead.y, gx, gy)) continue;
+            br.goal = null;
+            setGoal(w, a, br, gx, gy);
+            break;
+          }
+        }
+        if (follow(w, a, br, dt)) {
+          br.timer += dt;
+          out.aim = lead.facing + (a.id % 2 ? 1 : -1) * 0.9 + Math.sin(br.timer * 1.3) * 0.7;
+        } else br.lookBase = out.aim;
+        out.quiet = !far;
         break;
       }
       const target = br.patrol[br.patrolIndex];
@@ -446,11 +533,12 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
         && Math.hypot(p.x - a.x, p.y - a.y) <= range
         && shotClear(w.level, a.x, a.y, p.x, p.y, a.weapon.piercesCover, TUNING.combat.coverLean);
       // Out of range: close in along the path instead of wasting shots.
-      if (Math.hypot(p.x - a.x, p.y - a.y) > range) {
+      const dist = Math.hypot(p.x - a.x, p.y - a.y);
+      if (dist > range) {
         setGoal(w, a, br, p.x, p.y);
         follow(w, a, br, dt);
         out.aim = toP;
-      }
+      } else fightStyle(w, a, br, p, dist, toP, dt);
       if (!out.firing && a.ammo < a.weapon.magazine / 2) out.reload = true;
       break;
     }
@@ -494,7 +582,34 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
       break;
     }
   }
-  return out;
+}
+
+/**
+ * How a department fights once it is trading shots (owner 2026-10-14). Moving costs accuracy (spread grows with
+ * speed), so each style pays for what it gains: assault and bruiser (while healthy) close in, the sniper backs off
+ * from anyone inside 6 u, the flanker side-steps across the line at creeping speed, the tank holds its ground.
+ */
+function fightStyle(w: World, a: Actor, br: Brain, p: Actor, dist: number, toP: number, dt: number): void {
+  const style = a.hero.dept;
+  if ((style === 'bruiser' && dist > 3.2 && a.hp > a.maxHp * 0.6) || (style === 'assault' && dist > 6)) {
+    setGoal(w, a, br, p.x, p.y);
+    follow(w, a, br, dt);
+    out.aim = toP;
+  } else if (style === 'sniper' && dist < 6) {
+    out.moveX = -Math.cos(toP);
+    out.moveY = -Math.sin(toP);
+  } else if (style === 'flanker') {
+    // Strafe across the line of fire; pick a new side about every 1.2 s.
+    br.timer += dt;
+    if (br.timer > 1.2) { br.timer = 0; br.strafe = rand(w) < 0.5 ? -1 : 1; }
+    // Only side-step to where it still sees the target (fairness: whoever hits you stays visible), else the other way.
+    const open = (dir: number) => sightClear(w.level, a.x - Math.sin(toP) * dir * 0.8, a.y + Math.cos(toP) * dir * 0.8, p.x, p.y);
+    if (!open(br.strafe)) br.strafe = -br.strafe;
+    if (!open(br.strafe)) return;
+    out.moveX = -Math.sin(toP) * br.strafe;
+    out.moveY = Math.cos(toP) * br.strafe;
+    out.quiet = true; // a creeping side-step, not a sprint: it stays hittable
+  }
 }
 
 function nearestHealth(w: World, a: Actor): { x: number; y: number } | null {

@@ -7,6 +7,7 @@ import { parseLevel, bulletBlockT, shotClear, sightClear } from '../src/sim/leve
 import { coverStops, COVER_RULES } from '../src/sim/cover';
 import { canSee } from '../src/sim/vision';
 import { WEAPONS } from '../src/config/weapons';
+import { HEROES } from '../src/config/heroes';
 import { TUNING } from '../src/config/tuning';
 import { coverDrawBox } from '../src/render/footprint';
 import type { Brain } from '../src/sim/bots';
@@ -28,7 +29,7 @@ const RANGE = [
 
 /** Player (hero) at (px,py) shoots once along `aim`; a frozen target at (tx,ty). Returns damage dealt and impacts. */
 function duel(hero: string, px: number, py: number, tx: number, ty: number, aim: number, map = RANGE, ticks = 60) {
-  const w = createWorld({ map, hero, bots: [{ name: 'T', hero: 'kettle', patrol: [[Math.floor(tx), Math.floor(ty)]], flanker: false }] });
+  const w = createWorld({ map, hero, bots: [{ name: 'T', hero: 'benja', patrol: [[Math.floor(tx), Math.floor(ty)]], flanker: false }] });
   const p = player(w), t = w.actors[1];
   p.weapon = { ...p.weapon, spreadDeg: 0 };
   p.x = px; p.y = py;
@@ -45,7 +46,7 @@ function duel(hero: string, px: number, py: number, tx: number, ty: number, aim:
 
 describe('RC-8 scenario 1: clear shot, no obstacle', () => {
   it('the marksman and the rifle both hit a target in the open', () => {
-    for (const hero of ['wick', 'kettle']) {
+    for (const hero of ['ray', 'benja']) {
       const r = duel(hero, 2.5, 1.5, 12.5, 1.5, 0);
       expect(r.dealt, hero).toBeGreaterThan(0);
       expect(r.impacts.length).toBe(0);
@@ -55,20 +56,20 @@ describe('RC-8 scenario 1: clear shot, no obstacle', () => {
 
 describe('RC-8 scenario 2: target fully behind a solid box', () => {
   it('the marksman (sniper) is stopped by the crate, with a blocked impact on the crate face', () => {
-    const r = duel('wick', 2.5, 3.5, 10.5, 3.5, 0);
+    const r = duel('ray', 2.5, 3.5, 10.5, 3.5, 0);
     expect(r.dealt).toBe(0);
     expect(r.impacts).toHaveLength(1);
     expect(r.impacts[0].blocked).toBe(true);
     expect(r.impacts[0].x).toBeCloseTo(8, 1);
   });
   it('every weapon is stopped the same way (no weapon pierces cover)', () => {
-    for (const hero of ['kettle', 'mop', 'brick', 'wick']) {
+    for (const hero of HEROES.map((h) => h.id)) {
       expect(duel(hero, 2.5, 3.5, 10.5, 3.5, 0).dealt, hero).toBe(0);
       expect(WEAPONS[duel(hero, 2.5, 3.5, 10.5, 3.5, 0).w.actors[0].weapon.id].piercesCover).toBe(false);
     }
   });
   it('a bot sniper is stopped by the same crate (same rule for bots)', () => {
-    const w = createWorld({ map: RANGE, hero: 'kettle', bots: [{ name: 'S', hero: 'wick', patrol: [[2, 3]], flanker: false }] });
+    const w = createWorld({ map: RANGE, hero: 'benja', bots: [{ name: 'S', hero: 'ray', patrol: [[2, 3]], flanker: false }] });
     const p = player(w), b = w.actors[1];
     p.x = 10.5; p.y = 3.5; p.hp = p.maxHp = 1e6; p.armor = 0;
     b.x = 3.5; b.y = 3.5; b.weapon = { ...b.weapon, spreadDeg: 0 };
@@ -82,8 +83,8 @@ describe('RC-8 scenario 2: target fully behind a solid box', () => {
     expect(p.hp).toBe(1e6);
   });
   it('the only way over a box is the lean rule: a shooter pressed against it (within 1.25 u) fires over it', () => {
-    expect(duel('wick', 7.5 - 0.1, 3.5, 10.5, 3.5, 0).dealt).toBeGreaterThan(0); // 0.6 u from the crate
-    expect(duel('wick', 8 - LEAN - 0.2, 3.5, 10.5, 3.5, 0).dealt).toBe(0); // 1.45 u: too far to lean
+    expect(duel('ray', 7.5 - 0.1, 3.5, 10.5, 3.5, 0).dealt).toBeGreaterThan(0); // 0.6 u from the crate
+    expect(duel('ray', 8 - LEAN - 0.2, 3.5, 10.5, 3.5, 0).dealt).toBe(0); // 1.45 u: too far to lean
     expect(COVER_RULES.crate.lean).toBe(LEAN);
     expect(coverStops('crate', true, LEAN + 0.01)).toBe(true);
   });
@@ -92,8 +93,8 @@ describe('RC-8 scenario 2: target fully behind a solid box', () => {
 describe('RC-8 scenario 3: target partly exposed around a corner', () => {
   // Target at y 1.85: its body spans y 1.5..2.2, the crate starts at y 2, so the top 0.5 u is exposed.
   it('a shot at the exposed part hits; a shot at the covered part hits the crate', () => {
-    expect(duel('wick', 2.5, 1.75, 10.5, 1.85, 0).dealt).toBeGreaterThan(0);
-    const covered = duel('wick', 2.5, 2.15, 10.5, 1.85, 0);
+    expect(duel('ray', 2.5, 1.75, 10.5, 1.85, 0).dealt).toBeGreaterThan(0);
+    const covered = duel('ray', 2.5, 2.15, 10.5, 1.85, 0);
     expect(covered.dealt).toBe(0);
     expect(covered.impacts[0]?.blocked).toBe(true);
   });
@@ -107,9 +108,9 @@ describe('RC-8 scenario 3: target partly exposed around a corner', () => {
       '##############',
     ];
     // Wall from y 3. Target at (10.5, 2.75): body y 2.4..3.1 sticks 0.6 u above the wall.
-    expect(duel('kettle', 2.5, 2.6, 10.5, 2.75, 0, MAP).dealt).toBeGreaterThan(0);
+    expect(duel('benja', 2.5, 2.6, 10.5, 2.75, 0, MAP).dealt).toBeGreaterThan(0);
     // From lower down the line to the target crosses the wall at x 8 (y 3.3): stopped.
-    expect(duel('kettle', 2.5, 4.5, 10.5, 2.75, Math.atan2(2.75 - 4.5, 8), MAP).dealt).toBe(0);
+    expect(duel('benja', 2.5, 4.5, 10.5, 2.75, Math.atan2(2.75 - 4.5, 8), MAP).dealt).toBe(0);
   });
 });
 
@@ -122,16 +123,16 @@ describe('RC-8 scenario 4: several obstacles between shooter and target', () => 
     '######################',
   ];
   it('the first obstacle stops the bullet (crate), and removing it leaves the wall and barrier in the way', () => {
-    const r = duel('wick', 2.5, 2.5, 19.5, 2.5, 0, MAP);
+    const r = duel('ray', 2.5, 2.5, 19.5, 2.5, 0, MAP);
     expect(r.dealt).toBe(0);
     expect(r.impacts[0].x).toBeCloseTo(6, 1);
     const noCrate = MAP.map((row) => row.replace('c', '.'));
-    const r2 = duel('wick', 2.5, 2.5, 19.5, 2.5, 0, noCrate);
+    const r2 = duel('ray', 2.5, 2.5, 19.5, 2.5, 0, noCrate);
     expect(r2.dealt).toBe(0);
     expect(r2.impacts[0].x).toBeCloseTo(11, 1);
     expect(r2.impacts[0].blocked).toBe(false); // a wall, not cover
     const onlyBarrier = noCrate.map((row) => row.replace('#....b', '.....b'));
-    const r3 = duel('wick', 2.5, 2.5, 19.5, 2.5, 0, onlyBarrier);
+    const r3 = duel('ray', 2.5, 2.5, 19.5, 2.5, 0, onlyBarrier);
     expect(r3.dealt).toBe(0);
     expect(r3.impacts[0].x).toBeCloseTo(16, 1);
     expect(r3.impacts[0].blocked).toBe(true);
@@ -154,7 +155,7 @@ describe('RC-8 scenario 5: bot visibility and shooting', () => {
     '##############',
   ];
   function setup(px: number, py: number) {
-    const w = createWorld({ map: MAP, hero: 'kettle', seed: 3, bots: [{ name: 'S', hero: 'wick', patrol: [[2, 3]], flanker: false }] });
+    const w = createWorld({ map: MAP, hero: 'benja', seed: 3, bots: [{ name: 'S', hero: 'ray', patrol: [[2, 3]], flanker: false }] });
     const p = player(w), b = w.actors[1];
     p.x = px; p.y = py; p.hp = p.maxHp = 1e6; p.armor = 0;
     b.facing = 0;
@@ -170,6 +171,7 @@ describe('RC-8 scenario 5: bot visibility and shooting', () => {
   }
   it('a bot sees a player behind waist-high cover but does not fire into the crate', () => {
     const { w, p, b, br } = setup(9.5, 3.5);
+    b.grenades = 0; // bullets only here; flushing cover with a grenade is tested in tests/gr-ai.test.ts
     run(w, p, b, 240);
     expect(br.sawPlayer).toBe(true);
     expect(br.state).toBe('engage');
@@ -204,7 +206,7 @@ describe('RC-8 scenario 6: movement collision and projectile collision use the s
   });
   it('for a wall, a crate and a barrier: a body stops at its face and a bullet stops at the same face', () => {
     for (const x of [5, 11, 17]) {
-      const w = createWorld({ map: MAP, hero: 'kettle', bots: [] });
+      const w = createWorld({ map: MAP, hero: 'benja', bots: [] });
       const p = player(w);
       p.x = x - 2.5; p.y = 2.5;
       for (let i = 0; i < 90; i++) stepWorld(w, input({ moveX: 1, aim: 0 }));
@@ -213,8 +215,8 @@ describe('RC-8 scenario 6: movement collision and projectile collision use the s
       expect((x - 3) + t * 3.5, `bullet vs box at ${x}`).toBeCloseTo(x, 5);
     }
   });
-  it("Brick's slab blocks movement and bullets while it stands, and neither after it expires", () => {
-    const w = createWorld({ map: ['##########', '#........#', '#........#', '#........#', '##########'], hero: 'brick', bots: [] });
+  it("Yot's slab blocks movement and bullets while it stands, and neither after it expires", () => {
+    const w = createWorld({ map: ['##########', '#........#', '#........#', '#........#', '##########'], hero: 'yot', bots: [] });
     const p = player(w);
     p.x = 2.5; p.y = 2.5;
     stepWorld(w, input({ aim: 0, ability: true }));
@@ -275,7 +277,7 @@ describe('RC-8 scenario 7: touch and desktop aiming reach the same shot', () => 
     // Same sim, same input -> same bullet and the same cover outcome.
     const MAP = ['##############', '#............#', '#............#', '#.......c....#', '#............#', '#............#', '##############'];
     const shoot = (inp: ActorInput) => {
-      const w = createWorld({ map: MAP, hero: 'wick', seed: 9, bots: [] });
+      const w = createWorld({ map: MAP, hero: 'ray', seed: 9, bots: [] });
       const p = player(w);
       p.x = 3.5; p.y = 1.5;
       stepWorld(w, { ...inp, moveX: 0, moveY: 0 });

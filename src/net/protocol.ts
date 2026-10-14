@@ -19,7 +19,8 @@ export type ClientMsg =
   /** Squads (master integration pass): create one, join one by its code, or leave it. The leader queues the squad. */
   | { t: 'party'; op: 'create' | 'leave' }
   | { t: 'party'; op: 'join'; code: string }
-  | { t: 'input'; seq: number; mx: number; my: number; aim: number; fire: boolean; quiet: boolean; reload: boolean; ability: boolean }
+  /** nade: throw a grenade (edge); nd: how far, in u (the server clamps it; capacity is the server's, from the ticket). */
+  | { t: 'input'; seq: number; mx: number; my: number; aim: number; fire: boolean; quiet: boolean; reload: boolean; ability: boolean; nade?: boolean; nd?: number }
   | { t: 'ping'; at: number };
 
 /** One actor as a client may see it. Enemies the client's team cannot see are left out of the snapshot. */
@@ -34,6 +35,8 @@ export interface NetActor {
   shieldLeft: number; frenzyLeft: number; slowLeft: number; burstLeft: number;
   /** Team modes: down but not out, and the rescue progress in seconds. */
   downed?: boolean; reviveProgress?: number;
+  /** Grenades left and capacity (the server's count). */
+  nades?: number; maxNades?: number;
 }
 
 /** What everyone in a match knows about each player: power is never hidden from the opponent. */
@@ -45,9 +48,11 @@ export interface RosterEntry {
 
 /** The server's view of this connection after checking its ticket. */
 export interface NetProfile { verified: boolean; tier: Tier; holder: boolean; demo: boolean; account: boolean; metadataId: number | null; note: string | null }
+/** A live grenade as a client may see it (own team's always; others when the team can see it or it is close). */
+export interface NetGrenade { id: number; x: number; y: number; vx: number; vy: number; fuse: number; owner: number }
 export interface NetBullet { x: number; y: number; dx: number; dy: number; ox: number; oy: number; owner: number; weapon: string }
 export interface NetSound { type: string; x: number; y: number; radius: number; source: number; team: Team; weapon?: string; blocked?: boolean; sig?: number }
-export interface NetHit { target: number; by: number; x: number; y: number; fromX: number; fromY: number; killed: boolean; downed?: boolean }
+export interface NetHit { target: number; by: number; x: number; y: number; fromX: number; fromY: number; killed: boolean; downed?: boolean; grenade?: boolean }
 
 /** One squad member as every member sees it. */
 export interface PartyMember { name: string; hero: string; tier: Tier; holder: boolean; demo: boolean; you: boolean; leader: boolean; ready: boolean }
@@ -61,7 +66,7 @@ export type ServerMsg =
   | { t: 'queued'; mode: Mode; have: number; need: number; code: string | null }
   | { t: 'queueTimeout' }
   | { t: 'match'; room: string; mode: Mode; you: number; team: Team; seed: number; friendlyFire: boolean; roster: RosterEntry[]; startsIn: number; demo?: boolean; zone: { x: number; y: number; r: number }[] }
-  | { t: 'snap'; tick: number; actors: NetActor[]; bullets: NetBullet[]; pickups: boolean[]; sounds: NetSound[]; hits: NetHit[]; barriers: { x0: number; y0: number; x1: number; y1: number; left: number }[] }
+  | { t: 'snap'; tick: number; actors: NetActor[]; bullets: NetBullet[]; grenades?: NetGrenade[]; pickups: boolean[]; sounds: NetSound[]; hits: NetHit[]; barriers: { x0: number; y0: number; x1: number; y1: number; left: number }[] }
   | { t: 'over'; winner: Team | null; reason: 'eliminated' | 'time'; results: PlayerResult[]; matchId?: string; settle?: boolean }
   | { t: 'pong'; at: number; tick: number }
   | { t: 'party'; code: string | null; members: PartyMember[] }
@@ -96,7 +101,8 @@ export function parseClientMsg(raw: string): ClientMsg | null {
     case 'input': {
       if (!isNum(m.seq) || !isNum(m.mx) || !isNum(m.my) || !isNum(m.aim)) return null;
       if (!isBool(m.fire) || !isBool(m.quiet) || !isBool(m.reload) || !isBool(m.ability)) return null;
-      return { t: 'input', seq: m.seq, mx: m.mx, my: m.my, aim: m.aim, fire: m.fire, quiet: m.quiet, reload: m.reload, ability: m.ability };
+      if ((m.nade !== undefined && !isBool(m.nade)) || (m.nd !== undefined && !isNum(m.nd))) return null;
+      return { t: 'input', seq: m.seq, mx: m.mx, my: m.my, aim: m.aim, fire: m.fire, quiet: m.quiet, reload: m.reload, ability: m.ability, ...(m.nade === true ? { nade: true, nd: m.nd as number | undefined } : {}) };
     }
     case 'ping':
       return isNum(m.at) ? { t: 'ping', at: m.at } : null;
@@ -111,6 +117,8 @@ export function toActorInput(m: Extract<ClientMsg, { t: 'input' }>): ActorInput 
   const len = Math.hypot(mx, my);
   if (len > 1) { mx /= len; my /= len; }
   const aim = Math.atan2(Math.sin(m.aim), Math.cos(m.aim));
-  return { moveX: mx, moveY: my, aim, firing: m.fire, quiet: m.quiet, reload: m.reload, ability: m.ability };
+  // Throw distance: clamped again in the sim; a missing or absurd value throws at the touch default.
+  const nd = m.nd !== undefined && m.nd >= 0 && m.nd <= 30 ? m.nd : undefined;
+  return { moveX: mx, moveY: my, aim, firing: m.fire, quiet: m.quiet, reload: m.reload, ability: m.ability, grenade: !!m.nade, throwDist: nd };
 }
 

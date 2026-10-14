@@ -131,6 +131,10 @@ try {
   await sleep(3000); await A.shot('04-3v3-match');
   const over = await Promise.all(all.map((x) => x.until(`!!__chog.net()?.over`, 300000)));
   check('3v3: the match finished on the server for everyone', over.every(Boolean));
+  // The scripted drivers each throw one grenade at a target they see 4-9 u away: the server spends it and the
+  // snapshot carries the new count back to that browser.
+  const nadesLeft = await Promise.all(all.map((x) => x.ev(`[__chog.world.actors[0].grenades, __chog.world.actors[0].maxGrenades]`)));
+  check('3v3 online: grenades go through the real server (a player server-side count dropped below its capacity)', nadesLeft.some(([n, m]) => n < m), JSON.stringify(nadesLeft));
   await A.until(`!!document.getElementById('rewards') || /Not saved/.test(document.getElementById('overlay').innerText)`, 30000); await sleep(1500);
   const resText = await A.text(); await A.shot('05-results');
   check('results: result, XP, shards, rating change, level bar, Continue', /Victory|Defeat|Draw/i.test(resText) && /XP/.test(resText) && /Shards/i.test(resText) && /Rating/i.test(resText) && /Continue/i.test(resText), resText.replace(/\n/g, ' '));
@@ -203,6 +207,42 @@ try {
   check('default game: you + 2 AI teammates (not online 3v3), and they move', start.length === 3 && start.filter((x) => x.ai).length === 2 && !(await D.ev(`__chog.online()`)) && moved, JSON.stringify(later));
   const fought = await D.until(`__chog.world.actors.filter((a) => a.team === 'player' && a.ai).some((a) => a.shots > 0)`, 90000);
   check('default game: AI teammates fight (fire at hostiles) in the real browser', fought, JSON.stringify(await D.ev(`__chog.world.actors.filter((a) => a.team === 'player').map((a) => [a.name, a.shots, Math.round(a.damageDealt), a.kills])`)));
+
+  // ---- 7. Free roster and grenades, from a truly fresh browser (nothing stored: the first-run card shows) ----
+  const RS = await B('roster');
+  await RS.go('/?debug');
+  const firstRun = await RS.until(`!document.getElementById('boot') && !!document.querySelector('[data-act=howto-close]')`, 30000);
+  await RS.shot('10-first-run');
+  const toHub = firstRun && (await RS.click('[data-act=howto-close]')) && (await RS.hub());
+  check('fresh browser: loading screen, then How to play, then Got it opens the hub', toHub);
+  await RS.click('.op-show');
+  const roster = await RS.ev(`[...document.querySelectorAll('.heroes .hero')].map((e) => e.querySelector('b').innerText.trim() + ' ' + e.querySelector('.role').innerText.trim())`);
+  await RS.shot('11-roster');
+  check('roster: the seven free characters with their departments, no paragraphs', JSON.stringify(roster) === JSON.stringify(['BENJA ASSAULT', 'TOAD TANK', 'RAY SNIPER', 'TABSU FLANKER', 'TONASHIRO BRUISER', 'YOT ASSAULT', 'BILL FLANKER'])
+    && !(await RS.ev(`[...document.querySelectorAll('.heroes .hero p')].length`)), JSON.stringify(roster));
+  await RS.click('[data-hero="toad"]'); await RS.click('[data-go="quit"]'); await RS.hub();
+  check('picking Toad shows Toad (Tank) in the hub', /toad/i.test(await RS.text('.op-name')) && /tank/i.test(await RS.text('.op-name')), await RS.text('.op-name'));
+  await RS.click('[data-mode="solo"]'); await RS.click('#playbtn');
+  await RS.until(`__chog.phase === 'play'`, 15000);
+  const squad = await RS.ev(`__chog.world.actors.filter((a) => a.team === 'player').map((a) => [a.name, a.hero.id, a.hero.dept, a.ai])`);
+  check('default game: you play Toad, with two AI teammates who are roster characters from other departments', squad.length === 3 && squad[0][1] === 'toad'
+    && squad.slice(1).every((m) => m[3] && m[0] !== 'Rook' && m[0] !== 'Moth') && new Set(squad.map((m) => m[2])).size === 3, JSON.stringify(squad));
+  await RS.cmd('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 900, y: 360 });
+  const n0 = await RS.ev(`__chog.world.actors[0].grenades`), hud0 = await RS.text('#naden');
+  await RS.cmd('Input.dispatchKeyEvent', { type: 'keyDown', code: 'KeyG', key: 'g' }); await RS.cmd('Input.dispatchKeyEvent', { type: 'keyUp', code: 'KeyG', key: 'g' });
+  const flying = await RS.until(`__chog.world.grenades.length > 0 && __chog.world.actors[0].grenades === ${n0 - 1}`, 4000);
+  await RS.shot('12-grenade-thrown');
+  const hud1 = await RS.text('#naden');
+  const boom = await RS.until(`__chog.world.grenades.length === 0`, 4000);
+  check('grenade (PC): G throws a real grenade, the count drops 3 -> 2 on the HUD, and it explodes', n0 === 3 && flying && hud0.trim() === '3' && hud1.trim() === '2' && boom, JSON.stringify({ n0, hud0, hud1, flying: !!flying, boom: !!boom }));
+  const TC = await B('touch', { w: 844, h: 390, mobile: true, touch: true });
+  await fresh(TC); await TC.click('[data-mode="solo"]'); await TC.click('#playbtn');
+  await TC.until(`__chog.phase === 'play'`, 15000); await sleep(800);
+  const btn = await TC.ev(`(() => { const r = document.getElementById('nade').getBoundingClientRect(); return { touch: document.body.classList.contains('touch'), w: r.width, inView: r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight, n: document.getElementById('naden').innerText }; })()`);
+  await TC.click('#nade');
+  const tapped = await TC.until(`__chog.world.actors[0].grenades === 2 && document.getElementById('naden').innerText.trim() === '2'`, 4000);
+  await TC.shot('13-touch-grenade');
+  check('grenade (touch): the button is on screen, finger-sized, shows 3, and a tap throws one (HUD shows 2)', btn.touch && btn.inView && btn.w >= 56 && btn.n.trim() === '3' && tapped, JSON.stringify(btn));
 
   for (const x of open) if (x.errors.length) check(`no page errors (${x.label})`, false, x.errors.slice(0, 3).join(' / '));
 } catch (e) {

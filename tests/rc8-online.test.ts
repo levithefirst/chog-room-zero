@@ -19,7 +19,7 @@ class FakeConn {
 function setup(opts: Record<string, unknown> = {}) {
   let t = 0;
   const lobby = new Lobby({ now: () => t, seed: () => 7, ...opts });
-  const join = (name: string, hero = 'kettle', ticket?: string) => {
+  const join = (name: string, hero = 'benja', ticket?: string) => {
     const c = new FakeConn();
     const id = lobby.connect(c);
     lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name, hero, ticket }));
@@ -78,7 +78,7 @@ describe('RC-8 matchmaking and teams', () => {
       const { join } = setup({ checkTicket: async () => ({ tid: `t${tid++}`, acc: `acc${tid}`, tier: 'free', up: { vitality: 0, plating: 0, firepower: 0, focus: 0 }, tok: tid, mid: tid, tokTier: 'common', own: '0xA', holder: true, demo: false, name: '', exp: 2e9 }) });
       const lone = join('Other');
       lone.say({ t: 'queue', mode: '1v1' });
-      const ps = Array.from({ length: n }, (_, i) => join(`P${i}`, 'kettle', mode === '5v5' ? 'aaaa.bbbb' : undefined));
+      const ps = Array.from({ length: n }, (_, i) => join(`P${i}`, 'benja', mode === '5v5' ? 'aaaa.bbbb' : undefined));
       await new Promise((r) => setTimeout(r, 0));
       ps.forEach((p, i) => { p.say({ t: 'queue', mode }); if (i < n - 1) expect(p.c.last('match')).toBeUndefined(); });
       const m = ps.map((p) => p.c.last('match')!);
@@ -98,13 +98,13 @@ describe('RC-8 matchmaking and teams', () => {
     expect(a.c.last('match')!.room).toBe(c.c.last('match')!.room);
     expect(b.c.last('match')).toBeUndefined();
   });
-  it('guest identity: a bad callsign becomes Guest-XXXX, an unknown operator becomes Kettle', () => {
+  it('guest identity: a bad callsign becomes Guest-XXXX, an unknown operator becomes Benja, a pre-roster id maps to its replacement (wick to Ray)', () => {
     const { join } = setup();
     const a = join('<script>', 'admin');
     expect(a.c.last('welcome')!.name).toMatch(/^Guest-[0-9A-F]{4}$/);
     const b = join('Real Name', 'wick');
     a.say({ t: 'queue', mode: '1v1' }); b.say({ t: 'queue', mode: '1v1' });
-    expect(a.c.last('match')!.roster.map((r) => r.hero)).toEqual(['kettle', 'wick']);
+    expect(a.c.last('match')!.roster.map((r) => r.hero)).toEqual(['benja', 'ray']);
   });
   it('queue timeout: a lonely player is told and dropped from the queue', () => {
     const { join, run } = setup({ queueTimeoutSec: 5, idleTimeoutSec: 999 });
@@ -127,7 +127,7 @@ describe('RC-8 matchmaking and teams', () => {
 describe('RC-8 the server decides the match', () => {
   function duel(extra: Record<string, unknown> = {}) {
     const s = setup({ idleTimeoutSec: 999, ...extra });
-    const a = s.join('A', 'wick'), b = s.join('B', 'kettle');
+    const a = s.join('A', 'ray'), b = s.join('B', 'benja');
     a.say({ t: 'queue', mode: '1v1' }); b.say({ t: 'queue', mode: '1v1' });
     const room = [...s.lobby.rooms.values()][0];
     return { ...s, a, b, room, w: room.world };
@@ -220,7 +220,7 @@ describe('RC-8 connections: rate limit, timeouts, reconnect, leaving', () => {
     expect(w.actors[0].alive).toBe(true);
     const c = new FakeConn();
     const id = lobby.connect(c);
-    lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name: 'A', hero: 'kettle', token }));
+    lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name: 'A', hero: 'benja', token }));
     expect(c.last('welcome')!.resumed).toBe(true);
     expect(c.last('match')!.you).toBe(0);
     run(0.2);

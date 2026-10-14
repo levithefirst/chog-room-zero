@@ -64,7 +64,7 @@ describe('RC-5 portrait framing', () => {
     expect(ahead).toBeGreaterThanOrEqual(10.4);
     // Base sight of Kettle 9, Mop 8, Brick 7.5 fits on screen ahead of the aim. Wick (12 u) and long sidegrades
     // (Lamp x1.22, e.g. Kettle 10.98 u) can see past the edge: those seen hostiles get edge chevrons (below).
-    for (const h of HEROES) if (h.id !== 'wick') expect(h.vision.range).toBeLessThanOrEqual(ahead);
+    for (const h of HEROES) if (h.id !== 'ray') expect(h.vision.range).toBeLessThanOrEqual(ahead);
     const longest = Math.max(...HEROES.flatMap((h) => SIDEGRADES.map((sg) => h.vision.range * sg.rangeMul)));
     expect(longest).toBeGreaterThan(ahead); // so the chevrons are needed, not decoration
     expect(edgeAnchor(195, 422, 600, 422, 16, 16, 374, 828)).toMatchObject({ x: 374, y: 422 });

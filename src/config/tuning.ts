@@ -123,6 +123,40 @@ export const TUNING = {
     markerLife: 1.4,
   },
 
+  // Grenades (owner 2026-10-14, docs/design/roster-grenades.md). Every player carries them; capacity is by tier
+  // (src/config/power.ts GRENADES). PROPOSAL numbers for the Core Feel Gate.
+  grenade: {
+    // Throw distance in u: PC throws to the cursor within min..max, touch throws along the aim at touchThrow.
+    minThrow: 2,
+    maxThrow: 9,
+    touchThrow: 6.5,
+    // Rolling friction (u/s^2). The launch speed is set so it comes to rest at the chosen distance (6.5 u: ~1 s).
+    friction: 14,
+    // Share of speed kept when it bounces off a wall. Crates and slabs do not stop it: it is lobbed over them.
+    bounce: 0.45,
+    // Throw to boom: long enough to see the ring land and step out of it.
+    fuseSeconds: 1.4,
+    // Blast: 70 at the centre falling to 20 at the 3.2 u edge; 30% ignores armour. Kills a free Bill from full only
+    // with the centre plus a follow-up shot.
+    radius: 3.2,
+    damage: 70,
+    edgeDamage: 20,
+    armorPen: 0.3,
+    // A crate or slab between the blast and you halves it; a wall blocks it.
+    coverMul: 0.5,
+    // Seconds between two throws: 13 grenades cannot be dumped in one go.
+    throwCooldown: 1,
+    // Hostile bots carry this many (solo difficulty); everyone else carries their tier's capacity.
+    botCount: 1,
+    // Sound radii (u): a quiet throw, a clink you hear nearby, a boom that carries like a shot and more.
+    throwSound: 4,
+    bounceSound: 7,
+    boomSound: 22,
+    // Bots throw at a believed spot this far away, at most once per botCooldown seconds.
+    botMin: 4,
+    botMax: 9,
+    botCooldown: 5,
+  },
   bots: {
     // Seconds of sight before committing. 0.45 s: you can slip past an edge.
     reactionTime: 0.45,

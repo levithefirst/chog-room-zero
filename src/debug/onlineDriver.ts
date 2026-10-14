@@ -29,6 +29,8 @@ export function createOnlineDriver(): (w: World) => ActorInput {
     const at = target ?? n ?? z;
     inp.aim = Math.atan2(at.y - me.y, at.x - me.x);
     inp.firing = !!target && best < 10;
+    // One grenade a match at a target it sees 4-9 u away (the hosted checks see the server spend it).
+    if (target && best >= 4 && best <= 9 && me.grenades >= me.maxGrenades && me.grenades > 0) { inp.grenade = true; inp.throwDist = best; inp.firing = false; }
     return inp;
   };
 }

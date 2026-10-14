@@ -15,7 +15,7 @@ const RANGE = [
   '#....................#',
   '######################',
 ];
-const bot = (hero = 'kettle') => [{ name: 'T', hero, patrol: [[15, 3]] as [number, number][], flanker: false }];
+const bot = (hero = 'benja') => [{ name: 'T', hero, patrol: [[15, 3]] as [number, number][], flanker: false }];
 
 function shootAt(hero: string, px: number, tx: number, ticks = 1) {
   const w = createWorld({ map: RANGE, hero, bots: bot() });
@@ -47,16 +47,16 @@ describe('armour and damage math', () => {
 
 describe('weapons behave differently', () => {
   it('shotgun fires its pellet count in one trigger pull; rifle fires one', () => {
-    const w = createWorld({ map: RANGE, hero: 'brick', bots: [] });
+    const w = createWorld({ map: RANGE, hero: 'tonashiro', bots: [] });
     stepWorld(w, input({ aim: 0, firing: true }));
     expect(w.bullets.length).toBe(WEAPONS.shotgun.pellets);
-    const w2 = createWorld({ map: RANGE, hero: 'kettle', bots: [] });
+    const w2 = createWorld({ map: RANGE, hero: 'benja', bots: [] });
     stepWorld(w2, input({ aim: 0, firing: true }));
     expect(w2.bullets.length).toBe(1);
   });
   it('shotgun is lethal close and weak far (falloff)', () => {
-    const near = shootAt('brick', 10.5, 12.5, 30);
-    const far = shootAt('brick', 10.5, 18.5, 40);
+    const near = shootAt('tonashiro', 10.5, 12.5, 30);
+    const far = shootAt('tonashiro', 10.5, 18.5, 40);
     const dNear = 1e6 - near.t.hp, dFar = 1e6 - far.t.hp;
     expect(dNear).toBeGreaterThan(60);
     expect(dFar).toBeLessThan(dNear * 0.5);
@@ -64,9 +64,9 @@ describe('weapons behave differently', () => {
   // RC-8 (owner 2026-10-13, "solid boxes block sniper shots"): this asserted the old penetration rule (the marksman
   // went through). The rule was reversed on purpose; the check is as strict, with the opposite outcome.
   it('a crate stops the marksman and the rifle alike (no weapon pierces cover, RC-8)', () => {
-    const m = shootAt('wick', 3.5, 15.5, 40);
+    const m = shootAt('ray', 3.5, 15.5, 40);
     expect(m.t.hp).toBe(1e6);
-    const r = shootAt('kettle', 3.5, 15.5, 40);
+    const r = shootAt('benja', 3.5, 15.5, 40);
     expect(r.t.hp).toBe(1e6);
   });
   it('fire rate: the SMG fires several shots in the time the marksman fires one', () => {
@@ -75,10 +75,10 @@ describe('weapons behave differently', () => {
       for (let i = 0; i < 60; i++) stepWorld(w, input({ aim: 0, firing: true }));
       return player(w).shots;
     };
-    expect(count('mop')).toBeGreaterThan(count('wick') * 5);
+    expect(count('tabsu')).toBeGreaterThan(count('ray') * 5);
   });
   it('magazine empties, reload draws from reserve, no reserve means no reload', () => {
-    const w = createWorld({ map: RANGE, hero: 'brick', bots: [] });
+    const w = createWorld({ map: RANGE, hero: 'tonashiro', bots: [] });
     const p = player(w);
     const mag = p.weapon.magazine;
     for (let i = 0; i < 600 && p.ammo > 0; i++) stepWorld(w, input({ aim: Math.PI, firing: true }));
@@ -105,14 +105,14 @@ describe('half-cover rule', () => {
     expect(shotClear(l, 14.5, 3.5, 7.4, 3.5, false, TUNING.combat.coverLean)).toBe(false);
   });
   it('in the sim: rifle bullets from a leaning shooter hit past the crate', () => {
-    const r = shootAt('kettle', 7.45, 12.5, 30);
+    const r = shootAt('benja', 7.45, 12.5, 30);
     expect(r.t.hp).toBeLessThan(1e6);
   });
 });
 
 describe('death and victory', () => {
   it('killing the last bot is a win; armour absorbed part of the damage', () => {
-    const w = createWorld({ map: RANGE, hero: 'kettle', bots: bot('brick') });
+    const w = createWorld({ map: RANGE, hero: 'benja', bots: bot('tonashiro') });
     const p = player(w), t = w.actors[1];
     p.x = 10.5; p.y = 5.5;
     for (let i = 0; i < 900 && t.alive; i++) {

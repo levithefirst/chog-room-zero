@@ -22,7 +22,7 @@ function setup(tickets: Record<string, GameTicket | null>) {
   const join = async (name: string, ticket?: string) => {
     const c = new FakeConn();
     const id = lobby.connect(c);
-    lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name, hero: 'kettle', ticket }));
+    lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name, hero: 'benja', ticket }));
     await flush();
     return { c, id, say: (m: object) => lobby.message(id, JSON.stringify(m)) };
   };
@@ -54,7 +54,7 @@ describe('tickets on hello', () => {
     const lobby = new Lobby({ now: () => 0, seed: () => 7, checkTicket: () => new Promise(() => undefined) });
     const c = new FakeConn();
     const id = lobby.connect(c);
-    lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name: 'Slow', hero: 'kettle', ticket: 'slow.t' }));
+    lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name: 'Slow', hero: 'benja', ticket: 'slow.t' }));
     expect(c.last('welcome')).toBeUndefined();
     await vi.advanceTimersByTimeAsync(5100);
     expect(c.last('welcome')!.profile).toMatchObject({ verified: false, tier: 'free' });
@@ -96,10 +96,10 @@ describe('power from the ticket, visible to both sides, and the match record', (
     const a = await join('A', 'a.t'), b = await join('B', 'b.t');
     a.say({ t: 'queue', mode: '1v1' }); b.say({ t: 'queue', mode: '1v1' });
     const m = a.c.last('match')!;
-    expect(m.roster.map((r) => [r.tier, r.holder, r.ability.name])).toEqual([['legendary', true, 'Red Rush'], ['free', false, 'Patch']]);
+    expect(m.roster.map((r) => [r.tier, r.holder, r.ability.name])).toEqual([['legendary', true, 'Red Rush'], ['free', false, 'Ping']]);
     expect(b.c.last('match')!.roster[0].tier).toBe('legendary');
     const room = [...lobby.rooms.values()][0];
-    const kettle = HEROES.find((h) => h.id === 'kettle')!;
+    const kettle = HEROES.find((h) => h.id === 'benja')!;
     expect(room.world.actors[0].maxHp).toBe(Math.round(kettle.maxHp * 1.75));
     expect(room.world.actors[1].maxHp).toBe(Math.round(kettle.maxHp * 1.09));
     b.say({ t: 'leave' });

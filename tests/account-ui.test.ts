@@ -16,7 +16,7 @@ const prof = (o: Partial<AccountProfile> = {}): AccountProfile => ({
 });
 const ctx = (acct: AcctView, o: Partial<HubCtx> = {}): HubCtx => ({
   touch: false, profile: { id: 'GUEST123', nickname: acct.profile?.callsign ?? null, favourite: null, pinned: [], linked: [] }, settings: DEFAULT_SETTINGS,
-  records: acct.profile?.practice ?? { overall: prof().practice.overall, heroes: {} }, medals: acct.profile?.medals ?? {}, heroId: 'kettle', demoChip: 'Guest', marking: null,
+  records: acct.profile?.practice ?? { overall: prof().practice.overall, heroes: {} }, medals: acct.profile?.medals ?? {}, heroId: 'benja', demoChip: 'Guest', marking: null,
   muted: false, canFs: false, canVibrate: false, build: 'test', auth: { config: null, session: [], wallets: [], busy: false, message: '' },
   acct, netProfile: null, demoToken: null, mode: 'solo',
   net: { url: 'ws://x/ws', state: 'offline', message: '', queue: null, rtt: 0, party: null, follower: false }, ...o,
@@ -93,7 +93,7 @@ describe('hub', () => {
     expect(hubHtml(ctx(a))).toMatch(/NFT power off/);
   });
   it('a squad shows its code and members; a follower cannot start the match', () => {
-    const party = { code: 'AB2CD', members: [{ name: 'Lead', hero: 'kettle', tier: 'free' as const, holder: false, demo: false, you: false, leader: true, ready: true }, { name: 'Me', hero: 'mop', tier: 'epic' as const, holder: true, demo: false, you: true, leader: false, ready: true }] };
+    const party = { code: 'AB2CD', members: [{ name: 'Lead', hero: 'benja', tier: 'free' as const, holder: false, demo: false, you: false, leader: true, ready: true }, { name: 'Me', hero: 'tabsu', tier: 'epic' as const, holder: true, demo: false, you: true, leader: false, ready: true }] };
     const h = hubHtml(ctx(signed(), { mode: '3v3', net: { url: 'ws://x/ws', state: 'idle', message: '', queue: null, rtt: 0, party, follower: true } }));
     expect(h).toMatch(/AB2CD/);
     expect(h).toMatch(/Leader starts the match/);
@@ -122,13 +122,13 @@ describe('sub-screens', () => {
   it('career: online and practice careers from the account', () => {
     const c = careerHtml(ctx(signed()));
     expect(c).toMatch(/<h3>Online<\/h3>/);
-    expect(c).toMatch(/data-fav="kettle"/);
+    expect(c).toMatch(/data-fav="benja"/);
     expect(c).toMatch(/Kills<\/td><td class="num">4/);
   });
   it('online results: XP, shards, rating, level bar, upgrades ready, play again', () => {
     const html = onlineResultsHtml({
       mode: '1v1', won: true, reason: 'eliminated', team: 'alpha', demo: false, signedIn: true, settle: true, myClass: 'Free class', canRequeue: true, follower: false,
-      rows: [{ name: 'Me', hero: 'kettle', team: 'alpha', kills: 1, damageDealt: 100, damageTaken: 20, alive: true, cause: null, you: true, tier: 'free', demo: false, metadataId: null }],
+      rows: [{ name: 'Me', hero: 'benja', team: 'alpha', kills: 1, damageDealt: 100, damageTaken: 20, alive: true, cause: null, you: true, tier: 'free', demo: false, metadataId: null }],
       prog: { before: { xp: 90, shards: 0, rating: 1000 }, reward: { xp: 110, shards: 20, ratingBefore: 1000, ratingAfter: 1012 }, pending: false, note: '', upgradesReady: 2 },
     });
     expect(html).toMatch(/Victory/);

@@ -7,11 +7,11 @@ import { randomBytes } from 'node:crypto';
 import { createWorld, down, IDLE_INPUT, matchSeconds, revealed, standing, stepWorld, type Actor, type ActorInput, type Team, type World } from '../src/sim/world';
 import { canSee, muzzleFlashSeen } from '../src/sim/vision';
 import { hears } from '../src/sim/world';
-import { HEROES } from '../src/config/heroes';
+import { heroIdOf } from '../src/config/heroes';
 import { VERSUS_SPAWNS } from '../src/config/map';
 import { TUNING } from '../src/config/tuning';
 import { validateNickname } from '../src/ui/profile';
-import { MODE_SIZE, PROTOCOL, parseClientMsg, toActorInput, type ClientMsg, type Mode, type NetActor, type NetBullet, type NetHit, type NetProfile, type NetSound, type PlayerResult, type ServerMsg } from '../src/net/protocol';
+import { MODE_SIZE, PROTOCOL, parseClientMsg, toActorInput, type ClientMsg, type Mode, type NetActor, type NetBullet, type NetGrenade, type NetHit, type NetProfile, type NetSound, type PlayerResult, type ServerMsg } from '../src/net/protocol';
 import { BASE_POWER, powerFor, signatureFor, type Power, type Tier } from '../src/config/power';
 import type { GameTicket, MatchRecord } from '../api/_lib/game';
 
@@ -120,7 +120,7 @@ export class Lobby {
     const id = this.nextId++;
     const now = this.opts.now();
     this.players.set(id, {
-      id, conn, token: randomBytes(16).toString('hex'), name: '', hero: 'kettle', state: 'new', queueKey: null, queuedAt: 0,
+      id, conn, token: randomBytes(16).toString('hex'), name: '', hero: 'benja', state: 'new', queueKey: null, queuedAt: 0,
       room: null, actorId: -1, lastMsgAt: now, goneAt: 0, bucket: this.opts.rateBurst, bucketAt: now, dropped: 0, ticket: null, party: null,
     });
     return id;
@@ -203,7 +203,7 @@ export class Lobby {
         }
         const nick = validateNickname(m.name);
         p.name = nick.ok ? nick.value : `Guest-${p.token.slice(0, 4).toUpperCase()}`;
-        p.hero = HEROES.some((h) => h.id === m.hero) ? m.hero : 'kettle';
+        p.hero = heroIdOf(m.hero) ?? 'benja';
         if (p.state === 'new') { p.state = 'idle'; this.byToken.set(p.token, p); }
         if (!m.ticket || p.state !== 'idle') { this.welcome(p, null); return; }
         if (!this.opts.checkTicket) { this.welcome(p, 'This server does not check tickets: playing as a free profile.'); return; }
@@ -266,7 +266,8 @@ export class Lobby {
         const inp = toActorInput(m);
         const prev = r.inputs[p.actorId];
         // Edge-triggered actions survive until a step uses them; a tap of fire fires once.
-        r.inputs[p.actorId] = { ...inp, reload: inp.reload || prev.reload, ability: inp.ability || prev.ability };
+        r.inputs[p.actorId] = { ...inp, reload: inp.reload || prev.reload, ability: inp.ability || prev.ability, grenade: !!inp.grenade || !!prev.grenade,
+          throwDist: inp.grenade ? inp.throwDist : prev.throwDist };
         if (inp.firing) r.fireLatch[p.actorId] = true;
         return;
       }
@@ -387,7 +388,7 @@ export class Lobby {
         const inp = room.members[i].conn && !room.left[i] ? room.inputs[i] : IDLE_INPUT;
         const out = { ...inp, firing: inp.firing || room.fireLatch[i] };
         room.fireLatch[i] = false;
-        room.inputs[i] = { ...room.inputs[i], reload: false, ability: false };
+        room.inputs[i] = { ...room.inputs[i], reload: false, ability: false, grenade: false };
         return out;
       });
       for (const s of w.sounds) if (s.type === 'shot') room.lastShot[s.sourceId] = w.tick;
@@ -422,16 +423,20 @@ export class Lobby {
       reloadLeft: r3(a.reloadLeft), abilityCd: r3(a.abilityCd), revealLeft: r3(a.revealLeft), muzzle: r3(a.muzzle), hitFlash: r3(a.hitFlash),
       deadFor: r3(a.deadFor), lastSpread: r3(a.lastSpread), stepAcc: r3(a.stepAcc), kills: a.kills, connected: !!room.members[a.id].conn,
       shieldLeft: r3(a.shieldLeft), frenzyLeft: r3(a.frenzyLeft), slowLeft: r3(a.slowLeft), burstLeft: r3(a.burstLeft),
-      downed: a.downed, reviveProgress: r3(a.reviveProgress),
+      downed: a.downed, reviveProgress: r3(a.reviveProgress), nades: a.grenades, maxNades: a.maxGrenades,
     }));
+    // Grenades: your team's always; a hostile one when your team can see it or it is close to one of you (you hear it
+    // land and see the ring), so every client can read the danger it is in.
+    const grenades: NetGrenade[] = w.grenades.filter((g) => g.team === me.team || seenBy(g.x, g.y) || mates.some((m) => Math.hypot(m.x - g.x, m.y - g.y) <= TUNING.grenade.radius + 1.5))
+      .map((g) => ({ id: g.id, x: r3(g.x), y: r3(g.y), vx: r3(g.vx), vy: r3(g.vy), fuse: r3(g.fuse), owner: g.owner }));
     const bullets: NetBullet[] = w.bullets.filter((b) => w.actors[b.owner].team === me.team || seenBy(b.x, b.y))
       .map((b) => ({ x: r3(b.x), y: r3(b.y), dx: r3(b.dx), dy: r3(b.dy), ox: r3(b.ox), oy: r3(b.oy), owner: b.owner, weapon: b.weapon.id }));
     const sounds: NetSound[] = w.sounds.filter((s) => s.sourceId === me.id || hears(w.level, me.x, me.y, s))
       .map((s) => ({ type: s.type, x: r3(s.x), y: r3(s.y), radius: s.radius, source: s.sourceId, team: s.team, weapon: s.weapon, blocked: s.blocked, sig: s.sig }));
     const hits: NetHit[] = w.hits.filter((h) => w.actors[h.target].team === me.team || w.actors[h.by].team === me.team)
-      .map((h) => ({ target: h.target, by: h.by, x: r3(h.x), y: r3(h.y), fromX: r3(h.fromX), fromY: r3(h.fromY), killed: h.killed, downed: h.downed }));
+      .map((h) => ({ target: h.target, by: h.by, x: r3(h.x), y: r3(h.y), fromX: r3(h.fromX), fromY: r3(h.fromY), killed: h.killed, downed: h.downed, grenade: h.grenade }));
     return {
-      t: 'snap', tick: w.tick, actors, bullets, pickups: w.pickups.map((k) => k.active), sounds, hits,
+      t: 'snap', tick: w.tick, actors, bullets, grenades, pickups: w.pickups.map((k) => k.active), sounds, hits,
       barriers: w.barriers.map((b) => ({ ...b.box, left: r3(b.left) })),
     };
   }

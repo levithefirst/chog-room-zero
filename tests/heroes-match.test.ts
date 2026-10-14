@@ -1,18 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { ABILITIES, HEROES, heroById } from '../src/config/heroes';
+import { HEROES, heroById } from '../src/config/heroes';
 import { WEAPONS } from '../src/config/weapons';
 import { BOT_SPAWNS } from '../src/config/map';
 import { nextPhase, simRuns, type Phase } from '../src/sim/match';
 import { createWorld } from '../src/sim/world';
 
 describe('hero data', () => {
-  it('3-4 heroes, unique ids, valid weapons and abilities, sane numbers', () => {
-    expect(HEROES.length).toBeGreaterThanOrEqual(3);
-    expect(HEROES.length).toBeLessThanOrEqual(4);
+  it('the free roster: seven characters, unique ids, valid weapons and abilities, sane numbers', () => {
+    expect(HEROES.map((h) => h.name)).toEqual(['Benja', 'Toad', 'Ray', 'Tabsu', 'Tonashiro', 'Yot', 'Bill']);
     expect(new Set(HEROES.map((h) => h.id)).size).toBe(HEROES.length);
     for (const h of HEROES) {
       expect(WEAPONS[h.weapon], h.id).toBeDefined();
-      expect(Object.values(ABILITIES)).toContain(h.ability);
+      expect(['dash', 'sonar', 'barrier', 'mend', 'scream', 'shield', 'frenzy']).toContain(h.ability.kind);
+      expect(h.ability.cooldown).toBeGreaterThan(0);
       expect(h.maxHp).toBeGreaterThan(50);
       expect(h.maxArmor).toBeGreaterThanOrEqual(0);
       expect(h.speed).toBeGreaterThan(0.8);

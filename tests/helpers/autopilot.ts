@@ -2,7 +2,7 @@
 // the real bots with player-level information only for SHOOTING: it fires only at a bot inside its own view
 // cone and range with wall line of sight, with human aim error. For NAVIGATION it heads to the nearest live bot
 // (a stand-in for a player who explores and listens). Fire discipline: stops to shoot, reloads when empty,
-// uses its ability when hurt (Mend/Patch), or on contact (others).
+// uses its ability when hurt (Patch, Shell), inside its reach (Snare), or on contact (others).
 import { createWorld, stepWorld, type World } from '../../src/sim/world';
 import { canSee } from '../../src/sim/vision';
 import { createAutopilot } from '../../src/debug/autopilot';

@@ -1,15 +1,15 @@
-// Hero archetypes. Adding a hero means adding an entry here: weapon, body, vision, one ability.
-// Bots use the same entries. Names are original to this game.
-// The last four exist only as 1:1 signature abilities (src/config/power.ts).
+// Characters. Adding one means adding an entry here: department, weapon, body, vision, one ability.
+// Bots use the same entries. The burst kind is used only by 1:1 signatures (src/config/power.ts); scream, shield and
+// frenzy are shared by free characters (smaller numbers) and 1:1 signatures.
 export type AbilityKind = 'dash' | 'sonar' | 'barrier' | 'mend' | 'burst' | 'scream' | 'shield' | 'frenzy';
 
 export interface AbilityDef {
   kind: AbilityKind;
   name: string;
   cooldown: number;
-  // Plain description shown on hero select.
+  // One short line (roster detail, tooltips).
   text: string;
-  /** Signature overrides of the kind's TUNING.abilities numbers. Hero abilities leave these unset. */
+  /** Overrides of the kind's TUNING.abilities numbers (1:1 signatures, and the free Snare, Shell and Rush). */
   seconds?: number;
   amount?: number;
   radius?: number;
@@ -23,11 +23,16 @@ export interface AbilityDef {
   counter?: string;
 }
 
+/** Five combat departments (owner 2026-10-14): how a character fights, never a stat bonus on its own. */
+export type Department = 'assault' | 'tank' | 'sniper' | 'flanker' | 'bruiser';
+export const DEPARTMENTS: Record<Department, string> = { assault: 'Assault', tank: 'Tank', sniper: 'Sniper', flanker: 'Flanker', bruiser: 'Bruiser' };
+
 export interface HeroDef {
   id: string;
   name: string;
+  dept: Department;
+  /** Shown label of the department. */
   role: string;
-  blurb: string;
   weapon: string;
   maxHp: number;
   maxArmor: number;
@@ -40,33 +45,69 @@ export interface HeroDef {
 }
 
 export const ABILITIES: Record<'dash' | 'sonar' | 'barrier' | 'mend', AbilityDef> = {
-  dash: { kind: 'dash', name: 'Slip', cooldown: 6, text: 'Short burst of speed in the move direction. Quiet.' },
-  sonar: { kind: 'sonar', name: 'Ping', cooldown: 14, text: 'Shows every hostile within 14 m for 2.5 s. They hear the ping.' },
-  barrier: { kind: 'barrier', name: 'Slab', cooldown: 16, text: 'Drops a waist-high slab ahead for 12 s. Stops bullets, not sight.' },
-  mend: { kind: 'mend', name: 'Patch', cooldown: 18, text: 'Restores 35 health at once.' },
+  dash: { kind: 'dash', name: 'Slip', cooldown: 6, text: 'Quick quiet dash.' },
+  sonar: { kind: 'sonar', name: 'Ping', cooldown: 14, text: 'Reveals hostiles within 14 m for 2.5 s. They hear it.' },
+  barrier: { kind: 'barrier', name: 'Slab', cooldown: 16, text: 'Waist-high cover for 12 s. Stops bullets, not sight.' },
+  mend: { kind: 'mend', name: 'Patch', cooldown: 18, text: '+35 health.' },
 };
 
+// The free roster's abilities (docs/design/roster-grenades.md). The last three reuse signature kinds with smaller
+// numbers than the 1:1 versions (Snare < Howl, Shell < Gold Shell, Rush < Red Rush), so the 1:1s stay on top.
+const SNARE: AbilityDef = { kind: 'scream', name: 'Snare', cooldown: 16, radius: 4, seconds: 2, amount: 0.6, text: 'Slows hostiles within 4 m you can see, 2 s.' };
+const SHELL: AbilityDef = { kind: 'shield', name: 'Shell', cooldown: 16, seconds: 1, text: 'Untouchable for 1 s. Cannot shoot.' };
+const RUSH: AbilityDef = { kind: 'frenzy', name: 'Rush', cooldown: 18, seconds: 3, amount: 1.2, text: '+20% damage for 3 s.' };
+
+/**
+ * The free roster (owner 2026-10-14): seven characters, five departments. Abilities are scrambled on purpose: each
+ * covers part of its weapon's weakness, never all of it. Bots (hostiles and AI teammates) use the same entries.
+ * Not NFT related: holders pick from this roster too; their Chog adds tier power and grenade capacity on top.
+ */
 export const HEROES: HeroDef[] = [
-  {
-    id: 'kettle', name: 'Kettle', role: 'Rifle', blurb: 'Steady all-rounder. Patches up between fights.',
-    weapon: 'rifle', maxHp: 100, maxArmor: 25, speed: 1, vision: { range: 9, coneDeg: 70 }, ability: ABILITIES.mend, accent: 0x9fb39a,
-  },
-  {
-    id: 'mop', name: 'Mop', role: 'Runner', blurb: 'Fast and fragile. Gets in close and slips out.',
-    weapon: 'smg', maxHp: 85, maxArmor: 0, speed: 1.1, vision: { range: 8, coneDeg: 85 }, ability: ABILITIES.dash, accent: 0xc9b37a,
-  },
-  {
-    id: 'brick', name: 'Brick', role: 'Holder', blurb: 'Slow and heavy. Owns doorways and builds its own cover.',
-    weapon: 'shotgun', maxHp: 120, maxArmor: 50, speed: 0.9, vision: { range: 7.5, coneDeg: 80 }, ability: ABILITIES.barrier, accent: 0xa58f84,
-  },
-  {
-    id: 'wick', name: 'Wick', role: 'Lane', blurb: 'Long narrow sight. Finds them first and owns the long lanes.',
-    weapon: 'marksman', maxHp: 85, maxArmor: 15, speed: 0.95, vision: { range: 12, coneDeg: 48 }, ability: ABILITIES.sonar, accent: 0x93a0b4,
-  },
+  { id: 'benja', name: 'Benja', dept: 'assault', role: 'Assault', weapon: 'rifle', maxHp: 100, maxArmor: 15, speed: 1,
+    vision: { range: 9, coneDeg: 70 }, ability: ABILITIES.sonar, accent: 0x9fb39a },
+  { id: 'toad', name: 'Toad', dept: 'tank', role: 'Tank', weapon: 'lmg', maxHp: 120, maxArmor: 45, speed: 0.92,
+    vision: { range: 8, coneDeg: 72 }, ability: { ...ABILITIES.dash, cooldown: 8 }, accent: 0x7fae7a },
+  { id: 'ray', name: 'Ray', dept: 'sniper', role: 'Sniper', weapon: 'marksman', maxHp: 85, maxArmor: 15, speed: 0.95,
+    vision: { range: 12, coneDeg: 46 }, ability: SNARE, accent: 0x93a0b4 },
+  { id: 'tabsu', name: 'Tabsu', dept: 'flanker', role: 'Flanker', weapon: 'smg', maxHp: 85, maxArmor: 0, speed: 1.1,
+    vision: { range: 8, coneDeg: 85 }, ability: SHELL, accent: 0xc9b37a },
+  { id: 'tonashiro', name: 'Tonashiro', dept: 'bruiser', role: 'Bruiser', weapon: 'shotgun', maxHp: 115, maxArmor: 40, speed: 0.95,
+    vision: { range: 7.5, coneDeg: 80 }, ability: ABILITIES.mend, accent: 0xa58f84 },
+  { id: 'yot', name: 'Yot', dept: 'assault', role: 'Assault', weapon: 'carbine', maxHp: 95, maxArmor: 25, speed: 1,
+    vision: { range: 9, coneDeg: 64 }, ability: ABILITIES.barrier, accent: 0xb59ad0 },
+  { id: 'bill', name: 'Bill', dept: 'flanker', role: 'Flanker', weapon: 'sawnoff', maxHp: 90, maxArmor: 10, speed: 1.08,
+    vision: { range: 7.5, coneDeg: 90 }, ability: RUSH, accent: 0xd08f7a },
 ];
 
+/** Hero ids from before the free roster (records stored on accounts still carry them). */
+export const LEGACY_HERO: Readonly<Record<string, string>> = { kettle: 'benja', mop: 'tabsu', brick: 'toad', wick: 'ray' };
+
+/** A current roster id for any stored or received id (old ids map to their replacement), or null if unknown. */
+export function heroIdOf(id: unknown): string | null {
+  if (typeof id !== 'string') return null;
+  const v = LEGACY_HERO[id] ?? id;
+  return HEROES.some((h) => h.id === v) ? v : null;
+}
+
+/**
+ * The default game's two AI teammates for a player on `heroId`: roster characters from departments other than the
+ * player's and each other's, named by their character, rotating with the run so the squad changes between rooms.
+ */
+export function squadFor(heroId: string, run = 0): { name: string; hero: string }[] {
+  const i = Math.max(0, HEROES.findIndex((h) => h.id === heroId));
+  const used = new Set([HEROES[i].dept]);
+  const out: { name: string; hero: string }[] = [];
+  for (let k = 1; k < HEROES.length * 2 && out.length < 2; k++) {
+    const h = HEROES[(i + k + run * 2) % HEROES.length];
+    if (h.id === HEROES[i].id || used.has(h.dept)) continue;
+    used.add(h.dept);
+    out.push({ name: h.name, hero: h.id });
+  }
+  return out;
+}
+
 export function heroById(id: string): HeroDef {
-  const h = HEROES.find((x) => x.id === id);
+  const h = HEROES.find((x) => x.id === (LEGACY_HERO[id] ?? id));
   if (!h) throw new Error(`Unknown hero "${id}"`);
   return h;
 }

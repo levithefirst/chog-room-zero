@@ -44,14 +44,17 @@ export interface Input {
   right: Stick;
   mouseX: number;
   mouseY: number;
-  /** Build this tick's input. `aimFrom` is the player's screen position. */
-  read(aimFromX: number, aimFromY: number): ActorInput;
+  /** Build this tick's input. `aimFrom` is the player's screen position; `pxPerUnit` turns the cursor distance into a
+   * grenade throw distance (PC). */
+  read(aimFromX: number, aimFromY: number, pxPerUnit?: number): ActorInput;
   /** True once after a restart/start action (R, Enter, click or tap on an overlay). */
   takeAction(): boolean;
   /** Touch reload button. */
   reload(): void;
   /** Touch ability button. */
   ability(): void;
+  /** Touch grenade button: throw along the aim. */
+  grenade(): void;
   /** Escape / P pressed since last call. */
   /** Is fire physically held right now (vs a latched tap)? */
   fireHeld(): boolean;
@@ -85,6 +88,7 @@ export function createInput(el: HTMLElement): Input {
   let latchAim = 0;
   let reloadQueued = false;
   let abilityQueued = false;
+  let grenadeQueued = false;
   let action = false;
   let pauseQueued = false;
   let lastAim = 0;
@@ -100,16 +104,19 @@ export function createInput(el: HTMLElement): Input {
   const inp: Input = {
     mode: matchMedia('(pointer: coarse)').matches ? 'touch' : 'pc',
     left, right, mouseX: 0, mouseY: 0,
-    read(ax, ay) {
-      const out: ActorInput = { moveX: 0, moveY: 0, quiet: false, aim: lastAim, firing: false, reload: reloadQueued, ability: abilityQueued || held.has('Space') || held.has('KeyQ') };
+    read(ax, ay, pxPerUnit) {
+      const out: ActorInput = { moveX: 0, moveY: 0, quiet: false, aim: lastAim, firing: false, reload: reloadQueued, ability: abilityQueued || held.has('Space') || held.has('KeyQ'), grenade: grenadeQueued };
       reloadQueued = false;
       abilityQueued = false;
+      grenadeQueued = false;
       if (inp.mode === 'pc') {
         const m = keysToMove(held);
         out.moveX = m.x;
         out.moveY = m.y;
         out.quiet = held.has('ShiftLeft') || held.has('ShiftRight');
         lastAim = out.aim = Math.atan2(inp.mouseY - ay, inp.mouseX - ax);
+        // PC grenades land at the cursor (clamped in the sim); touch ones fly the default distance along the aim.
+        if (out.grenade && pxPerUnit) out.throwDist = Math.hypot(inp.mouseX - ax, inp.mouseY - ay) / pxPerUnit;
         out.firing = firing || fireLatched;
         fireLatched = false;
       } else {
@@ -141,6 +148,9 @@ export function createInput(el: HTMLElement): Input {
     },
     ability() {
       abilityQueued = true;
+    },
+    grenade() {
+      grenadeQueued = true;
     },
     fireHeld() {
       if (inp.mode === 'pc') return firing;
@@ -194,6 +204,7 @@ export function createInput(el: HTMLElement): Input {
       e.preventDefault();
       abilityQueued = true;
     }
+    if (e.code === 'KeyG' && !e.repeat) grenadeQueued = true;
     inp.mode = 'pc';
   };
   const up = (e: KeyboardEvent) => void held.delete(e.code);
@@ -221,6 +232,7 @@ export function createInput(el: HTMLElement): Input {
     } else {
       inp.mode = 'pc';
       if (e.button === 0 && !blocked.has(e.pointerId)) firing = fireLatched = true;
+      if (e.button === 2 && !blocked.has(e.pointerId)) grenadeQueued = true;
     }
     e.preventDefault();
   };

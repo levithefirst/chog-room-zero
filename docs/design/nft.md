@@ -30,6 +30,7 @@ Weak means the difference is only a skin, portrait, badge, access, title, color,
 ## Class system (LOCKED direction; numbers in `src/config/power.ts`)
 - Tier comes from the token's on-chain metadata (`Tier` trait via `metadataId`), never from a hash, a rank score or the browser.
 - A tier changes health, armour and, for the 1:1s only, damage and the ability. Movement speed never changes with tier: positioning stays the skill.
+- A tier also sets grenade capacity (owner 2026-10-14): free 3, Common 5, Uncommon 7, Rare 9, Epic 11, Legendary and 1:1 13. Upgrades never raise it; the game server sets it from the verified ticket. The character (free roster: Benja, Toad, Ray, Tabsu, Tonashiro, Yot, Bill) is the player's pick and is not NFT related.
 - Caps, the measured duel shares and the reasons for each number are in `docs/design/power.md`. Any value outside those caps is an automatic CUT.
 - A free player at full upgrades must keep a real chance against a Common holder (measured band in `power.md`).
 - The four RC-1 sidegrades (Lamp, Wide, Steady, Spray) stay as shape-only options on top of the class (`tests/operators.test.ts`).

@@ -45,7 +45,15 @@ export function createAutopilot(seed: number, aimErrDeg = 3): Autopilot {
         else if (d > want) { inp.moveX = (seen.x - p.x) / d; inp.moveY = (seen.y - p.y) / d; inp.quiet = false; }
         inp.firing = clear && d <= want + 0.5 && p.ammo > 0 && p.reloadLeft <= 0;
         if (p.ammo === 0) inp.reload = true;
-        if (p.ability.kind !== 'mend' && p.abilityCd === 0) inp.ability = true;
+        // Abilities for a reason, like a player: Shell when hurt under fire (it stops your own shots), Snare inside its
+        // radius, Slip to close in or to get away when hurt, the rest on contact. Patch is below.
+        const k = p.ability.kind;
+        // Slip goes where you move: to close in when the gun wants it closer, or away when hurt (never into a shotgun).
+        const hurt = p.hp < p.maxHp * 0.5;
+        const want2 = k === 'shield' ? hurt && p.lastHitTick >= w.tick - 2 : k === 'scream' ? d <= (p.ability.radius ?? 0)
+          : k === 'dash' ? d > want + 1 || hurt : k !== 'mend';
+        if (k === 'dash' && hurt && p.abilityCd === 0) { inp.moveX = -(seen.x - p.x) / d; inp.moveY = -(seen.y - p.y) / d; }
+        if (want2 && p.abilityCd === 0) inp.ability = true;
         if (zoneSpot) {
           // Fight on the way in: keep shooting what it sees, but the feet go to the zone.
           if (--repath <= 0 || path.length === 0) { path = findPath(w.level, p.x, p.y, zoneSpot.x, zoneSpot.y); repath = 30; }
@@ -73,6 +81,14 @@ export function createAutopilot(seed: number, aimErrDeg = 3): Autopilot {
         }
       }
       if (p.ability.kind === 'mend' && p.hp < p.maxHp * 0.55 && p.abilityCd === 0) inp.ability = true;
+      // A hostile grenade ring it stands in (drawn for anyone within radius + 1.5 u): step straight out, like a player.
+      const nade = w.grenades.find((g) => g.team !== p.team && Math.hypot(g.x - p.x, g.y - p.y) <= TUNING.grenade.radius + 0.4);
+      if (nade) {
+        const d = Math.max(0.01, Math.hypot(p.x - nade.x, p.y - nade.y));
+        inp.moveX = (p.x - nade.x) / d;
+        inp.moveY = (p.y - nade.y) / d;
+        inp.quiet = false;
+      }
       return inp;
     },
   };

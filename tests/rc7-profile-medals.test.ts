@@ -1,4 +1,5 @@
 // RC-7: guest profile, settings and medals are pure over a key-value store: validated, persisted, never fabricated.
+import { HEROES } from '../src/config/heroes';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, PROFILE_KEY, SETTINGS_KEY, displayName, linkIdentity, loadProfile, loadSettings, newProfileId, saveProfile, saveSettings, togglePin, validateNickname } from '../src/ui/profile';
 import { MEDALS, MEDALS_KEY, awardMedals, loadMedals, medalProgress, type RunFacts } from '../src/ui/medals';
@@ -6,7 +7,7 @@ import { loadRecords, recordBest } from '../src/ui/records';
 import { nextPhase } from '../src/sim/match';
 
 function mem() { const m = new Map<string, string>(); return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), m }; }
-const run = (o: Partial<RunFacts> = {}): RunFacts => ({ hero: 'kettle', won: false, seconds: 30, kills: 0, bullets: 0, hits: 0, damageTaken: 10, hpLeft: 50, pickups: 0, abilities: 0, ...o });
+const run = (o: Partial<RunFacts> = {}): RunFacts => ({ hero: 'benja', won: false, seconds: 30, kills: 0, bullets: 0, hits: 0, damageTaken: 10, hpLeft: 50, pickups: 0, abilities: 0, ...o });
 // Record then award, the order main.ts uses at match end.
 function finish(s: ReturnType<typeof mem>, f: RunFacts) {
   const { records } = recordBest(s, { ...f });
@@ -35,13 +36,13 @@ describe('RC-7 profile', () => {
   it('saves a callsign, favourite and up to three pins; rejects a tampered callsign on load', () => {
     const s = mem();
     let p = loadProfile(s);
-    p = { ...p, nickname: 'Sniper', favourite: 'wick' };
+    p = { ...p, nickname: 'Sniper', favourite: 'ray' };
     for (const m of ['a', 'b', 'c', 'd']) p = togglePin(p, m);
     expect(p.pinned).toEqual(['b', 'c', 'd']);
     p = togglePin(p, 'c');
     expect(p.pinned).toEqual(['b', 'd']);
     saveProfile(s, p);
-    expect(loadProfile(s)).toMatchObject({ nickname: 'Sniper', favourite: 'wick', pinned: ['b', 'd'] });
+    expect(loadProfile(s)).toMatchObject({ nickname: 'Sniper', favourite: 'ray', pinned: ['b', 'd'] });
     s.m.set(PROFILE_KEY, JSON.stringify({ ...p, nickname: '<img onerror=x>' }));
     expect(loadProfile(s).nickname).toBeNull();
   });
@@ -107,14 +108,16 @@ describe('RC-7 medals', () => {
   });
   it('career medals show progress and unlock at the goal (Full Squad needs a clear with each operator)', () => {
     const s = mem();
-    for (const hero of ['kettle', 'mop', 'brick']) finish(s, run({ hero, won: true, kills: 5 }));
+    const ids = HEROES.map((h) => h.id);
+    for (const hero of ids.slice(0, -1)) finish(s, run({ hero, won: true, kills: 5 }));
     const recs = loadRecords(s);
     const squad = MEDALS.find((m) => m.id === 'full-squad')!;
-    expect(medalProgress(squad, recs, loadMedals(s))).toBe(3);
-    expect(medalProgress(MEDALS.find((m) => m.id === 'exterminator')!, recs, loadMedals(s))).toBe(15);
-    const r = finish(s, run({ hero: 'wick', won: true, kills: 5 }));
+    expect(medalProgress(squad, recs, loadMedals(s))).toBe(6);
+    expect(medalProgress(MEDALS.find((m) => m.id === 'exterminator')!, recs, loadMedals(s))).toBe(25); // 30 kills, capped at the goal
+    expect(loadMedals(s)['full-squad']).toBeUndefined();
+    const r = finish(s, run({ hero: ids[6], won: true, kills: 5 }));
     expect(r.earned.map((m) => m.id)).toContain('full-squad');
-    expect(medalProgress(squad, loadRecords(s), r.unlocked)).toBe(4);
+    expect(medalProgress(squad, loadRecords(s), r.unlocked)).toBe(7);
   });
 });
 

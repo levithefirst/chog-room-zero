@@ -78,9 +78,26 @@ The bots stay dangerous: the scripted player still loses most runs as Mop, Brick
 ## AI teammates: the default game (owner 2026-10-14 final QA pass)
 The default mode ("Vs bots" in the hub) is YOU + 2 AI TEAMMATES against the five hostile bots. It is not online 3v3 (that is three real players a side). Teammates are real actors in the simulation (`createWorld({ allies })`, team `player`, `Actor.ai = true`) driven by the same brain as the hostiles (`src/sim/bots.ts`):
 - Perception is unchanged and symmetric: a bot's target is the nearest hostile it actually sees in its own cone (a downed one last), or a position it heard, saw a muzzle flash at, was shot from, or pinged. It never reads a hostile's position by identity.
-- Teammates follow the player (a couple of metres off one side) when nothing is known, engage, take cover, heal, use their ability, and never wait for attack tokens (tokens only throttle the hostiles shooting at the player's side). Their bullets carry the same bot damage scale as the hostiles (`TUNING.bots.damageMul` 0.6, PROPOSAL), so the player stays the one who carries the room.
+- Teammates move with the squad, not on top of the player (owner 2026-10-14): every 2.5-5 s they pick a spot 2.5-6 u from the player, mostly ahead and in the player's line of sight, walk there and watch the flanks; past 9 u they regroup; they hunt sounds on a 12 u leash. They engage, take cover, heal, use their ability, throw grenades, and never wait for attack tokens (tokens only throttle the hostiles shooting at the player's side). Their bullets carry the same bot damage scale as the hostiles (`TUNING.bots.damageMul` 0.6, PROPOSAL), so the player stays the one who carries the room.
 - Team rules: no friendly fire; the fairness rule protects every member of the player's side (a hostile bullet from beyond its target's own sight distance does no damage); the player's side can be downed and revived (TUNING.revive); hostile bots are always eliminated, never downed.
 - A teammate rescues a downed teammate (the player included) when no hostile is in sight: it walks to them and holds fire for the 3 s revive.
 - Team vision: a hostile any standing teammate sees is drawn for the player (their cone, their line of sight; nothing through walls).
 - Outcome: the side wins when all five hostiles are down (anyone's kills count); the run ends when the player is eliminated (bled out, or the whole side down).
 Evidence: `tests/qa-allies.test.ts` (spawn, follow, 8 real matches with the scripted player: teammates shoot, deal and take damage, kill, win; no friendly fire; the player downed and revived by an AI teammate; alone means eliminated). Browser: `tools/qa-journey.mjs` step 6.
+
+## Departments and grenades (owner 2026-10-14, free roster)
+Every bot is a roster character and fights by its department once it trades shots (`fightStyle` in `src/sim/bots.ts`):
+- **Assault**: closes to 6 u.
+- **Bruiser**: closes to 3.2 u while above 60% health.
+- **Sniper**: backs off from anyone inside 6 u.
+- **Flanker**: side-steps across the line at creeping speed, only to spots that keep the target in sight (so whoever hits you stays visible).
+- **Tank**: holds its ground.
+
+Abilities are used for a reason: Snare inside its reach, Shell when hit and hurt, Rush while trading shots.
+
+Grenades:
+- **When a bot throws**: at a believed spot 4-9 u away, never inside its own blast, when the target hugs cover it cannot shoot through, two hostiles stand together, or it only heard them.
+- **Dodging**: bots step out of a live hostile ring they see.
+- **How many**: hostile bots carry 1, teammates 3.
+
+Evidence: `tests/gr-ai.test.ts` (each style, flush with a grenade, dodge, both sides throw in real games). The mutation check fails 5 tests with the styles removed and 2 with bot throws removed. `tests/rc-victory.test.ts` still holds at 2 or more wins of 40 for every character alone against five.

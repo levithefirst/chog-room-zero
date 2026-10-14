@@ -56,13 +56,13 @@ export interface BotSpawn {
   flanker: boolean;
 }
 
-// Bots are named for where they work. Each uses a hero archetype from heroes.ts.
+// Bots are named for where they work. Each is a roster character (heroes.ts); its department sets how it fights.
 export const BOT_SPAWNS: BotSpawn[] = [
-  { name: 'Stair', hero: 'wick', patrol: [[37, 2], [40, 5], [33, 5]], flanker: false },
-  { name: 'Pump', hero: 'brick', patrol: [[39, 9], [41, 12], [33, 8]], flanker: false },
-  { name: 'Cellar', hero: 'mop', patrol: [[5, 15], [8, 20], [2, 18]], flanker: true },
-  { name: 'Boiler', hero: 'kettle', patrol: [[37, 16], [40, 20], [34, 19]], flanker: false },
-  { name: 'Hatch', hero: 'mop', patrol: [[15, 20], [17, 16], [13, 15]], flanker: true },
+  { name: 'Stair', hero: 'ray', patrol: [[37, 2], [40, 5], [33, 5]], flanker: false },
+  { name: 'Pump', hero: 'tonashiro', patrol: [[39, 9], [41, 12], [33, 8]], flanker: false },
+  { name: 'Cellar', hero: 'tabsu', patrol: [[5, 15], [8, 20], [2, 18]], flanker: true },
+  { name: 'Boiler', hero: 'benja', patrol: [[37, 16], [40, 20], [34, 19]], flanker: false },
+  { name: 'Hatch', hero: 'tabsu', patrol: [[15, 20], [17, 16], [13, 15]], flanker: true },
 ];
 
 // Danger zone (RC-8): where the last circle may settle, one is drawn per match. Each is open floor with 1.5 u clear

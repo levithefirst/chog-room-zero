@@ -52,6 +52,10 @@ export const MAX_UPGRADES: Upgrades = { vitality: 8, plating: 8, firepower: 3, f
 /** Hard caps (docs/design/power.md). A profile outside them is a bug; tests check every tier at max upgrades. */
 export const CAPS = { hpMul: 2, armor: 52, damageMul: 1.15, cooldownMul: 0.8 } as const;
 
+/** Grenade capacity by tier (owner 2026-10-14): free 3, +2 per holder tier, 13 for Legendary and the 1:1s. Upgrades
+ * never change it; online the server sets it from the verified ticket. */
+export const GRENADES: Record<Tier, number> = { free: 3, common: 5, uncommon: 7, rare: 9, epic: 11, legendary: 13 };
+
 /** What the sim applies to one actor. */
 export interface Power {
   tier: Tier;
@@ -65,9 +69,11 @@ export interface Power {
   demo: boolean;
   /** The Chog behind this power (verified or demo), or null for a free profile. Picks a 1:1's own cues. */
   metadataId: number | null;
+  /** Grenades carried into a match (GRENADES by tier). */
+  grenades: number;
 }
 
-export const BASE_POWER: Power = { tier: 'free', hpMul: 1, armor: 0, damageMul: 1, cooldownMul: 1, signature: null, demo: false, metadataId: null };
+export const BASE_POWER: Power = { tier: 'free', hpMul: 1, armor: 0, damageMul: 1, cooldownMul: 1, signature: null, demo: false, metadataId: null, grenades: GRENADES.free };
 
 export function clampUpgrades(u: Partial<Upgrades> | null | undefined): Upgrades {
   const out = { ...NO_UPGRADES };
@@ -90,6 +96,7 @@ export function powerFor(tier: Tier, upgrades: Partial<Upgrades> | null = null, 
     signature: tier === 'legendary' ? signature : null,
     demo,
     metadataId,
+    grenades: GRENADES[tier],
   };
 }
 

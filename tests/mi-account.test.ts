@@ -23,7 +23,7 @@ async function call(method: string, action: string, c?: string, body?: object) {
 }
 const bots = BOT_SPAWNS.length;
 let n = 0;
-const run = (o: Partial<Record<string, unknown>> = {}) => ({ runId: `run-${++n}-abcdef`, hero: 'kettle', won: true, seconds: 70, kills: bots, bullets: 40, hits: 25, damageDealt: 500, damageTaken: 60, hpLeft: 40, pickups: 3, abilities: 3, ...o });
+const run = (o: Partial<Record<string, unknown>> = {}) => ({ runId: `run-${++n}-abcdef`, hero: 'benja', won: true, seconds: 70, kills: bots, bullets: 40, hits: 25, damageDealt: 500, damageTaken: 60, hpLeft: 40, pickups: 3, abilities: 3, ...o });
 
 beforeEach(async () => { db = await memoryDb(); await migrate(db); });
 
@@ -50,12 +50,12 @@ describe('account-owned profile', () => {
   it('favourite and pins: hero ids only, pins only for earned medals (max 3)', async () => {
     const c = await cookie([{ provider: 'google', subject: 'g2', label: 'x' }]);
     expect((await call('POST', 'prefs', c, { favourite: 'nobody' })).status).toBe(400);
-    expect((await call('POST', 'prefs', c, { favourite: 'wick' })).j.ok).toBe(true);
+    expect((await call('POST', 'prefs', c, { favourite: 'ray' })).j.ok).toBe(true);
     await call('POST', 'practice', c, run());
     expect((await call('POST', 'prefs', c, { pins: ['first-blood', 'untouched', 'nope'] })).status).toBe(400);
     await call('POST', 'prefs', c, { pins: ['first-blood', 'untouched'] });
     const p = (await call('GET', 'profile', c)).j.profile;
-    expect(p.favourite).toBe('wick');
+    expect(p.favourite).toBe('ray');
     expect(p.pins).toEqual(['first-blood']); // 'untouched' was not earned (60 damage taken)
   });
   it('practice runs: stored once per run id, medals awarded on the server, no XP, shards or leaderboard', async () => {
@@ -96,15 +96,15 @@ describe('account-owned profile', () => {
     await call('POST', 'practice', browserA, run());
     const acc = (await call('GET', 'profile', browserA)).j.profile.account as string;
     const m: MatchRecord = { id: 'aabbccdd00112233', mode: '1v1', demo: false, winner: 'alpha', reason: 'eliminated', seconds: 60, endedAt: Math.floor(Date.now() / 1000),
-      players: [{ acc, team: 'alpha', tier: 'free', tok: null, mid: null, own: null, kills: 1, damage: 120, left: false, name: 'Nomad', hero: 'kettle', survived: true },
-        { acc: null, team: 'bravo', tier: 'free', tok: null, mid: null, own: null, kills: 0, damage: 30, left: false, name: 'Guest-1', hero: 'mop', survived: false }] };
+      players: [{ acc, team: 'alpha', tier: 'free', tok: null, mid: null, own: null, kills: 1, damage: 120, left: false, name: 'Nomad', hero: 'benja', survived: true },
+        { acc: null, team: 'bravo', tier: 'free', tok: null, mid: null, own: null, kills: 0, damage: 30, left: false, name: 'Guest-1', hero: 'tabsu', survived: false }] };
     expect((await settleMatch(db, m)).ok).toBe(true);
     // "Close the browser": a brand new cookie for the same identity (another device signs in the same way).
     const browserB = await cookie(ident);
     const a = (await call('GET', 'profile', browserA)).j.profile, b = (await call('GET', 'profile', browserB)).j.profile;
     expect(b).toEqual(a);
     expect(b).toMatchObject({ callsign: 'Nomad', xp: 110, shards: 20, level: 2, matches: 1, wins: 1 });
-    expect(b.online).toMatchObject({ matches: 1, wins: 1, kills: 1, survived: 1, heroes: { kettle: { matches: 1, wins: 1, kills: 1 } } });
+    expect(b.online).toMatchObject({ matches: 1, wins: 1, kills: 1, survived: 1, heroes: { benja: { matches: 1, wins: 1, kills: 1 } } });
     expect(Object.keys(b.medals).length).toBeGreaterThan(0);
     const board = (await call('GET', 'leaderboard', browserB)).j;
     expect(board.rows[0]).toMatchObject({ name: 'Nomad', kills: 1, you: true });

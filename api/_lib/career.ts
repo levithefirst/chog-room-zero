@@ -9,12 +9,11 @@ import type { Db, Tx } from './db.js';
 import { MEDALS, type RunFacts } from '../../src/ui/medals.js';
 import type { Best, Records } from '../../src/ui/records.js';
 import { validateNickname } from '../../src/ui/profile.js';
-import { HEROES } from '../../src/config/heroes.js';
+import { heroIdOf } from '../../src/config/heroes.js';
 import { BOT_SPAWNS } from '../../src/config/map.js';
 import type { Tier } from '../../src/config/power.js';
 import { profileOf, type Profile } from './game.js';
 
-const HERO_IDS = HEROES.map((h) => h.id);
 const MEDAL_IDS = MEDALS.map((m) => m.id);
 /** Practice runs an account may store per minute (a run is at least ~10 s of real play). */
 export const PRACTICE_PER_MINUTE = 6;
@@ -30,8 +29,8 @@ export async function setCallsign(db: Db, acc: string, raw: unknown): Promise<{ 
 /** Favourite operator (a hero id or null) and up to three pinned medals, which must be medals this account earned. */
 export async function setPrefs(db: Db, acc: string, b: { favourite?: unknown; pins?: unknown }): Promise<{ ok: boolean; error?: string }> {
   if (b.favourite !== undefined) {
-    if (b.favourite !== null && !(typeof b.favourite === 'string' && HERO_IDS.includes(b.favourite))) return { ok: false, error: 'bad_favourite' };
-    await db.query(`UPDATE room_zero.accounts SET favourite_hero = $2 WHERE id = $1`, [acc, b.favourite]);
+    if (b.favourite !== null && !heroIdOf(b.favourite)) return { ok: false, error: 'bad_favourite' };
+    await db.query(`UPDATE room_zero.accounts SET favourite_hero = $2 WHERE id = $1`, [acc, b.favourite === null ? null : heroIdOf(b.favourite)]);
   }
   if (b.pins !== undefined) {
     if (!Array.isArray(b.pins) || b.pins.length > 3 || !b.pins.every((p) => typeof p === 'string' && MEDAL_IDS.includes(p))) return { ok: false, error: 'bad_pins' };
@@ -65,7 +64,10 @@ export async function practiceRecords(q: Tx, acc: string): Promise<Records> {
       kills: Number(r.kills), bullets: Number(r.bullets), hits: Number(r.hits), damageDealt: Number(r.dealt), damageTaken: Number(r.taken),
       seconds: Number(r.seconds), pickups: Number(r.pickups), abilities: Number(r.abilities),
     };
-    rec.heroes[String(r.hero)] = b;
+    // Runs stored under a pre-roster id (kettle, mop, brick, wick) count for the character that replaced it.
+    const id = heroIdOf(r.hero) ?? String(r.hero);
+    const prev = rec.heroes[id];
+    rec.heroes[id] = prev ? mergeBest(prev, b) : b;
     const o = rec.overall;
     o.runs += b.runs; o.wins += b.wins; o.mostKills = Math.max(o.mostKills, b.mostKills);
     if (b.bestWinSeconds !== null && (o.bestWinSeconds === null || b.bestWinSeconds < o.bestWinSeconds)) o.bestWinSeconds = b.bestWinSeconds;
@@ -79,7 +81,7 @@ const int = (v: unknown, lo: number, hi: number) => (typeof v === 'number' && Nu
 /** A practice run as the browser reports it, or null when any number is outside what the game can produce. */
 export function validPractice(b: Record<string, unknown>): (RunFacts & { runId: string; damageDealt: number }) | null {
   const runId = typeof b.runId === 'string' && /^[A-Za-z0-9_-]{8,40}$/.test(b.runId) ? b.runId : null;
-  const hero = typeof b.hero === 'string' && HERO_IDS.includes(b.hero) ? b.hero : null;
+  const hero = heroIdOf(b.hero);
   const bots = BOT_SPAWNS.length;
   const f = {
     seconds: int(b.seconds, 1, 900), kills: int(b.kills, 0, bots), bullets: int(b.bullets, 0, 20000), hits: int(b.hits, 0, 20000),
@@ -133,6 +135,13 @@ export async function recordPractice(db: Db, acc: string, raw: Record<string, un
   });
 }
 
+function mergeBest(a: Best, b: Best): Best {
+  const out = { ...a, mostKills: Math.max(a.mostKills, b.mostKills) };
+  if (b.bestWinSeconds !== null && (a.bestWinSeconds === null || b.bestWinSeconds < a.bestWinSeconds)) out.bestWinSeconds = b.bestWinSeconds;
+  for (const k of ['runs', 'wins', 'kills', 'bullets', 'hits', 'damageDealt', 'damageTaken', 'seconds', 'pickups', 'abilities'] as const) out[k] = a[k] + b[k];
+  return out;
+}
+
 // ---- online career ----
 export interface OnlineCareer { matches: number; wins: number; kills: number; damage: number; survived: number; heroes: Record<string, { matches: number; wins: number; kills: number }> }
 
@@ -145,7 +154,11 @@ export async function onlineCareer(q: Tx, acc: string): Promise<OnlineCareer> {
   for (const r of rows) {
     const n = Number(r.n), w = Number(r.w), k = Number(r.k);
     out.matches += n; out.wins += w; out.kills += k; out.damage += Number(r.d); out.survived += Number(r.s);
-    if (r.hero) out.heroes[r.hero] = { matches: n, wins: w, kills: k };
+    if (r.hero) {
+      const id = heroIdOf(r.hero) ?? r.hero;
+      const h = out.heroes[id] ?? { matches: 0, wins: 0, kills: 0 };
+      out.heroes[id] = { matches: h.matches + n, wins: h.wins + w, kills: h.kills + k };
+    }
   }
   return out;
 }
@@ -170,7 +183,7 @@ export async function accountView(db: Db, acc: string): Promise<AccountView | nu
   const a = r[0];
   const tier = a.nft_tier && ['common', 'uncommon', 'rare', 'epic', 'legendary'].includes(a.nft_tier) ? (a.nft_tier as Tier) : null;
   return {
-    ...p, callsign: a.callsign, favourite: a.favourite_hero, pins: a.pins ?? [],
+    ...p, callsign: a.callsign, favourite: heroIdOf(a.favourite_hero), pins: a.pins ?? [],
     medals: await medalsOf(db, acc), practice: await practiceRecords(db, acc), online: await onlineCareer(db, acc),
     nft: tier ? { tier, tokenId: a.nft_token_id === null ? null : Number(a.nft_token_id) } : null,
   };

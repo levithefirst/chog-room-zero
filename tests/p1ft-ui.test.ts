@@ -1,23 +1,23 @@
-// CHOG-UI-001: hero select number keys 1-4 select the matching card (the cards print "1 · Rifle" etc.).
+// CHOG-UI-001: hero select number keys 1-7 select the matching roster card.
 import { describe, expect, it } from 'vitest';
 import { HEROES } from '../src/config/heroes';
 import { heroForKey } from '../src/ui/heroKeys';
 
 describe('UI-001 hero select number keys', () => {
-  it('key 3 selects Brick (ADE repro)', () => {
-    expect(heroForKey({ key: '3', code: 'Digit3' }, HEROES)).toBe('brick');
+  it('key 3 selects the third roster card, Ray (ADE repro)', () => {
+    expect(heroForKey({ key: '3', code: 'Digit3' }, HEROES)).toBe('ray');
   });
-  it('keys 1-4 map to the card order, top row and numpad', () => {
+  it('keys 1-7 map to the card order, top row and numpad', () => {
     HEROES.forEach((h, i) => {
       expect(heroForKey({ key: String(i + 1), code: `Digit${i + 1}` }, HEROES)).toBe(h.id);
       expect(heroForKey({ key: String(i + 1), code: `Numpad${i + 1}` }, HEROES)).toBe(h.id);
     });
   });
   it('AZERTY top row (key "(" on Digit5 etc.) uses the physical code', () => {
-    expect(heroForKey({ key: '"', code: 'Digit3' }, HEROES)).toBe('brick');
+    expect(heroForKey({ key: '"', code: 'Digit3' }, HEROES)).toBe('ray');
   });
   it('other keys and out-of-range numbers select nothing', () => {
-    expect(heroForKey({ key: '5', code: 'Digit5' }, HEROES)).toBeNull();
+    expect(heroForKey({ key: '8', code: 'Digit8' }, HEROES)).toBeNull();
     expect(heroForKey({ key: '0', code: 'Digit0' }, HEROES)).toBeNull();
     expect(heroForKey({ key: 'a', code: 'KeyA' }, HEROES)).toBeNull();
   });

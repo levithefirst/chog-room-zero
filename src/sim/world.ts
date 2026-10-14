@@ -5,7 +5,7 @@ import { heroById, type AbilityDef, type HeroDef } from '../config/heroes';
 import { BASE_POWER, type Power } from '../config/power';
 import { WEAPONS, damageAt, type WeaponDef } from '../config/weapons';
 import { angleDiff, cornerAssistDir, resolveCircle, segmentCircleT, type Box } from './geom';
-import { blockedByCover, bulletBlockT, markDynamic, parseLevel, sightClear, walkable, type Level } from './level';
+import { blockedByCover, bulletBlockT, markDynamic, parseLevel, shotClear, sightClear, walkable, type Level } from './level';
 import { stepVelocity, type Vec2 } from './sim';
 import { NO_SIDEGRADE, type Sidegrade } from './operators';
 import type { ViewShape } from './vision';
@@ -29,6 +29,10 @@ export interface ActorInput {
   firing: boolean;
   reload: boolean;
   ability: boolean;
+  /** Throw a grenade this step (edge: one throw per press). */
+  grenade?: boolean;
+  /** How far to throw it, in u (clamped to TUNING.grenade minThrow..maxThrow); unset = the touch default. */
+  throwDist?: number;
 }
 
 export interface Actor {
@@ -99,6 +103,30 @@ export interface Actor {
   downInfo: KillInfo | null;
   /** Held the trigger on the last step it acted (a rescuer must hold fire). */
   firedLast: boolean;
+  /** Grenades left and the most this actor can carry (its tier's capacity, src/config/power.ts GRENADES). */
+  grenades: number;
+  maxGrenades: number;
+  /** Seconds until it may throw again. */
+  nadeCd: number;
+  /** Grenades thrown this match. */
+  thrown: number;
+  /** Burst weapons: rounds still to fire in the current burst, and seconds until the next one. */
+  volley: number;
+  volleyGap: number;
+}
+
+/** A thrown grenade: rolls to rest, bounces off walls, flies over waist-high cover, explodes when the fuse ends. */
+export interface Grenade {
+  id: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  /** Seconds until it explodes. */
+  fuse: number;
+  owner: number;
+  team: Team;
+  alive: boolean;
 }
 
 export interface Bullet {
@@ -116,7 +144,7 @@ export interface Bullet {
 
 export type SoundType =
   | 'step' | 'quietStep' | 'shot' | 'impact' | 'hit' | 'death' | 'reload' | 'pickup' | 'dash' | 'sonar' | 'barrier' | 'mend'
-  | 'windup' | 'burst' | 'scream' | 'shield' | 'frenzy' | 'downed' | 'revive';
+  | 'windup' | 'burst' | 'scream' | 'shield' | 'frenzy' | 'downed' | 'revive' | 'throw' | 'bounce' | 'boom';
 
 /** The one sound event bus: feeds audio, bot hearing, and the player's heard markers. */
 export interface SoundEvent {
@@ -147,6 +175,8 @@ export interface HitEvent {
   killed: boolean;
   /** Team modes: this hit downed the target (not out yet). */
   downed?: boolean;
+  /** A grenade blast (from = the blast, not the thrower, who may be behind a wall). */
+  grenade?: boolean;
 }
 
 export interface KillInfo {
@@ -184,6 +214,9 @@ export interface World {
   level: Level;
   actors: Actor[];
   bullets: Bullet[];
+  grenades: Grenade[];
+  /** Next grenade id (online clients match grenades across snapshots by it). */
+  nadeSeq: number;
   sounds: SoundEvent[];
   prevSounds: SoundEvent[];
   hits: HitEvent[];
@@ -235,6 +268,8 @@ function makeActor(id: number, team: Team, name: string, hero: HeroDef, sg: Side
   const weapon = weaponFor(hero, sg);
   const ab = power.signature ?? hero.ability;
   const maxHp = Math.round(hero.maxHp * power.hpMul);
+  // Grenades: the tier's capacity (free 3 ... 1:1 13), never upgrades; hostile bots carry a fixed few (solo difficulty).
+  const nades = team === 'bot' ? TUNING.grenade.botCount : power.grenades;
   return {
     id, team, ai: team === 'bot', name, hero, ability: { ...ab, cooldown: ab.cooldown * power.cooldownMul }, power, weapon, view: viewFor(hero, sg), x, y, vx: 0, vy: 0, facing,
     hp: maxHp, maxHp, armor: hero.maxArmor + power.armor, maxArmor: Math.max(hero.maxArmor, 50) + power.armor, alive: true,
@@ -242,6 +277,7 @@ function makeActor(id: number, team: Team, name: string, hero: HeroDef, sg: Side
     revealLeft: 0, shieldLeft: 0, frenzyLeft: 0, slowLeft: 0, slowMul: 1, burstLeft: 0, stepAcc: 0, hitFlash: 0, muzzle: 0, deadFor: 0, lastSpread: weapon.spreadDeg, lastHitTick: -999, lastHitFrom: null,
     shots: 0, bullets: 0, hits: 0, kills: 0, damageDealt: 0, damageTaken: 0, death: null, zoneTick: -999,
     downed: false, reviveProgress: 0, downInfo: null, firedLast: false,
+    grenades: nades, maxGrenades: nades, nadeCd: 0, thrown: 0, volley: 0, volleyGap: 0,
   };
 }
 
@@ -274,14 +310,14 @@ export function createWorld(opts: WorldOptions = {}): World {
       return { x: m.reduce((a, v) => a + v.x, 0) / Math.max(1, m.length), y: m.reduce((a, v) => a + v.y, 0) / Math.max(1, m.length) };
     });
     return {
-      tick: 0, rng: seed, level, actors, bullets: [], sounds: [], prevSounds: [], hits: [],
+      tick: 0, rng: seed, level, actors, bullets: [], grenades: [], nadeSeq: 0, sounds: [], prevSounds: [], hits: [],
       pickups: level.pickupSpawns.map((p) => ({ ...p, active: true, respawnLeft: 0 })), barriers: [],
       brains, attackTokens: [], perceptionLog: null, outcome: 'playing', playerKill: null,
       mode: 'versus', winner: null, friendlyFire: !!opts.friendlyFire,
       zone: opts.zone === false ? null : planZone(level, seed, ZONE_CENTRES, TUNING.zone, spawns),
     };
   }
-  const actors: Actor[] = [makeActor(0, 'player', 'You', heroById(opts.hero ?? 'kettle'), opts.sidegrade ?? NO_SIDEGRADE, level.playerSpawn.x, level.playerSpawn.y, 0, opts.power)];
+  const actors: Actor[] = [makeActor(0, 'player', 'You', heroById(opts.hero ?? 'benja'), opts.sidegrade ?? NO_SIDEGRADE, level.playerSpawn.x, level.playerSpawn.y, 0, opts.power)];
   // AI teammates spawn next to the player on free floor, in the same team, with their own bot brain.
   const ps = level.playerSpawn;
   const spots = [[1, 1], [1, -1], [-1, 1], [2, 0], [0, 2], [-1, -1]].map(([dx, dy]) => ({ x: Math.floor(ps.x) + dx + 0.5, y: Math.floor(ps.y) + dy + 0.5 }))
@@ -291,7 +327,7 @@ export function createWorld(opts: WorldOptions = {}): World {
     const a = makeActor(actors.length, 'player', m.name, heroById(m.hero), NO_SIDEGRADE, q.x, q.y, 0);
     a.ai = true;
     actors.push(a);
-    brains.set(a.id, createBrain({ name: m.name, hero: m.hero, patrol: [[Math.floor(q.x), Math.floor(q.y)]], flanker: i % 2 === 1 }));
+    brains.set(a.id, createBrain({ name: m.name, hero: m.hero, patrol: [[Math.floor(q.x), Math.floor(q.y)]], flanker: a.hero.dept === 'flanker' }));
   });
   (opts.bots ?? BOT_SPAWNS).forEach((b) => {
     const [tx, ty] = b.patrol[0];
@@ -300,7 +336,7 @@ export function createWorld(opts: WorldOptions = {}): World {
     brains.set(a.id, createBrain(b));
   });
   return {
-    tick: 0, rng: seed, level, actors, bullets: [], sounds: [], prevSounds: [], hits: [],
+    tick: 0, rng: seed, level, actors, bullets: [], grenades: [], nadeSeq: 0, sounds: [], prevSounds: [], hits: [],
     pickups: level.pickupSpawns.map((p) => ({ ...p, active: true, respawnLeft: 0 })), barriers: [],
     brains, attackTokens: [], perceptionLog: opts.log ? [] : null, outcome: 'playing', playerKill: null,
     mode: 'solo', winner: null, friendlyFire: !!opts.friendlyFire,
@@ -351,7 +387,7 @@ export function mitigate(armor: number, damage: number, armorPen: number): { hp:
   return { hp: damage - soak, armor: soak };
 }
 
-export const IDLE_INPUT: ActorInput = { moveX: 0, moveY: 0, quiet: false, aim: 0, firing: false, reload: false, ability: false };
+export const IDLE_INPUT: ActorInput = { moveX: 0, moveY: 0, quiet: false, aim: 0, firing: false, reload: false, ability: false, grenade: false };
 
 const vel: Vec2 = { x: 0, y: 0 };
 const move: Vec2 = { x: 0, y: 0 };
@@ -361,6 +397,7 @@ const moveTuning = { ...TUNING.movement, maxSpeed: TUNING.movement.maxSpeed as n
 function startReload(w: World, a: Actor): void {
   if (a.reloadLeft > 0 || a.ammo >= a.weapon.magazine || a.reserve <= 0) return;
   a.reloadLeft = a.weapon.reloadSeconds;
+  a.volley = 0;
   emit(w, 'reload', a.x, a.y, TUNING.sound.reload, a);
 }
 
@@ -457,7 +494,7 @@ function detonate(w: World, a: Actor): void {
 function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
   const M = TUNING.movement;
   // Downed: crawl, nothing else (no fire, reload, ability or pickups). The bleed-out runs in stepRevive.
-  if (a.downed) inp = { ...inp, firing: false, reload: false, ability: false, quiet: false, moveX: inp.moveX * TUNING.revive.crawl, moveY: inp.moveY * TUNING.revive.crawl };
+  if (a.downed) inp = { ...inp, firing: false, reload: false, ability: false, grenade: false, quiet: false, moveX: inp.moveX * TUNING.revive.crawl, moveY: inp.moveY * TUNING.revive.crawl };
   // Holding the trigger (even between shots) counts as firing: a rescuer must let go of it.
   a.firedLast = inp.firing;
   if (isHuman(a)) a.facing = inp.aim;
@@ -476,6 +513,8 @@ function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
     if (a.burstLeft === 0) detonate(w, a);
   }
   if (inp.ability && a.abilityCd === 0) useAbility(w, a, inp);
+  a.nadeCd = Math.max(0, a.nadeCd - dt);
+  if (inp.grenade && a.grenades > 0 && a.nadeCd === 0 && a.shieldLeft === 0) throwGrenade(w, a, inp.aim, inp.throwDist);
 
   const speedMul = a.hero.speed * (a.slowLeft > 0 ? a.slowMul : 1);
   if (a.dashLeft > 0) {
@@ -531,23 +570,113 @@ function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
     startReload(w, a);
     if (a.reloadLeft > 0) return;
   }
-  if (inp.firing && a.cooldown === 0 && a.ammo > 0 && a.shieldLeft === 0) {
-    const spread = a.lastSpread * DEG;
-    for (let i = 0; i < W.pellets; i++) {
-      // Pellets fan evenly across the spread with a little jitter; single shots are random within it.
-      const base = W.pellets > 1 ? -spread + (2 * spread * i) / (W.pellets - 1) : 0;
-      const jitter = (rand(w) * 2 - 1) * (W.pellets > 1 ? spread / W.pellets : spread);
-      const ang = a.facing + base + jitter;
-      w.bullets.push({ x: a.x, y: a.y, dx: Math.cos(ang), dy: Math.sin(ang), ox: a.x, oy: a.y, life: W.bulletLife, owner: a.id, weapon: W, alive: true });
-    }
-    a.ammo--;
+  // Burst weapons finish the burst they started (one trigger pull, W.burst rounds W.burstGap apart).
+  if (a.volley > 0) {
+    a.volleyGap -= dt;
+    if (a.volleyGap <= 0 && a.ammo > 0 && a.shieldLeft === 0) fireRound(w, a);
+    else if (a.ammo === 0 || a.shieldLeft > 0) { a.volley = 0; a.cooldown = W.fireInterval; }
+  } else if (inp.firing && a.cooldown === 0 && a.ammo > 0 && a.shieldLeft === 0) {
     a.shots++;
-    a.bullets += W.pellets;
-    a.cooldown = W.fireInterval;
-    a.muzzle = TUNING.render.muzzleFlash;
-    emit(w, 'shot', a.x, a.y, TUNING.sound.shot, a, W.sound);
+    a.volley = W.burst ?? 1;
+    fireRound(w, a);
   }
   if (a.ammo === 0 && !a.downed) startReload(w, a);
+}
+
+/** One round of the current trigger pull: every pellet, one ammo, the shot sound. Ends the burst on its last round. */
+function fireRound(w: World, a: Actor): void {
+  const W = a.weapon;
+  const spread = a.lastSpread * DEG;
+  for (let i = 0; i < W.pellets; i++) {
+    // Pellets fan evenly across the spread with a little jitter; single shots are random within it.
+    const base = W.pellets > 1 ? -spread + (2 * spread * i) / (W.pellets - 1) : 0;
+    const jitter = (rand(w) * 2 - 1) * (W.pellets > 1 ? spread / W.pellets : spread);
+    const ang = a.facing + base + jitter;
+    w.bullets.push({ x: a.x, y: a.y, dx: Math.cos(ang), dy: Math.sin(ang), ox: a.x, oy: a.y, life: W.bulletLife, owner: a.id, weapon: W, alive: true });
+  }
+  a.ammo--;
+  a.bullets += W.pellets;
+  a.muzzle = TUNING.render.muzzleFlash;
+  emit(w, 'shot', a.x, a.y, TUNING.sound.shot, a, W.sound);
+  a.volley = Math.max(0, a.volley - 1);
+  if (a.volley > 0) a.volleyGap = W.burstGap ?? 0;
+  else a.cooldown = W.fireInterval;
+}
+
+/** Throw toward `aim`: launched so rolling friction brings it to rest `dist` u away (TUNING.grenade). */
+function throwGrenade(w: World, a: Actor, aim: number, dist?: number): void {
+  const G = TUNING.grenade;
+  const d = Math.max(G.minThrow, Math.min(G.maxThrow, dist ?? G.touchThrow));
+  const v = Math.sqrt(2 * G.friction * d);
+  const cx = Math.cos(aim), cy = Math.sin(aim);
+  // Leaves the hand just ahead of the body, unless a wall is right there.
+  const hx = a.x + cx * 0.5, hy = a.y + cy * 0.5;
+  const out = sightClear(w.level, a.x, a.y, hx, hy);
+  w.grenades.push({ id: w.nadeSeq++, x: out ? hx : a.x, y: out ? hy : a.y, vx: cx * v, vy: cy * v, fuse: G.fuseSeconds, owner: a.id, team: a.team, alive: true });
+  a.grenades--;
+  a.thrown++;
+  a.nadeCd = G.throwCooldown;
+  emit(w, 'throw', a.x, a.y, G.throwSound, a);
+}
+
+/** Grenades roll (friction), bounce off walls (not crates or slabs: they are lobbed over waist-high cover) and explode. */
+function stepGrenades(w: World, dt: number): void {
+  const G = TUNING.grenade;
+  for (const g of w.grenades) {
+    if (!g.alive) continue;
+    const sp = Math.hypot(g.vx, g.vy);
+    if (sp > 0) {
+      const k = Math.max(0, sp - G.friction * dt) / sp;
+      g.vx *= k;
+      g.vy *= k;
+      const nx = g.x + g.vx * dt, ny = g.y + g.vy * dt;
+      if (sightClear(w.level, g.x, g.y, nx, ny)) {
+        g.x = nx;
+        g.y = ny;
+      } else {
+        // Bounce on the blocked axis (both at a corner), keeping G.bounce of the speed.
+        const xOk = sightClear(w.level, g.x, g.y, nx, g.y), yOk = sightClear(w.level, g.x, g.y, g.x, ny);
+        if (!xOk || xOk === yOk) g.vx = -g.vx * G.bounce;
+        if (!yOk || xOk === yOk) g.vy = -g.vy * G.bounce;
+        if (xOk && !yOk) g.x = nx;
+        if (yOk && !xOk) g.y = ny;
+        if (sp > 2) emit(w, 'bounce', g.x, g.y, G.bounceSound, w.actors[g.owner]);
+      }
+    }
+    g.fuse -= dt;
+    if (g.fuse <= 0) explode(w, g);
+  }
+  let j = 0;
+  for (const g of w.grenades) if (g.alive) w.grenades[j++] = g;
+  w.grenades.length = j;
+}
+
+/**
+ * Blast: full damage at the centre falling linearly to edgeDamage at the radius. A wall between the blast and a target
+ * blocks it; a crate or slab halves it. Hurts hostiles and the thrower; teammates only with friendly fire on.
+ */
+function explode(w: World, g: Grenade): void {
+  const G = TUNING.grenade;
+  const by = w.actors[g.owner];
+  g.alive = false;
+  emit(w, 'boom', g.x, g.y, G.boomSound, by);
+  for (const t of w.actors) {
+    if (!t.alive || (t.team === by.team && t !== by && !w.friendlyFire)) continue;
+    const d = Math.hypot(t.x - g.x, t.y - g.y);
+    if (d > G.radius || !sightClear(w.level, g.x, g.y, t.x, t.y)) continue;
+    const cover = shotClear(w.level, g.x, g.y, t.x, t.y, false, 0) ? 1 : G.coverMul;
+    const raw = t.shieldLeft > 0 ? 0 : (G.damage + (G.edgeDamage - G.damage) * (d / G.radius)) * cover * (by.ai ? TUNING.bots.damageMul : 1);
+    const m = mitigate(t.armor, raw, G.armorPen);
+    t.armor -= m.armor;
+    t.hp -= m.hp;
+    t.hitFlash = TUNING.render.hitFlash;
+    t.lastHitTick = w.tick;
+    t.lastHitFrom = { x: g.x, y: g.y };
+    if (t.team !== by.team) by.damageDealt += raw;
+    t.damageTaken += m.hp + m.armor;
+    const r = t.hp <= 0 ? drop(w, t, { cause: 'shot', killerId: by.id, weapon: 'Grenade', fromX: g.x, fromY: g.y, toX: t.x, toY: t.y, tick: w.tick }) : null;
+    w.hits.push({ target: t.id, by: by.id, x: t.x, y: t.y, fromX: g.x, fromY: g.y, hpDamage: m.hp, armorDamage: m.armor, killed: r === 'out', downed: r === 'downed', grenade: true });
+  }
 }
 
 function stepBullets(w: World, dt: number): void {
@@ -640,6 +769,7 @@ function drop(w: World, t: Actor, info: KillInfo): 'downed' | 'out' {
     t.reloadLeft = 0;
     t.burstLeft = 0;
     t.shieldLeft = t.frenzyLeft = 0;
+    t.volley = 0;
     t.vx = t.vy = 0;
     emit(w, 'downed', t.x, t.y, TUNING.sound.death, t);
     return 'downed';
@@ -819,6 +949,7 @@ export function stepWorld(
     applyInput(w, a, inp, dt);
   }
   stepBullets(w, dt);
+  stepGrenades(w, dt);
   stepZone(w, dt);
   stepPickups(w, dt);
   stepRevive(w, dt);

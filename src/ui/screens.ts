@@ -5,7 +5,7 @@
 // table.stats, the results h2.
 import { HEROES, type HeroDef } from '../config/heroes';
 import { WEAPONS } from '../config/weapons';
-import { fmtTime, type Best, type Records } from './records';
+import { fmtTime, type Records } from './records';
 import { medalProgress, type MedalDef, type Unlocked } from './medals';
 import { displayName, NICK_MAX, STICK_PX, type Profile, type Settings } from './profile';
 import { controlsSvg, medalSvg, portraitSvg, RARITY_LABEL } from './art';
@@ -54,10 +54,6 @@ const ICON = {
   pin: '<svg viewBox="0 0 24 24"><path d="M9 3h6l-1 6 4 4H6l4-4zM12 13v8"/></svg>',
 };
 
-const careerLine = (b: Best | undefined) => b && b.runs
-  ? `${b.runs} run${b.runs === 1 ? '' : 's'} · ${b.wins} clear${b.wins === 1 ? '' : 's'} · best ${fmtTime(b.bestWinSeconds)}`
-  : 'Not played yet';
-
 function topbar(title: string, right = '') {
   return `<header class="topbar"><button class="icon-btn" data-act="back" aria-label="Back">${ICON.back}</button><h2 class="bar-title">${title}</h2><div class="bar-right">${right}</div></header>`;
 }
@@ -72,6 +68,7 @@ export function howtoHtml(c: ScreenCtx): string {
 <tr><td>Aim / shoot</td><td>${t ? 'Right thumb; push past the ring to fire' : 'Mouse; hold left click'}</td></tr>
 <tr><td>Creep (quiet)</td><td>${t ? 'Half push on the left stick' : 'Hold Shift'}</td></tr>
 <tr><td>Ability</td><td>${t ? 'Ability button' : 'Space'} · reload ${t ? 'button' : 'R'}</td></tr>
+<tr><td>Grenade</td><td>${t ? 'Grenade button: thrown along your aim' : 'G or right click: lands at the cursor'}</td></tr>
 <tr><td>Pale rings</td><td>A noise you heard, not saw. Running is loud; enemies hear you too.</td></tr>
 <tr><td>Team</td><td>You + 2 AI teammates vs 5 bots. Down: a teammate revives you.</td></tr><tr><td>Win</td><td>Your side downs all five hostiles.</td></tr></table></div>
 <div class="btns"><button class="btn primary" data-act="howto-close">Got it</button></div></div>`;
@@ -91,21 +88,26 @@ function statBar(label: string, v: number) {
   return `<div class="stat">${label}<s style="--v:${Math.round(Math.max(0.08, Math.min(1, v)) * 100)}%"></s></div>`;
 }
 
+/** Damage per second of a weapon at point blank, bursts included (the roster's Punch bar). */
+export function weaponDps(w: (typeof WEAPONS)[string]): number {
+  const n = w.burst ?? 1;
+  return (w.damage * w.pellets * n) / (w.fireInterval + (n - 1) * (w.burstGap ?? 0));
+}
+
 export function selectHtml(c: ScreenCtx): string {
   const cards = HEROES.map((h, i) => {
     const w = WEAPONS[h.weapon];
-    const dps = (w.damage * w.pellets) / w.fireInterval;
     const fav = c.profile.favourite === h.id;
     return `<button class="hero${h.id === c.heroId ? ' sel' : ''}" data-hero="${h.id}" style="--accent:#${h.accent.toString(16).padStart(6, '0')}">
 <div class="hero-art">${portraitSvg(h, `s${i}`, h.id === c.heroId ? c.marking : null)}${fav ? '<i class="fav" title="Favourite">★</i>' : ''}</div>
-<div class="role">${i + 1} · ${esc(h.role)}</div><b><i></i>${esc(h.name)}</b><p>${esc(h.blurb)}</p>
-${statBar('Health', h.maxHp / 120)}${statBar('Armour', h.maxArmor / 50)}${statBar('Speed', (h.speed - 0.8) / 0.32)}${statBar('Sight', h.vision.range / 12)}${statBar('Punch', dps / 170)}
-<div class="wp">${esc(w.name)}</div><div class="ab">${esc(h.ability.name)} <span>· ${esc(h.ability.text)}</span></div>
-<div class="career">${careerLine(c.records.heroes[h.id])}</div></button>`;
+<div class="role dept-${h.dept}">${esc(h.role)}</div><b>${esc(h.name)}</b>
+${statBar('Health', (h.maxHp + h.maxArmor) / 180)}${statBar('Speed', (h.speed - 0.8) / 0.32)}${statBar('Sight', h.vision.range / 12)}${statBar('Punch', weaponDps(w) / 450)}
+<div class="wp">${esc(w.name)}</div><div class="ab" title="${esc(h.ability.text)}">${esc(h.ability.name)}</div></button>`;
   }).join('');
-  return `<div class="screen select"><header class="topbar"><button class="icon-btn" data-go="quit" aria-label="Back">${ICON.back}</button><h2 class="bar-title">Pick an operator</h2><div class="bar-right"><div class="mock" id="selchip">${c.demoChip}</div></div></header>
+  const demo = c.demoChip.includes('DEMO') ? `<div class="mock" id="selchip">${c.demoChip}</div>` : '';
+  return `<div class="screen select"><header class="topbar"><button class="icon-btn" data-go="quit" aria-label="Back">${ICON.back}</button><h2 class="bar-title">Roster</h2><div class="bar-right">${demo}</div></header>
 <div class="heroes">${cards}</div>
-<footer class="foot"><span class="hint-line">${c.touch ? 'Tap a card to pick it' : 'Keys 1-4 pick'}</span><button class="btn" data-go="pick">Play vs bots</button><button class="btn primary play" data-go="quit">Done</button></footer></div>`;
+<footer class="foot"><span></span><button class="btn primary play" data-go="quit">Done</button></footer></div>`;
 }
 
 // ---- Medal card (Medals screen) ----

@@ -106,7 +106,10 @@ function identity(c: HubCtx): string {
   const lv = p ? { level: p.level, into: p.into, next: p.next } : levelOf(0);
   const ready = upgradesReady(a);
   return `<div class="ident">
-<button class="player-chip" data-act="career" aria-label="Career">${tokenSvg(fav ? fav.accent : null, fav?.id)}<b id="callsign">${esc(displayName(c.profile))}</b>${a.signedIn && p && !p.callsign ? '<i class="new">NAME</i>' : ''}</button>
+${a.signedIn && p && !p.callsign
+    // No callsign yet: the chip opens the callsign editor (a pencil says so), not the career screen.
+    ? `<button class="player-chip" data-act="nick" aria-label="Set your callsign">${tokenSvg(fav ? fav.accent : null, fav?.id)}<b id="callsign">${esc(displayName(c.profile))}</b><i class="new edit">${ICON.edit}</i></button>`
+    : `<button class="player-chip" data-act="career" aria-label="Career">${tokenSvg(fav ? fav.accent : null, fav?.id)}<b id="callsign">${esc(displayName(c.profile))}</b></button>`}
 <div class="lvl"><div class="lvl-top"><b class="num" id="hublevel">LV ${lv.level}</b><span class="num" id="hubxp">${p ? `${p.into} / ${p.next} XP` : '0 XP'}</span></div><div class="xpbar"><i style="width:${Math.round((lv.into / lv.next) * 100)}%"></i></div></div>
 <div class="wallet">
   <button class="cur" data-act="upgrades" aria-label="Shards">${ICON.shard}<b class="num" id="hubshards">${p?.shards ?? 0}</b>${ready ? `<i class="dot num">${ready}</i>` : ''}</button>
@@ -203,7 +206,7 @@ function playPanel(c: HubCtx): string {
   <button class="op-show" data-go="start" aria-label="Operator details">${portraitSvg(h, 'hub', c.marking)}</button>
   <button class="icon-btn small" data-hero="${next}" data-pick="1" aria-label="Next operator">${ICON.next}</button>
 </div>
-<div class="op-name"><b>${esc(h.name)}</b><small>${esc(WEAPONS[h.weapon].name)} · ${esc(classOf(c.acct).power.signature?.name ?? h.ability.name)}</small></div>
+<div class="op-name"><b>${esc(h.name)}</b><small><i class="dept dept-${h.dept}">${esc(h.role)}</i> · ${esc(WEAPONS[h.weapon].name)} · ${esc(classOf(c.acct).power.signature?.name ?? h.ability.name)}</small></div>
 <div class="modes4">${modes}</div>
 <button class="btn primary play" ${playAttr}${disabled ? ' disabled' : ''} id="playbtn">${esc(playLabel)}</button>
 ${status}

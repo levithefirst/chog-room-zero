@@ -11,7 +11,7 @@ const ROOM = [
   '#............#',
   '##############',
 ];
-const far = [{ name: 'T', hero: 'kettle', patrol: [[11, 3]] as [number, number][], flanker: false }];
+const far = [{ name: 'T', hero: 'benja', patrol: [[11, 3]] as [number, number][], flanker: false }];
 
 describe('pickups', () => {
   it('health heals up to max, goes inactive, and respawns on its timer', () => {
@@ -74,7 +74,7 @@ describe('pickups', () => {
 
 describe('abilities', () => {
   it('Slip (dash) moves much further than running for the same time, then cools down', () => {
-    const w = createWorld({ map: ROOM, hero: 'mop', bots: [] });
+    const w = createWorld({ map: ROOM, hero: 'toad', bots: [] });
     const p = player(w);
     p.x = 2.5; p.y = 2.5;
     stepWorld(w, input({ moveX: 1, ability: true }));
@@ -87,7 +87,7 @@ describe('abilities', () => {
     expect(p.x).toBeCloseTo(x, 0);
   });
   it('Ping (sonar) reveals hostiles in range through walls for its duration, and is heard', () => {
-    const w = createWorld({ map: ROOM, hero: 'wick', bots: far });
+    const w = createWorld({ map: ROOM, hero: 'benja', bots: far });
     const p = player(w);
     stepWorld(w, input({ ability: true }));
     expect(revealed(w, p).length).toBe(1);
@@ -96,7 +96,7 @@ describe('abilities', () => {
     expect(revealed(w, p).length).toBe(0);
   });
   it('Slab (barrier) blocks bullets while it stands, then disappears', () => {
-    const w = createWorld({ map: ROOM, hero: 'brick', bots: [] });
+    const w = createWorld({ map: ROOM, hero: 'yot', bots: [] });
     const p = player(w);
     p.x = 3.5; p.y = 2.5;
     stepWorld(w, input({ aim: 0, ability: true }));
@@ -107,15 +107,15 @@ describe('abilities', () => {
     expect(shotClear(w.level, 10.5, 2.5, 2.5, 2.5, false, TUNING.combat.coverLean)).toBe(true);
   });
   it('Patch (mend) restores 35 health, capped at max', () => {
-    const w = createWorld({ map: ROOM, hero: 'kettle', bots: [] });
+    const w = createWorld({ map: ROOM, hero: 'tonashiro', bots: [] });
     const p = player(w);
     p.hp = 50;
     p.x = 2.5; p.y = 3.5;
     stepWorld(w, input({ ability: true }));
     expect(p.hp).toBe(85);
-    p.hp = 95;
+    p.hp = p.maxHp - 5;
     p.abilityCd = 0;
     stepWorld(w, input({ ability: true }));
-    expect(p.hp).toBe(100);
+    expect(p.hp).toBe(p.maxHp);
   });
 });

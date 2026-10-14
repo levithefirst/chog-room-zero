@@ -195,6 +195,22 @@ export function createAudio(): Audio {
           burst(0, 0.4, 'bandpass', 1800, 2, 0.35);
           len = 0.55;
           break;
+        // Grenades: a soft swish when thrown, a metal clink when it hits a wall, a deep boom with a crack on top.
+        case 'throw':
+          burst(0, 0.14, 'bandpass', 1300, 1.4, 0.25);
+          len = 0.18;
+          break;
+        case 'bounce':
+          thump(0, 0.07, 2600, 2300, 0.22);
+          thump(0.03, 0.06, 3300, 3100, 0.12);
+          len = 0.12;
+          break;
+        case 'boom':
+          thump(0, 0.7, 95, 32, 1);
+          burst(0, 0.12, 'highpass', 2500, 0.7, 0.6);
+          burst(0.02, 0.8, 'lowpass', 900, 0.8, 0.9);
+          len = 0.85;
+          break;
         case 'shield': // a bright bell
           thump(0, 0.6, 1320, 1300, 0.3);
           thump(0, 0.6, 1980, 1960, 0.15);

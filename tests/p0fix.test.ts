@@ -1,4 +1,5 @@
 // P0 bug-fix sprint regressions (ADE QA ids in test names).
+import { TUNING } from '../src/config/tuning';
 import { describe, expect, it } from 'vitest';
 import { createWorld, stepWorld, IDLE_INPUT, viewOf, type World } from '../src/sim/world';
 import { canSee } from '../src/sim/vision';
@@ -67,6 +68,8 @@ describe('CHOG-VIS-001 enemy visibility', () => {
         for (const h of w.hits) {
           if (h.target !== 0) continue;
           hits++;
+          // A grenade's visible source is its blast ring, drawn for anyone within radius + 1.5 u (render.ts).
+          if (h.grenade) { if (Math.hypot(h.fromX - p.x, h.fromY - p.y) <= TUNING.grenade.radius + 1.5) drawable++; continue; }
           const a = w.actors[h.by];
           const m = enemyDrawMode(w.level, p, viewOf(p), a, { recapKiller: false, threatLeft: THREAT_HIT_SECONDS, pinged: false });
           if (m === 'body') inCone++;

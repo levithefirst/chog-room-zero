@@ -83,14 +83,14 @@ describe('ladder and caps', () => {
   });
   it('spawn applies the tier: health, armour, armour cap, ability cooldown', () => {
     const p = powerFor('rare', { focus: 2 });
-    const a = createWorld({ hero: 'kettle', power: p }).actors[0];
-    const k = HEROES.find((h) => h.id === 'kettle')!;
+    const a = createWorld({ hero: 'benja', power: p }).actors[0];
+    const k = HEROES.find((h) => h.id === 'benja')!;
     expect(a.maxHp).toBe(Math.round(k.maxHp * 1.32));
     expect(a.hp).toBe(a.maxHp);
     expect(a.armor).toBe(k.maxArmor + 18);
     expect(a.maxArmor).toBe(50 + 18);
     expect(a.ability.cooldown).toBeCloseTo(k.ability.cooldown * 0.9, 6);
-    expect(createWorld({ hero: 'kettle' }).actors[0].maxHp).toBe(k.maxHp);
+    expect(createWorld({ hero: 'benja' }).actors[0].maxHp).toBe(k.maxHp);
   });
 });
 
@@ -99,9 +99,9 @@ function arena(sig: keyof typeof SIGNATURES, gap = 2, map = HALL): World {
   return createWorld({
     seed: 1, map, zone: false,
     versus: [
-      { name: 'S', hero: 'kettle', team: 'alpha', x: 10, y: 4.5, facing: 0, power: powerFor('legendary', null, SIGNATURES[sig]) },
-      { name: 'T', hero: 'kettle', team: 'bravo', x: 10 + gap, y: 4.5, facing: Math.PI },
-      { name: 'A', hero: 'kettle', team: 'alpha', x: 10, y: 6, facing: 0 },
+      { name: 'S', hero: 'benja', team: 'alpha', x: 10, y: 4.5, facing: 0, power: powerFor('legendary', null, SIGNATURES[sig]) },
+      { name: 'T', hero: 'benja', team: 'bravo', x: 10 + gap, y: 4.5, facing: Math.PI },
+      { name: 'A', hero: 'benja', team: 'alpha', x: 10, y: 6, facing: 0 },
     ],
   });
 }
@@ -129,8 +129,8 @@ describe('1:1 signature abilities in the sim', () => {
   });
   it('a 1:1 signature sound carries its token, so every client plays that Chog\'s own voice and colour', () => {
     const w = createWorld({ seed: 1, map: HALL, zone: false, versus: [
-      { name: 'S', hero: 'kettle', team: 'alpha', x: 10, y: 4.5, facing: 0, power: powerForToken(53, null, false) },
-      { name: 'T', hero: 'kettle', team: 'bravo', x: 12, y: 4.5, facing: Math.PI },
+      { name: 'S', hero: 'benja', team: 'alpha', x: 10, y: 4.5, facing: 0, power: powerForToken(53, null, false) },
+      { name: 'T', hero: 'benja', team: 'bravo', x: 12, y: 4.5, facing: Math.PI },
     ] });
     run(w, 1, pressOnce);
     expect(w.sounds.find((s) => s.type === 'windup')?.sig).toBe(53);
@@ -140,8 +140,9 @@ describe('1:1 signature abilities in the sim', () => {
   });
   it('Hellfire ignores armour', () => {
     const w = arena(392);
+    const armor = w.actors[1].armor;
     run(w, 70, pressOnce);
-    expect(w.actors[1].armor).toBe(25);
+    expect(w.actors[1].armor).toBe(armor);
     expect(w.actors[1].hp).toBeLessThan(w.actors[1].maxHp - 29);
   });
   it('Howl slows hostiles in sight', () => {
@@ -184,7 +185,7 @@ describe('1:1 signature abilities in the sim', () => {
   it('Leap goes further than Slip; Bulwark is longer and lasts longer than Slab; Deadsight reaches 18 m', () => {
     const leap = arena(973);
     run(leap, 19, (id, t) => (id === 0 ? { ability: t === 0, moveX: -1 } : {}));
-    const slip = createWorld({ seed: 1, map: HALL, zone: false, versus: [{ name: 'M', hero: 'mop', team: 'alpha', x: 10, y: 4.5, facing: 0 }] });
+    const slip = createWorld({ seed: 1, map: HALL, zone: false, versus: [{ name: 'M', hero: 'toad', team: 'alpha', x: 10, y: 4.5, facing: 0 }] });
     run(slip, 19, (id, t) => (id === 0 ? { ability: t === 0, moveX: -1 } : {}));
     expect(10 - leap.actors[0].x).toBeGreaterThan(3.5);
     expect(10 - leap.actors[0].x).toBeGreaterThan(10 - slip.actors[0].x + 1);
@@ -202,8 +203,8 @@ describe('1:1 signature abilities in the sim', () => {
 describe('measured duel bands', () => {
   const mean = (hero: string, a: ReturnType<typeof powerFor>, b: ReturnType<typeof powerFor>, n = 12, ability = false) =>
     [3, 6].reduce((s, d) => s + share(hero, a, hero, b, d, n, ability), 0) / 2;
-  it('Common beats a fresh free player about 7 in 10 (Kettle, Mop): real, beatable; a 1:1 dominates (over 0.95)', () => {
-    for (const hero of ['kettle', 'mop']) {
+  it('Common beats a fresh free player about 7 in 10 (Benja, Tabsu): real, beatable; a 1:1 dominates (over 0.95)', () => {
+    for (const hero of ['benja', 'tabsu']) {
       const c = mean(hero, powerFor('common'), BASE_POWER);
       expect(c, hero).toBeGreaterThanOrEqual(0.6);
       expect(c, hero).toBeLessThanOrEqual(0.85);
@@ -211,11 +212,11 @@ describe('measured duel bands', () => {
     }
   }, 120000);
   it('the ladder is monotonic (Kettle)', () => {
-    const s = TIERS.slice(1).map((t) => mean('kettle', powerFor(t), BASE_POWER));
+    const s = TIERS.slice(1).map((t) => mean('benja', powerFor(t), BASE_POWER));
     for (let i = 1; i < s.length; i++) expect(s[i]).toBeGreaterThanOrEqual(s[i - 1]);
   }, 120000);
   it('a maxed free player beats a Common holder, is even with Uncommon, and still loses to a 1:1', () => {
-    for (const hero of ['kettle', 'mop']) {
+    for (const hero of ['benja', 'tabsu']) {
       expect(mean(hero, powerFor('free', MAX_U), powerFor('common')), hero).toBeGreaterThanOrEqual(0.6);
       const u = mean(hero, powerFor('free', MAX_U), powerFor('uncommon'));
       expect(u, hero).toBeGreaterThanOrEqual(0.4);
@@ -225,7 +226,7 @@ describe('measured duel bands', () => {
   }, 180000);
   it('no signature dominates a 1:1 with the plain hero ability (mean of 3 and 6 u within 0.3 to 0.85)', () => {
     for (const sig of Object.values(SIGNATURES)) {
-      const s = mean('kettle', powerFor('legendary', null, sig), powerFor('legendary'), 12, true);
+      const s = mean('benja', powerFor('legendary', null, sig), powerFor('legendary'), 12, true);
       expect(s, sig.name).toBeGreaterThanOrEqual(0.3);
       expect(s, sig.name).toBeLessThanOrEqual(0.85);
     }

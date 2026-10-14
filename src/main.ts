@@ -14,7 +14,7 @@ import { muzzleFlashSeen } from './sim/vision';
 import { canSee } from './sim/vision';
 import { nextPhase, simRuns, type MatchEvent, type Phase } from './sim/match';
 import { TUNING } from './config/tuning';
-import { HEROES, heroById } from './config/heroes';
+import { HEROES, heroById, heroIdOf, squadFor } from './config/heroes';
 import { heroForKey } from './ui/heroKeys';
 import { portraitSvg } from './ui/art';
 import { WEAPONS } from './config/weapons';
@@ -209,8 +209,7 @@ async function start() {
     const forced = AUTOPLAY_SEED !== null ? QS.get('hero') : null;
     if (forced && HEROES.some((x) => x.id === forced)) return forced;
     try {
-      const h = localStorage.getItem(HERO_KEY);
-      return h && HEROES.some((x) => x.id === h) ? h : HEROES[0].id;
+      return heroIdOf(localStorage.getItem(HERO_KEY)) ?? HEROES[0].id;
     } catch {
       return HEROES[0].id;
     }
@@ -268,6 +267,10 @@ async function start() {
   $('ability').onpointerdown = (e) => {
     e.stopPropagation();
     input.ability();
+  };
+  $('nade').onpointerdown = (e) => {
+    e.stopPropagation();
+    input.grenade();
   };
 
   // Fullscreen + landscape lock (src/ui/stage.ts). Tried by itself once, on the first tap of a touch device (the
@@ -794,16 +797,14 @@ async function start() {
     $('abl').innerHTML = `${esc(world.actors[0].ability.name)}<small class="keyhint">Space</small>`;
     $('pips').innerHTML = world.actors.filter((a) => a.team === 'bot').map(() => '<i></i>').join('');
     hint.innerHTML = input.mode === 'touch'
-      ? 'Left thumb moves, half push creeps. Right thumb aims, push past the ring to fire.'
-      : 'WASD move · Shift creep · Mouse aim · Click fire · R reload · Space ability · Esc pause';
+      ? 'Left thumb: move · Right thumb: aim and fire · Grenade button: throw'
+      : 'WASD move · Mouse aim · Click fire · Space ability · G grenade · R reload';
     showHint(hint.innerHTML, runIndex === 1 ? 6 : 0);
   }
 
   /** AI teammates for the default game: the two operators after yours in the roster, with their own names. */
-  function squadmates(): { name: string; hero: string }[] {
-    const i = HEROES.findIndex((h) => h.id === heroId);
-    return [1, 2].map((k) => ({ name: ['Rook', 'Moth'][k - 1], hero: HEROES[(i + k) % HEROES.length].id }));
-  }
+  /** The two AI teammates (heroes.ts squadFor): roster characters from other departments, by their names. */
+  const squadmates = () => squadFor(heroId, runIndex);
 
   // ---- Account and class system (master build) ----
   function newSession(): OnlineSession {
@@ -1158,6 +1159,12 @@ async function start() {
       if (s.type === 'burst' || s.type === 'scream') fx.rings.push({ x: s.x, y: s.y, age: 0, r: src0?.ability.radius ?? 3, color: sigCol ?? (s.type === 'burst' ? TUNING.palette.hostile : TUNING.palette.armor) });
       // Every other 1:1 signature shows its moment in the Chog's own colour: Halo at its real heal radius, the rest at the body.
       else if (s.sig && sigCol !== undefined && s.type !== 'sonar' && s.type !== 'windup') fx.rings.push({ x: s.x, y: s.y, age: 0, r: s.type === 'mend' && src0?.ability.allies ? src0.ability.radius ?? 1.5 : 1.4, color: sigCol });
+      // Grenade blast: the true radius flashes; the screen shakes only when you were inside it (it hurt you or nearly).
+      if (s.type === 'boom') {
+        fx.rings.push({ x: s.x, y: s.y, age: 0, r: TUNING.grenade.radius, color: s.team === p.team ? TUNING.palette.ammo : TUNING.palette.hostile });
+        spark(s.x, s.y, 16, s.team !== p.team);
+        if (p.alive && Math.hypot(dx, dy) <= TUNING.grenade.radius + 0.5) fx.shake = TUNING.render.shakeSeconds * 1.6;
+      }
       if (s.type === 'downed') toast(s.sourceId === 0 ? 'YOU ARE DOWN · a teammate can revive you' : `${src0?.name ?? 'Someone'} is DOWN`);
       if (s.type === 'revive') toast(s.sourceId === 0 ? 'Revived a teammate' : 'Revived');
       // The one reveal rule (docs/design/bots.md): a muzzle flash with wall line of sight shows the shooter
@@ -1202,8 +1209,9 @@ async function start() {
         fx.shake = TUNING.render.shakeSeconds;
         fx.damageArcs.push({ ang: Math.atan2(h.fromY - p.y, h.fromX - p.x), age: 0 });
         // Fairness rule: every hit comes from within your sight range with line of sight, so the shooter is
-        // always shown (ringed) for the reveal window, even when it stands outside the lamp cone.
-        fx.threats[h.by] = TUNING.perception.flashSeconds;
+        // always shown (ringed) for the reveal window, even when it stands outside the lamp cone. A grenade's
+        // source is the blast you saw land (its ring); the thrower behind a wall is not revealed.
+        if (!h.grenade) fx.threats[h.by] = TUNING.perception.flashSeconds;
         audio.play('hurt', 0, 0, 1, false, true);
         ($('hurt') as HTMLElement).style.opacity = '1';
         setTimeout(() => (($('hurt') as HTMLElement).style.opacity = '0'), 90);
@@ -1261,7 +1269,7 @@ async function start() {
       // Online: send controls, show the server's state. Nothing here decides a hit, damage or the result.
       const p = player(world);
       const ps = renderer.toScreen(p.x, p.y);
-      const inp = onlineDriver ? onlineDriver(world) : input.read(ps.x, ps.y);
+      const inp = onlineDriver ? onlineDriver(world) : input.read(ps.x, ps.y, renderer.toScreen(p.x + 1, p.y).x - ps.x);
       net.sendInput(p.alive ? inp : { ...inp, firing: false, moveX: 0, moveY: 0 }, performance.now());
       net.update(p.alive ? inp.aim : null);
       for (const ev of net.takeEvents()) { world.sounds = ev.sounds; world.hits = ev.hits; afterStep(); }
@@ -1280,11 +1288,12 @@ async function start() {
       resumeSkip = false;
       acc = r.remainder;
       // Only consume input on frames that step the sim, so a latched tap is never lost on a 0-step frame.
-      const inp = r.steps > 0 ? input.read(ps.x, ps.y) : null;
+      const inp = r.steps > 0 ? input.read(ps.x, ps.y, renderer.toScreen(p.x + 1, p.y).x - ps.x) : null;
       for (let i = 0; inp && i < r.steps && world.outcome === 'playing'; i++) {
         stepWorld(world, autopilot ? autopilot.next(world) : inp);
         inp.reload = false;
         inp.ability = false;
+        inp.grenade = false;
         // A tap fires exactly once: after the first step, firing follows the real button state.
         if (!input.fireHeld()) inp.firing = false;
         afterStep();
@@ -1349,7 +1358,7 @@ async function start() {
     const left = world.actors.filter((a) => a.team !== p.team && a.alive).length;
     const cdShare = p.abilityCd / p.ability.cooldown;
     const reloadShare = p.reloadLeft > 0 ? 1 - p.reloadLeft / p.weapon.reloadSeconds : 0;
-    const key = `${p.downed ? 'D' : ''}${Math.ceil(p.hp)}|${Math.ceil(p.armor)}|${p.ammo}|${p.reserve}|${left}|${Math.round(cdShare * 60)}|${Math.round(reloadShare * 40)}`;
+    const key = `${p.downed ? 'D' : ''}${Math.ceil(p.hp)}|${Math.ceil(p.armor)}|${p.ammo}|${p.reserve}|${left}|${Math.round(cdShare * 60)}|${Math.round(reloadShare * 40)}|${p.grenades}|${p.nadeCd > 0 ? 1 : 0}`;
     if (key !== lastHud) {
       lastHud = key;
       $('hpn').textContent = String(Math.max(0, Math.ceil(p.hp)));
@@ -1370,6 +1379,10 @@ async function start() {
       const ab = $('ability');
       ab.style.setProperty('--cd', `${(1 - cdShare) * 360}deg`);
       ab.classList.toggle('ready', cdShare === 0);
+      const nd = $('nade');
+      $('naden').textContent = String(p.grenades);
+      nd.classList.toggle('empty', p.grenades === 0);
+      nd.classList.toggle('cool', p.grenades > 0 && p.nadeCd > 0);
     }
     // Danger zone HUD (RC-8): phase words + countdown; "Outside" and a red edge while it is hurting you.
     if (world.zone) {

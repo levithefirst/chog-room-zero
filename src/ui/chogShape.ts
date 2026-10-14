@@ -16,18 +16,21 @@ export interface ChogParts {
   eyes: Dot[];
   cheeks: Dot[];
   hands: Dot[];
-  /** Per-operator silhouette cue, so Kettle, Mop, Brick and Wick read apart at a glance (not by colour alone). */
+  /** Per-character silhouette cue, so the seven roster characters read apart at a glance (not by colour alone). */
   gear: Gear[];
 }
 
 interface Spikes { n: number; front: number; back: number; valley: number }
 
-// Spikes per operator: count, tip length at the front and the back (hedgehog spikes sweep back), valley depth.
+// Spikes per character: count, tip length at the front and the back (hedgehog spikes sweep back), valley depth.
 const SPIKES: Record<string, Spikes> = {
-  kettle: { n: 9, front: 1.04, back: 1.16, valley: 0.86 },
-  mop: { n: 13, front: 1.06, back: 1.2, valley: 0.84 }, // many thin strands: the fast one
-  brick: { n: 7, front: 1.02, back: 1.1, valley: 0.9 }, // short, blunt: the heavy one
-  wick: { n: 10, front: 1.04, back: 1.14, valley: 0.86 },
+  benja: { n: 9, front: 1.04, back: 1.16, valley: 0.86 },
+  toad: { n: 7, front: 1.02, back: 1.1, valley: 0.9 }, // short, blunt: the tank
+  ray: { n: 10, front: 1.04, back: 1.14, valley: 0.86 },
+  tabsu: { n: 13, front: 1.06, back: 1.2, valley: 0.84 }, // many thin strands: the fast one
+  tonashiro: { n: 8, front: 1.03, back: 1.12, valley: 0.88 },
+  yot: { n: 11, front: 1.05, back: 1.15, valley: 0.86 },
+  bill: { n: 12, front: 1.06, back: 1.2, valley: 0.84 }, // long swept spikes: the diver
 };
 
 function spikyBody(s: Spikes): number[] {
@@ -45,20 +48,36 @@ function spikyBody(s: Spikes): number[] {
 
 function gearFor(id: string): Gear[] {
   switch (id) {
-    // Kettle (rifle, Patch): a round lid on the crown with a knob; the medic.
-    case 'kettle': return [
-      { dot: { x: -0.36, y: 0, r: 0.32 }, fill: 'purpleDeep', stroke: 'purpleBright' },
-      { dot: { x: -0.36, y: 0, r: 0.11 }, fill: 'health' },
+    // Benja (assault, rifle, Ping): a small dish on the crown with a lit receiver.
+    case 'benja': return [
+      { poly: [-0.2, -0.36, -0.46, -0.3, -0.56, 0, -0.46, 0.3, -0.2, 0.36, -0.32, 0], fill: 'purpleDeep', stroke: 'purpleBright' },
+      { dot: { x: -0.36, y: 0, r: 0.09 }, fill: 'ally' },
     ];
-    // Mop (SMG, Slip): a pink sweatband across the brow; the runner.
-    case 'mop': return [{ poly: [0.02, -0.78, 0.2, -0.74, 0.2, 0.74, 0.02, 0.78], fill: 'pink' }];
-    // Brick (shotgun, Slab): a square helmet plate on the crown; the holder.
-    case 'brick': return [{ poly: [-0.78, -0.46, -0.12, -0.46, -0.12, 0.46, -0.78, 0.46], fill: 'purpleDeep', stroke: 'border' }];
-    // Wick (marksman, Ping): one tall wick spike with a lit tip, and a scope ring over one eye; the lane holder.
-    case 'wick': return [
+    // Toad (tank, LMG, Slip): a wide square helmet plate with shoulder pads; the frontline.
+    case 'toad': return [
+      { poly: [-0.82, -0.56, -0.08, -0.56, -0.08, 0.56, -0.82, 0.56], fill: 'purpleDeep', stroke: 'border' },
+      { dot: { x: -0.2, y: -0.78, r: 0.16 }, fill: 'border' },
+      { dot: { x: -0.2, y: 0.78, r: 0.16 }, fill: 'border' },
+    ];
+    // Ray (sniper, marksman, Snare): one tall spike with a lit tip, and a scope ring over one eye.
+    case 'ray': return [
       { poly: [-0.5, -0.12, -1.12, 0, -0.5, 0.12], fill: 'purpleDeep' },
       { dot: { x: -1.08, y: 0, r: 0.09 }, fill: 'ammo' },
       { dot: { x: 0.6, y: -0.2, r: 0.19 }, fill: 'bgDeep', stroke: 'cream' },
+    ];
+    // Tabsu (flanker, SMG, Shell): a pink sweatband across the brow.
+    case 'tabsu': return [{ poly: [0.02, -0.78, 0.2, -0.74, 0.2, 0.74, 0.02, 0.78], fill: 'pink' }];
+    // Tonashiro (bruiser, shotgun, Patch): a round lid on the crown with a green knob.
+    case 'tonashiro': return [
+      { dot: { x: -0.36, y: 0, r: 0.34 }, fill: 'purpleDeep', stroke: 'purpleBright' },
+      { dot: { x: -0.36, y: 0, r: 0.12 }, fill: 'health' },
+    ];
+    // Yot (assault, carbine, Slab): a dark visor bar across both eyes.
+    case 'yot': return [{ poly: [0.48, -0.42, 0.74, -0.38, 0.74, 0.38, 0.48, 0.42], fill: 'bgDeep', stroke: 'armor' }];
+    // Bill (flanker, sawn-off, Rush): two red horns swept back.
+    case 'bill': return [
+      { poly: [-0.3, -0.34, -0.98, -0.6, -0.5, -0.18], fill: 'damage' },
+      { poly: [-0.3, 0.34, -0.98, 0.6, -0.5, 0.18], fill: 'damage' },
     ];
     default: return [];
   }
@@ -66,7 +85,7 @@ function gearFor(id: string): Gear[] {
 
 export function chogParts(heroId: string): ChogParts {
   return {
-    body: spikyBody(SPIKES[heroId] ?? SPIKES.kettle),
+    body: spikyBody(SPIKES[heroId] ?? SPIKES.benja),
     // Cream face at the front: from above you see mostly the purple spiky crown, the face only toward the facing
     // direction (RC-8 review: a bigger face read as the old white disc).
     face: { x: 0.5, y: 0, rx: 0.34, ry: 0.5 },

@@ -577,6 +577,22 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       for (const c of fx.corpses) {
         marks.ellipse(c.x, c.y, 0.42, 0.3).fill({ color: c.hostile ? P.hostileDark : P.teamDark, alpha: 0.55 });
       }
+      // Grenades (docs/design/roster-grenades.md): your side's always; a hostile one in your light or close to you (you
+      // hear it land). The ring is the true blast radius and fills as the fuse runs: step out of it or get a wall between.
+      const GR = TUNING.grenade;
+      for (const g of w.grenades) {
+        const mine = g.team === p.team;
+        if (!mine && Math.hypot(g.x - p.x, g.y - p.y) > GR.radius + 1.5 && !pointInPolygon(g.x, g.y, poly)) continue;
+        const t = Math.min(1, Math.max(0, 1 - g.fuse / GR.fuseSeconds));
+        const col = mine ? P.ammo : P.hostile;
+        circle(marks, g.x, g.y, GR.radius * t, 32).fill({ color: col, alpha: 0.06 + 0.12 * t });
+        circle(marks, g.x, g.y, GR.radius, 40).stroke({ width: 0.05, color: col, alpha: 0.55 });
+        arc(marks, g.x, g.y, GR.radius, -Math.PI / 2, -Math.PI / 2 + t * Math.PI * 2, 40).stroke({ width: 0.12, color: col, alpha: 0.95 });
+        // The grenade itself, lifted off its shadow while it still flies fast (top-down arc).
+        const lift = Math.min(0.32, Math.hypot(g.vx, g.vy) * 0.025);
+        marks.ellipse(g.x, g.y + 0.04, 0.17, 0.12).fill({ color: 0x000000, alpha: 0.45 });
+        circle(marks, g.x, g.y - lift, 0.16, 12).fill(0x3a3f2c).stroke({ width: 0.05, color: col });
+      }
 
       actors.clear();
       bars.clear();
