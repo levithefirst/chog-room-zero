@@ -57,6 +57,30 @@ export const TUNING = {
     // crate (0.3 u half-width) with 0.05 u to spare. RC-8 draws the body at its true 0.35 u (it was drawn 1.45x), so
     // the pickup is taken on the same step the drawn body touches the drawn pickup (tests/rc8-pickups.test.ts).
     radius: 0.7,
+    // Master integration pass (owner 2026-10-14: a pickup at full health must not be irrelevant). Health over the
+    // maximum is kept as overheal up to +25% of max health and drains at 2 per second back to the maximum; armour can
+    // go 25 over its cap and drains at 1 per second. Above those hard caps the pickup is left for someone else.
+    overhealShare: 0.25,
+    overhealDecay: 2,
+    overArmor: 25,
+    overArmorDecay: 1,
+    // A health or armour pickup is taken only if it would add at least this much (no pickup wasted for a sliver).
+    minGain: 5,
+  },
+
+  revive: {
+    // Team modes (3v3, 5v5): a player dropped to 0 with a teammate still standing is DOWNED, not out. The downed pool
+    // (60) bleeds out over 15 s, faster under fire; at 0 they are eliminated and the one who downed them gets the kill.
+    // 1v1 and the last standing member of a team are eliminated at once (nobody can rescue them).
+    downHp: 60,
+    bleedSeconds: 15,
+    // A standing teammate within 1.4 m who is not firing revives them in 3 s, back up at 30% health and no armour.
+    // Any hit on the downed player or the rescuer resets the progress.
+    range: 1.4,
+    seconds: 3,
+    hpShare: 0.3,
+    // Downed players crawl at 25% speed and cannot shoot, reload, use the ability or take pickups.
+    crawl: 0.25,
   },
 
   abilities: {

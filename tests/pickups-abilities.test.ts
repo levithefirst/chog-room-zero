@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createWorld, player, stepWorld, IDLE_INPUT, revealed, type ActorInput } from '../src/sim/world';
+import { armorCeiling, createWorld, hpCeiling, player, stepWorld, IDLE_INPUT, revealed, type ActorInput } from '../src/sim/world';
 import { TUNING } from '../src/config/tuning';
 import { shotClear } from '../src/sim/level';
 
@@ -27,12 +27,36 @@ describe('pickups', () => {
     for (let i = 0; i < TUNING.pickups.health.respawn * 60 + 2; i++) stepWorld(w, IDLE_INPUT);
     expect(hp.active).toBe(true);
   });
-  it('a full-health actor does not waste a health pickup', () => {
+  it('a full-health actor overheals by the pickup (capped at +25%), and it drains back to max at 2 per second', () => {
     const w = createWorld({ map: ROOM, bots: [] });
     const p = player(w);
     p.x = 5.5; p.y = 1.5;
     stepWorld(w, IDLE_INPUT);
+    expect(w.pickups.find((k) => k.kind === 'health')!.active).toBe(false);
+    expect(p.hp).toBeCloseTo(Math.min(hpCeiling(p), p.maxHp + TUNING.pickups.health.amount), 0);
+    const over = p.hp - p.maxHp;
+    p.x = 2.5;
+    for (let i = 0; i < 60; i++) stepWorld(w, IDLE_INPUT);
+    expect(p.hp - p.maxHp).toBeCloseTo(over - TUNING.pickups.overhealDecay, 1);
+    for (let i = 0; i < 60 * 30; i++) stepWorld(w, IDLE_INPUT);
+    expect(p.hp).toBe(p.maxHp);
+  });
+  it('at the overheal ceiling a health pickup is left for someone else', () => {
+    const w = createWorld({ map: ROOM, bots: [] });
+    const p = player(w);
+    p.hp = hpCeiling(p);
+    p.x = 5.5; p.y = 1.5;
+    stepWorld(w, IDLE_INPUT);
     expect(w.pickups.find((k) => k.kind === 'health')!.active).toBe(true);
+  });
+  it('armour at its cap goes up to 25 over it, then drains at 1 per second', () => {
+    const w = createWorld({ map: ROOM, bots: [] });
+    const p = player(w);
+    p.armor = p.maxArmor;
+    p.x = 8.5; p.y = 1.5;
+    stepWorld(w, IDLE_INPUT);
+    expect(p.armor).toBeCloseTo(armorCeiling(p), 1);
+    expect(armorCeiling(p)).toBe(p.maxArmor + TUNING.pickups.overArmor);
   });
   it('armour adds armour (capped); ammo adds two magazines to reserve', () => {
     const w = createWorld({ map: ROOM, bots: [] });

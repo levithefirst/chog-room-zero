@@ -4,7 +4,7 @@
 // The server owns the match: it steps the same deterministic sim as solo play (src/sim/world.ts) with each player's
 // latest controls. Clients never send positions, hits, damage or results, only controls.
 import { randomBytes } from 'node:crypto';
-import { createWorld, down, IDLE_INPUT, matchSeconds, revealed, stepWorld, type Actor, type ActorInput, type Team, type World } from '../src/sim/world';
+import { createWorld, down, IDLE_INPUT, matchSeconds, revealed, standing, stepWorld, type Actor, type ActorInput, type Team, type World } from '../src/sim/world';
 import { canSee, muzzleFlashSeen } from '../src/sim/vision';
 import { hears } from '../src/sim/world';
 import { HEROES } from '../src/config/heroes';
@@ -260,7 +260,7 @@ export class Lobby {
   /** Power a player's ticket entitles them to. No ticket: base power. */
   static powerOf(t: GameTicket | null): Power {
     if (!t) return BASE_POWER;
-    return powerFor(t.tier, t.up, t.mid && t.tier === 'legendary' ? signatureFor(t.mid) : null, t.demo);
+    return powerFor(t.tier, t.up, t.mid && t.tier === 'legendary' ? signatureFor(t.mid) : null, t.demo, t.mid);
   }
 
   private startRoom(mode: Mode, members: Player[]): void {
@@ -326,7 +326,7 @@ export class Lobby {
     }
     if (w.outcome === 'playing' && matchSeconds(w) >= this.opts.matchLimitSec) {
       // Time limit: more health standing wins; equal is a draw.
-      const hp = (t: Team) => w.actors.filter((a) => a.team === t && a.alive).reduce((s, a) => s + a.hp, 0);
+      const hp = (t: Team) => w.actors.filter((a) => a.team === t && standing(a)).reduce((s, a) => s + a.hp, 0);
       w.outcome = 'won';
       w.winner = hp('alpha') === hp('bravo') ? null : hp('alpha') > hp('bravo') ? 'alpha' : 'bravo';
       this.finish(room, 'time');
@@ -354,13 +354,14 @@ export class Lobby {
       reloadLeft: r3(a.reloadLeft), abilityCd: r3(a.abilityCd), revealLeft: r3(a.revealLeft), muzzle: r3(a.muzzle), hitFlash: r3(a.hitFlash),
       deadFor: r3(a.deadFor), lastSpread: r3(a.lastSpread), stepAcc: r3(a.stepAcc), kills: a.kills, connected: !!room.members[a.id].conn,
       shieldLeft: r3(a.shieldLeft), frenzyLeft: r3(a.frenzyLeft), slowLeft: r3(a.slowLeft), burstLeft: r3(a.burstLeft),
+      downed: a.downed, reviveProgress: r3(a.reviveProgress),
     }));
     const bullets: NetBullet[] = w.bullets.filter((b) => w.actors[b.owner].team === me.team || seenBy(b.x, b.y))
       .map((b) => ({ x: r3(b.x), y: r3(b.y), dx: r3(b.dx), dy: r3(b.dy), ox: r3(b.ox), oy: r3(b.oy), owner: b.owner, weapon: b.weapon.id }));
     const sounds: NetSound[] = w.sounds.filter((s) => s.sourceId === me.id || hears(w.level, me.x, me.y, s))
-      .map((s) => ({ type: s.type, x: r3(s.x), y: r3(s.y), radius: s.radius, source: s.sourceId, team: s.team, weapon: s.weapon, blocked: s.blocked }));
+      .map((s) => ({ type: s.type, x: r3(s.x), y: r3(s.y), radius: s.radius, source: s.sourceId, team: s.team, weapon: s.weapon, blocked: s.blocked, sig: s.sig }));
     const hits: NetHit[] = w.hits.filter((h) => w.actors[h.target].team === me.team || w.actors[h.by].team === me.team)
-      .map((h) => ({ target: h.target, by: h.by, x: r3(h.x), y: r3(h.y), fromX: r3(h.fromX), fromY: r3(h.fromY), killed: h.killed }));
+      .map((h) => ({ target: h.target, by: h.by, x: r3(h.x), y: r3(h.y), fromX: r3(h.fromX), fromY: r3(h.fromY), killed: h.killed, downed: h.downed }));
     return {
       t: 'snap', tick: w.tick, actors, bullets, pickups: w.pickups.map((k) => k.active), sounds, hits,
       barriers: w.barriers.map((b) => ({ ...b.box, left: r3(b.left) })),
@@ -374,7 +375,7 @@ export class Lobby {
     if (a.alive) down(room.world, a, { cause, killerId: -1, weapon: 'Left the match', fromX: a.x, fromY: a.y, toX: a.x, toY: a.y, tick: room.world.tick });
     if (p.conn === null) this.forget(p);
     // The outcome is decided on the next step (stepWorld), so a leaver's team loses through the normal rule.
-    const teams = new Set(room.world.actors.filter((x) => x.alive).map((x) => x.team));
+    const teams = new Set(room.world.actors.filter(standing).map((x) => x.team));
     if (teams.size <= 1 && room.world.outcome === 'playing') {
       room.world.outcome = 'won';
       room.world.winner = teams.size === 1 ? [...teams][0] : null;

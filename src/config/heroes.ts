@@ -18,6 +18,9 @@ export interface AbilityDef {
   windup?: number;
   armorPen?: number;
   length?: number;
+  /** 1:1 signatures: what both sides see and hear first, and how to beat it. */
+  telegraph?: string;
+  counter?: string;
 }
 
 export interface HeroDef {

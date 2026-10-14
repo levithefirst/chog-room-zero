@@ -3,14 +3,14 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  BASE_POWER, CAPS, SIGNATURES, TIERS, TIER_DEFS, UPGRADES, UPGRADE_IDS, clampUpgrades, powerFor, powerForToken, signatureFor, tierOfMetadataId,
+  BASE_POWER, CAPS, MAX_UPGRADES, ONE_OF_ONE, SIGNATURES, chogName, TIERS, TIER_DEFS, UPGRADES, UPGRADE_IDS, clampUpgrades, powerFor, powerForToken, signatureFor, tierOfMetadataId,
 } from '../src/config/power';
 import { ONE_OF_ONE_IDS, TIER_TABLE } from '../src/nft/tier-table';
 import { HEROES } from '../src/config/heroes';
 import { createWorld, stepWorld, IDLE_INPUT, type ActorInput, type World } from '../src/sim/world';
 import { HALL, share } from './helpers/duel';
 
-const MAX_U = { vitality: 3, plating: 3, focus: 4 };
+const MAX_U = MAX_UPGRADES;
 const records = (JSON.parse(readFileSync(new URL('../data/chog-genesis/catalogue.json', import.meta.url), 'utf8')) as {
   records: { metadataId: number; traits: Record<string, string> }[];
 }).records;
@@ -58,22 +58,37 @@ describe('ladder and caps', () => {
       expect(p.damageMul).toBeLessThanOrEqual(CAPS.damageMul);
       expect(p.cooldownMul).toBeGreaterThanOrEqual(CAPS.cooldownMul);
     }
-    expect(clampUpgrades({ vitality: 99, plating: -4, focus: Infinity })).toEqual({ vitality: 3, plating: 0, focus: 0 });
+    expect(clampUpgrades({ vitality: 99, plating: -4, focus: Infinity })).toEqual({ vitality: 8, plating: 0, firepower: 0, focus: 0 });
     for (const id of UPGRADE_IDS) expect(UPGRADES[id].costs.length).toBe(UPGRADES[id].ranks);
   });
-  it('a maxed free player has exactly Common starting health and armour (the free upgrade path)', () => {
-    const f = powerFor('free', MAX_U), c = powerFor('common');
-    expect(f.hpMul).toBeCloseTo(c.hpMul, 6);
-    expect(f.armor).toBe(c.armor);
+  it('a maxed free player starts past Uncommon and below Rare (the free upgrade path climbs past the lower tiers)', () => {
+    const f = powerFor('free', MAX_U), u = powerFor('uncommon'), r = powerFor('rare');
+    expect(f.hpMul).toBeGreaterThanOrEqual(u.hpMul);
+    expect(f.armor).toBeGreaterThanOrEqual(u.armor);
+    expect(f.damageMul).toBeGreaterThanOrEqual(u.damageMul);
+    expect(f.hpMul).toBeLessThan(r.hpMul);
+    expect(f.armor).toBeLessThan(r.armor);
+  });
+  it('the 1:1 tier is the dominant one, and every 1:1 has its real name and its own colour', () => {
+    const l = TIER_DEFS.legendary, e = TIER_DEFS.epic;
+    expect(l.hpMul - e.hpMul).toBeGreaterThanOrEqual(0.3);
+    expect(l.damageMul).toBeGreaterThan(e.damageMul);
+    expect(Object.keys(ONE_OF_ONE).map(Number).sort((a, b) => a - b)).toEqual([...ONE_OF_ONE_IDS]);
+    expect(new Set(Object.values(ONE_OF_ONE).map((o) => o.color)).size).toBe(10);
+    expect(Object.values(ONE_OF_ONE).map((o) => o.name).sort()).toEqual(['Blaze', 'Burning Skully', 'Chog Scream', 'Chogbomination', 'Frogger', 'Grim', 'Halo', 'Krown', 'Midas', 'Redd']);
+    for (const r of records.filter((x) => x.traits.Base === '1:1')) expect((r as unknown as { name: string }).name).toContain(ONE_OF_ONE[r.metadataId].name);
+    expect(chogName(53)).toBe('Blaze (#53)');
+    expect(chogName(812)).toBe('Chog #812');
+    for (const sig of Object.values(SIGNATURES)) { expect(sig.telegraph, sig.name).toBeTruthy(); expect(sig.counter, sig.name).toBeTruthy(); }
   });
   it('spawn applies the tier: health, armour, armour cap, ability cooldown', () => {
     const p = powerFor('rare', { focus: 2 });
     const a = createWorld({ hero: 'kettle', power: p }).actors[0];
     const k = HEROES.find((h) => h.id === 'kettle')!;
-    expect(a.maxHp).toBe(Math.round(k.maxHp * 1.15));
+    expect(a.maxHp).toBe(Math.round(k.maxHp * 1.32));
     expect(a.hp).toBe(a.maxHp);
-    expect(a.armor).toBe(k.maxArmor + 12);
-    expect(a.maxArmor).toBe(50 + 12);
+    expect(a.armor).toBe(k.maxArmor + 18);
+    expect(a.maxArmor).toBe(50 + 18);
     expect(a.ability.cooldown).toBeCloseTo(k.ability.cooldown * 0.9, 6);
     expect(createWorld({ hero: 'kettle' }).actors[0].maxHp).toBe(k.maxHp);
   });
@@ -112,6 +127,17 @@ describe('1:1 signature abilities in the sim', () => {
     run(walled, 60, pressOnce);
     expect(walled.actors[1].hp).toBe(walled.actors[1].maxHp);
   });
+  it('a 1:1 signature sound carries its token, so every client plays that Chog\'s own voice and colour', () => {
+    const w = createWorld({ seed: 1, map: HALL, zone: false, versus: [
+      { name: 'S', hero: 'kettle', team: 'alpha', x: 10, y: 4.5, facing: 0, power: powerForToken(53, null, false) },
+      { name: 'T', hero: 'kettle', team: 'bravo', x: 12, y: 4.5, facing: Math.PI },
+    ] });
+    run(w, 1, pressOnce);
+    expect(w.sounds.find((s) => s.type === 'windup')?.sig).toBe(53);
+    const plain = arena(53);
+    run(plain, 1, pressOnce);
+    expect(plain.sounds.find((s) => s.type === 'windup')?.sig).toBeUndefined(); // no token behind it: generic cue
+  });
   it('Hellfire ignores armour', () => {
     const w = arena(392);
     run(w, 70, pressOnce);
@@ -141,19 +167,19 @@ describe('1:1 signature abilities in the sim', () => {
       run(w, 20, (id, t) => (id === 0 ? { ability: use && t === 0, firing: true } : {}));
       return w.actors[0].damageDealt;
     };
-    expect(dealt(1376, true) / dealt(1376, false)).toBeCloseTo(1.25, 2);
+    expect(dealt(1376, true) / dealt(1376, false)).toBeCloseTo(SIGNATURES[1376].amount!, 2);
   });
   it('Halo heals allies in range; Crown Guard restores armour', () => {
     const w = arena(1159);
     w.actors[0].hp = 50; w.actors[2].hp = 50;
     run(w, 1, pressOnce);
-    expect(w.actors[0].hp).toBe(80);
-    expect(w.actors[2].hp).toBe(80);
+    expect(w.actors[0].hp).toBe(50 + SIGNATURES[1159].amount!);
+    expect(w.actors[2].hp).toBe(50 + SIGNATURES[1159].amount!);
     const c = arena(1290);
     c.actors[0].armor = 0; c.actors[0].hp = 50;
     run(c, 1, pressOnce);
-    expect(c.actors[0].armor).toBe(35);
-    expect(c.actors[0].hp).toBe(65);
+    expect(c.actors[0].armor).toBe(SIGNATURES[1290].armor);
+    expect(c.actors[0].hp).toBe(50 + SIGNATURES[1290].amount!);
   });
   it('Leap goes further than Slip; Bulwark is longer and lasts longer than Slab; Deadsight reaches 18 m', () => {
     const leap = arena(973);
@@ -176,25 +202,27 @@ describe('1:1 signature abilities in the sim', () => {
 describe('measured duel bands', () => {
   const mean = (hero: string, a: ReturnType<typeof powerFor>, b: ReturnType<typeof powerFor>, n = 12, ability = false) =>
     [3, 6].reduce((s, d) => s + share(hero, a, hero, b, d, n, ability), 0) / 2;
-  it('Common beats free about 6 in 10 (Kettle, Mop); 1:1 without its signature stays under 0.92', () => {
+  it('Common beats a fresh free player about 7 in 10 (Kettle, Mop): real, beatable; a 1:1 dominates (over 0.95)', () => {
     for (const hero of ['kettle', 'mop']) {
       const c = mean(hero, powerFor('common'), BASE_POWER);
-      expect(c, hero).toBeGreaterThanOrEqual(0.52);
-      expect(c, hero).toBeLessThanOrEqual(0.72);
-      expect(mean(hero, powerFor('legendary'), BASE_POWER), hero).toBeLessThanOrEqual(0.92);
+      expect(c, hero).toBeGreaterThanOrEqual(0.6);
+      expect(c, hero).toBeLessThanOrEqual(0.85);
+      expect(mean(hero, powerFor('legendary'), BASE_POWER), hero).toBeGreaterThanOrEqual(0.95);
     }
   }, 120000);
   it('the ladder is monotonic (Kettle)', () => {
     const s = TIERS.slice(1).map((t) => mean('kettle', powerFor(t), BASE_POWER));
     for (let i = 1; i < s.length; i++) expect(s[i]).toBeGreaterThanOrEqual(s[i - 1]);
   }, 120000);
-  it('a maxed free player is an even match for a Common holder', () => {
+  it('a maxed free player beats a Common holder, is even with Uncommon, and still loses to a 1:1', () => {
     for (const hero of ['kettle', 'mop']) {
-      const s = mean(hero, powerFor('free', MAX_U), powerFor('common'));
-      expect(s, hero).toBeGreaterThanOrEqual(0.4);
-      expect(s, hero).toBeLessThanOrEqual(0.6);
+      expect(mean(hero, powerFor('free', MAX_U), powerFor('common')), hero).toBeGreaterThanOrEqual(0.6);
+      const u = mean(hero, powerFor('free', MAX_U), powerFor('uncommon'));
+      expect(u, hero).toBeGreaterThanOrEqual(0.4);
+      expect(u, hero).toBeLessThanOrEqual(0.6);
+      expect(mean(hero, powerFor('free', MAX_U), powerFor('legendary')), hero).toBeLessThanOrEqual(0.2);
     }
-  }, 120000);
+  }, 180000);
   it('no signature dominates a 1:1 with the plain hero ability (mean of 3 and 6 u within 0.3 to 0.85)', () => {
     for (const sig of Object.values(SIGNATURES)) {
       const s = mean('kettle', powerFor('legendary', null, sig), powerFor('legendary'), 12, true);

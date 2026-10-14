@@ -34,7 +34,7 @@ import { createAutopilot, type Autopilot } from './debug/autopilot';
 import { createOnlineDriver } from './debug/onlineDriver';
 import * as account from './net/account';
 import { emptyAcct, rewardLine } from './ui/account';
-import { powerForToken, signatureFor, tierOfMetadataId, BASE_POWER, TIER_DEFS, type Power } from './config/power';
+import { powerForToken, signatureFor, tierOfMetadataId, BASE_POWER, ONE_OF_ONE, TIER_DEFS, type Power } from './config/power';
 import { tierEffect } from './ui/account';
 
 // DEMO screen: the first token of each tier in the verified catalogue, plus two 1:1s with different signatures.
@@ -960,8 +960,14 @@ async function start() {
     for (const s of world.sounds) {
       const own = s.sourceId === 0;
       const dx = s.x - p.x, dy = s.y - p.y;
-      if (s.type === 'sonar') fx.pings.push({ x: s.x, y: s.y, age: 0, hostile: !own });
-      if (s.type === 'burst' || s.type === 'scream') fx.rings.push({ x: s.x, y: s.y, age: 0, r: world.actors[s.sourceId]?.ability.radius ?? 3, color: s.type === 'burst' ? TUNING.palette.hostile : TUNING.palette.armor });
+      const src0 = world.actors[s.sourceId];
+      const sigCol = s.sig ? ONE_OF_ONE[s.sig]?.color : undefined;
+      if (s.type === 'sonar') fx.pings.push({ x: s.x, y: s.y, age: 0, hostile: !own, r: src0?.ability.radius ?? TUNING.abilities.sonarRadius, color: sigCol });
+      if (s.type === 'burst' || s.type === 'scream') fx.rings.push({ x: s.x, y: s.y, age: 0, r: src0?.ability.radius ?? 3, color: sigCol ?? (s.type === 'burst' ? TUNING.palette.hostile : TUNING.palette.armor) });
+      // Every other 1:1 signature shows its moment in the Chog's own colour: Halo at its real heal radius, the rest at the body.
+      else if (s.sig && sigCol !== undefined && s.type !== 'sonar' && s.type !== 'windup') fx.rings.push({ x: s.x, y: s.y, age: 0, r: s.type === 'mend' && src0?.ability.allies ? src0.ability.radius ?? 1.5 : 1.4, color: sigCol });
+      if (s.type === 'downed') toast(s.sourceId === 0 ? 'YOU ARE DOWN · a teammate can revive you' : `${src0?.name ?? 'Someone'} is DOWN`);
+      if (s.type === 'revive') toast(s.sourceId === 0 ? 'Revived a teammate' : 'Revived');
       // The one reveal rule (docs/design/bots.md): a muzzle flash with wall line of sight shows the shooter
       // briefly, at any range. Bots get the same signal from the player's flash.
       if (s.type === 'shot' && !own && s.team !== p.team && muzzleFlashSeen(world.level, p.x, p.y, s.x, s.y))
@@ -973,7 +979,7 @@ async function start() {
       const heard = own || hears(world.level, p.x, p.y, s);
       if (!heard) continue;
       if (s.type === 'impact' && s.blocked) debugStats.blockedCues++;
-      audio.play(s.type === 'impact' && s.blocked ? 'blocked' : s.type, dx, dy, s.radius, !own && !sightClear(world.level, p.x, p.y, s.x, s.y), own, s.weapon);
+      audio.play(s.type === 'impact' && s.blocked ? 'blocked' : s.type, dx, dy, s.radius, !own && !sightClear(world.level, p.x, p.y, s.x, s.y), own, s.weapon, s.sig);
       if (s.type === 'impact') {
         fx.impacts.push({ x: s.x, y: s.y, age: 0, blocked: s.blocked });
         spark(s.x, s.y, s.blocked ? 7 : 3, false);
@@ -995,7 +1001,8 @@ async function start() {
       if (h.by === 0) {
         fx.hitMarks.push({ x: h.x, y: h.y, age: 0, kill: h.killed });
         spark(h.x, h.y, h.killed ? 10 : 4, true);
-        if (h.killed) toast(`${world.actors[h.target].name} down`);
+        if (h.killed) toast(`${world.actors[h.target].name} eliminated`);
+        else if (h.downed) toast(`${world.actors[h.target].name} DOWNED · finish or they get revived`);
       }
       if (h.target === 0) {
         hurtNow = true;
@@ -1067,7 +1074,8 @@ async function start() {
       net.update(p.alive ? inp.aim : null);
       for (const ev of net.takeEvents()) { world.sounds = ev.sounds; world.hits = ev.hits; afterStep(); }
       playTime += dt;
-      if (!p.alive && hintLeft <= 0) showHint('You are down. Your side plays on; the result comes when it ends.', 4);
+      if (!p.alive && hintLeft <= 0) showHint('You are out. Your side plays on; the result comes when it ends.', 4);
+      else if (p.downed && hintLeft <= 0) showHint(`DOWNED: crawl to cover. A teammate within ${TUNING.revive.range} m who holds fire revives you in ${TUNING.revive.seconds} s.`, 3);
       if (net.state === 'reconnecting' || net.state === 'error') showHint(esc(net.message), 1);
     } else if (online && net && phase === 'pause') {
       // Paused online, the match goes on: let go of every control so the operator stands still (the server keeps
@@ -1149,15 +1157,17 @@ async function start() {
     const left = world.actors.filter((a) => a.team !== p.team && a.alive).length;
     const cdShare = p.abilityCd / p.ability.cooldown;
     const reloadShare = p.reloadLeft > 0 ? 1 - p.reloadLeft / p.weapon.reloadSeconds : 0;
-    const key = `${Math.ceil(p.hp)}|${Math.ceil(p.armor)}|${p.ammo}|${p.reserve}|${left}|${Math.round(cdShare * 60)}|${Math.round(reloadShare * 40)}`;
+    const key = `${p.downed ? 'D' : ''}${Math.ceil(p.hp)}|${Math.ceil(p.armor)}|${p.ammo}|${p.reserve}|${left}|${Math.round(cdShare * 60)}|${Math.round(reloadShare * 40)}`;
     if (key !== lastHud) {
       lastHud = key;
       $('hpn').textContent = String(Math.max(0, Math.ceil(p.hp)));
       const hpEl = $('hpfill');
-      hpEl.style.width = `${(p.hp / p.maxHp) * 100}%`;
+      hpEl.style.width = `${Math.min(100, (p.hp / p.maxHp) * 100)}%`;
+      hpEl.classList.toggle('over', p.hp > p.maxHp && !p.downed);
+      hpEl.classList.toggle('downed', p.downed);
       hpEl.classList.toggle('low', p.hp / p.maxHp <= TUNING.render.lowHpShare);
       $('arn').textContent = String(Math.ceil(p.armor));
-      $('arfill').style.width = `${(p.armor / p.maxArmor) * 100}%`;
+      $('arfill').style.width = `${Math.min(100, (p.armor / p.maxArmor) * 100)}%`;
       const ammo = $('ammo');
       ammo.innerHTML = p.reloadLeft > 0 ? `--<small> reloading</small>` : `${p.ammo}<small> / ${p.reserve}</small>`;
       ammo.classList.toggle('empty', p.ammo === 0 && p.reserve === 0);

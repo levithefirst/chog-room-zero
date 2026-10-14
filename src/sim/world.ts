@@ -88,6 +88,14 @@ export interface Actor {
   death: KillInfo | null;
   /** Tick of the last danger-zone damage (client feedback). */
   zoneTick: number;
+  /** Team modes: down but not out (TUNING.revive). hp is then the bleed-out pool, not health. */
+  downed: boolean;
+  /** Revive progress in seconds (0 when nobody is reviving). */
+  reviveProgress: number;
+  /** Who downed this actor, so the kill goes to them if nobody rescues it. */
+  downInfo: KillInfo | null;
+  /** Held the trigger on the last step it acted (a rescuer must hold fire). */
+  firedLast: boolean;
 }
 
 export interface Bullet {
@@ -105,7 +113,7 @@ export interface Bullet {
 
 export type SoundType =
   | 'step' | 'quietStep' | 'shot' | 'impact' | 'hit' | 'death' | 'reload' | 'pickup' | 'dash' | 'sonar' | 'barrier' | 'mend'
-  | 'windup' | 'burst' | 'scream' | 'shield' | 'frenzy';
+  | 'windup' | 'burst' | 'scream' | 'shield' | 'frenzy' | 'downed' | 'revive';
 
 /** The one sound event bus: feeds audio, bot hearing, and the player's heard markers. */
 export interface SoundEvent {
@@ -120,6 +128,8 @@ export interface SoundEvent {
   weapon?: string;
   // Impact on half cover (crate/slab) rather than a wall.
   blocked?: boolean;
+  // A 1:1 signature use: the token's metadata id, so audio and the telegraph ring use that Chog's own cue.
+  sig?: number;
 }
 
 export interface HitEvent {
@@ -132,6 +142,8 @@ export interface HitEvent {
   hpDamage: number;
   armorDamage: number;
   killed: boolean;
+  /** Team modes: this hit downed the target (not out yet). */
+  downed?: boolean;
 }
 
 export interface KillInfo {
@@ -226,6 +238,7 @@ function makeActor(id: number, team: Team, name: string, hero: HeroDef, sg: Side
     ammo: weapon.magazine, reserve: weapon.reserve, cooldown: 0, reloadLeft: 0, abilityCd: 0, dashLeft: 0, dashX: 0, dashY: 0,
     revealLeft: 0, shieldLeft: 0, frenzyLeft: 0, slowLeft: 0, slowMul: 1, burstLeft: 0, stepAcc: 0, hitFlash: 0, muzzle: 0, deadFor: 0, lastSpread: weapon.spreadDeg, lastHitTick: -999, lastHitFrom: null,
     shots: 0, bullets: 0, hits: 0, kills: 0, damageDealt: 0, damageTaken: 0, death: null, zoneTick: -999,
+    downed: false, reviveProgress: 0, downInfo: null, firedLast: false,
   };
 }
 
@@ -307,6 +320,12 @@ function emit(w: World, type: SoundType, x: number, y: number, radius: number, s
   w.sounds.push({ type, x, y, radius, sourceId: src.id, team: src.team, tick: w.tick, weapon });
 }
 
+/** An ability sound; a 1:1 signature carries its token id so every client plays that Chog's own cue and ring colour. */
+function emitAbility(w: World, type: SoundType, x: number, y: number, radius: number, a: Actor): void {
+  emit(w, type, x, y, radius, a);
+  if (a.power.signature && a.power.metadataId) w.sounds[w.sounds.length - 1].sig = a.power.metadataId;
+}
+
 /**
  * Armour RULE: armour soaks `armorSoak` (60%) of each hit, reduced by the weapon's armour-pen share, until the
  * armour pool runs out. The rest goes to health. Pure, so it is tested directly.
@@ -341,12 +360,12 @@ function useAbility(w: World, a: Actor, inp: ActorInput): void {
       a.dashLeft = ab.seconds ?? A.dashSeconds;
       a.dashX = dx;
       a.dashY = dy;
-      emit(w, 'dash', a.x, a.y, TUNING.sound.quietStep, a);
+      emitAbility(w, 'dash', a.x, a.y, TUNING.sound.quietStep, a);
       break;
     }
     case 'sonar':
       a.revealLeft = ab.seconds ?? A.sonarSeconds;
-      emit(w, 'sonar', a.x, a.y, A.sonarSound, a);
+      emitAbility(w, 'sonar', a.x, a.y, Math.max(A.sonarSound, ab.radius ?? 0), a);
       break;
     case 'barrier': {
       const cx = a.x + Math.cos(a.facing) * 1.1, cy = a.y + Math.sin(a.facing) * 1.1;
@@ -361,42 +380,43 @@ function useAbility(w: World, a: Actor, inp: ActorInput): void {
       w.level.solidBoxes.push(box);
       markDynamic(w.level, box, 1);
       invalidatePaths(w);
-      emit(w, 'barrier', cx, cy, TUNING.sound.ability, a);
+      emitAbility(w, 'barrier', cx, cy, TUNING.sound.ability, a);
       break;
     }
     case 'mend': {
       const heal = (t: Actor) => {
-        t.hp = Math.min(t.maxHp, t.hp + (ab.amount ?? A.mendAmount));
-        if (ab.armor) t.armor = Math.min(t.maxArmor, t.armor + ab.armor);
+        if (t.downed) return;
+        t.hp = Math.max(t.hp, Math.min(t.maxHp, t.hp + (ab.amount ?? A.mendAmount)));
+        if (ab.armor) t.armor = Math.max(t.armor, Math.min(t.maxArmor, t.armor + ab.armor));
       };
       heal(a);
       if (ab.allies) for (const t of w.actors) if (t !== a && t.alive && t.team === a.team && Math.hypot(t.x - a.x, t.y - a.y) <= (ab.radius ?? 0)) heal(t);
-      emit(w, 'mend', a.x, a.y, TUNING.sound.reload, a);
+      emitAbility(w, 'mend', a.x, a.y, TUNING.sound.reload, a);
       break;
     }
     case 'burst':
       // Telegraph first: everyone in earshot hears the wind-up and sees the ring before it goes off (no surprise damage).
       a.burstLeft = ab.windup ?? 0.5;
-      emit(w, 'windup', a.x, a.y, TUNING.sound.ability, a);
+      emitAbility(w, 'windup', a.x, a.y, TUNING.sound.ability, a);
       break;
     case 'scream':
       for (const t of hostilesInSight(w, a, ab.radius ?? 0)) { t.slowLeft = ab.seconds ?? 0; t.slowMul = ab.amount ?? 1; }
-      emit(w, 'scream', a.x, a.y, TUNING.sound.shot, a);
+      emitAbility(w, 'scream', a.x, a.y, TUNING.sound.shot, a);
       break;
     case 'shield':
       a.shieldLeft = ab.seconds ?? 0;
-      emit(w, 'shield', a.x, a.y, TUNING.sound.ability, a);
+      emitAbility(w, 'shield', a.x, a.y, TUNING.sound.ability, a);
       break;
     case 'frenzy':
       a.frenzyLeft = ab.seconds ?? 0;
-      emit(w, 'frenzy', a.x, a.y, TUNING.sound.ability, a);
+      emitAbility(w, 'frenzy', a.x, a.y, TUNING.sound.ability, a);
       break;
   }
 }
 
 /** Living hostiles within r of a with a clear line (walls block signature effects the same way they block bullets). */
 function hostilesInSight(w: World, a: Actor, r: number): Actor[] {
-  return w.actors.filter((t) => t.alive && t.team !== a.team && Math.hypot(t.x - a.x, t.y - a.y) <= r && sightClear(w.level, a.x, a.y, t.x, t.y));
+  return w.actors.filter((t) => t.alive && !t.downed && t.team !== a.team && Math.hypot(t.x - a.x, t.y - a.y) <= r && sightClear(w.level, a.x, a.y, t.x, t.y));
 }
 
 function detonate(w: World, a: Actor): void {
@@ -412,18 +432,18 @@ function detonate(w: World, a: Actor): void {
     t.lastHitFrom = { x: a.x, y: a.y };
     a.damageDealt += raw;
     t.damageTaken += m.hp + m.armor;
-    const killed = t.hp <= 0;
-    w.hits.push({ target: t.id, by: a.id, x: t.x, y: t.y, fromX: a.x, fromY: a.y, hpDamage: m.hp, armorDamage: m.armor, killed });
-    if (killed) {
-      a.kills++;
-      down(w, t, { cause: 'shot', killerId: a.id, weapon: ab.name, fromX: a.x, fromY: a.y, toX: t.x, toY: t.y, tick: w.tick });
-    }
+    const r = t.hp <= 0 ? drop(w, t, { cause: 'shot', killerId: a.id, weapon: ab.name, fromX: a.x, fromY: a.y, toX: t.x, toY: t.y, tick: w.tick }) : null;
+    w.hits.push({ target: t.id, by: a.id, x: t.x, y: t.y, fromX: a.x, fromY: a.y, hpDamage: m.hp, armorDamage: m.armor, killed: r === 'out', downed: r === 'downed' });
   }
-  emit(w, 'burst', a.x, a.y, TUNING.sound.shot, a);
+  emitAbility(w, 'burst', a.x, a.y, TUNING.sound.shot, a);
 }
 
 function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
   const M = TUNING.movement;
+  // Downed: crawl, nothing else (no fire, reload, ability or pickups). The bleed-out runs in stepRevive.
+  if (a.downed) inp = { ...inp, firing: false, reload: false, ability: false, quiet: false, moveX: inp.moveX * TUNING.revive.crawl, moveY: inp.moveY * TUNING.revive.crawl };
+  // Holding the trigger (even between shots) counts as firing: a rescuer must let go of it.
+  a.firedLast = inp.firing;
   if (isHuman(a)) a.facing = inp.aim;
   else {
     const turn = TUNING.bots.turnRateDegPerSec * DEG * dt;
@@ -511,7 +531,7 @@ function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
     a.muzzle = TUNING.render.muzzleFlash;
     emit(w, 'shot', a.x, a.y, TUNING.sound.shot, a, W.sound);
   }
-  if (a.ammo === 0) startReload(w, a);
+  if (a.ammo === 0 && !a.downed) startReload(w, a);
 }
 
 function stepBullets(w: World, dt: number): void {
@@ -579,18 +599,45 @@ function damage(w: World, t: Actor, by: Actor, b: Bullet, hx: number, hy: number
   by.hits++;
   by.damageDealt += raw;
   t.damageTaken += m.hp + m.armor;
-  const killed = t.hp <= 0;
-  w.hits.push({ target: t.id, by: by.id, x: hx, y: hy, fromX: b.ox, fromY: b.oy, hpDamage: m.hp, armorDamage: m.armor, killed });
+  const r = t.hp <= 0 ? drop(w, t, { cause: 'shot', killerId: by.id, weapon: b.weapon.name, fromX: b.ox, fromY: b.oy, toX: t.x, toY: t.y, tick: w.tick }) : null;
+  w.hits.push({ target: t.id, by: by.id, x: hx, y: hy, fromX: b.ox, fromY: b.oy, hpDamage: m.hp, armorDamage: m.armor, killed: r === 'out', downed: r === 'downed' });
   emit(w, 'hit', hx, hy, TUNING.sound.impact, by);
-  if (killed) {
-    if (by.team !== t.team) by.kills++;
-    down(w, t, { cause: 'shot', killerId: by.id, weapon: b.weapon.name, fromX: b.ox, fromY: b.oy, toX: t.x, toY: t.y, tick: w.tick });
+}
+
+/** Standing (alive and not downed): can fight, rescue, and keep its team in the match. */
+export const standing = (a: Actor) => a.alive && !a.downed;
+
+/**
+ * An actor reached 0 from a hostile's damage. Team modes: downed if a teammate is still standing (TUNING.revive);
+ * otherwise, or when already downed, eliminated, and the kill goes to whoever downed them first.
+ */
+function drop(w: World, t: Actor, info: KillInfo): 'downed' | 'out' {
+  const mates = w.mode === 'versus' && w.actors.some((o) => o !== t && o.team === t.team && standing(o));
+  if (!t.downed && mates) {
+    t.downed = true;
+    t.downInfo = info;
+    t.hp = TUNING.revive.downHp;
+    t.armor = 0;
+    t.reviveProgress = 0;
+    t.reloadLeft = 0;
+    t.burstLeft = 0;
+    t.shieldLeft = t.frenzyLeft = 0;
+    t.vx = t.vy = 0;
+    emit(w, 'downed', t.x, t.y, TUNING.sound.death, t);
+    return 'downed';
   }
+  const credit = t.downInfo ?? info;
+  const killer = credit.killerId >= 0 ? w.actors[credit.killerId] : null;
+  if (killer && killer.team !== t.team) killer.kills++;
+  down(w, t, credit);
+  return 'out';
 }
 
 export function down(w: World, t: Actor, info: KillInfo): void {
   t.hp = 0;
   t.alive = false;
+  t.downed = false;
+  t.reviveProgress = 0;
   { const ti = w.attackTokens.indexOf(t.id); if (ti >= 0) w.attackTokens.splice(ti, 1); }
   t.vx = t.vy = 0;
   t.death = info;
@@ -618,19 +665,24 @@ function stepZone(w: World, dt: number): void {
   }
 }
 
-/** Does `a` want this pickup? Nobody wastes one they cannot use. */
+/** Hard ceilings for pickups (TUNING.pickups): health may run 25% over max as overheal, armour 25 over its cap. */
+export const hpCeiling = (a: Actor) => Math.round(a.maxHp * (1 + TUNING.pickups.overhealShare));
+export const armorCeiling = (a: Actor) => a.maxArmor + TUNING.pickups.overArmor;
+
+/** Does `a` want this pickup? Below the hard ceiling every pickup counts, even at full health (it overheals). */
 export function wants(a: Actor, kind: PickupKind): boolean {
-  if (kind === 'health') return a.hp < a.maxHp;
-  if (kind === 'armor') return a.armor < a.maxArmor;
+  if (a.downed) return false;
+  if (kind === 'health') return a.hp <= hpCeiling(a) - TUNING.pickups.minGain;
+  if (kind === 'armor') return a.armor <= armorCeiling(a) - TUNING.pickups.minGain;
   return a.reserve < a.weapon.reserve + a.weapon.magazine * 2;
 }
 
 /**
- * A pickup the actor is standing on but does not take because it is full (RC-8). Collection itself needs no button
- * or second step: stepPickups takes it on the first step of contact. This only lets the client say why not.
+ * A pickup the actor is standing on but does not take because it is at the hard ceiling (RC-8). Collection itself needs
+ * no button or second step: stepPickups takes it on the first step of contact. This only lets the client say why not.
  */
 export function touchingFull(w: World, a: Actor): Pickup | null {
-  if (!a.alive) return null;
+  if (!a.alive || a.downed) return null;
   for (const p of w.pickups) if (p.active && Math.hypot(a.x - p.x, a.y - p.y) <= TUNING.pickups.radius && !wants(a, p.kind)) return p;
   return null;
 }
@@ -645,14 +697,52 @@ function stepPickups(w: World, dt: number): void {
     }
     for (const a of w.actors) {
       if (!a.alive || Math.hypot(a.x - p.x, a.y - p.y) > P.radius || !wants(a, p.kind)) continue;
-      if (p.kind === 'health') a.hp = Math.min(a.maxHp, a.hp + P.health.amount);
-      else if (p.kind === 'armor') a.armor = Math.min(a.maxArmor, a.armor + P.armor.amount);
+      if (p.kind === 'health') a.hp = Math.min(hpCeiling(a), a.hp + P.health.amount);
+      else if (p.kind === 'armor') a.armor = Math.min(armorCeiling(a), a.armor + P.armor.amount);
       else a.reserve += a.weapon.magazine * P.ammo.mags;
       p.active = false;
       p.respawnLeft = P[p.kind].respawn;
       emit(w, 'pickup', p.x, p.y, TUNING.sound.pickup, a);
       break;
     }
+  }
+  // After pickups (so a pickup sees the true value): overheal and over-armour drain back to the normal maximum.
+  for (const a of w.actors) {
+    if (!a.alive || a.downed) continue;
+    if (a.hp > a.maxHp) a.hp = Math.max(a.maxHp, a.hp - P.overhealDecay * dt);
+    if (a.armor > a.maxArmor) a.armor = Math.max(a.maxArmor, a.armor - P.overArmorDecay * dt);
+  }
+}
+
+/**
+ * Downed and revive (team modes, TUNING.revive). Downed actors bleed out; a standing teammate in range who did not
+ * fire this step revives them; a hit on either resets the progress. A team with nobody standing is out: every downed
+ * member is eliminated (kill credit to whoever downed them).
+ */
+function stepRevive(w: World, dt: number): void {
+  const R = TUNING.revive;
+  for (const t of w.actors) {
+    if (!t.alive || !t.downed) continue;
+    const helper = w.actors.find((m) => m !== t && m.team === t.team && standing(m) && !m.firedLast && Math.hypot(m.x - t.x, m.y - t.y) <= R.range);
+    const hitNow = t.lastHitTick === w.tick || (helper && helper.lastHitTick === w.tick);
+    if (helper && !hitNow) {
+      t.reviveProgress += dt;
+      if (t.reviveProgress >= R.seconds) {
+        t.downed = false;
+        t.downInfo = null;
+        t.reviveProgress = 0;
+        t.hp = Math.round(t.maxHp * R.hpShare);
+        emit(w, 'revive', t.x, t.y, TUNING.sound.reload, helper);
+        continue;
+      }
+    } else t.reviveProgress = 0;
+    t.hp -= (R.downHp / R.bleedSeconds) * dt;
+    if (t.hp <= 0) drop(w, t, t.downInfo ?? { cause: 'shot', killerId: -1, weapon: 'Bled out', fromX: t.x, fromY: t.y, toX: t.x, toY: t.y, tick: w.tick });
+  }
+  if (w.mode !== 'versus') return;
+  for (const t of w.actors) {
+    if (!t.downed || !t.alive) continue;
+    if (!w.actors.some((m) => m.team === t.team && standing(m))) drop(w, t, t.downInfo!);
   }
 }
 
@@ -714,11 +804,12 @@ export function stepWorld(
   stepBullets(w, dt);
   stepZone(w, dt);
   stepPickups(w, dt);
+  stepRevive(w, dt);
   stepBarriers(w, dt);
   if (w.outcome === 'playing') {
     if (w.mode === 'versus') {
       // Online: the match ends when at most one team has anyone standing. Nobody standing is a draw.
-      const teams = new Set(w.actors.filter((a) => a.alive).map((a) => a.team));
+      const teams = new Set(w.actors.filter(standing).map((a) => a.team));
       if (teams.size <= 1) {
         w.outcome = 'won';
         w.winner = teams.size === 1 ? [...teams][0] : null;

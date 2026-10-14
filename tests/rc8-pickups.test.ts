@@ -1,7 +1,7 @@
 // RC-8 pickups: one touch, no button, no second step. A pickup is taken on the first sim step the operator's body
 // touches it (body radius 0.35 u + pickup half-width 0.3 u = 0.65 u between centres; collection radius 0.7 u).
 import { describe, expect, it } from 'vitest';
-import { createWorld, player, stepWorld, touchingFull, IDLE_INPUT } from '../src/sim/world';
+import { createWorld, hpCeiling, player, stepWorld, touchingFull, IDLE_INPUT } from '../src/sim/world';
 import { TUNING } from '../src/config/tuning';
 
 const MAP = ['##############', '#............#', '#P.....h.....#', '#............#', '##############'];
@@ -35,18 +35,21 @@ describe('RC-8 pickup collection', () => {
     expect(pk.active).toBe(false);
     expect(w.sounds.some((s) => s.type === 'pickup' && s.sourceId === 0)).toBe(true);
   });
-  it('a full operator does not waste it, and touchingFull says why (the client shows "HEALTH FULL")', () => {
+  it('at full health it still counts (overheal); only at the overheal ceiling is it left, and touchingFull says why', () => {
     const w = createWorld({ map: MAP, hero: 'kettle', bots: [] });
     const p = player(w);
     const pk = w.pickups[0];
     p.x = pk.x - 0.4; p.y = pk.y;
+    expect(p.hp).toBe(p.maxHp);
+    stepWorld(w, IDLE_INPUT);
+    expect(pk.active).toBe(false);
+    expect(p.hp).toBeGreaterThan(p.maxHp);
+    expect(p.hp).toBeLessThanOrEqual(hpCeiling(p));
+    pk.active = true;
+    p.hp = hpCeiling(p);
     stepWorld(w, IDLE_INPUT);
     expect(pk.active).toBe(true);
     expect(touchingFull(w, p)).toBe(pk);
-    p.hp = 60;
-    stepWorld(w, IDLE_INPUT);
-    expect(pk.active).toBe(false);
-    expect(touchingFull(w, p)).toBe(null);
   });
   it('a dead operator neither takes nor reports a pickup', () => {
     const w = createWorld({ map: MAP, hero: 'kettle', bots: [] });

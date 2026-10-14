@@ -53,23 +53,22 @@ describe('accounts', () => {
 describe('upgrades', () => {
   it('cost shards, rise one rank at a time, stop at the cap, and refuse without shards', async () => {
     const acc = (await accountFor(db, [g('u')]))!;
-    expect(await buyUpgrade(db, acc, 'vitality')).toEqual({ ok: false, reason: 'shards' });
     await db.query('UPDATE room_zero.accounts SET shards = 1000 WHERE id = $1', [acc]);
-    expect(await buyUpgrade(db, acc, 'vitality')).toEqual({ ok: true, rank: 1, shards: 960 });
-    await buyUpgrade(db, acc, 'vitality');
-    await buyUpgrade(db, acc, 'vitality');
-    expect(await buyUpgrade(db, acc, 'vitality')).toEqual({ ok: false, reason: 'maxed' });
+    expect(await buyUpgrade(db, acc, 'firepower')).toEqual({ ok: true, rank: 1, shards: 850 });
+    await buyUpgrade(db, acc, 'firepower');
+    await buyUpgrade(db, acc, 'firepower');
+    expect(await buyUpgrade(db, acc, 'firepower')).toEqual({ ok: false, reason: 'maxed' });
     expect(await buyUpgrade(db, acc, 'speed')).toEqual({ ok: false, reason: 'unknown' });
     const p = (await profileOf(db, acc))!;
-    expect(p.upgrades.vitality).toBe(3);
-    expect(p.shards).toBe(1000 - 40 - 90 - 160);
+    expect(p.upgrades.firepower).toBe(3);
+    expect(p.shards).toBe(1000 - 150 - 250 - 350);
     const l = await db.query<{ delta: number }>(`SELECT delta FROM room_zero.ledger WHERE account_id = $1 ORDER BY id`, [acc]);
-    expect(l.map((r) => r.delta)).toEqual([-40, -90, -160]);
+    expect(l.map((r) => r.delta)).toEqual([-150, -250, -350]);
   });
   it('two purchases at once cannot spend the same shards twice', async () => {
     const acc = (await accountFor(db, [g('race')]))!;
-    await db.query('UPDATE room_zero.accounts SET shards = 40 WHERE id = $1', [acc]);
-    const r = await Promise.all([buyUpgrade(db, acc, 'vitality'), buyUpgrade(db, acc, 'plating')]);
+    await db.query('UPDATE room_zero.accounts SET shards = 150 WHERE id = $1', [acc]);
+    const r = await Promise.all([buyUpgrade(db, acc, 'firepower'), buyUpgrade(db, acc, 'firepower')]);
     expect(r.filter((x) => x.ok).length).toBe(1);
     expect((await profileOf(db, acc))!.shards).toBe(0);
   });

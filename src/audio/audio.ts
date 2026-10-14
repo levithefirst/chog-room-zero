@@ -7,7 +7,8 @@ export type CueType = SoundType | 'hurt' | 'ui' | 'blocked';
 
 export interface Audio {
   unlock(): void;
-  play(type: CueType, dx: number, dy: number, radius: number, muffled: boolean, own: boolean, weapon?: string): void;
+  /** sig: a 1:1's metadata id, which layers that Chog's own voice over the ability cue. */
+  play(type: CueType, dx: number, dy: number, radius: number, muffled: boolean, own: boolean, weapon?: string, sig?: number): void;
   muted: boolean;
   /** Master volume 0..1 (Settings, RC-7). Applied to the sum before the limiter. */
   volume: number;
@@ -76,7 +77,7 @@ export function createAudio(): Audio {
       }
       if (ctx.state === 'suspended') void ctx.resume();
     },
-    play(type, dx, dy, radius, muffled, own, weapon) {
+    play(type, dx, dy, radius, muffled, own, weapon, sig) {
       if (!ctx || !noise || a.muted || ctx.state !== 'running' || voices >= MAX_VOICES) return;
       const dist = Math.hypot(dx, dy);
       if (!own && dist > radius) return;
@@ -204,6 +205,16 @@ export function createAudio(): Audio {
           burst(0, 0.3, 'lowpass', 500, 1.2, 0.4);
           len = 0.45;
           break;
+        case 'downed': // a teammate or foe is down, not out: a falling two-note call that says "rescue me"
+          thump(0, 0.25, 520, 380, 0.5);
+          thump(0.28, 0.4, 380, 260, 0.5);
+          len = 0.7;
+          break;
+        case 'revive': // back up: the same two notes rising
+          thump(0, 0.2, 380, 400, 0.45);
+          thump(0.22, 0.3, 520, 560, 0.45);
+          len = 0.55;
+          break;
         case 'hurt': // you were hit: close, low, unmistakable
           thump(0, 0.16, 120, 55, 0.9);
           burst(0, 0.1, 'lowpass', 420, 1, 0.7);
@@ -243,6 +254,22 @@ export function createAudio(): Audio {
           burst(0.22, 0.025, 'bandpass', 2400, 4, 0.5);
           len = 0.3;
           break;
+      }
+      // Each 1:1 has its own voice on top of its ability cue, so you know WHICH legend just acted before you see it.
+      if (sig) {
+        switch (sig) {
+          case 53: for (let i = 0; i < 4; i++) burst(i * 0.07, 0.05, 'highpass', 3000 + i * 400, 0.8, 0.4); thump(0, 0.3, 200, 600, 0.3); break; // Blaze: crackle
+          case 392: thump(0, 1, 55, 38, 0.9); burst(0, 0.8, 'lowpass', 260, 0.7, 0.6); break; // Burning Skully: deep roar
+          case 434: thump(0, 0.7, 1400, 700, 0.4); thump(0.05, 0.6, 1750, 900, 0.2); break; // Chog Scream: shriek
+          case 494: thump(0, 0.2, 60, 35, 1); thump(0.22, 0.25, 55, 30, 1); break; // Chogbomination: double slam
+          case 973: thump(0, 0.09, 190, 120, 0.6); thump(0.12, 0.12, 170, 100, 0.6); break; // Frogger: croak
+          case 1006: thump(0, 1.4, 220, 218, 0.45); thump(0, 1.2, 440, 437, 0.2); break; // Grim: toll
+          case 1159: for (const f of [523, 659, 784]) thump(0, 0.9, f, f, 0.18); break; // Halo: choir chord
+          case 1290: burst(0, 0.06, 'bandpass', 2600, 8, 0.7); thump(0, 0.3, 300, 180, 0.5); break; // Krown: plate clank
+          case 1373: for (const [i, f] of [2637, 3136, 3520].entries()) thump(i * 0.06, 0.35, f, f, 0.14); break; // Midas: coin shimmer
+          case 1376: thump(0, 0.6, 90, 55, 0.8); burst(0, 0.5, 'lowpass', 300, 1.5, 0.5); break; // Redd: growl
+        }
+        len = Math.max(len, 1.4);
       }
       setTimeout(() => voices--, len * 1000 + 50);
     },

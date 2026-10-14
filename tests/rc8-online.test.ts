@@ -75,7 +75,7 @@ describe('RC-8 matchmaking and teams', () => {
     for (const [mode, n] of [['3v3', 6], ['5v5', 10]] as const) {
       // 5v5 is for verified holders (master build): every 5v5 player here carries a holder ticket.
       let tid = 0;
-      const { join } = setup({ checkTicket: async () => ({ tid: `t${tid++}`, acc: `acc${tid}`, tier: 'free', up: { vitality: 0, plating: 0, focus: 0 }, tok: tid, mid: tid, tokTier: 'common', own: '0xA', holder: true, demo: false, name: '', exp: 2e9 }) });
+      const { join } = setup({ checkTicket: async () => ({ tid: `t${tid++}`, acc: `acc${tid}`, tier: 'free', up: { vitality: 0, plating: 0, firepower: 0, focus: 0 }, tok: tid, mid: tid, tokTier: 'common', own: '0xA', holder: true, demo: false, name: '', exp: 2e9 }) });
       const lone = join('Other');
       lone.say({ t: 'queue', mode: '1v1' });
       const ps = Array.from({ length: n }, (_, i) => join(`P${i}`, 'kettle', mode === '5v5' ? 'aaaa.bbbb' : undefined));

@@ -29,6 +29,8 @@ export interface NetActor {
   kills: number; connected: boolean;
   /** Signature effect timers, so every client can draw the telegraphs. */
   shieldLeft: number; frenzyLeft: number; slowLeft: number; burstLeft: number;
+  /** Team modes: down but not out, and the rescue progress in seconds. */
+  downed?: boolean; reviveProgress?: number;
 }
 
 /** What everyone in a match knows about each player: power is never hidden from the opponent. */
@@ -41,8 +43,8 @@ export interface RosterEntry {
 /** The server's view of this connection after checking its ticket. */
 export interface NetProfile { verified: boolean; tier: Tier; holder: boolean; demo: boolean; account: boolean; metadataId: number | null; note: string | null }
 export interface NetBullet { x: number; y: number; dx: number; dy: number; ox: number; oy: number; owner: number; weapon: string }
-export interface NetSound { type: string; x: number; y: number; radius: number; source: number; team: Team; weapon?: string; blocked?: boolean }
-export interface NetHit { target: number; by: number; x: number; y: number; fromX: number; fromY: number; killed: boolean }
+export interface NetSound { type: string; x: number; y: number; radius: number; source: number; team: Team; weapon?: string; blocked?: boolean; sig?: number }
+export interface NetHit { target: number; by: number; x: number; y: number; fromX: number; fromY: number; killed: boolean; downed?: boolean }
 
 export interface PlayerResult { id: number; name: string; hero: string; team: Team; kills: number; damageDealt: number; damageTaken: number; hits: number; bullets: number; alive: boolean; cause: string | null }
 

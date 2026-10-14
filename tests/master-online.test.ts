@@ -13,7 +13,7 @@ class FakeConn {
   last<T extends ServerMsg['t']>(t: T) { return [...this.got].reverse().find((m) => m.t === t) as Extract<ServerMsg, { t: T }> | undefined; }
 }
 
-const T = (o: Partial<GameTicket>): GameTicket => ({ tid: 'x', acc: null, tier: 'free', up: { vitality: 0, plating: 0, focus: 0 }, tok: null, mid: null, tokTier: null, own: null, holder: false, demo: false, name: '', exp: 2e9, ...o });
+const T = (o: Partial<GameTicket>): GameTicket => ({ tid: 'x', acc: null, tier: 'free', up: { vitality: 0, plating: 0, firepower: 0, focus: 0 }, tok: null, mid: null, tokTier: null, own: null, holder: false, demo: false, name: '', exp: 2e9, ...o });
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 function setup(tickets: Record<string, GameTicket | null>) {
@@ -91,7 +91,7 @@ describe('power from the ticket, visible to both sides, and the match record', (
   it('applies the ticket tier, shows it in the roster, and keeps a record for settlement', async () => {
     const { join, run, lobby } = setup({
       'a.t': T({ tid: 'a', acc: 'ACC_A', holder: true, tier: 'legendary', tok: 5, mid: 1376, tokTier: 'legendary', own: '0xA' }),
-      'b.t': T({ tid: 'b', acc: 'ACC_B', tier: 'free', up: { vitality: 3, plating: 0, focus: 0 } }),
+      'b.t': T({ tid: 'b', acc: 'ACC_B', tier: 'free', up: { vitality: 3, plating: 0, firepower: 0, focus: 0 } }),
     });
     const a = await join('A', 'a.t'), b = await join('B', 'b.t');
     a.say({ t: 'queue', mode: '1v1' }); b.say({ t: 'queue', mode: '1v1' });
@@ -100,8 +100,8 @@ describe('power from the ticket, visible to both sides, and the match record', (
     expect(b.c.last('match')!.roster[0].tier).toBe('legendary');
     const room = [...lobby.rooms.values()][0];
     const kettle = HEROES.find((h) => h.id === 'kettle')!;
-    expect(room.world.actors[0].maxHp).toBe(Math.round(kettle.maxHp * 1.25));
-    expect(room.world.actors[1].maxHp).toBe(Math.round(kettle.maxHp * 1.06));
+    expect(room.world.actors[0].maxHp).toBe(Math.round(kettle.maxHp * 1.75));
+    expect(room.world.actors[1].maxHp).toBe(Math.round(kettle.maxHp * 1.09));
     b.say({ t: 'leave' });
     run(0.1);
     const over = a.c.last('over')!;

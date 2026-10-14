@@ -17,6 +17,7 @@ import { touchStick, AIM_DEADZONE, type Input } from '../input/input';
 import { bakeMap, type Baked } from './bake';
 import { chogParts, place, type ChogParts, type Oval } from '../ui/chogShape';
 import { px, type BrandToken } from '../config/brand';
+import { ONE_OF_ONE } from '../config/power';
 import { outsideCircle, zoneAt, type Circle } from '../sim/zone';
 import { matchSeconds } from '../sim/world';
 import { clampMarker, edgeAnchor, enemyDrawMode } from './visibility';
@@ -92,7 +93,8 @@ export interface Fx {
   // Fixed pool; `age >= 1` means free. Capped at TUNING.render.maxSparks.
   sparks: Spark[];
   damageArcs: { ang: number; age: number }[];
-  pings: { x: number; y: number; age: number; hostile: boolean }[];
+  /** Sonar pings: r is the ability's real radius (Ping 14 m, Deadsight 18 m); color overrides for a 1:1. */
+  pings: { x: number; y: number; age: number; hostile: boolean; r?: number; color?: number }[];
   // Seconds left that each actor id stays drawn after shooting at the player (see visibility.ts).
   threats: number[];
   /** Pickups the player just took: a ring in the pickup's colour expands from the player (RC-7). */
@@ -250,6 +252,9 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
     if (W.id === 'smg') g.moveTo(a.x + c * (r + 0.1), a.y + s * (r + 0.1)).lineTo(a.x + c * (r + 0.1) - s * 0.18, a.y + s * (r + 0.1) + c * 0.18).stroke({ width: 0.07, color: dark });
   }
 
+  /** A 1:1's own colour (src/config/power.ts ONE_OF_ONE), else the given default. */
+  const sigColor = (a: Actor, d: number) => (a.power.signature && a.power.metadataId ? ONE_OF_ONE[a.power.metadataId]?.color ?? d : d);
+
   function drawBody(g: Graphics, a: Actor, hostile: boolean, marking: number | null, alert: boolean) {
     // RC-8: the CHOG-inspired operator (src/ui/chogShape.ts) at its true sim size: valleys and spike tips straddle the
     // 0.35 u hitbox, so a bullet that touches the drawn body hits and one that misses it misses.
@@ -273,7 +278,19 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       if (hostile) g.poly(place(parts.body, a.x, a.y, a.facing, r * 1.14)).stroke({ width: 0.1, color: P.hostile, alpha: 1 });
       else circle(g, a.x, a.y, r0 * 1.42, 28).stroke({ width: 0.06, color: P.teamRing, alpha: 0.95 });
     }
-    if (a.alive) drawWeapon(g, a, hostile ? 0x2a1a14 : col('bgElevated'), KEYLINE);
+    // A 1:1 is marked for both sides at all times: a slow ring in its own colour (who you are facing is never hidden).
+    if (a.alive && a.power.tier === 'legendary') {
+      const c = sigColor(a, P.signal), ph = (performance.now() / 900) % (Math.PI * 2);
+      for (let i = 0; i < 4; i++) arc(g, a.x, a.y, r0 * 1.85, ph + i * Math.PI / 2, ph + i * Math.PI / 2 + 0.9, 6).stroke({ width: 0.07, color: c, alpha: 0.9 });
+    }
+    // Downed (team modes): flat, dimmed, a pulsing ring, and the rescue progress arc. Rescue it or finish it.
+    if (a.alive && a.downed) {
+      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 160);
+      circle(g, a.x, a.y, TUNING.revive.range, 40).stroke({ width: 0.05, color: hostile ? P.hostile : P.teamRing, alpha: 0.35 + 0.35 * pulse });
+      if (a.reviveProgress > 0) arc(g, a.x, a.y, r0 * 2.1, -Math.PI / 2, -Math.PI / 2 + (a.reviveProgress / TUNING.revive.seconds) * Math.PI * 2, 24).stroke({ width: 0.12, color: P.heal, alpha: 1 });
+      alpha = 0.6;
+    }
+    if (a.alive && !a.downed) drawWeapon(g, a, hostile ? 0x2a1a14 : col('bgElevated'), KEYLINE);
     const flash = a.alive && a.hitFlash > 0;
     // Same purple body for every operator: friend or foe is told by the ring or jagged red outline and the bar colour.
     const body = !a.alive ? col('disabled') : flash ? col('cream') : col('purple');
@@ -315,11 +332,12 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
     if (a.alive && a.burstLeft > 0) {
       // The burst's true radius, filling in as it winds up: step out of the ring.
       const R0 = a.ability.radius ?? 3, t = 1 - a.burstLeft / (a.ability.windup ?? 0.5);
-      circle(g, a.x, a.y, R0, 48).stroke({ width: 0.05 + 0.1 * t, color: P.hostile, alpha: 0.5 + 0.5 * t });
-      circle(g, a.x, a.y, R0, 48).fill({ color: P.hostile, alpha: 0.08 + 0.12 * t });
+      const c = sigColor(a, P.hostile);
+      circle(g, a.x, a.y, R0, 48).stroke({ width: 0.05 + 0.1 * t, color: c, alpha: 0.5 + 0.5 * t });
+      circle(g, a.x, a.y, R0, 48).fill({ color: c, alpha: 0.08 + 0.12 * t });
     }
-    if (a.alive && a.shieldLeft > 0) circle(g, a.x, a.y, r0 * 1.6, 28).stroke({ width: 0.12, color: px('ammo'), alpha: 0.95 });
-    if (a.alive && a.frenzyLeft > 0) g.poly(place(parts.body, a.x, a.y, a.facing, r * 1.22)).stroke({ width: 0.08, color: P.hostile, alpha: 0.6 + 0.3 * Math.sin(a.frenzyLeft * 12) });
+    if (a.alive && a.shieldLeft > 0) circle(g, a.x, a.y, r0 * 1.6, 28).stroke({ width: 0.12, color: sigColor(a, px('ammo')), alpha: 0.95 });
+    if (a.alive && a.frenzyLeft > 0) g.poly(place(parts.body, a.x, a.y, a.facing, r * 1.22)).stroke({ width: 0.08, color: sigColor(a, P.hostile), alpha: 0.6 + 0.3 * Math.sin(a.frenzyLeft * 12) });
     if (a.alive && a.slowLeft > 0) for (let i = 0; i < 6; i++) arc(g, a.x, a.y, r0 * 1.9, i * Math.PI / 3, i * Math.PI / 3 + 0.5, 4).stroke({ width: 0.06, color: P.armor, alpha: 0.85 });
     if (a.alive && a.reloadLeft > 0) {
       const t = 1 - a.reloadLeft / a.weapon.reloadSeconds;
@@ -341,7 +359,9 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
   function drawBar(a: Actor, hostile: boolean) {
     const W = 0.96, H = 0.11, x = a.x - W / 2, y = a.y - TUNING.movement.radius * R.actorScale - 0.42;
     bars.rect(x - 0.03, y - 0.03, W + 0.06, H + 0.1).fill({ color: KEYLINE, alpha: 0.75 });
-    bars.rect(x, y, W * Math.min(1, Math.max(0, a.hp / a.maxHp)), H).fill(hostile ? P.hostile : P.team);
+    bars.rect(x, y, W * Math.min(1, Math.max(0, a.hp / a.maxHp)), H).fill(a.downed ? P.signal : hostile ? P.hostile : P.team);
+    // Overheal (a health pickup taken at full health): a cream extension past the bar's end, draining back.
+    if (a.hp > a.maxHp && !a.downed) bars.rect(x + W, y, W * Math.min(0.25, (a.hp - a.maxHp) / a.maxHp), H).fill(P.signal);
     if (a.maxArmor > 0 && a.armor > 0) bars.rect(x, y + H + 0.015, W * Math.min(1, a.armor / a.maxArmor), 0.05).fill(P.armor);
   }
 
@@ -640,7 +660,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       }
       for (const pg of fx.pings) {
         const t = pg.age / 0.7;
-        circle(fxG, pg.x, pg.y, 0.5 + t * TUNING.abilities.sonarRadius, 48).stroke({ width: 0.08, color: pg.hostile ? P.hostile : P.armor, alpha: 0.7 * (1 - t) });
+        circle(fxG, pg.x, pg.y, 0.5 + t * (pg.r ?? TUNING.abilities.sonarRadius), 64).stroke({ width: 0.08, color: pg.color ?? (pg.hostile ? P.hostile : P.armor), alpha: 0.7 * (1 - t) });
       }
       for (const rg of fx.rings) {
         const t = rg.age / RING_SECONDS;

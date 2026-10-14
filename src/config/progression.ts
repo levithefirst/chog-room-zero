@@ -9,8 +9,9 @@ export const REWARDS = {
   xpWin: 60,
   xpPerKill: 10,
   maxKills: 5,
-  // Shards buy upgrades (src/config/power.ts UPGRADES). Every upgrade rank costs 960 shards in all: about 64 wins.
-  shardsPlay: 5,
+  // Shards buy upgrades (src/config/power.ts UPGRADES): 3,250 shards for every rank, about 160 wins or 325 losses.
+  // A first saved match always pays enough for a first rank (10).
+  shardsPlay: 10,
   shardsWin: 10,
   // A match shorter than this pays nothing (stops queue-and-quit farming between two accounts).
   minSeconds: 20,

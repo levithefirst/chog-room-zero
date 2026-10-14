@@ -214,7 +214,7 @@ export class OnlineSession {
     this.fromView = order.map((r) => r.id);
     this.world = createWorld({
       seed: m.seed, zone: false, friendlyFire: m.friendlyFire,
-      versus: order.map((r) => ({ name: r.name, hero: r.hero, team: r.team as 'alpha' | 'bravo', x: -100, y: -100, facing: 0, power: powerFor(r.tier ?? 'free', null, null, !!r.demo) })),
+      versus: order.map((r) => ({ name: r.name, hero: r.hero, team: r.team as 'alpha' | 'bravo', x: -100, y: -100, facing: 0, power: powerFor(r.tier ?? 'free', null, r.metadataId && r.tier === 'legendary' ? signatureFor(r.metadataId) : null, !!r.demo, r.metadataId) })),
     });
     // The server's ability slot (hero ability or 1:1 signature, with upgrades) so the HUD and telegraphs match it.
     order.forEach((r, i) => { const act = this.world!.actors[i]; if (r.ability) act.ability = { ...act.ability, ...r.ability, ...(r.metadataId && r.tier === 'legendary' ? signatureFor(r.metadataId) : {}), cooldown: r.ability.cooldown }; });
@@ -231,8 +231,8 @@ export class OnlineSession {
     if (this.snaps.length > 12) this.snaps.shift();
     const v = (id: number) => this.toView.get(id) ?? 0;
     this.pendingEvents.push({
-      sounds: m.sounds.map((s) => ({ type: s.type as SoundType, x: s.x, y: s.y, radius: s.radius, sourceId: v(s.source), team: s.team, tick: m.tick, weapon: s.weapon, blocked: s.blocked })),
-      hits: m.hits.map((h) => ({ target: v(h.target), by: v(h.by), x: h.x, y: h.y, fromX: h.fromX, fromY: h.fromY, hpDamage: 0, armorDamage: 0, killed: h.killed })),
+      sounds: m.sounds.map((s) => ({ type: s.type as SoundType, x: s.x, y: s.y, radius: s.radius, sourceId: v(s.source), team: s.team, tick: m.tick, weapon: s.weapon, blocked: s.blocked, sig: s.sig })),
+      hits: m.hits.map((h) => ({ target: v(h.target), by: v(h.by), x: h.x, y: h.y, fromX: h.fromX, fromY: h.fromY, hpDamage: 0, armorDamage: 0, killed: h.killed, downed: h.downed })),
     });
     m.pickups.forEach((on, i) => { if (w.pickups[i]) w.pickups[i].active = on; });
     w.barriers = m.barriers.map((b) => ({ box: { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 }, left: b.left, owner: -1 }));
@@ -295,4 +295,5 @@ function copy(act: Actor, s: NetActor): void {
   act.ammo = s.ammo; act.reserve = s.reserve; act.reloadLeft = s.reloadLeft; act.abilityCd = s.abilityCd; act.revealLeft = s.revealLeft;
   act.muzzle = s.muzzle; act.hitFlash = s.hitFlash; act.deadFor = s.deadFor; act.lastSpread = s.lastSpread; act.stepAcc = s.stepAcc; act.kills = s.kills;
   act.shieldLeft = s.shieldLeft ?? 0; act.frenzyLeft = s.frenzyLeft ?? 0; act.slowLeft = s.slowLeft ?? 0; act.burstLeft = s.burstLeft ?? 0;
+  act.downed = !!s.downed; act.reviveProgress = s.reviveProgress ?? 0;
 }
