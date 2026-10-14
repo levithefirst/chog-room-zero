@@ -4,7 +4,7 @@
 // last for the session. No rewards, currency or random drops: a medal is a record of play.
 import type { KeyValueStore } from '../nft/history';
 import type { Records } from './records';
-import { HEROES } from '../config/heroes';
+import { HEROES } from '../config/heroes.js';
 
 export type Rarity = 'common' | 'rare' | 'epic';
 
