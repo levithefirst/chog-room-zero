@@ -21,9 +21,11 @@ export interface Reward { xp: number; shards: number; ratingBefore: number; rati
 
 async function api<T>(action: string, body?: object): Promise<T | null> {
   try {
+    // Never wait forever: a hung request fails soft after 10 s (the chain read can take a few seconds on its own).
+    const signal = AbortSignal.timeout(10000);
     const r = await fetch(`/api/game/${action}`, body
-      ? { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
-      : { credentials: 'same-origin', cache: 'no-store' });
+      ? { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal }
+      : { credentials: 'same-origin', cache: 'no-store', signal });
     if (!(r.headers.get('content-type') ?? '').includes('json')) return null;
     return (await r.json()) as T;
   } catch {

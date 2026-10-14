@@ -7,7 +7,7 @@ const [base, shotDir] = process.argv.slice(2);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const port = 9400 + Math.floor(Math.random() * 300);
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rz-ui-'));
-const proc = spawn('google-chrome', ['--headless=new', '--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', `--user-data-dir=${dir}`, `--remote-debugging-port=${port}`, 'about:blank'], { stdio: 'ignore' });
+const proc = spawn('google-chrome', ['--headless=new', '--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', `--user-data-dir=${dir}`, `--remote-debugging-port=${port}`, 'about:blank'], { stdio: 'ignore', detached: true });
 let t; for (let i = 0; i < 60 && !t; i++) { await sleep(200); try { t = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find((x) => x.type === 'page'); } catch {} }
 const ws = new WebSocket(t.webSocketDebuggerUrl); await new Promise((r) => (ws.onopen = r));
 let id = 0; const P = new Map(); const errors = [];
@@ -36,24 +36,28 @@ await click('[data-demo="53"]'); await sleep(300);
 await click('[data-mode="solo"]'); await sleep(200);
 await click('#playbtn'); await sleep(1500);
 const solo = await ev(`(() => { const p = __chog.world.actors[0]; return { tier: p.power.tier, demo: p.power.demo, ability: p.ability.name, maxHp: p.maxHp, hud: document.getElementById('hero').innerText, abl: document.getElementById('abl').innerText }; })()`);
-check('practice demo #53 plays as a labelled 1:1 (Blaze) with Flashfire', solo?.tier === 'legendary' && solo.demo && solo.ability === 'Flashfire' && /DEMO/.test(solo.hud) && /Blaze/.test(solo.hud) && /flashfire/i.test(solo.abl), JSON.stringify(solo));
+check('practice demo #53 plays as a labelled 1:1 (Blaze) with Flashfire', solo?.tier === 'legendary' && solo.demo && solo.ability === 'Flashfire' && /Vs bots/i.test(solo.hud) && /DEMO/.test(solo.hud) && /Blaze/.test(solo.hud) && /flashfire/i.test(solo.abl), JSON.stringify(solo));
 await sleep(500); await shot('solo-demo-hud.png');
 // Back to the hub (master integration pass: no Online screen, no Player card tabs; everything is on the hub).
 await cmd('Page.navigate', { url: `${base}/?debug&server=ws://127.0.0.1:9/ws` });
 for (let i = 0; i < 60; i++) { await sleep(200); if (await ev('!!document.getElementById("hub") && !document.getElementById("boot")')) break; }
 const hub = await ev(`(() => { const b = document.querySelector('[data-mode="5v5"]'); return { five: b?.innerText ?? '', text: document.getElementById('overlay').innerText }; })()`);
-check('Hub: 5v5 locked for a guest with CHOG HOLDERS ONLY', /CHOG HOLDERS ONLY/.test(hub?.five ?? ''), JSON.stringify(hub?.five));
-check('Hub: class panel and leaderboard preview present', /Your class/i.test(hub?.text ?? '') && /Leaderboard/i.test(hub?.text ?? ''));
+check('Hub: 5v5 marked holders only for a guest', /holders only/i.test(hub?.five ?? ''), JSON.stringify(hub?.five));
+check('Hub: class panel (free class) and leaderboard preview present', /\bclass\b/i.test(hub?.text ?? '') && /\bfree\b/i.test(hub?.text ?? '') && /leaderboard/i.test(hub?.text ?? ''));
+await click('[data-mode="5v5"]'); await sleep(200);
+const lock = await ev(`({ text: document.getElementById('overlay').innerText, play: document.getElementById('playbtn')?.disabled })`);
+check('Hub: selecting 5v5 as a guest shows CHOG HOLDERS ONLY and Play is disabled', /chog holders only/i.test(lock?.text ?? '') && lock?.play === true, JSON.stringify({ play: lock?.play }));
+await click('[data-mode="solo"]'); await sleep(200);
 await shot('hub-guest.png');
 await click('[data-act=upgrades]'); await sleep(500);
 const up = await ev(`document.getElementById('overlay').innerText`);
-check('Upgrades screen says upgrades belong to the account (guest)', /belong to your account|Sign in/.test(up ?? ''));
+check('Upgrades screen (guest) asks to sign in to upgrade', /sign in to upgrade/i.test(up ?? ''));
 await click('[data-act=back]'); await sleep(200);
 await click('[data-act=ranks]'); await sleep(800);
 const ranks = await ev(`document.getElementById('overlay').innerText`);
-check('Leaderboard screen opens for a guest and says honestly whether the service is reachable', /leaderboard/i.test(ranks ?? '') && /ranked by opponents killed|offline|Loading/i.test(ranks ?? ''));
+check('Leaderboard screen opens for a guest with its ranking rule and honest service state', /leaderboard/i.test(ranks ?? '') && /kills · then wins · then fewer matches/i.test(ranks ?? '') && /\b(player|offline|no ranks yet)\b|…/i.test(ranks ?? ''));
 await shot('leaderboard.png');
 check('no page errors', errors.length === 0, errors.join(' | '));
-proc.kill(); await new Promise((r) => { proc.once('exit', r); setTimeout(r, 3000); }); try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* Chrome may still hold files */ }
+try { process.kill(-proc.pid, 'SIGKILL'); } catch { proc.kill(); } await new Promise((r) => { proc.once('exit', r); setTimeout(r, 3000); }); try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* Chrome may still hold files */ }
 console.log(JSON.stringify({ pass: results.every((r) => r.ok), results }));
 process.exit(results.every((r) => r.ok) ? 0 : 1);

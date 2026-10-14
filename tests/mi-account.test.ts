@@ -76,7 +76,7 @@ describe('account-owned profile', () => {
   it('practice bounds: impossible numbers and floods are refused', () => {
     expect(validPractice(run())).not.toBeNull();
     expect(validPractice(run({ kills: bots + 1 }))).toBeNull();
-    expect(validPractice(run({ won: true, kills: 1 }))).toBeNull();
+    expect(validPractice(run({ won: true, kills: 1 }))).not.toBeNull(); // AI teammates down the rest in the default game
     expect(validPractice(run({ hits: 41 }))).toBeNull();
     expect(validPractice(run({ hero: 'god' }))).toBeNull();
     expect(validPractice(run({ seconds: 0 }))).toBeNull();

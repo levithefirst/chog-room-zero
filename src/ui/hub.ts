@@ -5,9 +5,9 @@
 // or the config files, never from the browser's own guess.
 import { HEROES, heroById } from '../config/heroes';
 import { WEAPONS } from '../config/weapons';
-import { REWARDS, levelOf } from '../config/progression';
+import { levelOf } from '../config/progression';
 import {
-  CAPS, ONE_OF_ONE, TIER_DEFS, UPGRADES, UPGRADE_IDS, chogName, powerFor, signatureFor, tierOfMetadataId, type Power, type Tier, type Upgrades,
+  CAPS, ONE_OF_ONE, TIER_DEFS, UPGRADES, UPGRADE_IDS, powerFor, signatureFor, tierOfMetadataId, type Power, type Tier, type Upgrades,
 } from '../config/power';
 import type { BoardRow, Reward } from '../net/account';
 import type { PartyMember } from '../net/protocol';
@@ -103,19 +103,16 @@ function identity(c: HubCtx): string {
   const a = c.acct;
   const p = a.profile;
   const fav = c.profile.favourite ? HEROES.find((x) => x.id === c.profile.favourite) : null;
-  const name = displayName(c.profile);
   const lv = p ? { level: p.level, into: p.into, next: p.next } : levelOf(0);
-  const sub = a.signedIn
-    ? (p ? `Level ${lv.level} · ${esc(c.auth.session[0]?.label ?? a.identities[0]?.label ?? 'account')}` : a.progression ? 'Loading your account…' : 'Account saving is offline')
-    : 'Guest · nothing is saved';
+  const ready = upgradesReady(a);
   return `<div class="ident">
-<button class="player-chip" data-act="career" aria-label="Your career">${tokenSvg(fav ? fav.accent : null, fav?.id)}<span><b id="callsign">${esc(name)}</b><small>${sub}</small></span>${a.signedIn && p && !p.callsign ? '<i class="new">NAME</i>' : ''}</button>
+<button class="player-chip" data-act="career" aria-label="Career">${tokenSvg(fav ? fav.accent : null, fav?.id)}<b id="callsign">${esc(displayName(c.profile))}</b>${a.signedIn && p && !p.callsign ? '<i class="new">NAME</i>' : ''}</button>
 <div class="lvl"><div class="lvl-top"><b class="num" id="hublevel">LV ${lv.level}</b><span class="num" id="hubxp">${p ? `${p.into} / ${p.next} XP` : '0 XP'}</span></div><div class="xpbar"><i style="width:${Math.round((lv.into / lv.next) * 100)}%"></i></div></div>
 <div class="wallet">
-  <button class="cur" data-act="upgrades" aria-label="Shards and upgrades">${ICON.shard}<b class="num" id="hubshards">${p?.shards ?? 0}</b>${upgradesReady(a) ? `<i class="dot num">${upgradesReady(a)}</i>` : ''}</button>
-  <button class="cur" data-act="ranks" aria-label="Rating and leaderboard">${ICON.star}<b class="num" id="hubrating">${p?.rating ?? 1000}</b></button>
+  <button class="cur" data-act="upgrades" aria-label="Shards">${ICON.shard}<b class="num" id="hubshards">${p?.shards ?? 0}</b>${ready ? `<i class="dot num">${ready}</i>` : ''}</button>
+  <button class="cur" data-act="ranks" aria-label="Rating">${ICON.star}<b class="num" id="hubrating">${p?.rating ?? 1000}</b></button>
 </div>
-${a.signedIn ? '' : '<button class="btn small primary" data-act="settings" id="signin-cta">Sign in to save</button>'}
+${a.signedIn ? '' : '<button class="btn small primary" data-act="signin" id="signin-cta">Sign in</button>'}
 <button class="icon-btn" data-act="settings" aria-label="Settings">${ICON.gear}</button>
 </div>`;
 }
@@ -127,40 +124,30 @@ function chogPanel(c: HubCtx): string {
   const one = k.metadataId ? ONE_OF_ONE[k.metadataId] : undefined;
   const sig = k.metadataId ? signatureFor(k.metadataId) : null;
   const accent = one ? hexColor(one.color) : 'var(--line)';
-  const title = k.metadataId ? esc(chogName(k.metadataId)) : 'No Chog';
-  const tierLine = k.source === 'free'
-    ? '<span class="tier tier-free">Free</span>'
-    : `${tierBadge(k.tokenTier ?? k.tier, k.source === 'demo')}${k.source === 'token' ? ' <span class="verified">verified on Monad</span>' : ''}`;
-  let note = '';
-  if (k.source === 'token' && a.config && !a.config.nftCombat) note = '<p class="note warn">NFT combat power is switched off on this server right now: you play at free power. 5v5 and token history still count.</p>';
-  else if (k.source === 'demo') note = '<p class="note">DEMO: no ownership checked. Demo power plays solo and in demo-only rooms and earns nothing.</p>';
-  else if (k.source === 'free') note = a.signedIn && !a.hasWallet
-    ? '<p class="note">Own a Chog Genesis? Sign in with the wallet that holds it (Settings): its tier sets your starting class and unlocks 5v5.</p>'
-    : a.signedIn && a.tokens && !a.tokens.length ? '<p class="note">No Chog Genesis in your signed-in wallet: free class. Upgrades still take you past the lower tiers.</p>'
-      : !a.signedIn ? '<p class="note">Free class. Sign in to earn shards and upgrade; sign in with a wallet that holds a Chog to start higher.</p>' : '';
+  const title = k.metadataId ? (one ? esc(one.name) : `Chog #${k.metadataId}`) : 'Free';
+  const tierLine = k.source === 'free' ? '' : `<div class="tierline">${tierBadge(k.tokenTier ?? k.tier, k.source === 'demo')}${k.source === 'token' ? ' <span class="verified">✓ Monad</span>' : ''}${one ? ` <span class="num dim">#${k.metadataId}</span>` : ''}</div>`;
+  const off = k.source === 'token' && a.config && !a.config.nftCombat ? '<p class="note warn small">NFT power off on this server</p>' : '';
   const picks = a.tokens && a.tokens.length > 1
     ? `<div class="tokpick">${a.tokens.map((t) => `<button class="btn small${a.choice?.tokenId === t.tokenId ? ' on' : ''}" data-token="${t.tokenId}">${esc(t.oneOfOne ?? `#${t.metadataId}`)} ${tierBadge(t.tier)}</button>`).join('')}<button class="btn small${!a.choice ? ' on' : ''}" data-token="">Free</button></div>` : '';
-  const sigBox = sig ? `<div class="sig" style="--sig:${accent}"><b>${esc(sig.name)}</b> <span class="num">${Math.round(sig.cooldown * k.power.cooldownMul)} s</span><p>${esc(sig.text)}</p>
+  const sigBox = sig ? `<div class="sig" style="--sig:${accent}"><div class="sig-h"><b>${esc(sig.name)}</b><span class="num">${Math.round(sig.cooldown * k.power.cooldownMul)}s</span></div><p>${esc(sig.text)}</p>
 <p class="small"><em>Telegraph</em> ${esc(sig.telegraph ?? '')}</p><p class="small"><em>Counter</em> ${esc(sig.counter ?? '')}</p></div>` : '';
   const hist = k.source === 'token' ? a.tokens?.find((t) => t.metadataId === k.metadataId)?.history : null;
   return `<section class="hub-card chog${one ? ' oneofone' : ''}" style="--accent:${accent}" id="chogpanel">
-<div class="kicker">Your class</div>
-<h3 id="chogname">${title}</h3><div class="tierline">${tierLine}</div>
-${one ? `<div class="legend">1:1 LEGEND · ${esc(one.name)}</div>` : ''}
+<div class="kicker">Class</div>
+<h3 id="chogname">${title}</h3>${tierLine}
 <div class="pwrows">${powerRows(k.power)}</div>
-<p class="note small">From your Chog's tier${k.upgrades && Object.values(k.upgrades).some((x) => x) ? ' plus your upgrades' : ''}. Speed never changes.</p>
-${sigBox}${hist ? `<p class="note small">This Chog's own history: ${hist.matches} matches, ${hist.wins} wins, ${hist.kills} kills (kept with the token, whoever holds it).</p>` : ''}
-${picks}${note}
+${sigBox}${hist ? `<p class="hist num" title="This Chog's own record">${hist.matches}M · ${hist.wins}W · ${hist.kills}K</p>` : ''}
+${picks}${off}
 ${c.demoToken && tierOfMetadataId(Number(c.demoToken)) ? (a.choice?.demo ? '<button class="btn small" data-act="demo-online-off">Leave demo</button>' : `<button class="btn small" data-act="demo-online">Use <span class="demo">DEMO</span> #${esc(c.demoToken)}</button>`) : ''}
-<div class="btns tight"><button class="btn small" data-act="upgrades">Upgrades${upgradesReady(a) ? ` · ${upgradesReady(a)} ready` : ''}</button></div>
 </section>`;
 }
 
 // ---- centre: operator + mode + PLAY ----
+// The default game is you + 2 AI teammates against bots; 1v1, 3v3 and 5v5 are real players only.
 const MODE_INFO: Record<PlayMode, { label: string; sub: string }> = {
-  solo: { label: 'Practice', sub: 'Solo vs 5 bots' },
-  '1v1': { label: '1v1', sub: 'Duel' },
-  '3v3': { label: '3v3', sub: 'Squads · revive' },
+  solo: { label: 'Vs bots', sub: 'You + 2 AI' },
+  '1v1': { label: '1v1', sub: 'Online' },
+  '3v3': { label: '3v3', sub: 'Online' },
   '5v5': { label: '5v5', sub: 'Holders' },
 };
 
@@ -168,11 +155,10 @@ const MODE_INFO: Record<PlayMode, { label: string; sub: string }> = {
 export function fiveLockReason(a: AcctView): string | null {
   if (a.choice?.demo) return null;
   if (a.choice?.tokenId && a.tokens?.some((t) => t.tokenId === a.choice!.tokenId)) return null;
-  if (!a.signedIn) return 'Sign in with the wallet that holds your Chog';
-  if (!a.hasWallet) return 'Sign in with your Chog wallet';
-  if (a.tokens === null) return 'Checking your wallet on Monad…';
-  if (a.tokensError) return 'Monad could not be reached; try again';
-  return 'No Chog Genesis in your wallet';
+  if (!a.signedIn || !a.hasWallet) return 'Sign in with your Chog wallet';
+  if (a.tokens === null) return 'Checking your wallet…';
+  if (a.tokensError) return 'Monad unreachable, try again';
+  return 'No Chog in this wallet';
 }
 
 function playPanel(c: HubCtx): string {
@@ -184,24 +170,27 @@ function playPanel(c: HubCtx): string {
     const locked = m === '5v5' && !!lock;
     const off = m !== 'solo' && !v.url;
     return `<button class="mode-btn${c.mode === m ? ' on' : ''}${locked ? ' locked' : ''}" data-mode="${m}"${busy ? ' disabled' : ''} aria-pressed="${c.mode === m}">
-<b>${locked ? ICON.lock : ''}${MODE_INFO[m].label}</b><small>${locked ? 'CHOG HOLDERS ONLY' : off ? 'Offline' : MODE_INFO[m].sub}</small></button>`;
+<b>${locked ? ICON.lock : ''}${MODE_INFO[m].label}</b><small>${locked ? 'Holders only' : off ? 'Offline' : MODE_INFO[m].sub}</small></button>`;
   }).join('');
   const sel = c.mode;
-  let playLabel = sel === 'solo' ? 'Practice' : `Play ${sel}`;
+  let playLabel = 'Play';
   let playAttr = 'data-act="play"';
   let disabled = false;
   let status = '';
-  if (sel === '5v5' && lock) { disabled = true; status = `<p class="status warn" id="lockwhy"><b>CHOG HOLDERS ONLY</b> · ${esc(lock)}. 1v1 and 3v3 are open to everyone.</p>`; }
-  if (sel !== 'solo' && !v.url) { disabled = true; status = '<p class="status warn">Online play is not switched on in this build.</p>'; }
-  if (v.follower && sel !== 'solo') { disabled = true; status = '<p class="status">Your squad leader starts the match. Stay here: you join automatically.</p>'; }
+  if (sel === '5v5' && lock) {
+    disabled = true;
+    status = `<p class="status warn" id="lockwhy"><b>CHOG HOLDERS ONLY</b> · ${esc(lock)}</p>${!c.acct.signedIn || !c.acct.hasWallet ? '<button class="btn small" data-act="signin">Connect wallet</button>' : ''}`;
+  }
+  if (sel !== 'solo' && !v.url) { disabled = true; status = '<p class="status warn">Online unavailable</p>'; }
+  if (v.follower && sel !== 'solo') { disabled = true; status = '<p class="status">Leader starts the match</p>'; }
   if (busy) {
     playLabel = 'Cancel';
     playAttr = 'data-act="online-cancel"';
     disabled = false;
     status = v.state === 'connecting'
-      ? `<p class="status" id="queuestatus">${esc(v.message || 'Connecting to the game server…')}</p><div class="loadbar"><i></i></div>`
-      : `<p class="status num" id="queuestatus">Finding ${esc(v.queue?.mode ?? sel)}: ${v.queue?.have ?? 0} / ${v.queue?.need ?? 0} players</p><div class="loadbar"><i></i></div>`;
-  } else if (v.state === 'match') status = '<p class="status good">Match found. Deploying…</p>';
+      ? `<p class="status" id="queuestatus">${esc(v.message || 'Connecting…')}</p><div class="loadbar"><i></i></div>`
+      : `<p class="status num" id="queuestatus">${esc(v.queue?.mode ?? sel)} · ${v.queue?.have ?? 0}/${v.queue?.need ?? 0}</p><div class="loadbar"><i></i></div>`;
+  } else if (v.state === 'match') status = '<p class="status good">Match found</p>';
   else if (v.message && !status) status = `<p class="status warn">${esc(v.message)}</p>`;
   // What the server made of the last ticket (a fail-closed ownership read, a reused ticket): said plainly, never hidden.
   const warn = c.acct.ticketWarning ? TICKET_WARN[c.acct.ticketWarning] ?? c.acct.ticketWarning : c.netProfile?.note ?? '';
@@ -214,12 +203,10 @@ function playPanel(c: HubCtx): string {
   <button class="op-show" data-go="start" aria-label="Operator details">${portraitSvg(h, 'hub', c.marking)}</button>
   <button class="icon-btn small" data-hero="${next}" data-pick="1" aria-label="Next operator">${ICON.next}</button>
 </div>
-<div class="op-name"><b>${esc(h.name)}</b><small>${esc(h.role)} · ${esc(WEAPONS[h.weapon].name)} · ${esc(c.acct.choice && classOf(c.acct).power.signature ? classOf(c.acct).power.signature!.name : h.ability.name)}</small></div>
+<div class="op-name"><b>${esc(h.name)}</b><small>${esc(WEAPONS[h.weapon].name)} · ${esc(classOf(c.acct).power.signature?.name ?? h.ability.name)}</small></div>
 <div class="modes4">${modes}</div>
 <button class="btn primary play" ${playAttr}${disabled ? ' disabled' : ''} id="playbtn">${esc(playLabel)}</button>
 ${status}
-${sel !== 'solo' && v.url && !busy ? `<p class="note small">${sel === '3v3' || sel === '5v5' ? 'Teams of real players. A teammate can revive you when you go down. ' : ''}${c.acct.signedIn ? `Saved matches pay ${REWARDS.xpPlay}+ XP and ${REWARDS.shardsPlay}+ shards.` : 'Sign in to earn XP and shards.'}${v.rtt ? ` · ping ${Math.round(v.rtt)} ms` : ''}</p>` : ''}
-${sel === 'solo' ? '<p class="note small">Practice runs never pay XP or shards. Signed in, they count for your practice career and medals.</p>' : ''}
 </section>`;
 }
 
@@ -229,19 +216,15 @@ const boardRow = (r: BoardRow) => `<tr class="${r.you ? 'me' : ''}"><td class="n
 function boardPreview(c: HubCtx): string {
   const a = c.acct;
   let body: string;
-  if (!a.config) body = '<p class="note">Leaderboard unavailable here.</p>';
-  else if (!a.config.db) body = '<p class="note">Saved progression is offline.</p>';
-  else if (a.board === null) body = '<p class="note">Loading…</p>';
-  else if (!a.board.length) body = '<p class="note">Nobody is ranked yet. Win a saved online match to be first.</p>';
+  if (!a.config?.db) body = '<p class="note">Offline</p>';
+  else if (a.board === null) body = '<p class="note">…</p>';
+  else if (!a.board.length) body = '<p class="note">No ranks yet</p>';
   else {
     const top = a.board.slice(0, 5);
     const me = a.boardMe ?? a.board.find((r) => r.you) ?? null;
     body = `<table class="mini-board"><tr><th>#</th><th>Player</th><th>Kills</th><th></th></tr>${top.map(boardRow).join('')}${me && !top.some((r) => r.you) ? `<tr class="gap"><td colspan="4">…</td></tr>${boardRow(me)}` : ''}</table>`;
   }
-  const mine = a.boardMe ?? a.board?.find((r) => r.you);
-  return `<section class="hub-card board" id="boardpreview"><div class="card-head"><h3>Leaderboard</h3><button class="btn small" data-act="ranks">All</button></div>
-${body}${a.signedIn && !mine && a.board?.length ? '<p class="note small">Play a saved online match to get your rank.</p>' : ''}
-<p class="note small">Ranked by kills, then wins. Your Chog never moves you up.</p></section>`;
+  return `<section class="hub-card board" id="boardpreview"><div class="card-head"><h3>Leaderboard</h3><button class="btn small" data-act="ranks">All</button></div>${body}</section>`;
 }
 
 function squadPanel(c: HubCtx): string {
@@ -250,16 +233,13 @@ function squadPanel(c: HubCtx): string {
   const p = v.party;
   if (!p || p.members.length === 0) {
     return `<section class="hub-card squad" id="squad"><div class="card-head"><h3>Squad</h3></div>
-<p class="note small">Play 3v3 and 5v5 with friends: always on the same team, together between matches.</p>
-<div class="squad-row"><button class="btn small" data-act="squad-create">Create squad</button>
+<div class="squad-row"><button class="btn small" data-act="squad-create">Create</button>
 <input id="squadcode" class="field small" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false" aria-label="Squad code" />
 <button class="btn small" data-act="squad-join">Join</button></div></section>`;
   }
-  const me = p.members.find((m) => m.you);
-  const rows = p.members.map((m) => `<li class="${m.you ? 'me' : ''}"><span>${m.leader ? '★ ' : ''}${esc(m.name)}${m.you ? ' (you)' : ''}</span><span>${esc(heroById(m.hero).name)} ${tierBadge(m.tier, m.demo)}${m.ready ? '' : ' <em>busy</em>'}</span></li>`).join('');
+  const rows = p.members.map((m) => `<li class="${m.you ? 'me' : ''}"><span>${m.leader ? '★ ' : ''}${esc(m.name)}</span><span>${tierBadge(m.tier, m.demo)}${m.ready ? '' : ' <em>…</em>'}</span></li>`).join('');
   return `<section class="hub-card squad" id="squad"><div class="card-head"><h3>Squad <span class="num code" id="squadcodeshown">${esc(p.code)}</span></h3><button class="btn small" data-act="squad-leave">Leave</button></div>
-<ul class="squad-list">${rows}</ul>
-<p class="note small">${me?.leader ? 'You lead: pick 3v3 or 5v5 and press Play; the squad queues with you.' : 'The leader starts the match; you join automatically.'} Invite: share the code${p.members.length < 5 ? ` (${5 - p.members.length} slots left)` : ''}.</p></section>`;
+<ul class="squad-list">${rows}</ul><p class="note small num">${p.members.length}/5</p></section>`;
 }
 
 // ---- the hub ----
@@ -276,8 +256,8 @@ export function hubHtml(c: HubCtx): string {
   <button class="navbtn" data-act="ranks">Leaderboard</button>
   <button class="navbtn" data-act="career">Career</button>
   <button class="navbtn" data-act="medals">Medals <span class="num">${Object.keys(c.medals).length}/${MEDALS.length}</span></button>
-  <button class="navbtn" data-act="howto">How to play</button>
-  <button class="navbtn" data-act="demo">Chog <span class="demo">DEMO</span></button>
+  <button class="navbtn" data-act="howto">Help</button>
+  <button class="navbtn" data-act="demo"><span class="demo">DEMO</span></button>
 </nav></div>`;
 }
 
@@ -285,11 +265,10 @@ export function hubHtml(c: HubCtx): string {
 export function upgradesHtml(c: ScreenCtx): string {
   const a = c.acct;
   const k = classOf(a);
-  const right = `<span class="cur">${ICON.shard}<b class="num">${a.profile?.shards ?? 0}</b></span>`;
+  const right = `<span class="cur">${ICON.shard}<b class="num" id="upshards">${a.profile?.shards ?? 0}</b></span>`;
   if (!a.signedIn || !a.profile) {
-    return `<div class="screen upgrades">${topbar('Upgrades', right)}<div class="up-body"><section class="hub-card"><h3>Upgrades belong to your account</h3>
-<p class="note">${a.signedIn ? 'Saved progression is offline right now.' : 'Sign in (Google or wallet) to earn shards in online matches and spend them here. Guests play at their class power with no upgrades.'}</p>
-${a.signedIn ? '' : '<div class="btns"><button class="btn primary" data-act="settings">Sign in</button></div>'}</section></div></div>`;
+    return `<div class="screen upgrades">${topbar('Upgrades', right)}<div class="up-wrap"><section class="hub-card up-empty"><h3>Sign in to upgrade</h3>
+<div class="btns"><button class="btn primary" data-act="signin">Sign in</button></div></section></div></div>`;
   }
   const p = a.profile;
   const cards = UPGRADE_IDS.map((id) => {
@@ -297,17 +276,12 @@ ${a.signedIn ? '' : '<div class="btns"><button class="btn primary" data-act="set
     const pips = Array.from({ length: d.ranks }, (_, i) => `<i class="${i < rank ? 'on' : ''}"></i>`).join('');
     const btn = rank >= d.ranks ? '<span class="maxed">MAX</span>'
       : `<button class="btn small${p.shards >= cost ? ' primary' : ''}" data-upgrade="${id}"${p.shards < cost || a.busy ? ' disabled' : ''}>${ICON.shard}<span class="num">${cost}</span></button>`;
-    return `<div class="upcard"><div><b>${esc(d.name)}</b><small>${esc(d.text)}</small></div><div class="pips">${pips}</div><div class="num rank">${rank}/${d.ranks}</div>${btn}</div>`;
+    return `<div class="upcard${a.justBought === id ? ' bought' : ''}" data-up="${id}"><div class="up-top"><b>${esc(d.name)}</b><span class="num rank">${rank}/${d.ranks}</span></div><small>${esc(d.text)}</small><div class="pips">${pips}</div>${btn}</div>`;
   }).join('');
   return `<div class="screen upgrades">${topbar('Upgrades', right)}
-<div class="up-body">
-<section class="hub-card"><h3>Develop your operator</h3>${cards}
-${a.message ? `<p class="note warn">${esc(a.message)}</p>` : ''}
-<p class="note">Shards come only from saved online matches (${REWARDS.shardsPlay} for playing, ${REWARDS.shardsWin} more for a win). They cannot be bought. Upgrades apply to every operator, online and in practice.</p></section>
-<section class="hub-card"><h3>Your class now</h3><div class="pwrows">${powerRows(k.power)}</div>
-<p class="note">Your Chog decides your starting class (${k.source === 'free' ? 'Free' : esc(TIER_DEFS[k.tokenTier ?? k.tier].label)}); your account's upgrades decide how far you have developed it. A fully upgraded free operator starts stronger than a Common or Uncommon Chog.</p>
-<table class="kv tiers">${(['free', 'common', 'uncommon', 'rare', 'epic', 'legendary'] as Tier[]).map((t) => { const q = powerFor(t); return `<tr class="${t === (k.tokenTier ?? k.tier) ? 'me' : ''}"><td>${tierBadge(t)}</td><td class="num">+${Math.round((q.hpMul - 1) * 100)}% HP</td><td class="num">+${q.armor} AR</td><td class="num">+${Math.round((q.damageMul - 1) * 100)}% DMG</td></tr>`; }).join('')}</table>
-</section></div></div>`;
+<div class="up-wrap"><div class="up-grid">${cards}</div>
+${a.message ? `<p class="note warn up-msg">${esc(a.message)}</p>` : ''}
+<section class="hub-card up-class"><div class="kicker">Class · ${k.source === 'free' ? 'Free' : esc(TIER_DEFS[k.tokenTier ?? k.tier].label)}</div><div class="pwrows">${powerRows(k.power)}</div></section></div></div>`;
 }
 
 // ---- Leaderboard (full) ----
@@ -316,13 +290,12 @@ export function boardScreenHtml(c: ScreenCtx): string {
   const head = '<tr><th>#</th><th>Player</th><th>Kills</th><th>Wins</th><th>Matches</th><th>Level</th><th>Rating</th><th>Chog</th></tr>';
   const row = (r: BoardRow) => `<tr class="${r.you ? 'me' : ''}"><td class="num">${r.rank}</td><td>${esc(r.name)}${r.you ? ' (you)' : ''}</td><td class="num"><b>${r.kills}</b></td><td class="num">${r.wins}</td><td class="num">${r.matches}</td><td class="num">${r.level}</td><td class="num">${r.rating}</td><td>${r.nftTier ? tierBadge(r.nftTier) : '<span class="note">none</span>'}</td></tr>`;
   let body: string;
-  if (!a.config?.db) body = '<p class="note warn">Saved progression is offline, so there is no leaderboard right now.</p>';
-  else if (a.board === null) body = '<p class="note">Loading…</p>';
-  else if (!a.board.length) body = '<p class="note">Nobody has finished a saved online match yet. Sign in and play 1v1, 3v3 or 5v5 to be first.</p>';
+  if (!a.config?.db) body = '<p class="note warn">Offline</p>';
+  else if (a.board === null) body = '<p class="note">…</p>';
+  else if (!a.board.length) body = '<p class="note">No ranks yet</p>';
   else body = `<table class="kv board">${head}${a.board.map(row).join('')}${a.boardMe && !a.board.some((r) => r.you) ? `<tr class="gap"><td colspan="8">…</td></tr>${row(a.boardMe)}` : ''}</table>`;
   return `<div class="screen ranks">${topbar('Leaderboard')}<div class="scroll-body"><section class="hub-card wide">
-<p class="note">Ranked by opponents killed in saved online matches (20 s or longer), then wins, then fewer matches. Public: anyone can see it, no Chog needed. The Chog column is shown for information only and never changes a rank. Rating is matchmaking skill, kept separate.</p>
-${body}${a.signedIn ? '' : '<p class="note">Sign in to appear here. Guests and demo matches are not ranked.</p>'}</section></div></div>`;
+<p class="note small rankrule">Kills · then wins · then fewer matches</p>${body}</section></div></div>`;
 }
 
 // ---- Career (player card, online and practice) ----
@@ -342,8 +315,8 @@ export function careerHtml(c: ScreenCtx): string {
     const b = c.records.heroes[h.id];
     const on = o?.heroes[h.id];
     const isFav = c.profile.favourite === h.id;
-    return `<tr><td><b>${esc(h.name)}</b></td><td class="num">${on?.matches ?? 0} / ${on?.wins ?? 0} / ${on?.kills ?? 0}</td><td class="num">${b?.runs ?? 0} / ${b?.wins ?? 0} / ${fmtTime(b?.bestWinSeconds ?? null)}</td>
-<td><button class="btn small${isFav ? ' on' : ''}" data-fav="${h.id}">${isFav ? '★ Favourite' : 'Favourite'}</button></td></tr>`;
+    return `<tr><td><b>${esc(h.name)}</b></td><td class="num">${on?.matches ?? 0} · ${on?.kills ?? 0}</td><td class="num">${b?.runs ?? 0} · ${b?.wins ?? 0}</td>
+<td><button class="icon-btn small fav${isFav ? ' on' : ''}" data-fav="${h.id}" aria-label="${isFav ? 'Favourite' : 'Set favourite'}">${isFav ? '★' : '☆'}</button></td></tr>`;
   }).join('');
   return `<div class="screen career">${topbar('Career')}
 <div class="career-body">
@@ -352,17 +325,17 @@ export function careerHtml(c: ScreenCtx): string {
 <div class="pcard-art">${portraitSvg(show, 'car', null)}<span class="pcard-op">${fav ? 'Favourite' : 'Current'}: ${esc(show.name)}</span></div>
 <div class="pins">${pins}</div><div class="links">${linked || '<span class="linkchip dim">Guest: nothing is saved</span>'}</div></aside>
 <div class="scroll-body">
-<section class="hub-card"><h3>Online <small>saved to your account</small></h3>
+<section class="hub-card"><h3>Online</h3>
 ${a.signedIn && a.profile ? rows([
     ['Level', `${a.profile.level} (${a.profile.xp} XP)`], ['Matches', String(a.profile.matches)], ['Wins', `${a.profile.wins} (${pct(a.profile.wins, a.profile.matches)})`],
     ['Kills', String(o?.kills ?? 0)], ['Damage dealt', String(o?.damage ?? 0)], ['Survived to the end', String(o?.survived ?? 0)], ['Rating', String(a.profile.rating)],
-  ]) : '<p class="note">Sign in to keep an online career.</p>'}</section>
-<section class="hub-card"><h3>Practice <small>${a.signedIn ? 'saved to your account' : 'this session only (guest)'}</small></h3>
+  ]) : '<div class="btns tight"><button class="btn small primary" data-act="signin">Sign in</button></div>'}</section>
+<section class="hub-card"><h3>Vs bots</h3>
 ${rows([
     ['Runs', String(r.runs)], ['Rooms cleared', `${r.wins} (${pct(r.wins, r.runs)})`], ['Best clear', fmtTime(r.bestWinSeconds)], ['Most kills in a run', String(r.mostKills)],
     ['Hostiles down', String(r.kills)], ['Accuracy', pct(r.hits, r.bullets)], ['Pickups · abilities', `${r.pickups} · ${r.abilities}`],
   ])}</section>
-<section class="hub-card"><h3>Operators <small>online matches / wins / kills · practice runs / clears / best</small></h3><table class="kv ops">${heroRows}</table></section>
+<section class="hub-card"><h3>Operators</h3><table class="kv ops"><tr><th></th><th>Online M · K</th><th>Bots R · W</th><th></th></tr>${heroRows}</table></section>
 </div></div></div>`;
 }
 
@@ -370,8 +343,7 @@ ${rows([
 export function medalsScreenHtml(c: ScreenCtx, cardHtml: (m: (typeof MEDALS)[number]) => string): string {
   const sorted = [...MEDALS].sort((x, y) => Number(!!c.medals[y.id]) - Number(!!c.medals[x.id]));
   return `<div class="screen medals-screen">${topbar(`Medals <span class="num">${Object.keys(c.medals).length}/${MEDALS.length}</span>`)}
-<div class="scroll-body"><p class="note">${c.acct.signedIn ? 'Earned in practice runs and kept on your account. Tap an earned medal to pin it to your card (3 max).' : 'Guest: medals earned now last for this session only. Sign in to keep them on your account.'}</p>
-<div class="medals">${sorted.map(cardHtml).join('')}</div></div></div>`;
+<div class="scroll-body"><div class="medals">${sorted.map(cardHtml).join('')}</div></div></div>`;
 }
 
 // ---- Online results ----
@@ -388,16 +360,16 @@ export interface ResultProgress {
 
 export function onlineResultsHtml(r: { mode: string; won: boolean | null; reason: string; team: string; rows: OnlineRow[]; demo: boolean; signedIn: boolean; settle: boolean; prog: ResultProgress; myClass: string; canRequeue: boolean; follower: boolean }): string {
   const title = r.won === null ? 'Draw' : r.won ? 'Victory' : 'Defeat';
-  const why = r.reason === 'time' ? 'Time ran out: the side with more health standing takes it.' : r.won === null ? 'Nobody was left standing.' : r.won ? 'The other side is down.' : 'Your side is down.';
+  const why = r.reason === 'time' ? 'Time' : '';
   const me = r.rows.find((x) => x.you);
   const row = (x: OnlineRow) => `<tr class="${x.you ? 'me' : ''}"><td>${esc(x.name)}${x.you ? ' (you)' : ''}</td><td>${esc(heroById(x.hero).name)} ${x.metadataId && ONE_OF_ONE[x.metadataId] && x.tier === 'legendary' ? `<span class="legend-chip">${esc(ONE_OF_ONE[x.metadataId].name)}</span>` : tierBadge(x.tier, x.demo)}</td><td class="num">${x.kills}</td><td class="num">${x.damageDealt}</td><td>${x.alive ? 'standing' : x.cause === 'zone' ? 'zone' : x.cause === 'left' ? 'left' : 'out'}</td></tr>`;
   const side = (team: string, label: string) => `<h3>${label}</h3><table class="kv online-res"><tr><th>Player</th><th>Operator</th><th>Kills</th><th>Dealt</th><th></th></tr>${r.rows.filter((x) => x.team === team).map(row).join('')}</table>`;
   const other = r.team === 'alpha' ? 'bravo' : 'alpha';
   const p = r.prog;
   let rewards: string;
-  if (r.demo) rewards = '<p class="pb"><span class="demo">DEMO</span> match: no XP, shards or rating.</p>';
-  else if (!r.settle) rewards = `<p class="pb">${r.signedIn ? 'Not saved: nobody in this match had a checked account ticket.' : 'Guest: nothing saved. Sign in to earn XP and shards from online matches.'}</p>`;
-  else if (p.pending) rewards = '<p class="pb" id="saving">Saving the result to your account…</p>';
+  if (r.demo) rewards = '<p class="pb"><span class="demo">DEMO</span> no rewards</p>';
+  else if (!r.settle) rewards = `<p class="pb">${r.signedIn ? 'Not saved' : 'Guest · not saved'}</p>`;
+  else if (p.pending) rewards = '<p class="pb" id="saving">Saving…</p>';
   else if (p.reward && p.before) {
     const lb = levelOf(p.before.xp), la = levelOf(p.before.xp + p.reward.xp);
     const d = p.reward.ratingAfter - p.reward.ratingBefore;
@@ -406,11 +378,37 @@ export function onlineResultsHtml(r: { mode: string; won: boolean | null; reason
 <div class="rw"><span>Shards</span><b class="num">+${p.reward.shards}</b></div>
 <div class="rw"><span>Rating</span><b class="num ${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '+' : ''}${d}</b><small class="num">${p.reward.ratingBefore} → ${p.reward.ratingAfter}</small></div>
 <div class="rw lv"><span>Level ${la.level}${la.level > lb.level ? ' <em class="lvup">LEVEL UP</em>' : ''}</span><div class="xpbar big"><i class="was" style="width:${la.level > lb.level ? 0 : Math.round((lb.into / lb.next) * 100)}%"></i><i class="now" style="width:${Math.round((la.into / la.next) * 100)}%"></i></div><small class="num">${la.into} / ${la.next} XP</small></div>
-</div>${p.reward.xp === 0 ? '<p class="note">No reward this time: left early, under 20 s, or the daily limit (20 saved matches a day).</p>' : ''}
-${p.upgradesReady ? `<p class="pb good">${p.upgradesReady} upgrade${p.upgradesReady > 1 ? 's' : ''} ready to buy.</p>` : ''}`;
-  } else rewards = `<p class="pb">${esc(p.note || 'Result not saved to your account.')}</p>`;
-  return `<div class="card results online-results"><div class="kicker">Online ${esc(r.mode)} · ${esc(r.myClass)}</div><h2 class="${r.won === null ? '' : r.won ? 'good' : 'bad'}">${title}</h2><p>${why}${me ? ` You: ${me.kills} kill${me.kills === 1 ? '' : 's'}, ${me.damageDealt} damage.` : ''}</p>
+</div>${p.reward.xp === 0 ? '<p class="note small">No reward: under 20 s, left early or daily cap</p>' : ''}
+${p.upgradesReady ? `<p class="pb good">${p.upgradesReady} upgrade${p.upgradesReady > 1 ? 's' : ''} ready</p>` : ''}`;
+  } else rewards = `<p class="pb">${esc(p.note || 'Not saved')}</p>`;
+  return `<div class="card results online-results"><div class="kicker">${esc(r.mode)} · ${esc(r.myClass)}${why ? ` · ${why}` : ''}</div><h2 class="${r.won === null ? '' : r.won ? 'good' : 'bad'}">${title}</h2>${me ? `<p class="num">${me.kills} K · ${me.damageDealt} DMG</p>` : ''}
 ${rewards}
-<div class="res-grid"><div>${side(r.team, 'Your side')}</div><div>${side(other, 'Other side')}</div></div>
-<div class="btns">${r.follower ? '<p class="note">Your squad leader picks the next match.</p>' : `<button class="btn primary" data-act="online-again"${r.canRequeue ? '' : ' disabled'}>Play ${esc(r.mode)} again</button>`}${p.upgradesReady ? '<button class="btn" data-act="upgrades-from-results">Upgrades</button>' : ''}<button class="btn" data-go="menu">Hub</button></div></div>`;
+<div class="res-grid"><div>${side(r.team, 'Your side')}</div><div>${side(other, 'Enemy')}</div></div>
+<div class="btns"><button class="btn primary" data-go="menu" id="continuebtn">Continue</button>${r.follower ? '' : `<button class="btn" data-act="online-again"${r.canRequeue ? '' : ' disabled'}>Again</button>`}${p.upgradesReady ? '<button class="btn" data-act="upgrades-from-results">Upgrades</button>' : ''}</div></div>`;
+}
+
+// ---- Sign in (a sheet over whatever screen asked for it; never routed through Settings) ----
+export interface AuthSheet { config: { google: boolean; wallet: boolean } | null | false; session: { provider: 'google' | 'wallet'; label: string }[]; wallets: { id: string; name: string }[]; busy: boolean; message: string; pickWallet: boolean }
+
+const G_ICON = '<svg viewBox="0 0 24 24" class="ico brand" aria-hidden="true"><path d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3z" fill="#4285F4"/><path d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22z" fill="#34A853"/><path d="M6.4 14a6 6 0 0 1 0-3.9V7.5H3.1a10 10 0 0 0 0 9z" fill="#FBBC05"/><path d="M12 5.9c1.5 0 2.8.5 3.8 1.5l2.9-2.9A10 10 0 0 0 3.1 7.5l3.3 2.6C7.2 7.7 9.4 5.9 12 5.9z" fill="#EA4335"/></svg>';
+const W_ICON = '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M3 7h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM3 7l13-3v3M16 13h2"/></svg>';
+
+export function authHtml(s: AuthSheet, host: string): string {
+  const has = (p: 'google' | 'wallet') => s.session.some((x) => x.provider === p);
+  const chips = s.session.map((x) => `<span class="linkchip">${x.provider === 'google' ? 'Google' : 'Wallet'} · ${esc(x.label)}</span>`).join('');
+  const googleOff = s.config === false || (s.config !== null && !s.config.google);
+  const walletOff = s.config === false || (s.config !== null && !s.config.wallet);
+  const google = has('google') ? '' : `<button class="btn auth-btn" data-act="signin-google"${googleOff || s.busy ? ' disabled' : ''}>${G_ICON}<span>Continue with Google</span></button>`;
+  let wallet = '';
+  if (!has('wallet')) {
+    wallet = `<button class="btn auth-btn" data-act="signin-wallet"${walletOff || s.busy ? ' disabled' : ''}>${W_ICON}<span>Continue with Wallet</span></button>`;
+    if (s.pickWallet && s.wallets.length > 1) wallet += `<div class="wallet-list">${s.wallets.map((w) => `<button class="btn small" data-wallet="${esc(w.id)}">${esc(w.name)}</button>`).join('')}</div>`;
+    if (s.pickWallet && !s.wallets.length) wallet += `<p class="note small" id="nowallet">No wallet in this browser</p><div class="wallet-list"><a class="btn small" href="https://metamask.app.link/dapp/${esc(host)}" rel="noopener">Open in MetaMask</a></div>`;
+  }
+  return `<div class="card dialog auth-sheet" id="authsheet" role="dialog" aria-label="Sign in">
+<button class="icon-btn small close" data-act="back" aria-label="Close">×</button>
+<h2>${s.session.length ? 'Account' : 'Sign in'}</h2>${chips ? `<div class="links">${chips}</div>` : ''}
+<div class="auth-btns">${google}${wallet}</div>
+${s.config === false ? '<p class="note warn" id="authmsg">Sign-in unavailable right now</p>' : s.message ? `<p class="note${s.busy ? '' : ' warn'}" id="authmsg">${esc(s.message)}</p>` : ''}
+${s.session.length ? '<button class="btn small" data-act="signout">Sign out</button>' : ''}</div>`;
 }

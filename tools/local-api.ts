@@ -13,6 +13,10 @@ import { handleGame, type Deps } from '../api/_lib/game-api';
 import { SESSION_COOKIE, clearCookie, cookie, json, readSession, sign, type Identity } from '../api/_lib/auth';
 import { migrate, type Db, type Tx } from '../api/_lib/db';
 import { CONTRACT, selector } from '../api/_lib/chain';
+import { POST as walletChallenge } from '../api/auth/wallet/challenge';
+import { POST as walletVerify } from '../api/auth/wallet/verify';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { keccak_256 } from '@noble/hashes/sha3.js';
 
 const PORT = Number(process.env.PORT ?? 8790);
 const GAME = process.env.GAME_SERVER_URL ?? 'http://127.0.0.1:8791';
@@ -22,8 +26,13 @@ process.env.AUTH_SECRET = SECRET;
 process.env.AUTH_ORIGIN = `http://localhost:${PORT}`;
 process.env.GAME_SERVER_URL = GAME;
 
-// Test wallets: A holds Blaze (a 1:1, token 5 -> metadata 53) and an Uncommon (token 900 -> 1462); B holds nothing.
-const OWNED: Record<string, number[]> = { '0x00000000000000000000000000000000000000a1': [5, 900] };
+// Test wallets. HOLDER is the address of the fixed test key tools/mi-journey.mjs signs with (a real EIP-191 signature
+// through the real /api/auth/wallet routes): it holds Blaze (a 1:1, token 5 -> metadata 53) and an Uncommon
+// (token 900 -> 1462). 0x...a1 holds the same for /__test/login checks. Every other address holds nothing.
+export const TEST_KEY = '4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318';
+const pub = secp256k1.getPublicKey(Uint8Array.from(TEST_KEY.match(/../g)!.map((h) => parseInt(h, 16))), false);
+const HOLDER = '0x' + Array.from(keccak_256(pub.subarray(1)).subarray(12), (b) => b.toString(16).padStart(2, '0')).join('');
+const OWNED: Record<string, number[]> = { '0x00000000000000000000000000000000000000a1': [5, 900], [HOLDER]: [5, 900] };
 const META: Record<number, number> = { 5: 53, 900: 1462 };
 const word = (n: number) => n.toString(16).padStart(64, '0');
 async function fakeChain(init: RequestInit): Promise<Response> {
@@ -57,8 +66,20 @@ const deps: Deps = {
 
 const TYPES: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.png': 'image/png', '.json': 'application/json' };
 
-createServer(async (req, res) => {
+// /__test/slow?ms=N: every /api/* answer waits N ms (failure-state tests: a hanging API).
+let slowMs = 0;
+
+createServer((req, res) => {
+  // A browser that gives up on a slow request (its 10 s timeout) aborts it: that must never take the stack down.
+  req.on('error', () => undefined);
+  res.on('error', () => undefined);
+  handle(req, res).catch(() => { try { if (!res.headersSent) res.writeHead(500); res.end(); } catch { /* socket gone */ } });
+}).listen(PORT, () => console.log(`local stack on http://localhost:${PORT} (game server ${GAME}); test holder ${HOLDER}`));
+
+async function handle(req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) {
   const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
+  if (url.pathname === '/__test/slow') { slowMs = Number(url.searchParams.get('ms')) || 0; res.writeHead(200); res.end('ok'); return; }
+  if (slowMs && url.pathname.startsWith('/api/')) await new Promise((r) => setTimeout(r, slowMs));
   const chunks: Buffer[] = [];
   for await (const c of req) chunks.push(c as Buffer);
   const body = chunks.length ? Buffer.concat(chunks) : undefined;
@@ -68,6 +89,14 @@ createServer(async (req, res) => {
   else if (url.pathname === '/api/auth/session') out = json({ identities: (await readSession(request, deps.env))?.ids ?? [] });
   else if (url.pathname === '/api/auth/config') out = json({ google: true, wallet: true });
   else if (url.pathname === '/api/auth/logout') out = json({ ok: true }, 200, { 'set-cookie': clearCookie(SESSION_COOKIE) });
+  else if (url.pathname === '/api/auth/wallet/challenge') out = await walletChallenge(request);
+  else if (url.pathname === '/api/auth/wallet/verify') out = await walletVerify(request);
+  // Google cannot be reached from the test container: its start route signs in a fixed test Google identity instead and
+  // comes back exactly like the real callback does (/?signedin=google). ?google_sub= in the page URL picks the subject.
+  else if (url.pathname === '/api/auth/google/start') {
+    const sub = (request.headers.get('referer') && new URL(request.headers.get('referer')!).searchParams.get('google_sub')) || 'google-tester';
+    out = new Response(null, { status: 302, headers: { location: `/__test/login?provider=google&sub=${encodeURIComponent(sub)}&label=${encodeURIComponent(sub + '@gmail.test')}&to=${encodeURIComponent('/?signedin=google&debug')}` } });
+  }
   else if (url.pathname === '/__test/login') {
     // Same cookie the real sign-in routes set: a signed list of proven identities (adds to an existing session).
     const prev = await readSession(request, deps.env);
@@ -82,6 +111,7 @@ createServer(async (req, res) => {
   }
   const h: Record<string, string[] | string> = {};
   out.headers.forEach((v, k) => { h[k] = k === 'set-cookie' ? [...(h[k] as string[] ?? []), v] : v; });
+  if (res.destroyed) return;
   res.writeHead(out.status, h);
   res.end(Buffer.from(await out.arrayBuffer()));
-}).listen(PORT, () => console.log(`local stack on http://localhost:${PORT} (game server ${GAME})`));
+}

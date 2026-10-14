@@ -89,8 +89,7 @@ export function validPractice(b: Record<string, unknown>): (RunFacts & { runId: 
   if (!runId || !hero || typeof b.won !== 'boolean' || Object.values(f).some((v) => v === null)) return null;
   const n = f as { [K in keyof typeof f]: number };
   if (n.hits > n.bullets) return null;
-  // A clear means every hostile is down, and only the player downs them.
-  if (b.won && n.kills !== bots) return null;
+  // (A clear needs every hostile down, but the default game has AI teammates who down some of them too.)
   return { runId, hero, won: b.won, ...n };
 }
 

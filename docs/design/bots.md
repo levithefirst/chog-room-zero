@@ -74,3 +74,13 @@ Lever sweep, wins over 4 heroes x 20 seeds (40 seeds for the last row):
 - Chosen: aim 12 deg settling over 2 s, reaction 0.40-0.65 s, bot damage x0.6 (`TUNING.bots.damageMul`). Over 40 seeds: Kettle 25, Mop 5, Brick 5, Wick 6. Win times 26-78 s.
 
 The bots stay dangerous: the scripted player still loses most runs as Mop, Brick and Wick. A human using doors, slabs and Ping should do better. Not verified by hand. `tests/rc-victory.test.ts` requires at least 2 wins in 40 for every hero. Weapon duels run at damage parity.
+
+## AI teammates: the default game (owner 2026-10-14 final QA pass)
+The default mode ("Vs bots" in the hub) is YOU + 2 AI TEAMMATES against the five hostile bots. It is not online 3v3 (that is three real players a side). Teammates are real actors in the simulation (`createWorld({ allies })`, team `player`, `Actor.ai = true`) driven by the same brain as the hostiles (`src/sim/bots.ts`):
+- Perception is unchanged and symmetric: a bot's target is the nearest hostile it actually sees in its own cone (a downed one last), or a position it heard, saw a muzzle flash at, was shot from, or pinged. It never reads a hostile's position by identity.
+- Teammates follow the player (a couple of metres off one side) when nothing is known, engage, take cover, heal, use their ability, and never wait for attack tokens (tokens only throttle the hostiles shooting at the player's side). Their bullets carry the same bot damage scale as the hostiles (`TUNING.bots.damageMul` 0.6, PROPOSAL), so the player stays the one who carries the room.
+- Team rules: no friendly fire; the fairness rule protects every member of the player's side (a hostile bullet from beyond its target's own sight distance does no damage); the player's side can be downed and revived (TUNING.revive); hostile bots are always eliminated, never downed.
+- A teammate rescues a downed teammate (the player included) when no hostile is in sight: it walks to them and holds fire for the 3 s revive.
+- Team vision: a hostile any standing teammate sees is drawn for the player (their cone, their line of sight; nothing through walls).
+- Outcome: the side wins when all five hostiles are down (anyone's kills count); the run ends when the player is eliminated (bled out, or the whole side down).
+Evidence: `tests/qa-allies.test.ts` (spawn, follow, 8 real matches with the scripted player: teammates shoot, deal and take damage, kill, win; no friendly fire; the player downed and revived by an AI teammate; alone means eliminated). Browser: `tools/qa-journey.mjs` step 6.

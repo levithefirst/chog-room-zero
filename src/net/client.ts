@@ -68,6 +68,8 @@ export class OnlineSession {
   /** Squad: create one, join one by code, or leave. Connects first when needed. */
   partyOp(op: 'create' | 'leave' | 'join', code?: string): void {
     this.pendingParty = { t: 'party', op, ...(op === 'join' ? { code } : {}) };
+    // A new squad action replaces the last one's result (a bad code must not stay on screen after a good join).
+    this.message = '';
     if (this.state === 'idle' || this.state === 'over' || this.state === 'queued') { this.send(this.pendingParty); this.pendingParty = null; }
     else if (this.state !== 'match' && this.state !== 'reconnecting') this.connect();
   }
@@ -156,6 +158,8 @@ export class OnlineSession {
     this.pendingQueue = null;
     this.send({ t: 'leave' });
     if (this.state === 'queued') this.state = 'idle';
+    // Cancel while still reaching the server (or waiting for a sleeping one to wake): stop trying, back to idle.
+    else if (this.state === 'connecting' || this.state === 'error') { this.close(); this.message = ''; }
     this.queue = null;
   }
 

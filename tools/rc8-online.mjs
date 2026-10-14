@@ -21,7 +21,7 @@ async function launch(n) {
   const port = 9700 + Math.floor(Math.random() * 280);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rz-client-'));
   const proc = spawn('google-chrome', ['--headless=new', '--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', `--user-data-dir=${dir}`,
-    `--remote-debugging-port=${port}`, '--disable-background-timer-throttling', '--disable-renderer-backgrounding', 'about:blank'], { stdio: 'ignore' });
+    `--remote-debugging-port=${port}`, '--disable-background-timer-throttling', '--disable-renderer-backgrounding', 'about:blank'], { stdio: 'ignore', detached: true });
   let t;
   for (let i = 0; i < 60 && !t; i++) { await sleep(200); try { t = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find((x) => x.type === 'page'); } catch {} }
   const ws = new WebSocket(t.webSocketDebuggerUrl); await new Promise((r) => (ws.onopen = r));
@@ -134,7 +134,7 @@ for (const mode of MODES) {
     const errs = clients.flatMap((c) => c.errors);
     ok('no page errors on any client', errs.length === 0, errs.slice(0, 4));
   } catch (e) { ok('tool ran', false, String(e?.stack ?? e)); }
-  for (const c of clients) { try { c.proc.kill(); } catch {} try { fs.rmSync(c.dir, { recursive: true, force: true }); } catch {} }
+  for (const c of clients) { try { process.kill(-c.proc.pid, 'SIGKILL'); } catch { try { c.proc.kill(); } catch {} } try { fs.rmSync(c.dir, { recursive: true, force: true }); } catch {} }
   R.pass = Object.values(R.checks).every((c) => c.pass);
   rows.push(R);
   console.log(mode, R.pass ? 'PASS' : 'FAIL', `${R.data.seconds ?? '-'} s`, JSON.stringify(R.data.results?.map((r) => `${r.team}:${r.title}`) ?? []),

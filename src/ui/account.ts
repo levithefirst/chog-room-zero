@@ -25,11 +25,13 @@ export interface AcctView {
   boardMe: BoardRow | null;
   busy: boolean;
   message: string;
+  /** The upgrade just bought (a short highlight on its card). */
+  justBought: string | null;
 }
 
 export const emptyAcct = (): AcctView => ({
   config: null, signedIn: false, progression: false, profile: null, tokens: null, tokensError: null, hasWallet: false, identities: [],
-  choice: null, ticket: null, ticketWarning: null, board: null, boardMe: null, busy: false, message: '',
+  choice: null, ticket: null, ticketWarning: null, board: null, boardMe: null, busy: false, message: '', justBought: null,
 });
 
 export const tierBadge = (t: Tier, demo = false) =>

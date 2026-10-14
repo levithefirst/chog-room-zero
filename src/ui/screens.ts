@@ -73,7 +73,7 @@ export function howtoHtml(c: ScreenCtx): string {
 <tr><td>Creep (quiet)</td><td>${t ? 'Half push on the left stick' : 'Hold Shift'}</td></tr>
 <tr><td>Ability</td><td>${t ? 'Ability button' : 'Space'} · reload ${t ? 'button' : 'R'}</td></tr>
 <tr><td>Pale rings</td><td>A noise you heard, not saw. Running is loud; enemies hear you too.</td></tr>
-<tr><td>Win</td><td>Down all five hostiles. Bots only shoot from inside your sight range.</td></tr></table></div>
+<tr><td>Team</td><td>You + 2 AI teammates vs 5 bots. Down: a teammate revives you.</td></tr><tr><td>Win</td><td>Your side downs all five hostiles.</td></tr></table></div>
 <div class="btns"><button class="btn primary" data-act="howto-close">Got it</button></div></div>`;
 }
 
@@ -105,7 +105,7 @@ ${statBar('Health', h.maxHp / 120)}${statBar('Armour', h.maxArmor / 50)}${statBa
   }).join('');
   return `<div class="screen select"><header class="topbar"><button class="icon-btn" data-go="quit" aria-label="Back">${ICON.back}</button><h2 class="bar-title">Pick an operator</h2><div class="bar-right"><div class="mock" id="selchip">${c.demoChip}</div></div></header>
 <div class="heroes">${cards}</div>
-<footer class="foot"><span class="hint-line">${c.touch ? 'Tap a card to pick it' : 'Keys 1-4 pick · Enter starts practice'}</span><button class="btn" data-go="pick">Practice now</button><button class="btn primary play" data-go="quit">Done</button></footer></div>`;
+<footer class="foot"><span class="hint-line">${c.touch ? 'Tap a card to pick it' : 'Keys 1-4 pick'}</span><button class="btn" data-go="pick">Play vs bots</button><button class="btn primary play" data-go="quit">Done</button></footer></div>`;
 }
 
 // ---- Medal card (Medals screen) ----
@@ -128,18 +128,9 @@ function toggle(name: string, on: boolean, disabled = false): string {
 
 function accountRows(c: ScreenCtx): string {
   const a = c.auth;
-  if (a.config === null) return '<p class="note">Checking sign-in options…</p>';
-  const signedIn = a.session.length ? `<p class="note">Signed in: ${a.session.map((s) => `<span class="linkchip">${s.provider === 'google' ? 'Google' : 'Wallet'} · ${esc(s.label)}</span>`).join(' ')} <button class="btn small" data-act="signout">Sign out</button></p>` : '';
-  if (a.config === false) return `${signedIn}<p class="note">Sign-in is not available at this address (no auth server). You play as a guest: nothing is saved.</p>`;
-  const google = a.config.google
-    ? '<button class="btn signin" data-act="signin-google">Sign in with Google</button>'
-    : '<button class="btn signin" disabled>Google sign-in: not set up yet</button>';
-  let wallet: string;
-  if (!a.config.wallet) wallet = '<button class="btn signin" disabled>Wallet sign-in: not set up yet</button>';
-  else if (!a.wallets.length) wallet = '<p class="note">No wallet found in this browser. Open the game in MetaMask, Rabby or Zerion, or install the extension.</p>';
-  else wallet = a.wallets.map((w) => `<button class="btn signin" data-wallet="${esc(w.id)}">Sign in with ${esc(w.name)}</button>`).join('');
-  return `${signedIn}<div class="signins">${google}${wallet}</div>${a.message ? `<p class="note${a.busy ? '' : ' warn'}" id="authmsg">${esc(a.message)}</p>` : ''}
-<p class="note">Your progress is saved to your account on the server: callsign, XP, level, shards, upgrades, rating, career and medals. Sign in on any device with the same Google account or wallet to pick it up. Signing in with a wallet as well links it to the same account and lets the server check, on Monad, which Chog Genesis tokens it holds. Signing is free and sends no transaction.</p>`;
+  if (!a.session.length) return '<div class="row2"><span>Guest</span><button class="btn small primary" data-act="signin">Sign in</button></div>';
+  return `<div class="links">${a.session.map((s) => `<span class="linkchip">${s.provider === 'google' ? 'Google' : 'Wallet'} · ${esc(s.label)}</span>`).join(' ')}</div>
+<div class="row2"><button class="btn small" data-act="signin">Link Google or wallet</button><button class="btn small" data-act="signout">Sign out</button></div>`;
 }
 
 export function settingsHtml(c: ScreenCtx, confirmReset: boolean): string {
@@ -150,16 +141,16 @@ export function settingsHtml(c: ScreenCtx, confirmReset: boolean): string {
 <section><h3>Sound</h3>
 <div class="row2"><span>Volume</span><div class="stepper"><button class="icon-btn small" data-set="volume" data-val="down" aria-label="Volume down">−</button><span class="meter"><i style="width:${vol}%"></i></span><b class="num">${vol}%</b><button class="icon-btn small" data-set="volume" data-val="up" aria-label="Volume up">+</button></div></div>
 <div class="row2"><span>Sound</span>${toggle('sound', !c.muted)}</div>
-<p class="note">No music: every sound in Room Zero is a game cue.</p></section>
+</section>
 <section><h3>Controls</h3>
 <div class="row2"><span>Touch stick size</span>${seg('stick', s.stick, [['small', `S · ${STICK_PX.small}`], ['medium', `M · ${STICK_PX.medium}`], ['large', `L · ${STICK_PX.large}`]])}</div>
 <div class="row2"><span>Vibration</span>${toggle('vibration', s.vibration && c.canVibrate, !c.canVibrate)}</div>
-${c.canVibrate ? '<p class="note">A short buzz when you are hit.</p>' : '<p class="note">This browser has no vibration API (iPhone Safari and most desktops).</p>'}
+
 <div class="row2"><span>Tips</span>${toggle('tips', s.tips)}</div>
 <div class="row2"><span>Tutorial</span><button class="btn small" data-act="replay">Replay tutorial</button></div></section>
 <section><h3>Display</h3>
 <div class="row2"><span>Graphics quality</span>${seg('quality', s.quality, [['low', 'Low'], ['medium', 'Medium'], ['high', 'High']])}</div>
-<p class="note">Sharpness of the arena: Low 1x, Medium 1.5x, High 2x device pixels (capped by your screen). Low is fastest.</p>
+
 ${c.canFs && c.touch ? '<div class="row2"><span>Full screen</span><button class="btn small" data-fs>Full screen</button></div>' : ''}</section>
 <section><h3>Account</h3>
 <div class="row2"><span>${c.acct.signedIn ? 'Account ID' : 'Guest ID (this session)'}</span><b class="num" id="profid">${esc(c.profile.id)}</b></div>
@@ -168,8 +159,8 @@ ${accountRows(c)}</section>
 <div class="row2"><span>Preferences</span>${confirmReset
     ? '<span class="confirm"><button class="btn small danger" data-act="reset-yes">Clear</button><button class="btn small" data-act="reset-no">Keep</button></span>'
     : '<button class="btn small" data-act="reset">Clear preferences</button>'}</div>
-<p class="note">This browser only keeps preferences: sound, controls, graphics, tips, the tutorial and the last operator. Clearing them never touches your account.</p></section>
-<section><h3>About</h3><p class="note">Chog: Room Zero, an original game for the Chogathon. Build <span class="num" id="buildsha">${esc(c.build)}</span>. Chog DEMO traits are a demo: no wallet ownership is checked.</p></section>
+</section>
+<section><h3>About</h3><p class="note">Chog: Room Zero · build <span class="num" id="buildsha">${esc(c.build)}</span></p></section>
 </div></div>`;
 }
 
@@ -181,6 +172,8 @@ export interface RunReport {
   why: string;
   time: number;
   kills: number;
+  /** Hostiles downed by your AI teammates. */
+  teamKills: number;
   bots: number;
   left: number;
   hits: number;
@@ -196,23 +189,16 @@ export interface RunReport {
   saved: 'account' | 'session' | 'saving' | 'failed';
 }
 
-export function resultsHtml(c: ScreenCtx, r: RunReport): string {
-  const hb = c.records.heroes[r.hero.id];
+export function resultsHtml(_c: ScreenCtx, r: RunReport): string {
   const acc = r.bullets ? Math.round((r.hits / r.bullets) * 100) : 0;
   const nb = r.newBest;
+  const stat = (k: string, v: string, best = false) => `<div class="rw"><span>${k}${best ? ' <em class="lvup">BEST</em>' : ''}</span><b class="num">${v}</b></div>`;
   const medals = r.earned.length
-    ? `<div class="earned"><h3>Medal${r.earned.length > 1 ? 's' : ''} earned</h3>${r.earned.map((m) => `<div class="earned-m">${medalSvg(m, true)}<span><b>${esc(m.name)}</b><small>${esc(m.text)}</small></span></div>`).join('')}</div>`
+    ? `<div class="earned">${r.earned.map((m) => `<div class="earned-m">${medalSvg(m, true)}<span><b>${esc(m.name)}</b><small>${esc(m.text)}</small></span></div>`).join('')}</div>`
     : '';
-  return `<div class="card results"><div class="kicker">${esc(r.hero.name)} · ${esc(r.weaponName)}</div><h2 class="${r.won ? 'good' : 'bad'}">${r.won ? 'Room cleared' : 'Run over'}</h2>${r.why}
-<div class="res-grid"><table class="stats"><tr><td>Chog</td><td>${esc(r.hero.name)}${r.demoRow}</td></tr>
-<tr><td>Time</td><td>${fmtTime(Math.round(r.time))}</td></tr>
-<tr><td>Rooms cleared</td><td>${r.won ? '1' : '0'} / 1</td></tr>
-<tr><td>Hostiles down</td><td>${r.kills} / ${r.bots}${r.won ? '' : ` (${r.left} left)`}</td></tr>
-<tr><td>Hits / bullets</td><td>${r.hits} / ${r.bullets} · ${acc}%</td></tr>
-<tr><td>Damage dealt / taken</td><td>${Math.round(r.dealt)} / ${Math.round(r.taken)}</td></tr>
-<tr><td>Pickups · abilities</td><td>${r.pickups} · ${r.abilities}</td></tr></table>
-<div class="res-side">${medals}<p class="pb" id="resultpb">${esc(r.hero.name)} best clear ${fmtTime(hb?.bestWinSeconds ?? null)}${nb?.time ? ' <b>NEW</b>' : ''} · most kills ${hb?.mostKills ?? 0}${nb?.kills ? ' <b>NEW</b>' : ''} · overall best ${fmtTime(c.records.overall.bestWinSeconds)}</p>
-<p class="note" id="savedwhere">${r.saved === 'account' ? 'Practice run saved to your account (career and medals). Practice never pays XP or shards: play online for those.' : r.saved === 'saving' ? 'Saving to your account…' : r.saved === 'failed' ? 'Could not save this run to your account.' : 'Guest: this run counts for this session only. Sign in to keep your career and medals.'}</p></div></div>
-<div class="btns"><button class="btn primary" data-go="restart">Again</button><button class="btn" data-go="menu">Hub</button></div></div>`;
+  const saved = r.saved === 'account' ? 'Saved to your account' : r.saved === 'saving' ? 'Saving…' : r.saved === 'failed' ? 'Not saved' : 'Guest · not saved';
+  return `<div class="card results practice-results"><div class="kicker">Vs bots · ${esc(r.hero.name)}</div><h2 class="${r.won ? 'good' : 'bad'}">${r.won ? 'Room cleared' : 'Run over'}</h2>${r.why}
+<div class="reward-grid practice-grid" id="resultpb">${stat('Time', fmtTime(Math.round(r.time)), !!nb?.time)}${stat('Hostiles', `${r.kills + r.teamKills}/${r.bots}`)}${stat('Your kills', String(r.kills), !!nb?.kills)}${stat('Accuracy', `${acc}%`)}${stat('Dealt', String(Math.round(r.dealt)))}</div>
+${medals}<p class="note small" id="savedwhere">${saved}</p>
+<div class="btns"><button class="btn primary" data-go="menu" id="continuebtn">Continue</button><button class="btn" data-go="restart">Again</button></div></div>`;
 }
-

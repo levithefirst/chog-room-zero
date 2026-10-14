@@ -9,7 +9,7 @@ import { placeLabel, stackLabels, type Rect } from './labels';
 import { createCamera, frameAxis, stepCamera, viewScale } from './camera';
 import { WALL, walkable, type Level } from '../sim/level';
 import { pointInPolygon } from '../sim/geom';
-import { visibilityPolygon } from '../sim/vision';
+import { canSee, visibilityPolygon } from '../sim/vision';
 import { createLightMesh, type LightMesh, type LightParams } from './lightmesh';
 import { player, revealed, wants, type Actor, type World } from '../sim/world';
 import type { Brain } from '../sim/bots';
@@ -584,6 +584,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       flashBots = 0;
       shownHostiles.length = 0;
       const rev = revealed(w, p);
+      const mates = w.actors.filter((m) => m !== p && m.team === p.team && m.alive && !m.downed && m.x > -50);
       for (const a of w.actors) {
         // Teammates (online) are allies: always drawn, round green ring. Anyone on another team is a hostile.
         if (a !== p && a.team === p.team) {
@@ -594,11 +595,14 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
         }
         if (a !== p) {
           if (!a.alive && a.deadFor > R.deathAnimSeconds) continue;
-          const mode = enemyDrawMode(level, p, view, a, {
+          let mode = enemyDrawMode(level, p, view, a, {
             recapKiller: !!opts.recap && w.playerKill?.killerId === a.id,
             threatLeft: fx.threats[a.id] ?? 0,
             pinged: rev.includes(a),
           });
+          // Team vision: a hostile one of your standing teammates sees (AI teammates in the default game, real ones
+          // online) is drawn for you too. Nobody sees through walls: it is their cone, with their line of sight.
+          if (mode === null && a.alive && mates.some((m) => canSee(level, m.x, m.y, m.facing, m.view, a.x, a.y))) mode = 'body';
           if (mode === null) continue;
           if (a.alive) shownHostiles.push(a);
           if (mode === 'ping') {

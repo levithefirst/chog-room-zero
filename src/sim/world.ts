@@ -5,7 +5,7 @@ import { heroById, type AbilityDef, type HeroDef } from '../config/heroes';
 import { BASE_POWER, type Power } from '../config/power';
 import { WEAPONS, damageAt, type WeaponDef } from '../config/weapons';
 import { angleDiff, cornerAssistDir, resolveCircle, segmentCircleT, type Box } from './geom';
-import { blockedByCover, bulletBlockT, markDynamic, parseLevel, sightClear, type Level } from './level';
+import { blockedByCover, bulletBlockT, markDynamic, parseLevel, sightClear, walkable, type Level } from './level';
 import { stepVelocity, type Vec2 } from './sim';
 import { NO_SIDEGRADE, type Sidegrade } from './operators';
 import type { ViewShape } from './vision';
@@ -17,8 +17,9 @@ const DEG = Math.PI / 180;
 /** 'player' and 'bot' in solo play; 'alpha' and 'bravo' are the two human teams of an online match (RC-8). */
 export type Team = 'player' | 'bot' | 'alpha' | 'bravo';
 
-/** Driven by a person (solo player or an online client), not by a bot brain. */
-export const isHuman = (a: { team: Team }) => a.team !== 'bot';
+/** Driven by a person (solo player or an online client), not by a bot brain. AI teammates are on the player's team
+ * but still bots (Actor.ai). */
+export const isHuman = (a: { ai: boolean }) => !a.ai;
 
 export interface ActorInput {
   moveX: number;
@@ -33,6 +34,8 @@ export interface ActorInput {
 export interface Actor {
   id: number;
   team: Team;
+  /** Driven by a bot brain: every 'bot' and the solo player's AI teammates. */
+  ai: boolean;
   name: string;
   hero: HeroDef;
   /** The one ability slot: the hero's ability, or a 1:1 signature (src/config/power.ts). */
@@ -233,7 +236,7 @@ function makeActor(id: number, team: Team, name: string, hero: HeroDef, sg: Side
   const ab = power.signature ?? hero.ability;
   const maxHp = Math.round(hero.maxHp * power.hpMul);
   return {
-    id, team, name, hero, ability: { ...ab, cooldown: ab.cooldown * power.cooldownMul }, power, weapon, view: viewFor(hero, sg), x, y, vx: 0, vy: 0, facing,
+    id, team, ai: team === 'bot', name, hero, ability: { ...ab, cooldown: ab.cooldown * power.cooldownMul }, power, weapon, view: viewFor(hero, sg), x, y, vx: 0, vy: 0, facing,
     hp: maxHp, maxHp, armor: hero.maxArmor + power.armor, maxArmor: Math.max(hero.maxArmor, 50) + power.armor, alive: true,
     ammo: weapon.magazine, reserve: weapon.reserve, cooldown: 0, reloadLeft: 0, abilityCd: 0, dashLeft: 0, dashX: 0, dashY: 0,
     revealLeft: 0, shieldLeft: 0, frenzyLeft: 0, slowLeft: 0, slowMul: 1, burstLeft: 0, stepAcc: 0, hitFlash: 0, muzzle: 0, deadFor: 0, lastSpread: weapon.spreadDeg, lastHitTick: -999, lastHitFrom: null,
@@ -255,6 +258,8 @@ export interface WorldOptions {
   zone?: boolean;
   /** Online match: these humans instead of the solo player and bots (actor ids follow the array order). */
   versus?: { name: string; hero: string; team: 'alpha' | 'bravo'; x: number; y: number; facing: number; power?: Power }[];
+  /** Solo: AI teammates on the player's side (the default game: you + 2). Off by default so rule tests stay isolated. */
+  allies?: { name: string; hero: string }[];
   friendlyFire?: boolean;
 }
 
@@ -277,9 +282,20 @@ export function createWorld(opts: WorldOptions = {}): World {
     };
   }
   const actors: Actor[] = [makeActor(0, 'player', 'You', heroById(opts.hero ?? 'kettle'), opts.sidegrade ?? NO_SIDEGRADE, level.playerSpawn.x, level.playerSpawn.y, 0, opts.power)];
-  (opts.bots ?? BOT_SPAWNS).forEach((b, i) => {
+  // AI teammates spawn next to the player on free floor, in the same team, with their own bot brain.
+  const ps = level.playerSpawn;
+  const spots = [[1, 1], [1, -1], [-1, 1], [2, 0], [0, 2], [-1, -1]].map(([dx, dy]) => ({ x: Math.floor(ps.x) + dx + 0.5, y: Math.floor(ps.y) + dy + 0.5 }))
+    .filter((q) => walkable(level.tiles[Math.floor(q.y) * level.w + Math.floor(q.x)]));
+  (opts.allies ?? []).forEach((m, i) => {
+    const q = spots[i % Math.max(1, spots.length)] ?? ps;
+    const a = makeActor(actors.length, 'player', m.name, heroById(m.hero), NO_SIDEGRADE, q.x, q.y, 0);
+    a.ai = true;
+    actors.push(a);
+    brains.set(a.id, createBrain({ name: m.name, hero: m.hero, patrol: [[Math.floor(q.x), Math.floor(q.y)]], flanker: i % 2 === 1 }));
+  });
+  (opts.bots ?? BOT_SPAWNS).forEach((b) => {
     const [tx, ty] = b.patrol[0];
-    const a = makeActor(i + 1, 'bot', b.name, heroById(b.hero), NO_SIDEGRADE, tx + 0.5, ty + 0.5, Math.PI);
+    const a = makeActor(actors.length, 'bot', b.name, heroById(b.hero), NO_SIDEGRADE, tx + 0.5, ty + 0.5, Math.PI);
     actors.push(a);
     brains.set(a.id, createBrain(b));
   });
@@ -552,7 +568,8 @@ function stepBullets(w: World, dt: number): void {
       // can switch it on (w.friendlyFire); the shooter itself is never hit by its own bullet.
       if (!a.alive || a.id === b.owner || (a.team === team && !w.friendlyFire)) continue;
       // Damage range cap: a bot bullet fired from beyond the player's sight distance never hurts the player.
-      if (team === 'bot' && a.team === 'player' && Math.hypot(b.ox - a.x, b.oy - a.y) > playerSightRange(w)) continue;
+      // (Each target's own sight distance: the same rule protects the player and the player's AI teammates.)
+      if (team === 'bot' && a.team === 'player' && Math.hypot(b.ox - a.x, b.oy - a.y) > a.view.range) continue;
       const t = segmentCircleT(b.x, b.y, nx, ny, a.x, a.y, r);
       if (t >= 0 && t < bestT) {
         bestT = t;
@@ -587,7 +604,7 @@ function stepBullets(w: World, dt: number): void {
 function damage(w: World, t: Actor, by: Actor, b: Bullet, hx: number, hy: number): void {
   // Gold Shell: the bullet stops on the shell and does nothing (the hit spark still shows where it landed).
   const raw = t.shieldLeft > 0 ? 0
-    : damageAt(b.weapon, Math.hypot(hx - b.ox, hy - b.oy)) * (by.team === 'bot' ? TUNING.bots.damageMul : 1) * by.power.damageMul * (by.frenzyLeft > 0 ? by.ability.amount ?? 1 : 1);
+    : damageAt(b.weapon, Math.hypot(hx - b.ox, hy - b.oy)) * (by.ai ? TUNING.bots.damageMul : 1) * by.power.damageMul * (by.frenzyLeft > 0 ? by.ability.amount ?? 1 : 1);
   const m = mitigate(t.armor, raw, b.weapon.armorPen);
   t.armor -= m.armor;
   t.hp -= m.hp;
@@ -612,7 +629,8 @@ export const standing = (a: Actor) => a.alive && !a.downed;
  * otherwise, or when already downed, eliminated, and the kill goes to whoever downed them first.
  */
 function drop(w: World, t: Actor, info: KillInfo): 'downed' | 'out' {
-  const mates = w.mode === 'versus' && w.actors.some((o) => o !== t && o.team === t.team && standing(o));
+  // Team modes, and the solo player's side (you + AI teammates): hostile bots are never downed, always eliminated.
+  const mates = (w.mode === 'versus' || t.team === 'player') && w.actors.some((o) => o !== t && o.team === t.team && standing(o));
   if (!t.downed && mates) {
     t.downed = true;
     t.downInfo = info;
@@ -642,7 +660,7 @@ export function down(w: World, t: Actor, info: KillInfo): void {
   t.vx = t.vy = 0;
   t.death = info;
   emit(w, 'death', t.x, t.y, TUNING.sound.death, t);
-  if (t.team === 'player') w.playerKill = info;
+  if (w.mode === 'solo' && t.id === 0) w.playerKill = info;
 }
 
 /** Match time in seconds (the zone clock). */
@@ -739,7 +757,6 @@ function stepRevive(w: World, dt: number): void {
     t.hp -= (R.downHp / R.bleedSeconds) * dt;
     if (t.hp <= 0) drop(w, t, t.downInfo ?? { cause: 'shot', killerId: -1, weapon: 'Bled out', fromX: t.x, fromY: t.y, toX: t.x, toY: t.y, tick: w.tick });
   }
-  if (w.mode !== 'versus') return;
   for (const t of w.actors) {
     if (!t.downed || !t.alive) continue;
     if (!w.actors.some((m) => m.team === t.team && standing(m))) drop(w, t, t.downInfo!);

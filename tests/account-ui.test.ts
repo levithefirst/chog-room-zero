@@ -2,7 +2,7 @@
 // the hub itself, and every number comes from the account, the config or the server.
 import { describe, expect, it } from 'vitest';
 import { emptyAcct, tierEffect, type AcctView } from '../src/ui/account';
-import { boardScreenHtml, careerHtml, classOf, fiveLockReason, hubHtml, onlineResultsHtml, upgradesHtml, upgradesReady, type HubCtx } from '../src/ui/hub';
+import { authHtml, boardScreenHtml, careerHtml, classOf, fiveLockReason, hubHtml, onlineResultsHtml, upgradesHtml, upgradesReady, type AuthSheet, type HubCtx } from '../src/ui/hub';
 import { NO_UPGRADES } from '../src/config/power';
 import { DEFAULT_SETTINGS } from '../src/ui/profile';
 import type { AccountProfile } from '../src/net/account';
@@ -26,20 +26,43 @@ const signed = (o: Partial<AcctView> = {}): AcctView => ({ ...emptyAcct(), confi
 const holder = (): AcctView => signed({ hasWallet: true, tokens: [blaze], choice: { tokenId: 5 } });
 
 describe('hub', () => {
-  it('guest: PLAY, four modes, 5v5 CHOG HOLDERS ONLY, leaderboard and squad on one screen; nothing saved', () => {
+  it('guest: compact identity, a Sign in button that opens sign-in (never Settings), PLAY, four modes, board, squad', () => {
     const h = hubHtml(ctx(guest()));
     expect(h).toMatch(/id="playbtn"/);
     for (const m of ['solo', '1v1', '3v3', '5v5']) expect(h).toContain(`data-mode="${m}"`);
-    expect(h).toMatch(/CHOG HOLDERS ONLY/);
+    expect(h).toMatch(/You \+ 2 AI/); // the default game is not the online 3v3
+    expect(h).toMatch(/Holders only/);
     expect(h).toMatch(/id="boardpreview"/);
     expect(h).toMatch(/id="squad"/);
-    expect(h).toMatch(/nothing is saved/);
-    expect(h).not.toMatch(/this device only/i);
+    expect(h).toMatch(/<button class="btn small primary" data-act="signin" id="signin-cta">Sign in<\/button>/);
+    expect(h).not.toMatch(/data-act="settings"[^>]*id="signin-cta"/);
+    // Minimal: no explanatory paragraphs on the hub.
+    expect(h).not.toMatch(/nothing is saved|this device only|Sign in to earn|Play 3v3 and 5v5 with friends|Ranked by kills, then wins/i);
+    expect(h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').length).toBeLessThan(600);
+  });
+  it('the sign-in sheet always offers Continue with Google AND Continue with Wallet', () => {
+    const base: AuthSheet = { config: { google: true, wallet: true }, session: [], wallets: [], busy: false, message: '', pickWallet: false };
+    const a = authHtml(base, 'chogroomzero.xyz');
+    expect(a).toMatch(/data-act="signin-google"[^>]*>.*Continue with Google/);
+    expect(a).toMatch(/data-act="signin-wallet"[^>]*>.*Continue with Wallet/);
+    // No wallet in the browser: the button stays, and the sheet says so with a way to open a wallet app.
+    const none = authHtml({ ...base, pickWallet: true }, 'chogroomzero.xyz');
+    expect(none).toMatch(/Continue with Wallet/);
+    expect(none).toMatch(/No wallet in this browser/);
+    expect(none).toMatch(/metamask\.app\.link\/dapp\/chogroomzero\.xyz/);
+    // Several wallets: pick one.
+    expect(authHtml({ ...base, pickWallet: true, wallets: [{ id: 'io.metamask', name: 'MetaMask' }, { id: 'io.rabby', name: 'Rabby' }] }, 'h')).toMatch(/data-wallet="io\.rabby"/);
+    // Signed in with Google: the wallet can still be linked to the same account; sign out is there.
+    const g = authHtml({ ...base, session: [{ provider: 'google', label: 'a@b' }] }, 'h');
+    expect(g).not.toMatch(/signin-google/);
+    expect(g).toMatch(/Continue with Wallet/);
+    expect(g).toMatch(/data-act="signout"/);
   });
   it('picking 5v5 without a verified Chog disables Play and says why', () => {
     const h = hubHtml(ctx(signed(), { mode: '5v5' }));
     expect(h).toMatch(/id="playbtn" disabled|disabled id="playbtn"|data-act="play" disabled/);
     expect(h).toMatch(/CHOG HOLDERS ONLY<\/b> · Sign in with your Chog wallet/);
+    expect(h).toMatch(/data-act="signin">Connect wallet/);
   });
   it('signed in: level, XP, shards, rating and upgrades ready are in the top strip', () => {
     const h = hubHtml(ctx(signed()));
@@ -52,12 +75,13 @@ describe('hub', () => {
   it('holder: the 1:1 by name, verified, tier power, signature with telegraph and counter, 5v5 open', () => {
     const a = holder();
     const h = hubHtml(ctx(a, { mode: '5v5' }));
-    expect(h).toMatch(/Blaze \(#53\)/);
-    expect(h).toMatch(/verified on Monad/);
-    expect(h).toMatch(/1:1 LEGEND · Blaze/);
+    expect(h).toMatch(/id="chogname">Blaze</);
+    expect(h).toMatch(/#53/);
+    expect(h).toMatch(/✓ Monad/);
     expect(h).toMatch(/Flashfire/);
     expect(h).toMatch(/Telegraph/);
     expect(h).toMatch(/Counter/);
+    expect(h).toMatch(/2M · 1W · 3K/); // the token's own history
     expect(h).not.toMatch(/CHOG HOLDERS ONLY/);
     expect(fiveLockReason(a)).toBeNull();
     expect(classOf(a)).toMatchObject({ source: 'token', tier: 'legendary', metadataId: 53 });
@@ -66,36 +90,39 @@ describe('hub', () => {
   it('NFT combat switched off: the token still shows, power is free, and the hub says so', () => {
     const a = { ...holder(), config: { ...cfg, nftCombat: false } };
     expect(classOf(a).tier).toBe('free');
-    expect(hubHtml(ctx(a))).toMatch(/switched off/);
+    expect(hubHtml(ctx(a))).toMatch(/NFT power off/);
   });
   it('a squad shows its code and members; a follower cannot start the match', () => {
     const party = { code: 'AB2CD', members: [{ name: 'Lead', hero: 'kettle', tier: 'free' as const, holder: false, demo: false, you: false, leader: true, ready: true }, { name: 'Me', hero: 'mop', tier: 'epic' as const, holder: true, demo: false, you: true, leader: false, ready: true }] };
     const h = hubHtml(ctx(signed(), { mode: '3v3', net: { url: 'ws://x/ws', state: 'idle', message: '', queue: null, rtt: 0, party, follower: true } }));
     expect(h).toMatch(/AB2CD/);
-    expect(h).toMatch(/Your squad leader starts the match/);
+    expect(h).toMatch(/Leader starts the match/);
+    expect(h).toMatch(/2\/5/);
     expect(h).toMatch(/data-act="squad-leave"/);
   });
 });
 
 describe('sub-screens', () => {
   it('upgrades: guest is told to sign in; signed in shows ranks, costs and the class table', () => {
-    expect(upgradesHtml(ctx(guest()))).toMatch(/Sign in/);
-    const u = upgradesHtml(ctx(signed({ profile: prof({ upgrades: { ...NO_UPGRADES, vitality: 8 } }) })));
+    expect(upgradesHtml(ctx(guest()))).toMatch(/data-act="signin">Sign in/);
+    const u = upgradesHtml(ctx(signed({ profile: prof({ upgrades: { ...NO_UPGRADES, vitality: 8 } }), justBought: 'plating' })));
     expect(u).toMatch(/MAX/);
     expect(u).toMatch(/data-upgrade="plating"/);
-    expect(u).toMatch(/cannot be bought/);
-    expect(u).toMatch(/starting class/);
+    expect(u).toMatch(/class="up-grid"/);
+    expect(u).toMatch(/upcard bought" data-up="plating"/);
+    expect(u).toMatch(/Class · Free/);
   });
   it('leaderboard: full columns, own row beyond the shown ranks, tier shown not ranked', () => {
     const row = (rank: number, you = false) => ({ rank, name: `P${rank}`, kills: 10 - rank, matches: 3, wins: 1, xp: 0, level: 1, rating: 1000, nftTier: rank === 1 ? 'rare' as const : null, you });
     const b = boardScreenHtml(ctx(signed({ board: [row(1), row(2)], boardMe: row(77, true) })));
     for (const col of ['Kills', 'Wins', 'Matches', 'Level', 'Rating', 'Chog']) expect(b).toContain(`<th>${col}</th>`);
     expect(b).toMatch(/P77 \(you\)/);
-    expect(b).toMatch(/never changes a rank/);
+    expect(b).toMatch(/Kills · then wins · then fewer matches/);
   });
   it('career: online and practice careers from the account', () => {
     const c = careerHtml(ctx(signed()));
-    expect(c).toMatch(/saved to your account/);
+    expect(c).toMatch(/<h3>Online<\/h3>/);
+    expect(c).toMatch(/data-fav="kettle"/);
     expect(c).toMatch(/Kills<\/td><td class="num">4/);
   });
   it('online results: XP, shards, rating, level bar, upgrades ready, play again', () => {
@@ -110,7 +137,8 @@ describe('sub-screens', () => {
     expect(html).toMatch(/\+12/);
     expect(html).toMatch(/LEVEL UP/);
     expect(html).toMatch(/2 upgrades ready/);
-    expect(html).toMatch(/Play 1v1 again/);
+    expect(html).toMatch(/data-go="menu" id="continuebtn">Continue/);
+    expect(html).toMatch(/data-act="online-again"/);
   });
   it('tier effects come from the power table and say speed never changes', () => {
     expect(tierEffect('free')).toMatch(/upgrades/);

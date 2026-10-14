@@ -2,8 +2,8 @@
 // only, so it runs on Vercel and in Vitest. Files under api/_lib are not routes.
 //
 // Sessions: an HMAC-SHA256 signed token in an HttpOnly, Secure, SameSite=Lax cookie. It lists the identities this
-// browser has proven (Google and/or wallet). There is no database yet, so there are no server accounts to merge:
-// progress stays on the player's device and the session only says who they proved to be.
+// browser has proven (Google and/or wallet). The account they belong to, and all its progress, live in Neon
+// (api/_lib/game.ts accountFor links every identity of a session to one account).
 // Never put a secret in a response or a log. GOOGLE_CLIENT_SECRET and AUTH_SECRET stay server-side.
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { keccak_256 } from '@noble/hashes/sha3.js';

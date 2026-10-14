@@ -29,7 +29,7 @@ import { DEFAULT_SETTINGS, QUALITY_DPR, SETTINGS_KEY, STICK_PX, displayName, loa
 import { MEDALS, awardMedals, loadMedals, type MedalDef, type Unlocked } from './ui/medals';
 import { TIPS_KEY, loadShownTips, nextTip, saveShownTips, tipText, type TipId } from './ui/tips';
 import { esc, howtoHtml, medalCard, nickHtml, resultsHtml, selectHtml, settingsHtml, type AuthView } from './ui/screens';
-import { boardScreenHtml, careerHtml, classOf, hubHtml, medalsScreenHtml, onlineResultsHtml, upgradesHtml, upgradesReady, type HubCtx, type NetView, type PlayMode } from './ui/hub';
+import { authHtml, boardScreenHtml, careerHtml, classOf, hubHtml, medalsScreenHtml, onlineResultsHtml, upgradesHtml, upgradesReady, type HubCtx, type NetView, type PlayMode } from './ui/hub';
 import { discoverWallets, fetchAuthConfig, fetchSession, googleSignIn, signOut, walletSignIn } from './ui/auth';
 import { SIDEGRADES } from './sim/operators';
 import { createAutopilot, type Autopilot } from './debug/autopilot';
@@ -141,7 +141,7 @@ async function start() {
     : 'Guest';
   // Onboarding: shown once on first launch, re-openable from the title.
   const ONBOARD_KEY = 'chog.onboarded';
-  type TitleView = 'main' | 'howto' | 'demo' | 'settings' | 'nick' | 'upgrades' | 'ranks' | 'career' | 'medals';
+  type TitleView = 'main' | 'howto' | 'demo' | 'settings' | 'nick' | 'upgrades' | 'ranks' | 'career' | 'medals' | 'auth';
   let titleView: TitleView = (() => { try { return localStorage.getItem(ONBOARD_KEY) === '1' ? 'main' : 'howto'; } catch { return 'main'; } })();
   let lastRun: { newBest: { time: boolean; kills: boolean }; earned: MedalDef[]; saved: 'account' | 'session' | 'saving' | 'failed' } | null = null;
   // Progression belongs to the account (master integration pass): records, medals, callsign, favourite and pins come
@@ -161,6 +161,10 @@ async function start() {
   let nickSaved = false;
   let nickReturn: TitleView = 'career';
   const auth: AuthView = { config: null, session: [], wallets: [], busy: false, message: '' };
+  // The sign-in sheet: shown over the screen that asked for it, and closed back to that screen.
+  let pickWallet = false;
+  let authReturn: TitleView = 'main';
+  const AUTH_RETURN_KEY = 'chog.authReturn';
   // The server account (XP, shards, upgrades, rating, callsign, medals, career), the held Chogs read on Monad, and the
   // ticket choice for online play. Loaded during the loading screen, and again whenever a screen shows it.
   const acct = emptyAcct();
@@ -169,6 +173,8 @@ async function start() {
   const curMedals = (): Unlocked => (signedIn() ? acct.profile!.medals : guestMedals);
   /** The player card: the account's (callsign, favourite, pins, linked sign-ins) or this session's guest card. */
   const curProfile = (): Profile => {
+    // Signed in while the account service is down: show who you are, never a guest name.
+    if (acct.signedIn && !acct.profile) return { ...guestProfile, nickname: null, fallback: acct.identities[0]?.label ?? 'Player' };
     if (!signedIn()) return guestProfile;
     const p = acct.profile!;
     const id = p.account.replace(/[^A-Za-z0-9]/g, '').slice(0, 8).toUpperCase();
@@ -364,6 +370,9 @@ async function start() {
   }
 
   function render() {
+    // Browser Back from a sub-screen (upgrades, leaderboard, sign-in...) returns to the hub instead of leaving the game:
+    // one history entry is added while away from the hub (see the popstate handler).
+    if (phase === 'title' && titleView !== 'main' && !(history.state as { rz?: number } | null)?.rz) { try { history.pushState({ rz: 1 }, ''); } catch { /* ignore */ } }
     $('hud').classList.toggle('on', phase === 'play' || phase === 'pause' || phase === 'recap');
     switch (phase) {
       case 'title': return showTitle();
@@ -416,6 +425,7 @@ async function start() {
       case 'ranks': return show(boardScreenHtml(c));
       case 'career': return show(careerHtml(c));
       case 'medals': return show(medalsScreenHtml(c, (m) => medalCard(m, c)));
+      case 'auth': return show(authHtml({ config: auth.config, session: auth.session, wallets: auth.wallets, busy: auth.busy, message: auth.message, pickWallet }, location.host));
       case 'nick': {
         show(nickHtml(c, nickError, nickSaved));
         const inp = document.getElementById('nickin') as HTMLInputElement | null;
@@ -454,7 +464,7 @@ async function start() {
   function showLoading() {
     // Deploy screen: what you are dropping into, full screen, while the world is built.
     const h = heroById(heroId);
-    const m = online ? `Online ${onlineMode}` : 'Practice · 5 hostiles';
+    const m = online ? `Online ${onlineMode}` : 'Vs bots · You + 2 AI vs 5';
     const tip = BOOT_TIPS[(runIndex + 3) % BOOT_TIPS.length];
     show(`<div class="screen deploy"><div class="deploy-in"><div class="kicker">${esc(m)}</div><h2>Room Zero</h2>
 <div class="deploy-op">${portraitSvg(h, 'dep', identity.marking)}<span><b>${esc(h.name)}</b><small>${esc(h.role)} · ${esc(WEAPONS[h.weapon].name)}</small></span></div>
@@ -498,8 +508,9 @@ async function start() {
     const k = world.playerKill;
     return {
       won, hero: heroById(heroId), weaponName: p.weapon.name,
-      why: !won && k?.cause === 'zone' ? '<p class="bad">The danger zone got you. The circle was closing.</p>' : !won && k ? `<p class="bad">${esc(world.actors[k.killerId].name)} got you with a ${esc(k.weapon.toLowerCase())}, ${Math.hypot(k.fromX - p.x, k.fromY - p.y).toFixed(0)} m ${compass(k.fromX - p.x, k.fromY - p.y)}.</p>` : '<p class="good">Every hostile is down.</p>',
-      time: playTime, kills: p.kills, bots: world.actors.length - 1, left: world.actors.filter((a) => a.team === 'bot' && a.alive).length,
+      why: !won && k?.cause === 'zone' ? '<p class="bad">Danger zone</p>' : !won && k && k.killerId >= 0 ? `<p class="bad">${esc(world.actors[k.killerId].name)} · ${esc(k.weapon)} · ${Math.hypot(k.fromX - p.x, k.fromY - p.y).toFixed(0)} m ${compass(k.fromX - p.x, k.fromY - p.y)}</p>` : '',
+      time: playTime, kills: p.kills, teamKills: world.actors.filter((a) => a.team === 'player' && a.ai).reduce((n, a) => n + a.kills, 0),
+      bots: world.actors.filter((a) => a.team === 'bot').length, left: world.actors.filter((a) => a.team === 'bot' && a.alive).length,
       // Per bullet, so a shotgun's 8 pellets per shot can never read above 100% (RC-3: Brick showed 59/16).
       hits: p.hits, bullets: p.bullets, dealt: p.damageDealt, taken: p.damageTaken, pickups: runPickups, abilities: runAbilities,
       newBest: lastRun?.newBest ?? null, earned: lastRun?.earned ?? [],
@@ -585,7 +596,13 @@ async function start() {
       case 'medals': titleView = 'medals'; break;
       case 'settings': titleView = 'settings'; confirmReset = false; refreshAuth(); break;
       case 'nick': nickReturn = titleView === 'nick' ? nickReturn : titleView; titleView = 'nick'; nickError = ''; nickSaved = false; break;
-      case 'back': titleView = titleView === 'nick' ? nickReturn : 'main'; confirmReset = false; acct.message = ''; break;
+      case 'back': titleView = titleView === 'nick' ? nickReturn : titleView === 'auth' ? authReturn : 'main'; confirmReset = false; acct.message = ''; break;
+      case 'signin':
+        if (titleView !== 'auth') authReturn = titleView;
+        titleView = 'auth'; pickWallet = false; auth.message = '';
+        void refreshAuth();
+        break;
+      case 'signin-wallet': void walletButton(); return;
       case 'replay':
         shownTips = new Set();
         saveShownTips(localStorage, shownTips);
@@ -597,11 +614,17 @@ async function start() {
       case 'reset': confirmReset = true; break;
       case 'reset-no': confirmReset = false; break;
       case 'reset-yes': clearPreferences(); break;
-      case 'signin-google': googleSignIn(); return;
+      case 'signin-google':
+        // Google leaves the page: remember where to come back to (a UI preference, not progress).
+        try { sessionStorage.setItem(AUTH_RETURN_KEY, authReturn); } catch { /* ignore */ }
+        auth.busy = true; auth.message = 'Opening Google…'; render();
+        googleSignIn();
+        return;
       case 'signout':
         void signOut().then(async () => {
           auth.session = [];
-          auth.message = 'Signed out on this browser. Your progress stays on your account; sign in again on any device to continue.';
+          auth.message = '';
+          titleView = 'main';
           acct.signedIn = false; acct.profile = null; acct.tokens = null; acct.hasWallet = false; acct.identities = []; acct.choice = null;
           if (net && net.state !== 'match') { net.close(); net = null; }
           await refreshAccount();
@@ -699,31 +722,45 @@ async function start() {
     auth.config = config;
     auth.session = config ? session : [];
     auth.wallets = wallets;
-    if (phase === 'title' && titleView === 'settings') render();
+    if (phase === 'title' && (titleView === 'settings' || titleView === 'auth')) render();
+  }
+  /** Continue with Wallet: one wallet signs straight away; several are listed; none shows how to get one. */
+  async function walletButton() {
+    if (!auth.wallets.length) auth.wallets = await discoverWallets();
+    if (auth.wallets.length === 1) { void doWalletSignIn(auth.wallets[0].id); return; }
+    pickWallet = true;
+    render();
   }
   async function doWalletSignIn(id: string) {
     auth.busy = true;
-    auth.message = 'Check your wallet: sign the message to prove this address. It is free and sends nothing.';
+    auth.message = 'Sign the message in your wallet (free, no transaction)';
     render();
     try {
-      const identity = await walletSignIn(id);
+      await walletSignIn(id);
       auth.session = await fetchSession();
-      auth.message = `Signed in as ${identity.label}. Your progress is saved to your account.`;
-      // A new identity in the session: reload the account (same account if one was already signed in) and its Chogs.
+      auth.message = '';
+      // A new identity in the session: reload the account (the same account if one was already signed in) and its Chogs.
       acct.tokens = null;
       acct.choice = null;
       if (net && net.state !== 'match') { net.close(); net = null; }
       await refreshAccount();
+      auth.busy = false;
+      if (titleView === 'auth') titleView = authReturn;
     } catch (err) {
-      auth.message = err instanceof Error ? err.message : 'Wallet sign-in failed.';
+      const code = (err as { code?: number })?.code;
+      auth.message = code === 4001 ? 'Cancelled in your wallet' : err instanceof Error ? err.message : 'Wallet sign-in failed';
+      auth.busy = false;
     }
-    auth.busy = false;
-    if (phase === 'title' && titleView === 'settings') render();
+    if (phase === 'title') render();
   }
-  // Back from Google (?signedin=google or ?signin_error=...): the hub shows the account (an error opens Settings).
+  // Back from Google (?signedin=google or ?signin_error=...): back to the screen sign-in started from (an error reopens
+  // the sign-in sheet with the reason).
   if (QS.has('signedin') || QS.has('signin_error')) {
-    titleView = QS.has('signin_error') ? 'settings' : 'main';
-    auth.message = QS.has('signin_error') ? `Google sign-in did not finish (${QS.get('signin_error')}).` : 'Signed in with Google.';
+    let back: TitleView = 'main';
+    try { back = (sessionStorage.getItem(AUTH_RETURN_KEY) as TitleView | null) ?? 'main'; sessionStorage.removeItem(AUTH_RETURN_KEY); } catch { /* ignore */ }
+    authReturn = back === 'auth' ? 'main' : back;
+    titleView = QS.has('signin_error') ? 'auth' : authReturn;
+    auth.message = QS.has('signin_error') ? 'Google sign-in did not finish' : '';
     history_replace();
     void refreshAuth();
   }
@@ -736,7 +773,8 @@ async function start() {
 
   function beginWorld() {
     runIndex++;
-    world = createWorld({ seed: TUNING.seed + runIndex, hero: heroId, sidegrade: identity.sidegrade, zone: true, power: soloPower() });
+    // The default game: you + 2 AI teammates (other operators than yours) against the five hostile bots.
+    world = createWorld({ seed: TUNING.seed + runIndex, hero: heroId, sidegrade: identity.sidegrade, zone: true, power: soloPower(), allies: squadmates() });
     autopilot = AUTOPLAY_SEED !== null ? createAutopilot(AUTOPLAY_SEED + runIndex) : null;
     suggestPilot = null;
     renderer.reset(world);
@@ -751,14 +789,20 @@ async function start() {
     const h = heroById(heroId);
     const dp = world.actors[0].power;
     const cls = dp.metadataId ? `${esc(chogName(dp.metadataId))} · ${esc(TIER_DEFS[dp.tier].label)}` : dp.tier !== 'free' ? esc(TIER_DEFS[dp.tier].label) : 'Free class';
-    $('hero').innerHTML = `${esc(h.name)} · Practice · ${dp.demo ? '<span class="demo">DEMO</span> ' : ''}${cls}`;
+    $('hero').innerHTML = `${esc(h.name)} · Vs bots · ${dp.demo ? '<span class="demo">DEMO</span> ' : ''}${cls}`;
     $('wname').textContent = world.actors[0].weapon.name;
     $('abl').innerHTML = `${esc(world.actors[0].ability.name)}<small class="keyhint">Space</small>`;
-    $('pips').innerHTML = world.actors.slice(1).map(() => '<i></i>').join('');
+    $('pips').innerHTML = world.actors.filter((a) => a.team === 'bot').map(() => '<i></i>').join('');
     hint.innerHTML = input.mode === 'touch'
       ? 'Left thumb moves, half push creeps. Right thumb aims, push past the ring to fire.'
       : 'WASD move · Shift creep · Mouse aim · Click fire · R reload · Space ability · Esc pause';
     showHint(hint.innerHTML, runIndex === 1 ? 6 : 0);
+  }
+
+  /** AI teammates for the default game: the two operators after yours in the roster, with their own names. */
+  function squadmates(): { name: string; hero: string }[] {
+    const i = HEROES.findIndex((h) => h.id === heroId);
+    return [1, 2].map((k) => ({ name: ['Rook', 'Moth'][k - 1], hero: HEROES[(i + k) % HEROES.length].id }));
   }
 
   // ---- Account and class system (master build) ----
@@ -795,7 +839,7 @@ async function start() {
       acct.profile = p?.profile ?? null;
       acct.identities = p?.identities ?? ids.map((i) => ({ provider: i.provider, label: i.label }));
       acct.hasWallet = ids.some((i) => i.provider === 'wallet');
-      if (auth.config === null) { auth.session = ids; }
+      auth.session = ids;
       loaded?.();
       // A signed-in player plays as their favourite operator unless they picked another one this session.
       if (acct.profile?.favourite && !heroPicked && HEROES.some((x) => x.id === acct.profile!.favourite)) heroId = acct.profile.favourite;
@@ -814,10 +858,14 @@ async function start() {
     }
   }
   async function buyUpgrade(id: string) {
+    // One purchase at a time (a double tap must never send two; the server also refuses to spend shards twice).
+    if (acct.busy) return;
     acct.busy = true; acct.message = ''; render();
     const r = await account.buyUpgrade(id);
     acct.busy = false;
-    acct.message = r?.ok ? '' : r?.reason === 'shards' ? 'Not enough shards yet.' : r?.reason === 'maxed' ? 'That upgrade is maxed.' : 'Could not buy that upgrade right now.';
+    acct.message = r?.ok ? '' : r?.reason === 'shards' ? 'Not enough shards' : r?.reason === 'maxed' ? 'Maxed' : 'Could not buy, try again';
+    acct.justBought = r?.ok ? id : null;
+    if (r?.ok) setTimeout(() => { acct.justBought = null; if (phase === 'title' && titleView === 'upgrades') render(); }, 1200);
     await refreshAccount();
   }
   /**
@@ -946,7 +994,7 @@ async function start() {
   applySettings();
   // The account is part of loading: the hub opens already showing who you are, your level, shards and Chog.
   boot(3);
-  await Promise.race([refreshAccount(() => boot(4)), new Promise((r) => setTimeout(r, 7000))]);
+  await Promise.race([refreshAccount(() => boot(4)), new Promise((r) => setTimeout(r, 5000))]);
   render();
   void bootDone();
   // Reload or crash mid online match: this tab still holds its session token, so it quietly asks the server to
@@ -982,6 +1030,10 @@ async function start() {
     }
   } catch { /* storage blocked: no resume */ }
   // The auth server is asked only when Settings opens or Google sends the player back: no request on a normal launch.
+  window.addEventListener('popstate', () => {
+    if (phase === 'title' && titleView !== 'main') { titleView = titleView === 'nick' ? nickReturn : 'main'; confirmReset = false; render(); }
+    else if (phase === 'play') go('pause');
+  });
   // Leaving the tab pauses the match: the sim must never run while nobody is watching.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && phase === 'play') go('pause');

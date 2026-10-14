@@ -41,7 +41,7 @@ export interface ServerIdentity { provider: 'google' | 'wallet'; subject: string
 /** {google, wallet} when the auth server answers; false when this address has none (e.g. local preview). */
 export async function fetchAuthConfig(): Promise<{ google: boolean; wallet: boolean } | false> {
   try {
-    const r = await fetch('/api/auth/config', { headers: { accept: 'application/json' } });
+    const r = await fetch('/api/auth/config', { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(8000) });
     if (!r.ok || !(r.headers.get('content-type') ?? '').includes('json')) return false;
     const j = (await r.json()) as { google?: unknown; wallet?: unknown };
     return { google: j.google === true, wallet: j.wallet === true };
@@ -52,7 +52,7 @@ export async function fetchAuthConfig(): Promise<{ google: boolean; wallet: bool
 
 export async function fetchSession(): Promise<ServerIdentity[]> {
   try {
-    const r = await fetch('/api/auth/session', { credentials: 'same-origin' });
+    const r = await fetch('/api/auth/session', { credentials: 'same-origin', signal: AbortSignal.timeout(8000) });
     if (!r.ok) return [];
     const j = (await r.json()) as { identities?: ServerIdentity[] };
     return Array.isArray(j.identities) ? j.identities : [];
@@ -66,7 +66,7 @@ export function googleSignIn(): void {
 }
 
 export async function signOut(): Promise<void> {
-  await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => undefined);
+  await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin', signal: AbortSignal.timeout(8000) }).catch(() => undefined);
 }
 
 const toHex = (s: string) => '0x' + Array.from(new TextEncoder().encode(s), (b) => b.toString(16).padStart(2, '0')).join('');
@@ -74,16 +74,16 @@ const toHex = (s: string) => '0x' + Array.from(new TextEncoder().encode(s), (b) 
 /** Connect, get a challenge, ask the wallet to sign it, let the server verify. Throws a readable message on failure. */
 export async function walletSignIn(id: string): Promise<ServerIdentity> {
   const w = found.get(id);
-  if (!w) throw new Error('That wallet is no longer available. Reopen Settings.');
+  if (!w) throw new Error('Wallet not available, try again');
   const accounts = (await w.provider.request({ method: 'eth_requestAccounts' })) as string[];
   const address = accounts?.[0];
-  if (!address) throw new Error('The wallet shared no account.');
+  if (!address) throw new Error('No account shared by the wallet');
   const chainHex = (await w.provider.request({ method: 'eth_chainId' })) as string;
   const ch = await fetch('/api/auth/wallet/challenge', {
     method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ address, chainId: parseInt(chainHex, 16) }),
   });
-  if (!ch.ok) throw new Error(`Sign-in is unavailable (${ch.status}).`);
+  if (!ch.ok) throw new Error('Sign-in unavailable, try again');
   const { message } = (await ch.json()) as { message: string };
   const signature = (await w.provider.request({ method: 'personal_sign', params: [toHex(message), address] })) as string;
   const v = await fetch('/api/auth/wallet/verify', {
@@ -91,6 +91,6 @@ export async function walletSignIn(id: string): Promise<ServerIdentity> {
     body: JSON.stringify({ message, signature }),
   });
   const j = (await v.json().catch(() => ({}))) as { identity?: ServerIdentity; error?: string };
-  if (!v.ok || !j.identity) throw new Error(`The signature was not accepted (${j.error ?? v.status}).`);
+  if (!v.ok || !j.identity) throw new Error(j.error === 'expired' ? 'Took too long, try again' : 'Signature not accepted');
   return j.identity;
 }

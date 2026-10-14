@@ -1,12 +1,14 @@
 // Bot decisions. Bots only know what they see in their own cone (walls block it) and what they hear
-// on the shared sound bus. They never read the player's position or input directly.
+// on the shared sound bus. They never read a hostile's position or input directly.
+// The same brain drives the hostile bots and the solo player's AI teammates (Actor.ai on team 'player', the default
+// game: you + 2). A bot's target is the hostile it actually perceives, never "the player" by identity.
 import { TUNING } from '../config/tuning';
 import type { BotSpawn } from '../config/map';
 import { angleDiff } from './geom';
 import { findPath, shotClear, sightClear } from './level';
 import { canSee, muzzleFlashSeen } from './vision';
 import { safeSpot, zoneAt, zoneGoal } from './zone';
-import { hears, player, playerSightRange, rand, revealed, viewOf, type Actor, type ActorInput, type World } from './world';
+import { hears, player, rand, revealed, viewOf, type Actor, type ActorInput, type World } from './world';
 
 const DEG = Math.PI / 180;
 
@@ -93,18 +95,28 @@ function setGoal(w: World, a: Actor, br: Brain, gx: number, gy: number): void {
 }
 
 /** Record a belief update with its signal. */
-function learn(w: World, a: Actor, br: Brain, source: PerceptionEvent['source'], x: number, y: number, suspicion: number): void {
+function learn(w: World, a: Actor, br: Brain, source: PerceptionEvent['source'], x: number, y: number, suspicion: number, truth: Actor = player(w)): void {
   br.lastKnown = { x, y };
   br.source = source;
   br.suspicion = Math.max(br.suspicion, suspicion);
-  if (w.perceptionLog) {
-    const p = player(w);
-    w.perceptionLog.push({ tick: w.tick, bot: a.id, source, x, y, ox: a.x, oy: a.y, ofacing: a.facing, px: p.x, py: p.y });
+  if (w.perceptionLog) w.perceptionLog.push({ tick: w.tick, bot: a.id, source, x, y, ox: a.x, oy: a.y, ofacing: a.facing, px: truth.x, py: truth.y });
+}
+
+/** The hostile this bot sees best right now: nearest standing one in its cone with a clear line; a downed one last. */
+function seenTarget(w: World, a: Actor): Actor | null {
+  let best: Actor | null = null, bd = Infinity;
+  for (const t of w.actors) {
+    if (!t.alive || t.team === a.team || !canSee(w.level, a.x, a.y, a.facing, viewOf(a), t.x, t.y)) continue;
+    const d = Math.hypot(t.x - a.x, t.y - a.y) + (t.downed ? 100 : 0);
+    if (d < bd) { bd = d; best = t; }
   }
+  return best;
 }
 
 /** Release or take an attack token. Returns whether this bot may shoot the player now. */
 function token(w: World, a: Actor, want: boolean): boolean {
+  // Tokens limit how many hostile bots fire at the player's side at once; the player's own AI teammates never wait.
+  if (a.team !== 'bot') return want;
   const i = w.attackTokens.indexOf(a.id);
   if (!want) {
     if (i >= 0) w.attackTokens.splice(i, 1);
@@ -189,7 +201,9 @@ function pickFlank(w: World, a: Actor, target: { x: number; y: number }): { x: n
 
 export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput {
   const B = TUNING.bots;
-  const p = player(w);
+  const seen = seenTarget(w, a);
+  // Only read when br.sawPlayer is true (then it is the seen hostile); `a` is a harmless stand-in otherwise.
+  const p = seen ?? a;
   out.firing = false;
   out.reload = false;
   out.ability = false;
@@ -199,20 +213,20 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
 
   // Perception (docs/design/bots.md). Every belief about the player comes from a signal, logged by learn().
   const P = TUNING.perception;
-  br.sawPlayer = p.alive && canSee(w.level, a.x, a.y, a.facing, viewOf(a), p.x, p.y);
+  br.sawPlayer = !!seen;
   br.heardAt = null;
   br.suspicion = Math.max(0, br.suspicion - dt / P.memorySeconds);
   if (br.sawPlayer) {
     if (br.seenFor === 0 && br.state !== 'engage') br.reaction = P.reactionMin + rand(w) * (P.reactionMax - P.reactionMin);
     br.seenFor += dt;
-    learn(w, a, br, 'seen', p.x, p.y, 1);
+    learn(w, a, br, 'seen', p.x, p.y, 1, p);
   } else {
     br.seenFor = Math.max(0, br.seenFor - dt * 2);
     if (br.source === 'seen') br.source = 'memory';
   }
   let flashed = false;
   for (const s of w.prevSounds) {
-    if (s.team !== 'player') continue;
+    if (s.team === a.team) continue;
     // Muzzle flash: same rule as the player's (vision.ts muzzleFlashSeen), any range with wall line of sight.
     if (s.type === 'shot' && !br.sawPlayer && muzzleFlashSeen(w.level, a.x, a.y, s.x, s.y)) {
       learn(w, a, br, 'flash', s.x, s.y, 0.9);
@@ -287,11 +301,24 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
     if (k === 'barrier' && br.state === 'engage' && (justHit || a.hp < a.maxHp * 0.7)) out.ability = true;
   }
   // Its own sonar shows the player like it shows bots to the player: a fair, telegraphed reveal.
-  if (a.revealLeft > 0 && revealed(w, a).length) {
-    learn(w, a, br, 'sonar', p.x, p.y, 1);
+  const pinged = a.revealLeft > 0 ? revealed(w, a) : [];
+  if (pinged.length) {
+    learn(w, a, br, 'sonar', pinged[0].x, pinged[0].y, 1, pinged[0]);
     if (br.state === 'investigate' || br.state === 'search' || br.state === 'patrol') {
       br.state = 'pursue';
       br.goal = null;
+    }
+  }
+
+  // AI teammates (solo default game): rescue a downed teammate when no hostile is in sight, and stay with the player.
+  if (a.team !== 'bot' && !br.sawPlayer) {
+    const down = w.actors.find((m) => m !== a && m.team === a.team && m.alive && m.downed && Math.hypot(m.x - a.x, m.y - a.y) < 16);
+    if (down) {
+      token(w, a, false);
+      if (Math.hypot(down.x - a.x, down.y - a.y) > TUNING.revive.range * 0.6) { setGoal(w, a, br, down.x, down.y); follow(w, a, br, dt); }
+      out.aim = Math.atan2(down.y - a.y, down.x - a.x);
+      out.firing = false;
+      return out;
     }
   }
 
@@ -305,7 +332,7 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
     setGoal(w, a, br, spot.x, spot.y);
     follow(w, a, br, dt);
     const toP = Math.atan2(p.y - a.y, p.x - a.x);
-    const range = Math.min(a.weapon.falloffEnd + 2, playerSightRange(w) - 0.25);
+    const range = Math.min(a.weapon.falloffEnd + 2, p.view.range - 0.25);
     if (br.sawPlayer && br.seenFor >= br.reaction && token(w, a, true)) {
       out.aim = toP;
       out.firing = Math.abs(angleDiff(a.facing, toP)) < B.fireToleranceDeg * DEG && Math.hypot(p.x - a.x, p.y - a.y) <= range
@@ -330,6 +357,16 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
     }
     case 'patrol': {
       out.quiet = B.patrolQuiet;
+      if (a.team !== 'bot') {
+        // Nothing to chase: move with the player, a couple of metres off to one side, and watch the flanks.
+        const lead = player(w);
+        const side = a.id % 2 ? 1 : -1;
+        const gx = lead.x - Math.cos(lead.facing) * 1.6 + Math.cos(lead.facing + side * Math.PI / 2) * 1.3;
+        const gy = lead.y - Math.sin(lead.facing) * 1.6 + Math.sin(lead.facing + side * Math.PI / 2) * 1.3;
+        if (Math.hypot(lead.x - a.x, lead.y - a.y) > 2.6) { setGoal(w, a, br, gx, gy); follow(w, a, br, dt); br.lookBase = out.aim; }
+        else { br.timer += dt; out.aim = lead.facing + side * 0.9 + Math.sin(br.timer * 1.3) * 0.5; br.goal = null; }
+        break;
+      }
       const target = br.patrol[br.patrolIndex];
       setGoal(w, a, br, target.x, target.y);
       if (follow(w, a, br, dt)) {
@@ -394,7 +431,7 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
       out.aim = toP + br.aimOffset * err;
       // Hold the angle: stand still and shoot, only when the shot is not blocked by cover.
       // Fire gate (fairness rule): never beyond the player's own sight distance, whatever this bot can see.
-      const range = Math.min(a.weapon.falloffEnd + 2, playerSightRange(w) - 0.25);
+      const range = Math.min(a.weapon.falloffEnd + 2, p.view.range - 0.25);
       // Attack tokens: at most N bots shoot at once; the rest flank (flankers) or hold the angle.
       if (!token(w, a, true)) {
         if (br.flanker) {
