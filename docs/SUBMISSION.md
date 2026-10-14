@@ -32,6 +32,7 @@ Honest limits (say them in the submission):
 ## 04 Show it working
 - Working demo: the candidate preview URL (recorded in `docs/STATE.md` and the PR). Only the owner may promote it to production.
 - Testing instructions: `README.md`, "How to test it".
+- Demo link for judges without a Chog (labelled DEMO, no wallet, demo-only rooms, no rewards): `https://chogroomzero.xyz/?mockChog=53&online=1v1&demo=1&code=JUDGE1` (two people open it to play each other as 1:1s with Flashfire; change 53 to any Chog number from 1 to 1969). Live chain check: `https://chogroomzero.xyz/api/game/chain`.
 - Video (up to 3 min): NOT RECORDED. Shot list for the owner, all features verified in tests:
   1. 0:00-0:15 Title, How to play, Got it.
   2. 0:15-0:35 Chog DEMO screen: the DEMO line, one token per tier; pick Chog #53 (1:1, Flashfire) and show the DEMO badge and tier on the HUD; use Flashfire on a bot (the ring, then the burst).

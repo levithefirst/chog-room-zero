@@ -812,7 +812,16 @@ async function start() {
   bootDone();
   // Reload or crash mid online match: this tab still holds its session token, so it quietly asks the server to
   // resume. If the match is still on, the server hands the operator back (pollOnline enters it); if not, nothing shows.
-  if (NET_URL && ONLINE_AUTO) { titleView = 'online'; joinOnline(ONLINE_AUTO); }
+  // Demo invite link (judges, no wallet): ?mockChog=<n>&online=1v1&demo=1[&code=X] joins as that labelled DEMO token,
+  // which only ever meets other demo players. The account service is asked first so the ticket can be fetched.
+  if (NET_URL && ONLINE_AUTO) {
+    titleView = 'online';
+    void refreshAccount().then(() => {
+      const n = Number(identity.tokenId);
+      if (QS.get('demo') === '1' && identity.kind === 'bound' && tierOfMetadataId(n)) acct.choice = { demo: n };
+      joinOnline(ONLINE_AUTO);
+    });
+  }
   // Hosted checks run in browsers that may render at a few frames per second: in drive mode the scripted player and
   // the snapshot view run on a timer, not the render loop, and the server-reported state goes on <body data-netlog>.
   if (onlineDriver) setInterval(() => {
