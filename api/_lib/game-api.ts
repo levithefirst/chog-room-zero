@@ -9,9 +9,10 @@
 //   POST upgrade       spend shards on an upgrade rank
 //   POST settle        pull a finished match from the game server and settle it once
 //   GET  leaderboard   top ratings
+//   GET  chain         read-only live check of the ownership path on Monad (cached 60 s; no player data)
 import { env as authEnv, json, readSession, sameOrigin, secretOk, type Env, type Identity } from './auth.js';
 import type { Db } from './db.js';
-import { readOwnership, type Fetch, type Holding } from './chain.js';
+import { readOwnership, selfCheck, type Fetch, type Holding, type SelfCheck } from './chain.js';
 import { accountFor, buyUpgrade, checkTicket, issueTicket, leaderboard, profileOf, settleMatch, ticketSecret, tokenHistory, upgradesOf, validRecord, type GameTicket } from './game.js';
 import { NO_UPGRADES, SIGNATURES, TIER_DEFS, TIERS, tierOfMetadataId, type Tier } from '../../src/config/power.js';
 
@@ -62,6 +63,8 @@ async function holdingsOf(d: Deps, db: Db | null, ids: Identity[]): Promise<{ ok
   }
   return { ok: true, list };
 }
+
+let chainCache: { at: number; r: SelfCheck } | null = null;
 
 export async function handleGame(req: Request, action: string, d: Deps): Promise<Response> {
   const e = d.env;
@@ -161,6 +164,11 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
         const s = await readSession(req, e);
         const me = s?.ids.length ? await accountFor(db, s.ids) : null;
         return json({ ...r, mine: r.ok ? r.players.find((p) => p.acc === me) ?? null : null, players: undefined });
+      }
+
+      case 'GET chain': {
+        if (!chainCache || d.now() - chainCache.at > 60_000) chainCache = { at: d.now(), r: await selfCheck(d.fetch) };
+        return json({ ...chainCache.r, checkedAt: new Date(chainCache.at).toISOString() });
       }
 
       case 'GET leaderboard':

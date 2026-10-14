@@ -108,3 +108,34 @@ export async function readOwnership(address: string, f: Fetch = fetch, rpcs = RP
   }
   return { ok: false, reason: last };
 }
+
+export type SelfCheck = { ok: boolean; rpc?: string; block?: string; checks: Record<string, boolean>; reason?: string };
+
+/**
+ * Live proof that the ownership path works from this server, with no wallet: the owner of token 1 (ownerOf) must list
+ * token 1 in tokensOfOwner, and metadataId(1) must equal the catalogue's 1462. Read-only; nothing about any player.
+ */
+export async function selfCheck(f: Fetch = fetch, rpcs = RPCS): Promise<SelfCheck> {
+  let reason = 'no rpc';
+  for (const rpc of rpcs) {
+    try {
+      const [chain, block, owner, meta] = await batch(rpc, [
+        { method: 'eth_chainId', params: [] },
+        { method: 'eth_blockNumber', params: [] },
+        { method: 'eth_call', params: [{ to: CONTRACT, data: encodeUintCall('ownerOf(uint256)', 1) }, 'latest'] },
+        { method: 'eth_call', params: [{ to: CONTRACT, data: encodeUintCall('metadataId(uint256)', 1) }, 'latest'] },
+      ], f, 4000);
+      const ownerAddr = '0x' + owner.replace(/^0x/, '').slice(24, 64);
+      const r = await readOwnership(ownerAddr, f, [rpc]);
+      const checks = {
+        chainId143: parseInt(chain, 16) === CHAIN_ID,
+        metadataIdOfToken1Is1462: decodeUint(meta) === 1462,
+        ownerOfToken1ListsToken1: r.ok && r.holdings.some((h) => h.tokenId === 1 && h.metadataId === 1462),
+      };
+      return { ok: Object.values(checks).every(Boolean), rpc, block, checks };
+    } catch (e) {
+      reason = e instanceof Error ? e.message : 'rpc failed';
+    }
+  }
+  return { ok: false, checks: {}, reason };
+}

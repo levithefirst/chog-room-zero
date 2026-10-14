@@ -59,13 +59,11 @@ Never write the guessed answer into code, config, or docs as if it were true.
 ## NFT copy and flow
 No "unlock your power" or "pay to win" language. The tier is always shown to both sides (badge on the player card and the in-match name tag) so the opponent knows what they face. No mint or marketplace links in the play flow. Do not show the NFT screen before the player has finished a room.
 
-## RC-1 NFT DEMO (built; DEMO only)
-A real wallet and ownership check are DEFERRED: chain, contract and metadata are still UNKNOWN. The DEMO shows how a Chog would change play:
-- **Entry points, all with a DEMO badge:** the title "Chog DEMO" button, a DEMO screen, the title identity chip, the hero select chip, the HUD chip and the results screen.
-- **Copy, shown on screen:** "DEMO: no wallet is connected and no ownership is checked. Traits come only from the token number."
-- **Non-holders:** play as guest (the default, or "Play as guest" on the DEMO screen). `?mockChog=<n>` still binds a DEMO token for testing.
-
-Deterministic mapping (`src/nft/traits.ts`, Option B above): token number, then FNV-1a hash mod 4, then the sidegrade. A second hash mod 5 picks a cosmetic marking colour (Slate, Brass, Lilac, Moss, Clay). The same number always gives the same traits. Sample numbers: #1 Lamp, #2 Wide, #3 Steady, #4 Spray (found by `sampleTokens()`).
+## DEMO (built; labelled)
+Any Chog number (1 to 1,969) can be tried without a wallet: the DEMO screen, `?mockChog=<n>`, and "Play online as DEMO" on the Online screen.
+- **Copy, shown on screen:** "DEMO: no wallet is connected and no ownership is checked." plus that the tier is the token's real catalogue tier and demo power earns nothing.
+- **Power:** the token's real tier and, for the ten 1:1s, its signature (`docs/design/power.md`). Solo, and online only against other demo players (server queue `|demo`). Never verified, never rewarded, never 5v5 with real holders.
+- **Play-shape trait (RC-1, unchanged):** the number also picks one of four sidegrades by FNV-1a hash mod 4 and a marking colour.
 
 | Trait | Effect | Counterplay |
 |---|---|---|
@@ -74,9 +72,10 @@ Deterministic mapping (`src/nft/traits.ts`, Option B above): token number, then 
 | Steady | Tighter spread, reload -30%; magazine -30%, fire 12% slower | Push when it reloads |
 | Spray | Magazine +40%, slightly faster fire; looser spread, reload +40% | Fight at range; punish the long reload |
 
-Sidegrades only: health, armour, damage and speed never change (`tests/operators.test.ts`). Seeded duel parity: each sidegrade vs the standard kit (Kettle, slot-swapped, strafing, 3/6/9 u, 80 duels per cell) must win between 25% and 75% (`tests/rc-nft-demo.test.ts`).
+Sidegrades never touch health, armour, damage or speed (`tests/operators.test.ts`); duel parity 25% to 75% vs the standard kit (`tests/rc-nft-demo.test.ts`).
 
-The owner's RC-1 brief changes two earlier notes. Guests now keep device-local personal bests; this is not Chog operator history, so the LOCKED guest rule still holds for token history. The DEMO screen is reachable from the title before any room is finished.
+## Verified holders (built 2026-10-14)
+Wallet sign-in (SIWE) -> the site reads `tokensOfOwner` and `metadataId` on Monad -> a signed single-use ticket -> the game server checks it with the site. Holders get 5v5, a verified identity, token history, and (once `NFT_COMBAT=1`, after the Core Feel Gate) their tier's power. Details: `docs/AUTH.md`, `docs/MULTIPLAYER.md`, `docs/DATABASE.md`.
 
 ## NFT-R1 research result (2026-10-13, EVIDENCE; full package in `docs/research/chog-genesis/`)
 Answers to "Verify before relying on anything", checked from public sources, not from the chain (this environment had no RPC access):
@@ -86,4 +85,4 @@ Answers to "Verify before relying on anything", checked from public sources, not
 4. Metadata: IPFS folder, 13 trait categories, permanent after the contract's reveal. All 1,969 records are in `data/chog-genesis/` (complete and consistent, not yet hash-verified). **Token id and the number shown in the name are different** (`metadataId = ((tokenId - 1 + startingIndex) % 1969) + 1`, `startingIndex` derived as 1461, not yet read). Key history by token id; show the metadata id.
 5. Art rights: still UNKNOWN. No Chog art in the build until the owner has written terms.
 6. RPC: five public endpoints listed at docs.monad.xyz/developer-essentials/network-information.
-Option A (real traits mapped by a hand-written table) is now possible. A proposal is in `IDENTITY-AND-MAPPING.md`; it needs a `/brief`, the Core Feel Gate, and the two network checks (`tools/nft/read-chain.ts`, `tools/nft/verify-ipfs.ts`) run once with internet access. The gate and all rules above are unchanged.
+The class system (above) uses the verified catalogue's `Tier` trait. The site re-reads `metadataId` from the contract for every held token, so the derived `startingIndex` is not relied on for verified holders.

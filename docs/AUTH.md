@@ -39,12 +39,13 @@ Google sign-in started on any other host first moves to `AUTH_ORIGIN`, so the co
 
 ## Limits (honest)
 
-- **No database:** sessions prove identity, nothing more. Records, medals and the player card are per device. A cloud
-  save needs a store (for example Vercel Marketplace Neon or Upstash, free tiers) and an owner decision.
+- **Accounts (master build, 2026-10-14):** a signed-in session is linked to a server account (`api/_lib/game.ts`): XP, level,
+  shards, upgrades, rating, and token history for verified holders. Stored in Postgres (`docs/DATABASE.md`); without
+  `DATABASE_URL` the game says "progression offline" and credits nothing. Solo records and medals stay on the device.
+- **NFT ownership:** checked by the site, not the browser: with a wallet identity in the session, `/api/game/tokens` and
+  `/api/game/ticket` read Monad (chain 143) `tokensOfOwner` and `metadataId` live. Any failure means a free profile.
+  The game server trusts only tickets the site signed (`/api/game/ticket-check`), each usable once, for 10 minutes.
 - **Replay:** a captured signature cannot be redeemed without the same browser's challenge cookie, and the cookie
-  expires in 5 minutes and is cleared on use. Strict server-side single-use nonces need a key-value store.
+  expires in 5 minutes and is cleared on use.
 - **Mobile wallets:** works inside a wallet's in-app browser (MetaMask, Rabby, Zerion inject a provider). A plain
   mobile browser would need WalletConnect, which needs a project id (owner action); not included.
-- **Chains:** the signed message records the wallet's chain id only. No chain-specific feature is enabled. Monad /
-  Robinhood chain ids and RPCs are UNKNOWN in `docs/STATE.md` until verified.
-- **NFT:** ownership verification is separate and not built (contract, network and method UNKNOWN).

@@ -34,6 +34,7 @@ const fakeFetch = async (url: string, init: RequestInit): Promise<Response> => {
       const ids = chain.owned[owner.toLowerCase()] ?? [];
       return { id: c.id, result: '0x' + word(32) + word(ids.length) + ids.map(word).join('') };
     }
+    if (data.startsWith(selector('ownerOf(uint256)'))) return { id: c.id, result: '0x' + '0'.repeat(24) + WALLET.slice(2) };
     if (data.startsWith(selector('metadataId(uint256)'))) return { id: c.id, result: '0x' + word(chain.meta[parseInt(data.slice(10), 16)]) };
     return { id: c.id, error: { message: 'unknown' } };
   }));
@@ -118,6 +119,14 @@ describe('ownership (live chain read, fails closed)', () => {
     const t = await call('POST', 'ticket', { body: { demo: 1373 } });
     expect(t.j.profile).toMatchObject({ demo: true, holder: false, account: false, tier: 'legendary', signature: 'Gold Shell' });
     expect((await call('POST', 'ticket', { body: { demo: 5000 } })).status).toBe(400);
+  });
+});
+
+describe('live chain self-check', () => {
+  it('passes when ownerOf, tokensOfOwner and metadataId agree with the catalogue; fails closed otherwise', async () => {
+    chain.owned[WALLET] = [1, 5]; chain.meta[1] = 1462;
+    const ok = await call('GET', 'chain');
+    expect(ok.j).toMatchObject({ ok: true, checks: { chainId143: true, metadataIdOfToken1Is1462: true, ownerOfToken1ListsToken1: true } });
   });
 });
 

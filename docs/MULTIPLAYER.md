@@ -166,6 +166,24 @@ to wake. Opening Online sends an HTTP request that wakes it and retries the sock
   two external browsers with `&drive=1`, code REL18B: matched at 1.0 s, 202 snapshots each, rtt 98 / 94 ms, alpha won
   by elimination at 11.1 s (126 vs 72 damage), identical result on both. PASS.
 
+## Tickets, holder-only 5v5 and settlement (master build, 2026-10-14)
+
+- **Ticket.** Before each connection the browser asks the site (`POST /api/game/ticket`, same origin) for a signed,
+  10 minute ticket naming its account, its verified Chog (read live on Monad) and the power it may use. It sends the
+  ticket in `hello`. The server asks the site whether it is genuine (`POST /api/game/ticket-check`, env
+  `TICKET_CHECK_URL`, default the production site), accepts each ticket id once, allows one connection per account,
+  and gives up after 5 s. Anything that fails plays as a free profile. No secret lives on the game server.
+- **5v5** is refused (`holders-only`) unless the ticket is a verified holder's, or a labelled demo token's.
+- **Demo** tickets queue in their own queues (`|demo`), so demo power never meets a real match, and earn nothing.
+- **Power** comes from the ticket (`src/config/power.ts`); the roster sent to every client carries each player's tier
+  and ability, so power is never hidden from the other side.
+- **Results.** A finished match's record (accounts, tiers, kills, who left) is kept for 2 hours at
+  `GET /results/<matchId>`. The site pulls it (`POST /api/game/settle`) and settles it once. The browser never reports
+  a result. Render Free restarts lose unsettled records (the client settles straight after the match).
+- Tests: `tests/master-online.test.ts` (server rules), `tests/game-api.test.ts` (site side), `tools/rc8-online.mjs`
+  (1v1 and 3v3 in real browsers; 5v5 now needs holder tickets, so that tool runs 1v1 and 3v3 by default when tickets
+  are off).
+
 ## Run it locally
 
 ```
