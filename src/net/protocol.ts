@@ -16,6 +16,9 @@ export type ClientMsg =
   | { t: 'hello'; v: number; name: string; hero: string; token?: string; ticket?: string }
   | { t: 'queue'; mode: Mode; code?: string }
   | { t: 'leave' }
+  /** Squads (master integration pass): create one, join one by its code, or leave it. The leader queues the squad. */
+  | { t: 'party'; op: 'create' | 'leave' }
+  | { t: 'party'; op: 'join'; code: string }
   | { t: 'input'; seq: number; mx: number; my: number; aim: number; fire: boolean; quiet: boolean; reload: boolean; ability: boolean }
   | { t: 'ping'; at: number };
 
@@ -46,6 +49,11 @@ export interface NetBullet { x: number; y: number; dx: number; dy: number; ox: n
 export interface NetSound { type: string; x: number; y: number; radius: number; source: number; team: Team; weapon?: string; blocked?: boolean; sig?: number }
 export interface NetHit { target: number; by: number; x: number; y: number; fromX: number; fromY: number; killed: boolean; downed?: boolean }
 
+/** One squad member as every member sees it. */
+export interface PartyMember { name: string; hero: string; tier: Tier; holder: boolean; demo: boolean; you: boolean; leader: boolean; ready: boolean }
+/** Squad codes: 5 characters from a set without lookalikes. */
+export const PARTY_CODE = /^[2-9A-HJ-NP-Z]{5}$/;
+
 export interface PlayerResult { id: number; name: string; hero: string; team: Team; kills: number; damageDealt: number; damageTaken: number; hits: number; bullets: number; alive: boolean; cause: string | null }
 
 export type ServerMsg =
@@ -56,6 +64,7 @@ export type ServerMsg =
   | { t: 'snap'; tick: number; actors: NetActor[]; bullets: NetBullet[]; pickups: boolean[]; sounds: NetSound[]; hits: NetHit[]; barriers: { x0: number; y0: number; x1: number; y1: number; left: number }[] }
   | { t: 'over'; winner: Team | null; reason: 'eliminated' | 'time'; results: PlayerResult[]; matchId?: string; settle?: boolean }
   | { t: 'pong'; at: number; tick: number }
+  | { t: 'party'; code: string | null; members: PartyMember[] }
   | { t: 'error'; code: string; message: string };
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -80,6 +89,10 @@ export function parseClientMsg(raw: string): ClientMsg | null {
       return { t: 'queue', mode: m.mode as Mode, code: m.code as string | undefined };
     case 'leave':
       return { t: 'leave' };
+    case 'party':
+      if (m.op === 'create' || m.op === 'leave') return { t: 'party', op: m.op };
+      if (m.op === 'join' && typeof m.code === 'string' && PARTY_CODE.test(m.code)) return { t: 'party', op: 'join', code: m.code };
+      return null;
     case 'input': {
       if (!isNum(m.seq) || !isNum(m.mx) || !isNum(m.my) || !isNum(m.aim)) return null;
       if (!isBool(m.fire) || !isBool(m.quiet) || !isBool(m.reload) || !isBool(m.ability)) return null;

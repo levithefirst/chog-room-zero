@@ -5,7 +5,7 @@ import { powerFor, signatureFor } from '../config/power';
 import { createWorld, type Actor, type ActorInput, type HitEvent, type SoundEvent, type SoundType, type World } from '../sim/world';
 import { WEAPONS } from '../config/weapons';
 import { TUNING } from '../config/tuning';
-import { PROTOCOL, type Mode, type NetActor, type NetProfile, type PlayerResult, type ServerMsg } from './protocol';
+import { PROTOCOL, type Mode, type NetActor, type NetProfile, type PartyMember, type PlayerResult, type ServerMsg } from './protocol';
 import type { Circle } from '../sim/zone';
 import type { Team } from '../sim/world';
 
@@ -62,6 +62,17 @@ export class OnlineSession {
   ticketSource: (() => Promise<string | null>) | null = null;
   /** Snapshots received this session (debug and hosted checks). */
   snapCount = 0;
+  /** Your squad (code and members, you included), or null when you are not in one. */
+  party: { code: string; members: PartyMember[] } | null = null;
+  private pendingParty: object | null = null;
+  /** Squad: create one, join one by code, or leave. Connects first when needed. */
+  partyOp(op: 'create' | 'leave' | 'join', code?: string): void {
+    this.pendingParty = { t: 'party', op, ...(op === 'join' ? { code } : {}) };
+    if (this.state === 'idle' || this.state === 'over' || this.state === 'queued') { this.send(this.pendingParty); this.pendingParty = null; }
+    else if (this.state !== 'match' && this.state !== 'reconnecting') this.connect();
+  }
+  /** Am I in a squad but not its leader (then the leader starts every match)? */
+  get follower(): boolean { return !!this.party && this.party.members.length > 1 && !this.party.members.find((m) => m.you)?.leader; }
 
   constructor(readonly url: string, private name: () => string, private hero: () => string, private store: Storage | null) {
     try { this.token = store?.getItem('chog-room-zero:net-token') ?? null; } catch { this.token = null; }
@@ -130,7 +141,8 @@ export class OnlineSession {
     this.over = null;
     this.queue = { mode, have: 0, need: 0, code: code ?? null };
     this.pendingQueue = { mode, code };
-    if (this.state === 'idle') this.sendQueue();
+    // After a match the server already has this player back in its lobby: queue straight away.
+    if (this.state === 'idle' || this.state === 'over') { this.state = 'idle'; this.sendQueue(); }
     else this.connect();
   }
   private pendingQueue: { mode: Mode; code?: string } | null = null;
@@ -171,7 +183,11 @@ export class OnlineSession {
         if (this.state === 'reconnecting' && !m.resumed) { this.state = 'error'; this.message = 'The match ended while you were away.'; return; }
         if (this.state !== 'reconnecting') this.state = 'idle';
         this.message = '';
+        if (this.pendingParty) { this.send(this.pendingParty); this.pendingParty = null; }
         this.sendQueue();
+        return;
+      case 'party':
+        this.party = m.code ? { code: m.code, members: m.members } : null;
         return;
       case 'queued':
         this.state = 'queued';
@@ -180,7 +196,7 @@ export class OnlineSession {
       case 'queueTimeout':
         this.state = 'idle';
         this.queue = null;
-        this.message = 'Nobody else is looking for this match right now. Try again, or play solo against bots.';
+        this.message = this.party && this.party.members.length > 1 ? 'Your squad left the queue.' : 'Nobody else is looking for this match right now. Try again, or play solo against bots.';
         return;
       case 'match':
         this.state = 'match';
@@ -193,6 +209,7 @@ export class OnlineSession {
         this.onSnap(m);
         return;
       case 'over':
+        // Back in the lobby on the server (a squad stays together; the leader can queue again).
         this.state = 'over';
         if (this.match) this.over = { winner: m.winner, reason: m.reason, results: m.results, you: this.match.you, team: this.match.team, mode: this.match.mode, matchId: m.matchId ?? null, settle: !!m.settle };
         return;
@@ -202,7 +219,7 @@ export class OnlineSession {
       case 'error':
         this.message = m.message;
         if (m.code === 'rate' || m.code === 'idle') this.state = 'error';
-        if (m.code === 'holders-only') { this.state = 'idle'; this.queue = null; }
+        if (m.code === 'holders-only' || m.code.startsWith('party-')) { if (this.state === 'queued' || this.state === 'connecting') this.state = 'idle'; this.queue = null; }
         return;
     }
   }

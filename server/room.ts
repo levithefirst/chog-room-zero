@@ -68,7 +68,15 @@ interface Player {
   dropped: number;
   /** The checked ticket, or null (guest: free power, no account, no 5v5). */
   ticket: GameTicket | null;
+  /** The squad this player is in (stays together between matches), or null. */
+  party: Party | null;
 }
+
+/** A squad: up to 5 players who queue together and always play on the same team. The leader queues for everyone. */
+interface Party { code: string; members: Player[] }
+
+/** A queue entry: one player, or a whole squad. Groups are never split across teams. */
+interface Group { players: Player[]; at: number }
 
 interface Room {
   id: string;
@@ -87,12 +95,14 @@ interface Room {
 }
 
 const STEP = TUNING.simStepSeconds;
+const PARTY_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 
 export class Lobby {
   readonly opts: LobbyOptions;
   private players = new Map<number, Player>();
   private byToken = new Map<string, Player>();
-  private queues = new Map<string, Player[]>();
+  private queues = new Map<string, Group[]>();
+  private parties = new Map<string, Party>();
   readonly rooms = new Map<string, Room>();
   private nextId = 1;
   /** Ticket ids already used, with their expiry (unix seconds): a ticket opens one connection only. */
@@ -111,7 +121,7 @@ export class Lobby {
     const now = this.opts.now();
     this.players.set(id, {
       id, conn, token: randomBytes(16).toString('hex'), name: '', hero: 'kettle', state: 'new', queueKey: null, queuedAt: 0,
-      room: null, actorId: -1, lastMsgAt: now, goneAt: 0, bucket: this.opts.rateBurst, bucketAt: now, dropped: 0, ticket: null,
+      room: null, actorId: -1, lastMsgAt: now, goneAt: 0, bucket: this.opts.rateBurst, bucketAt: now, dropped: 0, ticket: null, party: null,
     });
     return id;
   }
@@ -171,7 +181,7 @@ export class Lobby {
   }
 
   stats() {
-    return { players: this.players.size, queued: [...this.queues.values()].reduce((a, q) => a + q.length, 0), rooms: this.rooms.size };
+    return { players: this.players.size, queued: [...this.queues.values()].reduce((a, q) => a + q.reduce((n, g) => n + g.players.length, 0), 0), rooms: this.rooms.size, parties: this.parties.size };
   }
 
   // ---- messages ----
@@ -219,22 +229,32 @@ export class Lobby {
       }
       case 'queue': {
         if (p.state === 'playing') { this.err(p, 'in-match', 'Already in a match.'); return; }
+        const party = p.party;
+        if (party && party.members[0] !== p) { this.err(p, 'party-leader', 'Your squad leader starts the match.'); return; }
+        const group = party ? party.members : [p];
+        const half = MODE_SIZE[m.mode] / 2;
+        if (group.length > half) { this.err(p, 'party-too-big', `A squad of ${group.length} does not fit ${m.mode} (${half} a side).`); return; }
+        if (group.some((x) => x.state === 'playing' || !x.conn)) { this.err(p, 'party-busy', 'Wait until every squad member is back in the lobby.'); return; }
         // 5v5 is for verified Chog holders (or a labelled demo token, in demo-only rooms). Enforced here, not in the browser.
-        if (m.mode === '5v5' && !p.ticket?.holder && !p.ticket?.demo) { this.err(p, 'holders-only', '5v5 is for verified Chog holders. Sign in with the wallet that holds your Chog, or play 1v1 and 3v3.'); return; }
-        if (p.state === 'queued') this.unqueue(p);
+        if (m.mode === '5v5' && group.some((x) => !x.ticket?.holder && !x.ticket?.demo)) {
+          this.err(p, 'holders-only', group.length > 1 ? 'Everyone in the squad needs a verified Chog for 5v5.' : '5v5 is for verified Chog holders. Sign in with the wallet that holds your Chog, or play 1v1 and 3v3.');
+          return;
+        }
         // Demo tokens only ever meet other demo tokens, so demo power never touches a real match.
-        const key = `${m.mode}:${m.code ?? ''}${p.ticket?.demo ? '|demo' : ''}`;
+        const demo = group.some((x) => x.ticket?.demo);
+        if (demo && !group.every((x) => x.ticket?.demo)) { this.err(p, 'party-mixed-demo', 'Demo and real players cannot queue as one squad.'); return; }
+        for (const x of group) if (x.state === 'queued') this.unqueue(x);
+        const key = `${m.mode}:${m.code ?? ''}${demo ? '|demo' : ''}`;
         const q = this.queues.get(key) ?? [];
-        q.push(p);
+        q.push({ players: [...group], at: this.opts.now() });
         this.queues.set(key, q);
-        p.state = 'queued';
-        p.queueKey = key;
-        p.queuedAt = this.opts.now();
-        const need = MODE_SIZE[m.mode];
-        if (q.length >= need) this.startRoom(m.mode, q.splice(0, need));
-        else for (const o of q) o.conn?.send({ t: 'queued', mode: m.mode, have: q.length, need, code: m.code ?? null });
+        for (const x of group) { x.state = 'queued'; x.queueKey = key; x.queuedAt = this.opts.now(); }
+        this.tryMatch(key, m.mode, m.code ?? null);
         return;
       }
+      case 'party':
+        this.partyMsg(p, m);
+        return;
       case 'leave':
         if (p.state === 'queued') { this.unqueue(p); p.state = 'idle'; }
         else if (p.state === 'playing' && p.room) this.eliminate(p.room, p, 'left');
@@ -269,12 +289,53 @@ export class Lobby {
     return powerFor(t.tier, t.up, t.mid && t.tier === 'legendary' ? signatureFor(t.mid) : null, t.demo, t.mid);
   }
 
-  private startRoom(mode: Mode, members: Player[]): void {
+  /**
+   * Fills two equal teams from the queue, oldest first, never splitting a squad. Solo players fill the gaps, so a
+   * squad of three meets three solo players in 3v3. Starts the room when both teams are full.
+   */
+  private tryMatch(key: string, mode: Mode, code: string | null): void {
+    const q = this.queues.get(key);
+    if (!q) return;
+    const half = MODE_SIZE[mode] / 2;
+    // Small search (queues hold at most a few groups per key): each group goes to alpha, bravo or waits, oldest first,
+    // so the earliest players are matched whenever any split of the queue fills both teams exactly.
+    const pool = q.slice(0, 12);
+    const pick: (0 | 1 | 2)[] = [];
+    const fill = (i: number, na: number, nb: number): boolean => {
+      if (na === half && nb === half) return true;
+      if (i === pool.length) return false;
+      const n = pool[i].players.length;
+      for (const side of [0, 1, 2] as const) {
+        if (side === 0 && na + n > half) continue;
+        if (side === 1 && nb + n > half) continue;
+        pick[i] = side;
+        if (fill(i + 1, na + (side === 0 ? n : 0), nb + (side === 1 ? n : 0))) return true;
+      }
+      return false;
+    };
+    const ok = fill(0, 0, 0);
+    const alpha = ok ? pool.filter((_, i) => pick[i] === 0) : [];
+    const bravo = ok ? pool.filter((_, i) => pick[i] === 1) : [];
+    const na = alpha.reduce((a, g) => a + g.players.length, 0), nb = bravo.reduce((a, g) => a + g.players.length, 0);
+    if (na === half && nb === half) {
+      const used = new Set([...alpha, ...bravo]);
+      const rest = q.filter((g) => !used.has(g));
+      if (rest.length) this.queues.set(key, rest); else this.queues.delete(key);
+      this.startRoom(mode, alpha.flatMap((g) => g.players), bravo.flatMap((g) => g.players));
+      if (rest.length) this.tryMatch(key, mode, code);
+      return;
+    }
+    const have = q.reduce((a, g) => a + g.players.length, 0);
+    for (const g of q) for (const o of g.players) o.conn?.send({ t: 'queued', mode, have, need: MODE_SIZE[mode], code });
+  }
+
+  private startRoom(mode: Mode, alphaTeam: Player[], bravoTeam: Player[]): void {
     const id = randomBytes(8).toString('hex');
-    // Teams alternate in join order (a, b, a, b, ...): equal sizes, spawns west and east.
+    // Squads stay on one side; spawns west (alpha) and east (bravo).
+    const members = [...alphaTeam, ...bravoTeam];
     const used = { alpha: 0, bravo: 0 };
     const versus = members.map((p, i) => {
-      const team: 'alpha' | 'bravo' = i % 2 === 0 ? 'alpha' : 'bravo';
+      const team: 'alpha' | 'bravo' = i < alphaTeam.length ? 'alpha' : 'bravo';
       const s = VERSUS_SPAWNS[team][used[team]++];
       return { name: p.name, hero: p.hero, team, x: s.x, y: s.y, facing: team === 'alpha' ? 0 : Math.PI, power: Lobby.powerOf(p.ticket) };
     });
@@ -293,6 +354,7 @@ export class Lobby {
     });
     this.rooms.set(id, room);
     for (const p of members) this.sendMatch(room, p);
+    for (const pa of new Set(members.map((p) => p.party).filter((x): x is Party => !!x))) this.sendParty(pa);
   }
 
   private sendMatch(room: Room, p: Player): void {
@@ -416,25 +478,83 @@ export class Lobby {
       if (!p.conn) this.forget(p);
     });
     this.rooms.delete(room.id);
+    // Squads stay together: everyone back in the lobby sees the squad ready for the next match.
+    for (const pa of new Set(room.members.map((p) => p.party).filter((x): x is Party => !!x))) this.sendParty(pa);
   }
 
+  /** Takes p's whole queue entry (a squad leaves the queue together) out of its queue. */
   private unqueue(p: Player): void {
     if (!p.queueKey) return;
-    const q = this.queues.get(p.queueKey);
+    const key = p.queueKey;
+    const q = this.queues.get(key);
     if (q) {
-      const i = q.indexOf(p);
-      if (i >= 0) q.splice(i, 1);
-      if (!q.length) this.queues.delete(p.queueKey);
+      const g = q.find((x) => x.players.includes(p));
+      if (g) {
+        q.splice(q.indexOf(g), 1);
+        for (const o of g.players) { o.queueKey = null; if (o.state === 'queued') o.state = 'idle'; }
+        for (const o of g.players) if (o !== p) o.conn?.send({ t: 'queueTimeout' });
+      }
+      if (!q.length) this.queues.delete(key);
       else {
-        const [mode, rest] = p.queueKey.split(':');
+        const [mode, rest] = key.split(':');
         const code = rest.replace('|demo', '');
-        for (const o of q) o.conn?.send({ t: 'queued', mode: mode as Mode, have: q.length, need: MODE_SIZE[mode as Mode], code: code || null });
+        const have = q.reduce((a, x) => a + x.players.length, 0);
+        for (const x of q) for (const o of x.players) o.conn?.send({ t: 'queued', mode: mode as Mode, have, need: MODE_SIZE[mode as Mode], code: code || null });
       }
     }
     p.queueKey = null;
   }
 
+  // ---- squads ----
+  private partyMsg(p: Player, m: Extract<ClientMsg, { t: 'party' }>): void {
+    if (m.op === 'leave') { if (p.state === 'queued') this.unqueue(p); this.leaveParty(p); p.conn?.send({ t: 'party', code: null, members: [] }); return; }
+    if (p.state === 'playing' || p.state === 'queued') { this.err(p, 'party-busy', 'Leave the queue or finish the match first.'); return; }
+    if (m.op === 'create') {
+      this.leaveParty(p);
+      let code = '';
+      do code = Array.from(randomBytes(5), (b) => PARTY_ALPHABET[b % PARTY_ALPHABET.length]).join(''); while (this.parties.has(code));
+      const party: Party = { code, members: [p] };
+      this.parties.set(code, party);
+      p.party = party;
+      this.sendParty(party);
+      return;
+    }
+    const party = this.parties.get((m as { code: string }).code);
+    if (!party) { this.err(p, 'party-unknown', 'No squad with that code. Check it with your friend.'); return; }
+    if (party.members.includes(p)) { this.sendParty(party); return; }
+    if (party.members.length >= 5) { this.err(p, 'party-full', 'That squad is full (5).'); return; }
+    if (party.members.some((x) => x.state === 'queued' || x.state === 'playing')) { this.err(p, 'party-busy', 'That squad is in a queue or a match. Try again when it is back.'); return; }
+    this.leaveParty(p);
+    party.members.push(p);
+    p.party = party;
+    this.sendParty(party);
+  }
+
+  private leaveParty(p: Player): void {
+    const party = p.party;
+    if (!party) return;
+    p.party = null;
+    party.members = party.members.filter((x) => x !== p);
+    // A squad member leaving a queue takes the squad out of it (the leader re-queues).
+    for (const x of party.members) if (x.state === 'queued') this.unqueue(x);
+    if (!party.members.length) this.parties.delete(party.code);
+    else this.sendParty(party);
+  }
+
+  private sendParty(party: Party): void {
+    for (const me of party.members) {
+      me.conn?.send({
+        t: 'party', code: party.code,
+        members: party.members.map((x, i) => ({
+          name: x.name, hero: x.hero, tier: (x.ticket?.tier ?? 'free') as Tier, holder: !!x.ticket?.holder, demo: !!x.ticket?.demo,
+          you: x === me, leader: i === 0, ready: !!x.conn && x.state === 'idle',
+        })),
+      });
+    }
+  }
+
   private forget(p: Player): void {
+    this.leaveParty(p);
     this.byToken.delete(p.token);
     for (const [k, v] of this.players) if (v === p) this.players.delete(k);
   }
