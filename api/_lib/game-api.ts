@@ -64,6 +64,9 @@ async function holdingsOf(d: Deps, db: Db | null, ids: Identity[]): Promise<{ ok
   return { ok: true, list };
 }
 
+/** One line per ticket event for the Vercel runtime log: the outcome only, never an address, account id or ticket. */
+const log = (m: string) => console.log(`[game] ${m}`);
+
 let chainCache: { at: number; r: SelfCheck } | null = null;
 
 export async function handleGame(req: Request, action: string, d: Deps): Promise<Response> {
@@ -109,6 +112,7 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
           const tier = tierOfMetadataId(mid);
           if (!tier) return json({ error: 'bad_demo_token' }, 400);
           const t = await issueTicket({ acc: null, tier, up: NO_UPGRADES, tok: null, mid, tokTier: tier, own: null, holder: false, demo: true, name }, secret, d.now());
+          log('ticket issued: demo');
           return json({ ticket: t.ticket, profile: publicTicket(t.data) });
         }
         const s = await readSession(req, e);
@@ -132,12 +136,14 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
           tok: holding?.tokenId ?? null, mid: holding?.metadataId ?? null, tokTier, own: holding?.owner ?? null,
           holder: !!holding, demo: false,
         }, secret, d.now());
+        log(`ticket issued: ${holding ? 'holder' : 'free'}${acc ? ' with account' : ''}${chain ? ` (${chain})` : ''}`);
         return json({ ticket: t.ticket, profile: publicTicket(t.data), nftCombat: nftCombatOn(e), warning: chain });
       }
 
       case 'POST ticket-check': {
         const b = await body(req);
         const t = await checkTicket(String(b.ticket ?? ''), await ticketSecret(e.AUTH_SECRET!), d.now());
+        log(`ticket-check: ${t ? (t.demo ? 'ok demo' : t.holder ? 'ok holder' : 'ok free') : 'refused'}`);
         return t ? json({ ok: true, ticket: t }) : json({ ok: false }, 401);
       }
 
