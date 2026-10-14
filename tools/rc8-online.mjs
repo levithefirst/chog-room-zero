@@ -87,11 +87,13 @@ for (const mode of MODES) {
     await Promise.all(clients.map(async (c) => {
       await c.cmd('Page.navigate', { url }); await sleep(2500);
       await c.ev(`localStorage.clear();sessionStorage.clear();localStorage.setItem('chog.onboarded','1');localStorage.setItem('chog-room-zero:settings:v1',JSON.stringify({volume:0,vibration:false,quality:'low',stick:'medium',tips:false}));localStorage.setItem('chog-room-zero:profile:v1',JSON.stringify({id:'TEST${c.n}0000'.slice(0,8),nickname:'Tester ${c.n + 1}',favourite:null,pinned:[],linked:[]}))`);
-      await c.cmd('Page.navigate', { url }); await sleep(3000);
+      await c.cmd('Page.navigate', { url });
+      // Wait for the hub itself (the loading screen loads the account first, then hands over).
+      for (let i = 0; i < 80; i++) { await sleep(250); if (await c.ev(`!!document.getElementById('hub') && !document.getElementById('boot')`)) break; }
       await c.ev(DRIVER);
     }));
-    // Each client: menu -> Online -> pick the mode (real clicks).
-    for (const c of clients) { await click(c, '[data-act="online"]'); await sleep(300); await click(c, `[data-online="${mode}"]`); }
+    // Each client: hub -> pick the mode -> PLAY (real clicks; master integration pass hub).
+    for (const c of clients) { await click(c, `[data-mode="${mode}"]`); await sleep(300); await click(c, '#playbtn'); }
     const t0 = Date.now(); let inPlay = [];
     while (Date.now() - t0 < 40000) { inPlay = await Promise.all(clients.map((c) => c.ev(`__chog.online() && __chog.phase === 'play'`))); if (inPlay.every(Boolean)) break; await sleep(300); }
     ok('every client was matched and entered the online match through its own menu', inPlay.every(Boolean), inPlay);
@@ -111,7 +113,7 @@ for (const mode of MODES) {
         const c = clients[1]; const before = info[1];
         for (const k of c.held) await c.cmd('Input.dispatchKeyEvent', { type: 'keyUp', code: k, key: KEYS[k][0], windowsVirtualKeyCode: KEYS[k][1] }); c.held.clear(); c.pressed = false;
         await c.cmd('Page.reload'); await sleep(4500); await c.ev(DRIVER);
-        let back = null; for (let i = 0; i < 20 && !back?.online; i++) { back = await c.ev(`(()=>({online:__chog.online(),phase:__chog.phase,room:__chog.net()?.match?.room,you:__chog.net()?.match?.you}))()`); if (!back?.online) await sleep(500); }
+        let back = null; for (let i = 0; i < 30 && !(back?.online && back.phase === 'play'); i++) { back = await c.ev(`(()=>({online:__chog.online(),phase:__chog.phase,room:__chog.net()?.match?.room,you:__chog.net()?.match?.you}))()`); if (!(back?.online && back.phase === 'play')) await sleep(500); }
         reloaded = back;
         ok('1v1: a client that reloads mid-match resumes the same operator in the same match', back?.online && back.room === before.room && back.you === before.you && back.phase === 'play', back);
       }

@@ -129,8 +129,9 @@ try {
   await C.go('/?debug');
   await C.ev(`localStorage.setItem('chog.onboarded','1')`);
   await C.go('/__test/login?provider=google&sub=alice-sub&label=alice@test&to=/%3Fdebug');
-  await hubReady(C); await sleep(800);
+  await hubReady(C); await C.until(`!!window.__chog && !!__chog.acct().profile`, 20000); await sleep(800);
   const c = await acct(C);
+  if (!c) throw new Error(`second device did not load: ${JSON.stringify(await C.ev('({ boot: !!document.getElementById("boot"), hub: !!document.getElementById("hub"), url: location.href })'))} ${C.errors.join(' / ')}`);
   const aNow = await acct(A);
   check('second device: same XP, shards, level, callsign, upgrades, career and medals', c.xp === aNow.xp && c.shards === aNow.shards && c.level === aNow.level && c.callsign === 'Alice-R0'
     && c.upgrades.vitality === 1 && c.matches === aNow.matches && c.medals === aNow.medals && JSON.stringify(c.online) === JSON.stringify(aNow.online), JSON.stringify({ c, a: aNow }));
@@ -156,6 +157,20 @@ try {
   const solo = await D.until(`__chog.phase === 'play' && { tier: __chog.world.actors[0].power.tier, ability: __chog.world.actors[0].ability.name, hud: document.getElementById('hero').innerText }`, 15000);
   check('holder practice: plays as the 1:1 class with its signature', solo && solo.tier === 'legendary' && solo.ability === 'Flashfire' && /Blaze/.test(solo.hud), JSON.stringify(solo));
   await sleep(800); await D.shot('12-practice-blaze');
+
+  // ---- 8. Squad: A creates one in the hub, B joins with the typed code; both see it ----
+  for (const X of [A, B]) { if (await X.ev(`__chog.phase !== 'title'`)) { await X.click('[data-go=menu]'); } await hubReady(X); }
+  await A.click('[data-act=squad-create]');
+  const code = await A.until(`document.getElementById('squadcodeshown')?.innerText || null`, 15000);
+  await B.ev(`document.getElementById('squadcode').value = '${code}'`);
+  await B.click('[data-act=squad-join]');
+  const sq = await B.until(`(() => { const n = __chog.net(); return n?.party?.members?.length === 2 ? n.party.members.map((m) => m.name + (m.leader ? '*' : '')) : null; })()`, 15000);
+  await sleep(500); await B.shot('13-squad');
+  const aSees = await A.until(`document.querySelectorAll('.squad-list li').length === 2`, 8000);
+  check('squad: created in the hub, joined by code from another browser, both see it with the leader marked', code && sq && aSees && sq.includes('Alice-R0*'), JSON.stringify({ code, sq }));
+  await B.click('[data-mode="3v3"]');
+  const fol = await B.ev(`({ disabled: document.getElementById('playbtn').disabled, text: document.querySelector('.hub-play').innerText })`);
+  check('squad: a member who is not the leader cannot start the match and is told why', fol.disabled && /leader starts the match/i.test(fol.text), fol.text.slice(0, 120));
 
   for (const X of [A, B, C, D]) if (X.errors.length) check(`no page errors (${X.label})`, false, X.errors.slice(0, 3).join(' / '));
 } catch (e) {

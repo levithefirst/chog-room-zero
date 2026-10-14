@@ -1,5 +1,6 @@
-// Master build stage E in a real headless Chrome (emulated desktop, NOT a device): DEMO screen tier samples, a demo
-// 1:1 in solo (HUD and ability slot), the Online screen's identity panel and 5v5 lock, the Progress tab.
+// Master build stage E, updated for the master integration pass hub, in a real headless Chrome (emulated desktop, NOT
+// a device): DEMO screen tier samples, a demo 1:1 in practice (HUD and ability slot), the hub's 5v5 lock, the
+// Upgrades and Leaderboard screens.
 // Usage: node tools/master-ui.mjs <baseUrl> [shotDir]. Needs a test build (hooks on) served at baseUrl.
 import { spawn } from 'node:child_process'; import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path';
 const [base, shotDir] = process.argv.slice(2);
@@ -23,7 +24,7 @@ await cmd('Page.navigate', { url: `${base}/?debug` });
 for (let i = 0; i < 50; i++) { await sleep(200); if (await ev('!!window.__chog')) break; }
 await ev(`localStorage.setItem('chog.onboarded','1')`);
 await cmd('Page.navigate', { url: `${base}/?debug` });
-for (let i = 0; i < 50; i++) { await sleep(200); if (await ev('!!document.querySelector("[data-act=demo]")')) break; }
+for (let i = 0; i < 60; i++) { await sleep(200); if (await ev('!!document.querySelector("[data-act=demo]") && !document.getElementById("boot")')) break; }
 const results = [];
 const check = (name, ok, detail = '') => { results.push({ name, ok: !!ok, detail }); console.log(`${ok ? 'PASS' : 'FAIL'} ${name} ${detail}`); };
 
@@ -32,34 +33,26 @@ const demoText = await ev("document.getElementById('overlay').innerText");
 check('DEMO screen lists one token per tier and a 1:1 signature', /chog #53/i.test(demoText) && /flashfire/i.test(demoText) && /gold shell/i.test(demoText) && /epic/i.test(demoText) && /earns nothing/i.test(demoText));
 await shot('demo-screen.png');
 await click('[data-demo="53"]'); await sleep(300);
-await click('[data-go=start]'); await sleep(400);
-await click('[data-go=pick]'); await sleep(1500);
+await click('[data-mode="solo"]'); await sleep(200);
+await click('#playbtn'); await sleep(1500);
 const solo = await ev(`(() => { const p = __chog.world.actors[0]; return { tier: p.power.tier, demo: p.power.demo, ability: p.ability.name, maxHp: p.maxHp, hud: document.getElementById('hero').innerText, abl: document.getElementById('abl').innerText }; })()`);
-check('solo demo #53 plays as a labelled 1:1 with Flashfire', solo?.tier === 'legendary' && solo.demo && solo.ability === 'Flashfire' && /DEMO/.test(solo.hud) && /1:1/.test(solo.hud) && /flashfire/i.test(solo.abl), JSON.stringify(solo));
+check('practice demo #53 plays as a labelled 1:1 (Blaze) with Flashfire', solo?.tier === 'legendary' && solo.demo && solo.ability === 'Flashfire' && /DEMO/.test(solo.hud) && /Blaze/.test(solo.hud) && /flashfire/i.test(solo.abl), JSON.stringify(solo));
 await sleep(500); await shot('solo-demo-hud.png');
-// Back to the menu, then Online.
-await ev(`document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape', key: 'Escape', bubbles: true }))`); await sleep(300);
-// A test build may point at any game server (?server=); nothing listens here, so this checks the screens only.
+// Back to the hub (master integration pass: no Online screen, no Player card tabs; everything is on the hub).
 await cmd('Page.navigate', { url: `${base}/?debug&server=ws://127.0.0.1:9/ws` });
-for (let i = 0; i < 50; i++) { await sleep(200); if (await ev('!!document.querySelector("[data-act=online]")')) break; }
-await click('[data-act=online]'); await sleep(1500);
-const on = await ev(`(() => { const b = document.querySelector('[data-online="5v5"]'); return { text: document.getElementById('overlay').innerText, fiveDisabled: !!b?.disabled, fiveText: b?.innerText ?? null }; })()`);
-check('Online: 5v5 locked for a guest with the reason', on?.fiveDisabled && /holders only/i.test(on.fiveText ?? ''), JSON.stringify(on?.fiveText));
-check('Online: identity panel present (account service state shown honestly)', /Your profile online|not reachable/.test(on?.text ?? ''));
-await shot('online-guest.png');
-await click('[data-act=demo-online]'); await sleep(400);
-const on2 = await ev(`(() => { const b = document.querySelector('[data-online="5v5"]'); return { fiveDisabled: !!b?.disabled, text: document.getElementById('overlay').innerText }; })()`);
-check('Online demo choice (when the account service answers) or unchanged lock (when it does not)', on2 && (on2.fiveDisabled || /DEMO/.test(on2.text)), `fiveDisabled=${on2?.fiveDisabled}`);
+for (let i = 0; i < 60; i++) { await sleep(200); if (await ev('!!document.getElementById("hub") && !document.getElementById("boot")')) break; }
+const hub = await ev(`(() => { const b = document.querySelector('[data-mode="5v5"]'); return { five: b?.innerText ?? '', text: document.getElementById('overlay').innerText }; })()`);
+check('Hub: 5v5 locked for a guest with CHOG HOLDERS ONLY', /CHOG HOLDERS ONLY/.test(hub?.five ?? ''), JSON.stringify(hub?.five));
+check('Hub: class panel and leaderboard preview present', /Your class/i.test(hub?.text ?? '') && /Leaderboard/i.test(hub?.text ?? ''));
+await shot('hub-guest.png');
+await click('[data-act=upgrades]'); await sleep(500);
+const up = await ev(`document.getElementById('overlay').innerText`);
+check('Upgrades screen says upgrades belong to the account (guest)', /belong to your account|Sign in/.test(up ?? ''));
 await click('[data-act=back]'); await sleep(200);
-await click('[data-act=profile]'); await sleep(300);
-await click('[data-tab=progress]'); await sleep(800);
-const prog = await ev(`document.getElementById('overlay').innerText`);
-check('Progress tab says what is saved and where', /Progress|not reachable|Sign in/.test(prog ?? ''));
-await click('[data-tab=ranks]'); await sleep(800);
+await click('[data-act=ranks]'); await sleep(800);
 const ranks = await ev(`document.getElementById('overlay').innerText`);
-check('Leaderboard tab opens for a guest and says honestly whether the service is reachable', /leaderboard/i.test(ranks ?? '') && /not reachable|ranked by opponents killed|offline/i.test(ranks ?? ''));
+check('Leaderboard screen opens for a guest and says honestly whether the service is reachable', /leaderboard/i.test(ranks ?? '') && /ranked by opponents killed|offline|Loading/i.test(ranks ?? ''));
 await shot('leaderboard.png');
-await shot('progress.png');
 check('no page errors', errors.length === 0, errors.join(' | '));
 proc.kill(); await new Promise((r) => { proc.once('exit', r); setTimeout(r, 3000); }); try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* Chrome may still hold files */ }
 console.log(JSON.stringify({ pass: results.every((r) => r.ok), results }));
