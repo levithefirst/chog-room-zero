@@ -11,7 +11,9 @@ import { HEROES } from '../src/config/heroes';
 import { VERSUS_SPAWNS } from '../src/config/map';
 import { TUNING } from '../src/config/tuning';
 import { validateNickname } from '../src/ui/profile';
-import { MODE_SIZE, PROTOCOL, parseClientMsg, toActorInput, type ClientMsg, type Mode, type NetActor, type NetBullet, type NetHit, type NetSound, type PlayerResult, type ServerMsg } from '../src/net/protocol';
+import { MODE_SIZE, PROTOCOL, parseClientMsg, toActorInput, type ClientMsg, type Mode, type NetActor, type NetBullet, type NetHit, type NetProfile, type NetSound, type PlayerResult, type ServerMsg } from '../src/net/protocol';
+import { BASE_POWER, powerFor, signatureFor, type Power, type Tier } from '../src/config/power';
+import type { GameTicket, MatchRecord } from '../api/_lib/game';
 
 export interface Conn {
   send(msg: ServerMsg): void;
@@ -37,11 +39,15 @@ export interface LobbyOptions {
   rateBurst: number;
   friendlyFire: boolean;
   seed(): number;
+  /** Asks the site whether a game ticket is genuine (server/index.ts: POST /api/game/ticket-check). Null = no tickets. */
+  checkTicket: ((ticket: string) => Promise<GameTicket | null>) | null;
+  /** Finished match records kept for settlement, in seconds. */
+  resultsKeepSec: number;
 }
 
 export const DEFAULT_OPTIONS: Omit<LobbyOptions, 'now' | 'seed'> = {
   queueTimeoutSec: 90, reconnectGraceSec: 20, idleTimeoutSec: 10, matchLimitSec: 240, countdownSec: 3, snapEvery: 3,
-  ratePerSec: 90, rateBurst: 60, friendlyFire: false,
+  ratePerSec: 90, rateBurst: 60, friendlyFire: false, checkTicket: null, resultsKeepSec: 2 * 3600,
 };
 
 interface Player {
@@ -60,6 +66,8 @@ interface Player {
   bucket: number;
   bucketAt: number;
   dropped: number;
+  /** The checked ticket, or null (guest: free power, no account, no 5v5). */
+  ticket: GameTicket | null;
 }
 
 interface Room {
@@ -75,6 +83,7 @@ interface Room {
   /** Members who left (or never came back): out of the match, no longer sent anything, free to queue again. */
   left: boolean[];
   over: boolean;
+  demo: boolean;
 }
 
 const STEP = TUNING.simStepSeconds;
@@ -86,6 +95,11 @@ export class Lobby {
   private queues = new Map<string, Player[]>();
   readonly rooms = new Map<string, Room>();
   private nextId = 1;
+  /** Ticket ids already used, with their expiry (unix seconds): a ticket opens one connection only. */
+  private usedTickets = new Map<string, number>();
+  /** Finished matches for settlement (GET /results/:id), dropped after resultsKeepSec. */
+  private results = new Map<string, { at: number; record: MatchRecord }>();
+  private lastSweep = 0;
 
   constructor(opts: Partial<LobbyOptions> & Pick<LobbyOptions, 'now'>) {
     this.opts = { ...DEFAULT_OPTIONS, seed: () => randomBytes(4).readUInt32LE(0), ...opts };
@@ -97,7 +111,7 @@ export class Lobby {
     const now = this.opts.now();
     this.players.set(id, {
       id, conn, token: randomBytes(16).toString('hex'), name: '', hero: 'kettle', state: 'new', queueKey: null, queuedAt: 0,
-      room: null, actorId: -1, lastMsgAt: now, goneAt: 0, bucket: this.opts.rateBurst, bucketAt: now, dropped: 0,
+      room: null, actorId: -1, lastMsgAt: now, goneAt: 0, bucket: this.opts.rateBurst, bucketAt: now, dropped: 0, ticket: null,
     });
     return id;
   }
@@ -143,6 +157,17 @@ export class Lobby {
       }
     }
     for (const room of [...this.rooms.values()]) this.stepRoom(room, now);
+    if (now - this.lastSweep > 60) {
+      this.lastSweep = now;
+      for (const [k, v] of this.results) if (now - v.at > this.opts.resultsKeepSec) this.results.delete(k);
+      const unix = Date.now() / 1000;
+      for (const [k, exp] of this.usedTickets) if (exp < unix) this.usedTickets.delete(k);
+    }
+  }
+
+  /** A finished match's record for the site's settlement, or null (unknown or expired). */
+  result(id: string): MatchRecord | null {
+    return this.results.get(id)?.record ?? null;
   }
 
   stats() {
@@ -170,13 +195,29 @@ export class Lobby {
         p.name = nick.ok ? nick.value : `Guest-${p.token.slice(0, 4).toUpperCase()}`;
         p.hero = HEROES.some((h) => h.id === m.hero) ? m.hero : 'kettle';
         if (p.state === 'new') { p.state = 'idle'; this.byToken.set(p.token, p); }
-        p.conn!.send({ t: 'welcome', v: PROTOCOL, token: p.token, name: p.name, resumed: false });
+        if (!m.ticket || p.state !== 'idle') { this.welcome(p, null); return; }
+        if (!this.opts.checkTicket) { this.welcome(p, 'This server does not check tickets: playing as a free profile.'); return; }
+        // Fail closed: a ticket that cannot be checked in time, or was used before, plays as a free profile.
+        const conn = p.conn;
+        const timeout = new Promise<null>((r) => setTimeout(() => r(null), 5000));
+        void Promise.race([this.opts.checkTicket(m.ticket).catch(() => null), timeout]).then((t) => {
+          if (p.conn !== conn) return;
+          let note: string | null = null;
+          if (!t) note = 'Your ticket could not be checked: playing as a free profile.';
+          else if (this.usedTickets.has(t.tid)) note = 'That ticket was already used: playing as a free profile.';
+          else if (t.acc && [...this.players.values()].some((o) => o !== p && o.ticket?.acc === t.acc && (o.conn || o.state === 'playing'))) note = 'This account is already playing on another connection: playing as a free profile.';
+          else { this.usedTickets.set(t.tid, t.exp); p.ticket = t; }
+          this.welcome(p, note);
+        });
         return;
       }
       case 'queue': {
         if (p.state === 'playing') { this.err(p, 'in-match', 'Already in a match.'); return; }
+        // 5v5 is for verified Chog holders (or a labelled demo token, in demo-only rooms). Enforced here, not in the browser.
+        if (m.mode === '5v5' && !p.ticket?.holder && !p.ticket?.demo) { this.err(p, 'holders-only', '5v5 is for verified Chog holders. Sign in with the wallet that holds your Chog, or play 1v1 and 3v3.'); return; }
         if (p.state === 'queued') this.unqueue(p);
-        const key = `${m.mode}:${m.code ?? ''}`;
+        // Demo tokens only ever meet other demo tokens, so demo power never touches a real match.
+        const key = `${m.mode}:${m.code ?? ''}${p.ticket?.demo ? '|demo' : ''}`;
         const q = this.queues.get(key) ?? [];
         q.push(p);
         this.queues.set(key, q);
@@ -210,19 +251,32 @@ export class Lobby {
   }
 
   // ---- rooms ----
+  private welcome(p: Player, note: string | null): void {
+    const t = p.ticket;
+    const profile: NetProfile = { verified: !!t, tier: t?.tier ?? 'free', holder: !!t?.holder, demo: !!t?.demo, account: !!t?.acc, metadataId: t?.mid ?? null, note };
+    p.conn?.send({ t: 'welcome', v: PROTOCOL, token: p.token, name: p.name, resumed: false, profile });
+  }
+
+  /** Power a player's ticket entitles them to. No ticket: base power. */
+  static powerOf(t: GameTicket | null): Power {
+    if (!t) return BASE_POWER;
+    return powerFor(t.tier, t.up, t.mid && t.tier === 'legendary' ? signatureFor(t.mid) : null, t.demo);
+  }
+
   private startRoom(mode: Mode, members: Player[]): void {
-    const id = randomBytes(4).toString('hex');
+    const id = randomBytes(8).toString('hex');
     // Teams alternate in join order (a, b, a, b, ...): equal sizes, spawns west and east.
     const used = { alpha: 0, bravo: 0 };
     const versus = members.map((p, i) => {
       const team: 'alpha' | 'bravo' = i % 2 === 0 ? 'alpha' : 'bravo';
       const s = VERSUS_SPAWNS[team][used[team]++];
-      return { name: p.name, hero: p.hero, team, x: s.x, y: s.y, facing: team === 'alpha' ? 0 : Math.PI };
+      return { name: p.name, hero: p.hero, team, x: s.x, y: s.y, facing: team === 'alpha' ? 0 : Math.PI, power: Lobby.powerOf(p.ticket) };
     });
     const world = createWorld({ seed: this.opts.seed(), versus, zone: true, friendlyFire: this.opts.friendlyFire });
     const room: Room = {
       id, mode, world, members, inputs: members.map(() => ({ ...IDLE_INPUT })), fireLatch: members.map(() => false),
       startTick: Math.round(this.opts.countdownSec / STEP), steps: 0, lastShot: members.map(() => -1e9), left: members.map(() => false), over: false,
+      demo: members.some((p) => p.ticket?.demo),
     };
     members.forEach((p, i) => {
       p.state = 'playing';
@@ -239,8 +293,14 @@ export class Lobby {
     const w = room.world;
     p.conn?.send({
       t: 'match', room: room.id, mode: room.mode, you: p.actorId, team: w.actors[p.actorId].team, seed: w.rng, friendlyFire: w.friendlyFire,
-      roster: w.actors.map((a) => ({ id: a.id, name: a.name, hero: a.hero.id, team: a.team })),
-      startsIn: Math.max(0, (room.startTick - room.steps) * STEP), zone: w.zone?.plan ?? [],
+      roster: w.actors.map((a) => {
+        const t = room.members[a.id].ticket;
+        return {
+          id: a.id, name: a.name, hero: a.hero.id, team: a.team, tier: a.power.tier as Tier, holder: !!t?.holder, demo: !!t?.demo, metadataId: t?.mid ?? null,
+          ability: { kind: a.ability.kind, name: a.ability.name, cooldown: a.ability.cooldown, text: a.ability.text },
+        };
+      }),
+      startsIn: Math.max(0, (room.startTick - room.steps) * STEP), zone: w.zone?.plan ?? [], demo: room.demo,
     });
   }
 
@@ -293,6 +353,7 @@ export class Lobby {
       hp: r3(a.hp), maxHp: a.maxHp, armor: r3(a.armor), maxArmor: a.maxArmor, alive: a.alive, ammo: a.ammo, reserve: a.reserve,
       reloadLeft: r3(a.reloadLeft), abilityCd: r3(a.abilityCd), revealLeft: r3(a.revealLeft), muzzle: r3(a.muzzle), hitFlash: r3(a.hitFlash),
       deadFor: r3(a.deadFor), lastSpread: r3(a.lastSpread), stepAcc: r3(a.stepAcc), kills: a.kills, connected: !!room.members[a.id].conn,
+      shieldLeft: r3(a.shieldLeft), frenzyLeft: r3(a.frenzyLeft), slowLeft: r3(a.slowLeft), burstLeft: r3(a.burstLeft),
     }));
     const bullets: NetBullet[] = w.bullets.filter((b) => w.actors[b.owner].team === me.team || seenBy(b.x, b.y))
       .map((b) => ({ x: r3(b.x), y: r3(b.y), dx: r3(b.dx), dy: r3(b.dy), ox: r3(b.ox), oy: r3(b.oy), owner: b.owner, weapon: b.weapon.id }));
@@ -329,9 +390,19 @@ export class Lobby {
       id: a.id, name: a.name, hero: a.hero.id, team: a.team, kills: a.kills, damageDealt: Math.round(a.damageDealt), damageTaken: Math.round(a.damageTaken),
       hits: a.hits, bullets: a.bullets, alive: a.alive, cause: a.death?.cause ?? null,
     }));
+    // Kept for the site's settlement (GET /results/:id). Only accounts from checked tickets appear; demo is flagged.
+    const record: MatchRecord = {
+      id: room.id, mode: room.mode, demo: room.demo, winner: w.winner, reason, seconds: Math.round(matchSeconds(w)), endedAt: Math.floor(Date.now() / 1000),
+      players: w.actors.map((a) => {
+        const t = room.members[a.id].ticket;
+        return { acc: t?.acc ?? null, team: a.team, tier: a.power.tier, tok: t?.holder ? t.tok : null, mid: t?.holder ? t.mid : null, own: t?.holder ? t.own : null, kills: a.kills, damage: Math.round(a.damageDealt), left: room.left[a.id] };
+      }),
+    };
+    this.results.set(room.id, { at: this.opts.now(), record });
+    const settle = !room.demo && record.players.some((x) => x.acc);
     room.members.forEach((p, i) => {
       if (room.left[i]) return;
-      p.conn?.send({ t: 'over', winner: w.winner, reason, results });
+      p.conn?.send({ t: 'over', winner: w.winner, reason, results, matchId: room.id, settle });
       p.state = 'idle';
       p.room = null;
       p.actorId = -1;
@@ -348,7 +419,8 @@ export class Lobby {
       if (i >= 0) q.splice(i, 1);
       if (!q.length) this.queues.delete(p.queueKey);
       else {
-        const [mode, code] = p.queueKey.split(':');
+        const [mode, rest] = p.queueKey.split(':');
+        const code = rest.replace('|demo', '');
         for (const o of q) o.conn?.send({ t: 'queued', mode: mode as Mode, have: q.length, need: MODE_SIZE[mode as Mode], code: code || null });
       }
     }

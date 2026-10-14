@@ -2,7 +2,7 @@
 // a smaller upgrade path with shards, and the ten 1:1 Chogs each carry a signature ability in the single ability slot.
 // Every number here was chosen from measured duels (tests/power.test.ts, docs/design/power.md), not from feel.
 // Movement speed is never changed by tier or upgrade: positioning stays the skill.
-import { ONE_OF_ONE_IDS, TIER_TABLE } from '../nft/tier-table';
+import { ONE_OF_ONE_IDS, TIER_TABLE } from '../nft/tier-table.js';
 import type { AbilityDef } from './heroes';
 
 export type Tier = 'free' | 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';

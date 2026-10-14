@@ -19,10 +19,10 @@ class FakeConn {
 function setup(opts: Record<string, unknown> = {}) {
   let t = 0;
   const lobby = new Lobby({ now: () => t, seed: () => 7, ...opts });
-  const join = (name: string, hero = 'kettle') => {
+  const join = (name: string, hero = 'kettle', ticket?: string) => {
     const c = new FakeConn();
     const id = lobby.connect(c);
-    lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name, hero }));
+    lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name, hero, ticket }));
     return { c, id, say: (m: object) => lobby.message(id, JSON.stringify(m)) };
   };
   const run = (seconds: number, each?: () => void) => { for (let i = 0; i < Math.round(seconds * 60); i++) { t += 1 / 60; each?.(); lobby.tick(); } };
@@ -71,12 +71,15 @@ describe('RC-8 matchmaking and teams', () => {
     expect(ma.roster.map((r) => r.name)).toEqual(['Alpha', 'Bravo']);
     expect(ma.zone).toHaveLength(4);
   });
-  it('3v3 and 5v5 fill to 6 and 10 with even teams; queues of different modes never mix', () => {
+  it('3v3 and 5v5 fill to 6 and 10 with even teams; queues of different modes never mix', async () => {
     for (const [mode, n] of [['3v3', 6], ['5v5', 10]] as const) {
-      const { join } = setup();
+      // 5v5 is for verified holders (master build): every 5v5 player here carries a holder ticket.
+      let tid = 0;
+      const { join } = setup({ checkTicket: async () => ({ tid: `t${tid++}`, acc: `acc${tid}`, tier: 'free', up: { vitality: 0, plating: 0, focus: 0 }, tok: tid, mid: tid, tokTier: 'common', own: '0xA', holder: true, demo: false, name: '', exp: 2e9 }) });
       const lone = join('Other');
       lone.say({ t: 'queue', mode: '1v1' });
-      const ps = Array.from({ length: n }, (_, i) => join(`P${i}`));
+      const ps = Array.from({ length: n }, (_, i) => join(`P${i}`, 'kettle', mode === '5v5' ? 'aaaa.bbbb' : undefined));
+      await new Promise((r) => setTimeout(r, 0));
       ps.forEach((p, i) => { p.say({ t: 'queue', mode }); if (i < n - 1) expect(p.c.last('match')).toBeUndefined(); });
       const m = ps.map((p) => p.c.last('match')!);
       expect(new Set(m.map((x) => x.room)).size).toBe(1);

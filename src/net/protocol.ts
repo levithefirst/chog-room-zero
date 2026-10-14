@@ -2,14 +2,18 @@
 // controls); the server runs the match (src/net/room.ts) and decides movement, shots, damage, pickups, the zone and
 // the result. Every client message is validated here before the server looks at it.
 import type { ActorInput, Team } from '../sim/world';
+import type { AbilityKind } from '../config/heroes';
+import type { Tier } from '../config/power';
 
 export const PROTOCOL = 1;
 export type Mode = '1v1' | '3v3' | '5v5';
 export const MODE_SIZE: Record<Mode, number> = { '1v1': 2, '3v3': 6, '5v5': 10 };
-export const MAX_MESSAGE_BYTES = 512;
+// A hello can carry a signed game ticket (about 500 characters).
+export const MAX_MESSAGE_BYTES = 1200;
+export const MAX_TICKET = 900;
 
 export type ClientMsg =
-  | { t: 'hello'; v: number; name: string; hero: string; token?: string }
+  | { t: 'hello'; v: number; name: string; hero: string; token?: string; ticket?: string }
   | { t: 'queue'; mode: Mode; code?: string }
   | { t: 'leave' }
   | { t: 'input'; seq: number; mx: number; my: number; aim: number; fire: boolean; quiet: boolean; reload: boolean; ability: boolean }
@@ -23,7 +27,19 @@ export interface NetActor {
   ammo: number; reserve: number; reloadLeft: number; abilityCd: number; revealLeft: number;
   muzzle: number; hitFlash: number; deadFor: number; lastSpread: number; stepAcc: number;
   kills: number; connected: boolean;
+  /** Signature effect timers, so every client can draw the telegraphs. */
+  shieldLeft: number; frenzyLeft: number; slowLeft: number; burstLeft: number;
 }
+
+/** What everyone in a match knows about each player: power is never hidden from the opponent. */
+export interface RosterEntry {
+  id: number; name: string; hero: string; team: Team;
+  tier: Tier; holder: boolean; demo: boolean; metadataId: number | null;
+  ability: { kind: AbilityKind; name: string; cooldown: number; text: string };
+}
+
+/** The server's view of this connection after checking its ticket. */
+export interface NetProfile { verified: boolean; tier: Tier; holder: boolean; demo: boolean; account: boolean; metadataId: number | null; note: string | null }
 export interface NetBullet { x: number; y: number; dx: number; dy: number; ox: number; oy: number; owner: number; weapon: string }
 export interface NetSound { type: string; x: number; y: number; radius: number; source: number; team: Team; weapon?: string; blocked?: boolean }
 export interface NetHit { target: number; by: number; x: number; y: number; fromX: number; fromY: number; killed: boolean }
@@ -31,12 +47,12 @@ export interface NetHit { target: number; by: number; x: number; y: number; from
 export interface PlayerResult { id: number; name: string; hero: string; team: Team; kills: number; damageDealt: number; damageTaken: number; hits: number; bullets: number; alive: boolean; cause: string | null }
 
 export type ServerMsg =
-  | { t: 'welcome'; v: number; token: string; name: string; resumed: boolean }
+  | { t: 'welcome'; v: number; token: string; name: string; resumed: boolean; profile?: NetProfile }
   | { t: 'queued'; mode: Mode; have: number; need: number; code: string | null }
   | { t: 'queueTimeout' }
-  | { t: 'match'; room: string; mode: Mode; you: number; team: Team; seed: number; friendlyFire: boolean; roster: { id: number; name: string; hero: string; team: Team }[]; startsIn: number; zone: { x: number; y: number; r: number }[] }
+  | { t: 'match'; room: string; mode: Mode; you: number; team: Team; seed: number; friendlyFire: boolean; roster: RosterEntry[]; startsIn: number; demo?: boolean; zone: { x: number; y: number; r: number }[] }
   | { t: 'snap'; tick: number; actors: NetActor[]; bullets: NetBullet[]; pickups: boolean[]; sounds: NetSound[]; hits: NetHit[]; barriers: { x0: number; y0: number; x1: number; y1: number; left: number }[] }
-  | { t: 'over'; winner: Team | null; reason: 'eliminated' | 'time'; results: PlayerResult[] }
+  | { t: 'over'; winner: Team | null; reason: 'eliminated' | 'time'; results: PlayerResult[]; matchId?: string; settle?: boolean }
   | { t: 'pong'; at: number; tick: number }
   | { t: 'error'; code: string; message: string };
 
@@ -54,7 +70,8 @@ export function parseClientMsg(raw: string): ClientMsg | null {
     case 'hello':
       if (m.v !== PROTOCOL || typeof m.name !== 'string' || m.name.length > 40 || typeof m.hero !== 'string' || m.hero.length > 16) return null;
       if (m.token !== undefined && (typeof m.token !== 'string' || !/^[0-9a-f]{32}$/.test(m.token))) return null;
-      return { t: 'hello', v: PROTOCOL, name: m.name, hero: m.hero, token: m.token as string | undefined };
+      if (m.ticket !== undefined && (typeof m.ticket !== 'string' || m.ticket.length > MAX_TICKET || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(m.ticket))) return null;
+      return { t: 'hello', v: PROTOCOL, name: m.name, hero: m.hero, token: m.token as string | undefined, ticket: m.ticket as string | undefined };
     case 'queue':
       if (typeof m.mode !== 'string' || !MODES.includes(m.mode)) return null;
       if (m.code !== undefined && (typeof m.code !== 'string' || !/^[A-Z0-9]{4,8}$/.test(m.code))) return null;
