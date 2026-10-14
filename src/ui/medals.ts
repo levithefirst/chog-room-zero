@@ -1,6 +1,7 @@
 // Medals (RC-7): a small set of achievements earned from real, tracked play. Every unlock rule is a pure function of
 // the career records (after the run is recorded) and the run that just ended, so it is deterministic and tested.
-// Saved on this device next to the records. No rewards, currency or random drops: a medal is a record of play.
+// A signed-in player's medals are awarded and stored on the server (api/_lib/career.ts uses these same rules); a guest's
+// last for the session. No rewards, currency or random drops: a medal is a record of play.
 import type { KeyValueStore } from '../nft/history';
 import type { Records } from './records';
 

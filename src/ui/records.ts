@@ -1,5 +1,5 @@
-// Personal bests (RC-1). Guests included: saved in localStorage on this device only, per hero and overall.
-// Pure over a KeyValueStore so it is unit-tested; corrupt or blocked storage never breaks the game.
+// Practice records (RC-1, master integration pass): per hero and overall. A signed-in player's are aggregated on the
+// server from stored runs (api/_lib/career.ts); a guest's live in a session memory store. Pure over a KeyValueStore.
 import type { KeyValueStore } from '../nft/history';
 
 export interface Best {

@@ -1,6 +1,6 @@
-// Player profile and settings (RC-7). Guest identity lives on this device only, in localStorage, like the records:
-// a random profile id, an optional callsign, a favourite operator and up to three pinned medals. Pure over a
-// KeyValueStore so it is unit-tested; corrupt or blocked storage falls back to defaults and never breaks the game.
+// Player card and settings (RC-7, master integration pass). The card (callsign, favourite operator, pinned medals) of a
+// signed-in player is the account's, stored on the server; a guest's lives in a session memory store. Settings are the
+// one thing kept in localStorage (device preferences). Pure over a KeyValueStore so it is unit-tested.
 import type { KeyValueStore } from '../nft/history';
 
 export interface LinkedIdentity {
@@ -15,6 +15,8 @@ export interface LinkedIdentity {
 export interface Profile {
   id: string;
   nickname: string | null;
+  /** Shown when there is no callsign: a signed-in account's "Player-XXXX" (a guest gets "Guest-XXXX"). */
+  fallback?: string;
   favourite: string | null;
   pinned: string[];
   linked: LinkedIdentity[];
@@ -85,7 +87,7 @@ export function saveProfile(store: KeyValueStore, p: Profile): void {
 
 /** Shown name: the callsign, or a stable guest name from the profile id. */
 export function displayName(p: Profile): string {
-  return p.nickname ?? `Guest-${p.id.slice(0, 4)}`;
+  return p.nickname ?? p.fallback ?? `Guest-${p.id.slice(0, 4)}`;
 }
 
 /** Pin or unpin a medal (max three, oldest pin drops off). */

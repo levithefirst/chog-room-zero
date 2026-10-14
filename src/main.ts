@@ -16,25 +16,27 @@ import { nextPhase, simRuns, type MatchEvent, type Phase } from './sim/match';
 import { TUNING } from './config/tuning';
 import { HEROES, heroById } from './config/heroes';
 import { heroForKey } from './ui/heroKeys';
+import { portraitSvg } from './ui/art';
+import { WEAPONS } from './config/weapons';
 import { orientationOf, ORIENTATION_QUERY } from './ui/orientation';
 import { fullscreenSupported, isFullscreen, layoutStage, rectToStage, requestLandscape, stage, type LaunchResult } from './ui/stage';
 import { coverBoxAt } from './sim/cover';
 import { adapterFromUrl, resolveIdentity, GUEST, type Identity } from './nft/identity';
-import { recordRun, type TokenHistory } from './nft/history';
 import { boundIdentity } from './nft/identity';
 import { DEMO_COPY, TRAIT_INFO, isTokenId, sampleTokens, traitsFor } from './nft/traits';
-import { RECORDS_KEY, loadRecords, recordBest, type Records } from './ui/records';
-import { PROFILE_KEY, QUALITY_DPR, STICK_PX, displayName, linkIdentity, loadProfile, loadSettings, saveProfile, saveSettings, togglePin, validateNickname, type Profile, type Settings } from './ui/profile';
-import { MEDALS_KEY, awardMedals, loadMedals, type MedalDef, type Unlocked } from './ui/medals';
+import { loadRecords, recordBest, type Records } from './ui/records';
+import { DEFAULT_SETTINGS, QUALITY_DPR, SETTINGS_KEY, STICK_PX, displayName, loadProfile, loadSettings, saveSettings, togglePin, validateNickname, type Profile, type Settings } from './ui/profile';
+import { MEDALS, awardMedals, loadMedals, type MedalDef, type Unlocked } from './ui/medals';
 import { TIPS_KEY, loadShownTips, nextTip, saveShownTips, tipText, type TipId } from './ui/tips';
-import { esc, howtoHtml, nickHtml, onlineHtml, onlineResultsHtml, profileHtml, resultsHtml, selectHtml, settingsHtml, titleHtml, type AuthView, type ProfileTab, type ScreenCtx } from './ui/screens';
-import { discoverWallets, fetchAuthConfig, fetchSession, googleSignIn, signOut, walletSignIn, type ServerIdentity } from './ui/auth';
+import { esc, howtoHtml, medalCard, nickHtml, resultsHtml, selectHtml, settingsHtml, type AuthView } from './ui/screens';
+import { boardScreenHtml, careerHtml, classOf, hubHtml, medalsScreenHtml, onlineResultsHtml, upgradesHtml, upgradesReady, type HubCtx, type NetView, type PlayMode } from './ui/hub';
+import { discoverWallets, fetchAuthConfig, fetchSession, googleSignIn, signOut, walletSignIn } from './ui/auth';
 import { SIDEGRADES } from './sim/operators';
 import { createAutopilot, type Autopilot } from './debug/autopilot';
 import { createOnlineDriver } from './debug/onlineDriver';
 import * as account from './net/account';
-import { emptyAcct, rewardLine } from './ui/account';
-import { powerForToken, signatureFor, tierOfMetadataId, BASE_POWER, ONE_OF_ONE, TIER_DEFS, type Power } from './config/power';
+import { emptyAcct } from './ui/account';
+import { chogName, powerForToken, signatureFor, tierOfMetadataId, ONE_OF_ONE, TIER_DEFS, type Power } from './config/power';
 import { tierEffect } from './ui/account';
 
 // DEMO screen: the first token of each tier in the verified catalogue, plus two 1:1s with different signatures.
@@ -67,21 +69,50 @@ declare const __BUILD_SHA__: string;
 // False in production builds (vite.config.ts): the online test hooks below are then compiled out.
 declare const __TEST_HOOKS__: boolean;
 
-// Boot screen (RC-7): the real start-up steps, in order, so a slow phone shows progress instead of black. There is
-// no server to connect to: every step is local work. A failure shows the reason and a Retry button.
-const BOOT_STEPS = ['Loading fonts', 'Starting the renderer', 'Checking your Chog', 'Building the basement'];
+// Loading screen (master integration pass): its own full screen, separate from the hub, with the real start-up steps
+// in order (fonts, renderer, sign-in, the account, the map), a percentage, rotating game tips, and a transition into
+// the hub. A failure shows the reason and a Retry button.
+const BOOT_STEPS = ['Loading fonts', 'Starting the renderer', 'Building the basement', 'Checking your sign-in', 'Loading your account'];
+const BOOT_TIPS = [
+  'Walls block bullets and sight. If you cannot see them, they cannot hit you.',
+  'Running is loud. Creep (half push or Shift) and they hear nothing.',
+  'Pale rings are noises you heard, not saw.',
+  'In 3v3 and 5v5 a downed teammate can be revived: stand next to them and hold fire.',
+  'A health pickup at full health still overheals you for a while.',
+  'Your Chog sets your starting class. Your account upgrades take it further.',
+  'The ten 1:1 legends each have their own signature, telegraph and counter.',
+  'The leaderboard counts kills in saved online matches, then wins.',
+];
+const bootStart = performance.now();
+let bootTipTimer: ReturnType<typeof setInterval> | null = null;
 function boot(i: number) {
-  const fill = document.getElementById('bootfill'), step = document.getElementById('bootstep');
-  if (fill) fill.style.width = `${Math.round((i / BOOT_STEPS.length) * 100)}%`;
-  if (step) step.textContent = `${i + 1}/${BOOT_STEPS.length} ${BOOT_STEPS[i] ?? ''}`;
+  const fill = document.getElementById('bootfill'), step = document.getElementById('bootstep'), pctEl = document.getElementById('bootpct');
+  const share = Math.round((i / BOOT_STEPS.length) * 100);
+  if (fill) fill.style.width = `${share}%`;
+  if (pctEl) pctEl.textContent = `${share}%`;
+  if (step) step.textContent = BOOT_STEPS[i] ?? '';
+  const tip = document.getElementById('boottip');
+  if (tip && !bootTipTimer) {
+    let k = Math.floor(Math.random() * BOOT_TIPS.length);
+    tip.textContent = BOOT_TIPS[k];
+    bootTipTimer = setInterval(() => { k = (k + 1) % BOOT_TIPS.length; tip.classList.remove('in'); void tip.offsetWidth; tip.textContent = BOOT_TIPS[k]; tip.classList.add('in'); }, 2200);
+  }
 }
-function bootDone() {
+async function bootDone() {
   const b = document.getElementById('boot');
   if (!b) return;
-  boot(BOOT_STEPS.length - 1);
   (document.getElementById('bootfill') as HTMLElement).style.width = '100%';
+  const pctEl = document.getElementById('bootpct');
+  if (pctEl) pctEl.textContent = '100%';
+  const step = document.getElementById('bootstep');
+  if (step) step.textContent = 'Ready';
+  // Long enough to read the title and see the bar finish, never a flash.
+  const wait = Math.max(0, 900 - (performance.now() - bootStart));
+  await new Promise((r) => setTimeout(r, wait + 250));
+  if (bootTipTimer) clearInterval(bootTipTimer);
   b.classList.add('done');
-  setTimeout(() => b.remove(), 400);
+  document.body.classList.add('hub-in');
+  setTimeout(() => { b.remove(); document.body.classList.remove('hub-in'); }, 700);
 }
 
 async function start() {
@@ -110,25 +141,40 @@ async function start() {
     : 'Guest';
   // Onboarding: shown once on first launch, re-openable from the title.
   const ONBOARD_KEY = 'chog.onboarded';
-  type TitleView = 'main' | 'howto' | 'demo' | 'profile' | 'settings' | 'nick' | 'online';
+  type TitleView = 'main' | 'howto' | 'demo' | 'settings' | 'nick' | 'upgrades' | 'ranks' | 'career' | 'medals';
   let titleView: TitleView = (() => { try { return localStorage.getItem(ONBOARD_KEY) === '1' ? 'main' : 'howto'; } catch { return 'main'; } })();
-  let records: Records = loadRecords(localStorage);
-  let lastRun: { newBest: { time: boolean; kills: boolean }; earned: MedalDef[] } | null = null;
-  // RC-7: guest profile, settings, medals and tips, all on this device.
-  let profile: Profile = loadProfile(localStorage);
+  let lastRun: { newBest: { time: boolean; kills: boolean }; earned: MedalDef[]; saved: 'account' | 'session' | 'saving' | 'failed' } | null = null;
+  // Progression belongs to the account (master integration pass): records, medals, callsign, favourite and pins come
+  // from the server for a signed-in player. A guest's live in this memory store for the session only. The browser
+  // keeps preferences only (settings, tips, onboarding, last operator, last mode, demo pick).
+  const mem = new Map<string, string>();
+  const guestStore = { getItem: (k: string) => mem.get(k) ?? null, setItem: (k: string, v: string) => { mem.set(k, v); } };
+  let guestProfile: Profile = loadProfile(guestStore);
+  let guestRecords: Records = loadRecords(guestStore);
+  let guestMedals: Unlocked = loadMedals(guestStore);
   let settings: Settings = loadSettings(localStorage);
-  let medals: Unlocked = loadMedals(localStorage);
   let shownTips = loadShownTips(localStorage);
-  let profileTab: ProfileTab = 'player';
+  const MODE_KEY = 'chog.mode';
+  let playMode: PlayMode = (() => { try { const m = localStorage.getItem(MODE_KEY); return m === '1v1' || m === '3v3' || m === '5v5' || m === 'solo' ? m : 'solo'; } catch { return 'solo'; } })();
   let confirmReset = false;
   let nickError = '';
   let nickSaved = false;
-  let nickReturn: TitleView = 'profile';
+  let nickReturn: TitleView = 'career';
   const auth: AuthView = { config: null, session: [], wallets: [], busy: false, message: '' };
-  // Master build: the server account (XP, shards, upgrades, rating), the held Chogs read on Monad, and the ticket
-  // choice for online play. Loaded when Online or the Progress tab opens; never on a plain launch.
+  // The server account (XP, shards, upgrades, rating, callsign, medals, career), the held Chogs read on Monad, and the
+  // ticket choice for online play. Loaded during the loading screen, and again whenever a screen shows it.
   const acct = emptyAcct();
-  let lastReward: { pending: boolean; reward: account.Reward | null; note: string; matchId: string | null } = { pending: false, reward: null, note: '', matchId: null };
+  const signedIn = () => acct.signedIn && !!acct.profile;
+  const curRecords = (): Records => (signedIn() ? acct.profile!.practice : guestRecords);
+  const curMedals = (): Unlocked => (signedIn() ? acct.profile!.medals : guestMedals);
+  /** The player card: the account's (callsign, favourite, pins, linked sign-ins) or this session's guest card. */
+  const curProfile = (): Profile => {
+    if (!signedIn()) return guestProfile;
+    const p = acct.profile!;
+    const id = p.account.replace(/[^A-Za-z0-9]/g, '').slice(0, 8).toUpperCase();
+    return { id, nickname: p.callsign, fallback: `Player-${id.slice(0, 4)}`, favourite: p.favourite, pinned: p.pins, linked: acct.identities.map((i) => ({ ...i, subject: '' })) };
+  };
+  let lastReward: { pending: boolean; reward: account.Reward | null; note: string; matchId: string | null; before: { xp: number; shards: number; rating: number } | null } = { pending: false, reward: null, note: '', matchId: null, before: null };
   const canVibrate = typeof navigator.vibrate === 'function';
   // Per-run counters for the results screen and medals (the sim does not track these).
   let runPickups = 0, runAbilities = 0;
@@ -146,7 +192,11 @@ async function start() {
   // scripted player (src/debug/onlineDriver.ts) send the controls, so a browser service that cannot click can play.
   const ONLINE_AUTO = (Object.keys(MODE_SIZE) as Mode[]).find((m) => m === QS.get('online')) ?? null;
   const ONLINE_CODE = QS.get('code') ?? '';
-  const onlineDriver = __TEST_HOOKS__ && QS.has('debug') && QS.get('drive') === '1' ? createOnlineDriver() : null;
+  const scripted = __TEST_HOOKS__ && QS.has('debug') && QS.get('drive') === '1' ? createOnlineDriver() : null;
+  // &driveAfter=<s>: the scripted player stands still for the first s seconds of the match (journey tests need a match
+  // past the 20 s reward minimum). Test builds only, like the driver itself.
+  const driveAfter = Number(QS.get('driveAfter')) || 0;
+  const onlineDriver = scripted ? (w: World) => (matchSeconds(w) >= driveAfter ? scripted(w) : { ...IDLE_INPUT, aim: w.actors[0].facing }) : null;
 
   let phase: Phase = 'title';
   let heroId = (() => {
@@ -159,6 +209,7 @@ async function start() {
       return HEROES[0].id;
     }
   })();
+  let heroPicked = (() => { try { return !!localStorage.getItem(HERO_KEY); } catch { return false; } })();
   let runIndex = 0;
   let autopilot: Autopilot | null = null;
   let suggestPilot: Autopilot | null = null;
@@ -166,11 +217,9 @@ async function start() {
   let acc = 0;
   let recapLeft = 0;
   let playTime = 0;
-  let history: TokenHistory | null = null;
   let toastLeft = 0;
   const fx = createFx();
   const debugStats = { blockedCues: 0 };
-  boot(3);
   renderer.reset(world);
 
   // Settings that reach into running systems: volume, render sharpness, touch stick travel.
@@ -324,6 +373,7 @@ async function start() {
       case 'pause': return showPause();
       case 'recap': return showRecap();
       case 'results': return online ? showOnlineResults() : show(resultsHtml(ctx(), report()));
+      default: return;
     }
   }
 
@@ -338,11 +388,16 @@ async function start() {
   }
 
   // Everything a screen may show, read fresh each render.
-  function ctx(): ScreenCtx {
+  function ctx(): HubCtx {
+    const nv: NetView = {
+      url: NET_URL, state: net?.state ?? 'offline', message: net?.message ?? '', queue: net?.queue ?? null, rtt: net?.rtt ?? 0,
+      party: net?.party ?? null, follower: !!net?.follower,
+    };
     return {
-      touch: input.mode === 'touch', profile, settings, records, medals, heroId, demoChip: demoChip(), marking: identity.marking,
+      touch: input.mode === 'touch', profile: curProfile(), settings, records: curRecords(), medals: curMedals(), heroId, demoChip: demoChip(), marking: identity.marking,
       muted: audio.muted, canFs: canFs && !isFullscreen(), canVibrate, build: __BUILD_SHA__, auth,
       acct, netProfile: net?.profile ?? null, demoToken: identity.kind === 'bound' ? identity.tokenId : null,
+      mode: playMode, net: nv,
     };
   }
 
@@ -356,16 +411,18 @@ async function start() {
     switch (titleView) {
       case 'howto': return show(howtoHtml(c));
       case 'demo': return showDemo();
-      case 'profile': return show(profileHtml(c, profileTab));
       case 'settings': return show(settingsHtml(c, confirmReset));
-      case 'online': return show(onlineHtml(c, { url: NET_URL, state: net?.state ?? 'offline', message: net?.message ?? '', queue: net?.queue ?? null, rtt: net?.rtt ?? 0 }));
+      case 'upgrades': return show(upgradesHtml(c));
+      case 'ranks': return show(boardScreenHtml(c));
+      case 'career': return show(careerHtml(c));
+      case 'medals': return show(medalsScreenHtml(c, (m) => medalCard(m, c)));
       case 'nick': {
         show(nickHtml(c, nickError, nickSaved));
         const inp = document.getElementById('nickin') as HTMLInputElement | null;
         if (inp && !c.touch) { inp.focus(); inp.select(); }
         return;
       }
-      default: return show(titleHtml(c));
+      default: return show(hubHtml(c));
     }
   }
 
@@ -385,6 +442,7 @@ async function start() {
 
   function selectHero(id: string) {
     heroId = id;
+    heroPicked = true;
     try {
       localStorage.setItem(HERO_KEY, heroId);
     } catch {
@@ -394,7 +452,13 @@ async function start() {
   }
 
   function showLoading() {
-    card(`<div class="kicker">Deploying ${esc(heroById(heroId).name)}</div><h2>Room Zero</h2><div class="loadbar"><i></i></div>`);
+    // Deploy screen: what you are dropping into, full screen, while the world is built.
+    const h = heroById(heroId);
+    const m = online ? `Online ${onlineMode}` : 'Practice · 5 hostiles';
+    const tip = BOOT_TIPS[(runIndex + 3) % BOOT_TIPS.length];
+    show(`<div class="screen deploy"><div class="deploy-in"><div class="kicker">${esc(m)}</div><h2>Room Zero</h2>
+<div class="deploy-op">${portraitSvg(h, 'dep', identity.marking)}<span><b>${esc(h.name)}</b><small>${esc(h.role)} · ${esc(WEAPONS[h.weapon].name)}</small></span></div>
+<div class="loadbar"><i></i></div><p class="deploy-tip">${esc(tip)}</p></div></div>`);
     // Build the world (and bake the map if needed) after the loading card has painted.
     requestAnimationFrame(() => setTimeout(() => {
       if (online) beginOnlineWorld(); else beginWorld();
@@ -440,57 +504,88 @@ async function start() {
       hits: p.hits, bullets: p.bullets, dealt: p.damageDealt, taken: p.damageTaken, pickups: runPickups, abilities: runAbilities,
       newBest: lastRun?.newBest ?? null, earned: lastRun?.earned ?? [],
       demoRow: identity.kind === 'bound' ? ` · <span class="demo">DEMO</span> #${esc(identity.tokenId!)}` : '',
-      history: history ? `<p style="font-size:13px"><span class="demo">DEMO</span> Chog #${esc(history.tokenId)} on this device: ${history.runs} runs, ${history.wins} cleared, ${history.kills} kills. No ownership checked.</p>` : '',
+      saved: lastRun?.saved ?? 'session',
     };
   }
 
   // ---- Menu actions ----
-  function setProfile(next: Profile) {
-    profile = next;
-    saveProfile(localStorage, profile);
+  /** Favourite operator and pinned medals: saved on the account when signed in, for the session as a guest. */
+  async function setCard(next: { favourite?: string | null; pins?: string[] }) {
+    if (!signedIn()) { guestProfile = { ...guestProfile, ...(next.favourite !== undefined ? { favourite: next.favourite } : {}), ...(next.pins ? { pinned: next.pins } : {}) }; render(); return; }
+    const p = acct.profile!;
+    if (next.favourite !== undefined) p.favourite = next.favourite;
+    if (next.pins) p.pins = next.pins;
+    render();
+    const r = await account.setPrefs(next);
+    if (!r?.ok) { acct.message = 'Could not save that to your account.'; await refreshAccount(); }
   }
 
-  function saveNick() {
+  async function saveNick() {
     const inp = document.getElementById('nickin') as HTMLInputElement | null;
     const v = validateNickname(inp?.value ?? '');
     if (!v.ok) { nickError = v.error; nickSaved = false; render(); return; }
-    setProfile({ ...profile, nickname: v.value });
+    if (signedIn()) {
+      const r = await account.setCallsign(v.value);
+      if (!r?.ok) { nickError = r?.error ?? 'Could not save your callsign right now.'; nickSaved = false; render(); return; }
+      acct.profile!.callsign = r.callsign ?? v.value;
+      // The next online connection uses the new callsign.
+      if (net && net.state !== 'match' && net.state !== 'reconnecting' && net.state !== 'queued') { net.close(); net = null; }
+    } else guestProfile = { ...guestProfile, nickname: v.value };
     nickError = '';
     nickSaved = true;
     render();
     setTimeout(() => { if (titleView === 'nick' && nickSaved) { nickSaved = false; titleView = nickReturn; render(); } }, 700);
   }
 
-  function resetProgress() {
-    try {
-      for (const k of [RECORDS_KEY, MEDALS_KEY, PROFILE_KEY, TIPS_KEY, DEMO_KEY, RING_HINT_KEY]) localStorage.removeItem(k);
-      for (let i = localStorage.length - 1; i >= 0; i--) { const k = localStorage.key(i); if (k?.startsWith('chog-room-zero:history:')) localStorage.removeItem(k); }
-    } catch { /* storage blocked */ }
-    records = loadRecords(localStorage);
-    medals = loadMedals(localStorage);
-    profile = loadProfile(localStorage);
+  /** Clears this browser's preferences. Progress is on the account and is never touched from here. */
+  function clearPreferences() {
+    try { for (const k of [SETTINGS_KEY, TIPS_KEY, ONBOARD_KEY, RING_HINT_KEY, HERO_KEY, MODE_KEY, DEMO_KEY]) localStorage.removeItem(k); } catch { /* storage blocked */ }
+    settings = { ...DEFAULT_SETTINGS };
+    applySettings();
     shownTips = loadShownTips(localStorage);
     ringHintDone = false;
     setDemo(null);
     confirmReset = false;
   }
 
+  function setMode(m: PlayMode) {
+    playMode = m;
+    try { localStorage.setItem(MODE_KEY, m); } catch { /* ignore */ }
+  }
+
+  /** The hub's PLAY button: practice starts at once; online modes queue (a squad leader queues the squad). */
+  function hubPlay() {
+    if (playMode === 'solo') { go('start'); go('pick'); return; }
+    if (!NET_URL) return;
+    joinOnline(playMode);
+  }
+
   function menuAct(a: string) {
     switch (a) {
       case 'howto': titleView = 'howto'; break;
       case 'howto-close': closeHowto(); break;
-      case 'online': titleView = 'online'; void refreshAccount(); if (NET_URL && !net) net = newSession(); if (net && net.state === 'offline') net.connect(); break;
+      case 'play': hubPlay(); return;
       case 'demo-online': if (identity.tokenId && tierOfMetadataId(Number(identity.tokenId))) setChoice({ demo: Number(identity.tokenId) }); break;
       case 'demo-online-off': setChoice(null); break;
       case 'online-cancel': net?.leave(); break;
-      case 'online-again': online = false; go('menu'); titleView = 'online'; joinOnline(onlineMode); break;
+      case 'online-again': online = false; go('menu'); titleView = 'main'; if (!net?.follower) joinOnline(onlineMode); break;
+      case 'upgrades-from-results': online = false; go('menu'); titleView = 'upgrades'; break;
+      case 'squad-create': if (NET_URL) { net ??= newSession(); net.partyOp('create'); } break;
+      case 'squad-join': {
+        const code = ((document.getElementById('squadcode') as HTMLInputElement | null)?.value ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if (NET_URL && code.length === 5) { net ??= newSession(); net.partyOp('join', code); }
+        break;
+      }
+      case 'squad-leave': net?.partyOp('leave'); break;
       case 'demo': titleView = 'demo'; break;
       case 'demo-close': titleView = 'main'; break;
-      case 'profile': titleView = 'profile'; profileTab = 'player'; void refreshAccount(); break;
-      case 'medals': titleView = 'profile'; profileTab = 'medals'; break;
+      case 'upgrades': titleView = 'upgrades'; void refreshAccount(); break;
+      case 'ranks': titleView = 'ranks'; void refreshAccount(); break;
+      case 'career': titleView = 'career'; void refreshAccount(); break;
+      case 'medals': titleView = 'medals'; break;
       case 'settings': titleView = 'settings'; confirmReset = false; refreshAuth(); break;
       case 'nick': nickReturn = titleView === 'nick' ? nickReturn : titleView; titleView = 'nick'; nickError = ''; nickSaved = false; break;
-      case 'back': if (titleView === 'online') net?.leave(); titleView = titleView === 'nick' ? nickReturn : 'main'; confirmReset = false; break;
+      case 'back': titleView = titleView === 'nick' ? nickReturn : 'main'; confirmReset = false; acct.message = ''; break;
       case 'replay':
         shownTips = new Set();
         saveShownTips(localStorage, shownTips);
@@ -501,10 +596,17 @@ async function start() {
         break;
       case 'reset': confirmReset = true; break;
       case 'reset-no': confirmReset = false; break;
-      case 'reset-yes': resetProgress(); break;
+      case 'reset-yes': clearPreferences(); break;
       case 'signin-google': googleSignIn(); return;
       case 'signout':
-        void signOut().then(() => { auth.session = []; auth.message = 'Signed out on this browser. Your player card keeps its linked names.'; render(); });
+        void signOut().then(async () => {
+          auth.session = [];
+          auth.message = 'Signed out on this browser. Your progress stays on your account; sign in again on any device to continue.';
+          acct.signedIn = false; acct.profile = null; acct.tokens = null; acct.hasWallet = false; acct.identities = []; acct.choice = null;
+          if (net && net.state !== 'match') { net.close(); net = null; }
+          await refreshAccount();
+          render();
+        });
         return;
     }
     render();
@@ -536,8 +638,8 @@ async function start() {
       menuAct(act.dataset.act!);
       return;
     }
-    const tab = t.closest('[data-tab]') as HTMLElement | null;
-    if (tab) { e.preventDefault(); profileTab = tab.dataset.tab as ProfileTab; if (profileTab === 'progress' || profileTab === 'ranks') void refreshAccount(); render(); return; }
+    const md = t.closest('[data-mode]') as HTMLElement | null;
+    if (md) { e.preventDefault(); setMode(md.dataset.mode as PlayMode); render(); return; }
     const tk = t.closest('[data-token]') as HTMLElement | null;
     if (tk) { e.preventDefault(); setChoice(tk.dataset.token ? { tokenId: Number(tk.dataset.token) } : null); render(); return; }
     const up = t.closest('[data-upgrade]') as HTMLElement | null;
@@ -545,12 +647,12 @@ async function start() {
     const fav = t.closest('[data-fav]') as HTMLElement | null;
     if (fav) {
       e.preventDefault();
-      setProfile({ ...profile, favourite: profile.favourite === fav.dataset.fav ? null : fav.dataset.fav! });
-      render();
+      const cur = curProfile();
+      void setCard({ favourite: cur.favourite === fav.dataset.fav ? null : fav.dataset.fav! });
       return;
     }
     const pin = t.closest('[data-pin]') as HTMLElement | null;
-    if (pin) { e.preventDefault(); setProfile(togglePin(profile, pin.dataset.pin!)); render(); return; }
+    if (pin) { e.preventDefault(); void setCard({ pins: togglePin(curProfile(), pin.dataset.pin!).pinned }); return; }
     const set = t.closest('[data-set]') as HTMLElement | null;
     if (set) { e.preventDefault(); settingAct(set.dataset.set!, set.dataset.val!); return; }
     const wal = t.closest('[data-wallet]') as HTMLElement | null;
@@ -564,6 +666,7 @@ async function start() {
       return;
     }
     const hero = t.closest('[data-hero]') as HTMLElement | null;
+    if (hero && hero.dataset.pick) { e.preventDefault(); selectHero(hero.dataset.hero!); render(); return; }
     if (hero) {
       selectHero(hero.dataset.hero!);
       // A second tap on the selected card deploys.
@@ -572,8 +675,6 @@ async function start() {
       hero.dataset.armed = '1';
       return;
     }
-    const om = t.closest('[data-online]') as HTMLElement | null;
-    if (om) { e.preventDefault(); joinOnline(om.dataset.online as Mode); return; }
     const b = t.closest('[data-go]') as HTMLElement | null;
     if (b) {
       if (b.dataset.go === 'menu' || b.dataset.go === 'quit') { if (online) net?.leave(); online = false; }
@@ -588,21 +689,16 @@ async function start() {
   });
   overlay.addEventListener('submit', (e) => {
     e.preventDefault();
-    if ((e.target as HTMLElement).matches('[data-form="nick"]')) saveNick();
+    if ((e.target as HTMLElement).matches('[data-form="nick"]')) void saveNick();
   });
 
   // ---- Sign-in (optional; the game never waits on it) ----
-  function linkAll(ids: ServerIdentity[]) {
-    let p = profile;
-    for (const id of ids) p = linkIdentity(p, id);
-    if (p !== profile) setProfile(p);
-  }
+  // Linked sign-ins are the account's (the site links every identity in a session to one account): nothing local.
   async function refreshAuth() {
     const [config, session, wallets] = await Promise.all([fetchAuthConfig(), fetchSession(), discoverWallets()]);
     auth.config = config;
     auth.session = config ? session : [];
     auth.wallets = wallets;
-    linkAll(auth.session);
     if (phase === 'title' && titleView === 'settings') render();
   }
   async function doWalletSignIn(id: string) {
@@ -611,18 +707,22 @@ async function start() {
     render();
     try {
       const identity = await walletSignIn(id);
-      linkAll([identity]);
       auth.session = await fetchSession();
-      auth.message = `Signed in as ${identity.label}.`;
+      auth.message = `Signed in as ${identity.label}. Your progress is saved to your account.`;
+      // A new identity in the session: reload the account (same account if one was already signed in) and its Chogs.
+      acct.tokens = null;
+      acct.choice = null;
+      if (net && net.state !== 'match') { net.close(); net = null; }
+      await refreshAccount();
     } catch (err) {
       auth.message = err instanceof Error ? err.message : 'Wallet sign-in failed.';
     }
     auth.busy = false;
     if (phase === 'title' && titleView === 'settings') render();
   }
-  // Back from Google (?signedin=google or ?signin_error=...): link the identity, open Settings, clean the URL.
+  // Back from Google (?signedin=google or ?signin_error=...): the hub shows the account (an error opens Settings).
   if (QS.has('signedin') || QS.has('signin_error')) {
-    titleView = 'settings';
+    titleView = QS.has('signin_error') ? 'settings' : 'main';
     auth.message = QS.has('signin_error') ? `Google sign-in did not finish (${QS.get('signin_error')}).` : 'Signed in with Google.';
     history_replace();
     void refreshAuth();
@@ -645,13 +745,13 @@ async function start() {
     fx.shake = 0;
     acc = 0;
     playTime = 0;
-    history = null;
     runPickups = runAbilities = 0;
     hurtNow = blockedNow = false;
     sinceHint = 0;
     const h = heroById(heroId);
     const dp = world.actors[0].power;
-    $('hero').innerHTML = `${esc(h.name)} · ${identity.kind === 'bound' ? `<span class="demo">DEMO</span> #${esc(identity.tokenId!)} ${dp.tier !== 'free' ? `${esc(TIER_DEFS[dp.tier].label)} · ` : ''}${esc(identity.sidegrade.name)}` : 'Guest'}`;
+    const cls = dp.metadataId ? `${esc(chogName(dp.metadataId))} · ${esc(TIER_DEFS[dp.tier].label)}` : dp.tier !== 'free' ? esc(TIER_DEFS[dp.tier].label) : 'Free class';
+    $('hero').innerHTML = `${esc(h.name)} · Practice · ${dp.demo ? '<span class="demo">DEMO</span> ' : ''}${cls}`;
     $('wname').textContent = world.actors[0].weapon.name;
     $('abl').innerHTML = `${esc(world.actors[0].ability.name)}<small class="keyhint">Space</small>`;
     $('pips').innerHTML = world.actors.slice(1).map(() => '<i></i>').join('');
@@ -663,11 +763,11 @@ async function start() {
 
   // ---- Account and class system (master build) ----
   function newSession(): OnlineSession {
-    const s = new OnlineSession(NET_URL!, () => displayName(profile), () => heroId, sessionStorage);
+    const s = new OnlineSession(NET_URL!, () => displayName(curProfile()), () => heroId, sessionStorage);
     // Each connection gets a fresh single-use ticket from the site; the game server checks it with the site.
     s.ticketSource = async () => {
       if (!acct.config || (!acct.signedIn && !acct.choice?.demo)) return null;
-      const r = await account.fetchTicket(acct.choice ?? {}, displayName(profile));
+      const r = await account.fetchTicket(acct.choice ?? {}, displayName(curProfile()));
       acct.ticket = r?.profile ?? null;
       acct.ticketWarning = r?.warning ?? null;
       return r?.ticket ?? null;
@@ -682,7 +782,8 @@ async function start() {
     render();
   }
   let accountLoading = false;
-  async function refreshAccount() {
+  /** Reloads the account from the site: the one source of progression. `loaded` runs once the profile is in. */
+  async function refreshAccount(loaded?: () => void) {
     if (accountLoading) return;
     accountLoading = true;
     try {
@@ -692,7 +793,12 @@ async function start() {
       acct.signedIn = !!p?.signedIn;
       acct.progression = !!p?.progression;
       acct.profile = p?.profile ?? null;
+      acct.identities = p?.identities ?? ids.map((i) => ({ provider: i.provider, label: i.label }));
       acct.hasWallet = ids.some((i) => i.provider === 'wallet');
+      if (auth.config === null) { auth.session = ids; }
+      loaded?.();
+      // A signed-in player plays as their favourite operator unless they picked another one this session.
+      if (acct.profile?.favourite && !heroPicked && HEROES.some((x) => x.id === acct.profile!.favourite)) heroId = acct.profile.favourite;
       // The leaderboard is public: loaded whenever the database is on, signed in or not.
       if (acct.config.db) { const b = await account.leaderboard(); acct.board = b?.rows ?? []; acct.boardMe = b?.me ?? null; }
       if (acct.hasWallet) {
@@ -704,7 +810,7 @@ async function start() {
       }
     } finally {
       accountLoading = false;
-      if (phase === 'title' && (titleView === 'online' || titleView === 'profile')) render();
+      if (phase === 'title' && titleView !== 'nick' && titleView !== 'howto') render();
     }
   }
   async function buyUpgrade(id: string) {
@@ -714,10 +820,14 @@ async function start() {
     acct.message = r?.ok ? '' : r?.reason === 'shards' ? 'Not enough shards yet.' : r?.reason === 'maxed' ? 'That upgrade is maxed.' : 'Could not buy that upgrade right now.';
     await refreshAccount();
   }
-  /** Solo power: a labelled DEMO token shows its catalogue tier; everything else is the base operator. */
+  /**
+   * Practice power: a labelled DEMO token shows its catalogue tier; otherwise the class the hub shows (the Chog the site
+   * verified on Monad, with the account's upgrades), so practice plays like your online operator. It earns nothing.
+   */
   function soloPower(): Power {
     const n = Number(identity.tokenId);
-    return identity.kind === 'bound' && tierOfMetadataId(n) ? powerForToken(n, null, true) : BASE_POWER;
+    if (identity.kind === 'bound' && tierOfMetadataId(n)) return powerForToken(n, acct.profile?.upgrades ?? null, true);
+    return classOf(acct).power;
   }
 
   // ---- Online (RC-8) ----
@@ -752,22 +862,31 @@ async function start() {
 
   function showOnlineResults() {
     const o = net?.over;
-    if (!o) { show('<div class="card"><h2>Match over</h2><div class="btns"><button class="btn" data-go="menu">Menu</button></div></div>'); return; }
+    if (!o) { show('<div class="card"><h2>Match over</h2><div class="btns"><button class="btn" data-go="menu">Hub</button></div></div>'); return; }
     const roster = net?.match?.roster ?? [];
     const rows = o.results.map((x) => {
       const r = roster.find((y) => y.id === x.id);
-      return { name: x.name, hero: x.hero, team: x.team, kills: x.kills, damageDealt: x.damageDealt, damageTaken: x.damageTaken, alive: x.alive, cause: x.cause, you: x.id === o.you, tier: r?.tier ?? 'free', demo: !!r?.demo };
+      return { name: x.name, hero: x.hero, team: x.team, kills: x.kills, damageDealt: x.damageDealt, damageTaken: x.damageTaken, alive: x.alive, cause: x.cause, you: x.id === o.you, tier: r?.tier ?? 'free', demo: !!r?.demo, metadataId: r?.metadataId ?? null };
     });
     // Rewards are settled by the site pulling this match from the game server, once (never from what this page says).
+    // The hub's account is reloaded afterwards, so the XP bar, level, shards and upgrades there change at once.
     if (o.settle && o.matchId && lastReward.matchId !== o.matchId) {
-      lastReward = { pending: true, reward: null, note: '', matchId: o.matchId };
-      void account.settle(o.matchId).then((r) => {
-        lastReward = { pending: false, reward: r?.mine ?? null, note: r?.error === 'progression_offline' ? 'Saved progression is offline (no database connected yet).' : r?.mine ? '' : 'Result not saved to your account.', matchId: o.matchId };
+      const before = acct.profile ? { xp: acct.profile.xp, shards: acct.profile.shards, rating: acct.profile.rating } : null;
+      lastReward = { pending: true, reward: null, note: '', matchId: o.matchId, before };
+      void account.settle(o.matchId).then(async (r) => {
+        lastReward = { ...lastReward, pending: false, reward: r?.mine ?? null, note: r?.error === 'progression_offline' ? 'Saved progression is offline right now.' : r?.mine ? '' : 'Result not saved to your account.' };
+        if (r?.mine && !lastReward.before) lastReward.before = { xp: 0, shards: 0, rating: r.mine.ratingBefore };
+        await refreshAccount();
         if (phase === 'results' && online) render();
       });
     }
-    const reward = rewardLine(o, !!net?.match?.demo, acct.signedIn, lastReward.reward, lastReward.pending, lastReward.note);
-    show(onlineResultsHtml({ mode: o.mode, won: o.winner === null ? null : o.winner === o.team, reason: o.reason, team: o.team, rows, reward }));
+    const me = rows.find((x) => x.you);
+    const myClass = me && me.metadataId && me.tier === 'legendary' && ONE_OF_ONE[me.metadataId] ? `${ONE_OF_ONE[me.metadataId].name} · 1:1` : `${TIER_DEFS[me?.tier ?? 'free'].label} class`;
+    show(onlineResultsHtml({
+      mode: o.mode, won: o.winner === null ? null : o.winner === o.team, reason: o.reason, team: o.team, rows, demo: !!net?.match?.demo, signedIn: acct.signedIn, settle: o.settle,
+      prog: { before: lastReward.before, reward: lastReward.reward, pending: lastReward.pending, note: lastReward.note, upgradesReady: upgradesReady(acct) },
+      myClass, canRequeue: !!NET_URL, follower: !!net?.follower,
+    }));
   }
 
   // Watches the session from the frame loop: refreshes the Online screen, enters a found match, ends a finished one.
@@ -779,13 +898,16 @@ async function start() {
       const nl = `${phase} fps${Math.round(hook.fps)} | ${net.log.slice(-14).join(' | ')}`;
       if (document.body.dataset.netlog !== nl && now - lastPing > 500) { lastPing = now; document.body.dataset.netlog = nl; }
     }
-    const key = `${net.state}|${net.queue?.have}|${net.message}|${Math.round(net.rtt / 20)}`;
+    const key = `${net.state}|${net.queue?.have}|${net.message}|${Math.round(net.rtt / 50)}|${JSON.stringify(net.party)}`;
     if (key !== netKey) {
       netKey = key;
-      if (phase === 'title' && titleView === 'online') render();
+      if (phase === 'title' && titleView === 'main') render();
     }
-    if (net.state === 'match' && !online && net.world && phase === 'title') {
+    // A match found from the hub, or a squad leader re-queued while this player looked at the results: deploy.
+    if (net.state === 'match' && !online && net.world && (phase === 'title' || phase === 'results')) {
+      if (phase === 'results') go('menu');
       online = true;
+      onlineMode = net.match?.mode ?? onlineMode;
       go('start');
       go('pick');
     }
@@ -795,34 +917,52 @@ async function start() {
     }
   }
 
-  // Match end: the one place a run is saved (records, medals, demo token history). Never per frame.
+  // Match end: the one place a practice run is saved. Signed in: the site stores it on the account and awards medals
+  // there. Guest: this session's memory only. Never per frame, never to localStorage.
   function endRun(won: boolean) {
     const p = player(world);
     const seconds = Math.round(playTime);
-    history = recordRun(localStorage, identity.tokenId, { won, seconds, kills: p.kills, shots: p.shots, hits: p.hits, at: new Date().toISOString() });
-    const facts = { hero: heroId, won, seconds, kills: p.kills, bullets: p.bullets, hits: p.hits, damageDealt: p.damageDealt, damageTaken: p.damageTaken, pickups: runPickups, abilities: runAbilities };
-    const r = recordBest(localStorage, facts);
-    records = r.records;
-    const m = awardMedals(localStorage, records, { ...facts, hpLeft: Math.max(0, p.hp) });
-    medals = m.unlocked;
-    lastRun = { newBest: r.newBest, earned: m.earned };
+    const facts = { hero: heroId, won, seconds, kills: p.kills, bullets: p.bullets, hits: p.hits, damageDealt: Math.round(p.damageDealt), damageTaken: Math.round(p.damageTaken), pickups: runPickups, abilities: runAbilities, hpLeft: Math.max(0, Math.round(p.hp)) };
+    if (!signedIn()) {
+      const r = recordBest(guestStore, facts);
+      guestRecords = r.records;
+      const m = awardMedals(guestStore, guestRecords, facts);
+      guestMedals = m.unlocked;
+      lastRun = { newBest: r.newBest, earned: m.earned, saved: 'session' };
+      return;
+    }
+    lastRun = { newBest: { time: false, kills: false }, earned: [], saved: 'saving' };
+    const runId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    void account.practice({ runId, ...facts, seconds: Math.max(1, seconds) }).then((r) => {
+      if (r?.ok && acct.profile) {
+        if (r.records) acct.profile.practice = r.records;
+        if (r.medals) acct.profile.medals = r.medals;
+        lastRun = { newBest: r.newBest ?? { time: false, kills: false }, earned: MEDALS.filter((m) => r.earned?.includes(m.id)), saved: 'account' };
+      } else lastRun = { newBest: { time: false, kills: false }, earned: [], saved: 'failed' };
+      if (phase === 'results' && !online) render();
+    });
   }
 
   applySettings();
+  // The account is part of loading: the hub opens already showing who you are, your level, shards and Chog.
+  boot(3);
+  await Promise.race([refreshAccount(() => boot(4)), new Promise((r) => setTimeout(r, 7000))]);
   render();
-  bootDone();
+  void bootDone();
   // Reload or crash mid online match: this tab still holds its session token, so it quietly asks the server to
   // resume. If the match is still on, the server hands the operator back (pollOnline enters it); if not, nothing shows.
   // Demo invite link (judges, no wallet): ?mockChog=<n>&online=1v1&demo=1[&code=X] joins as that labelled DEMO token,
   // which only ever meets other demo players. The account service is asked first so the ticket can be fetched.
   if (NET_URL && ONLINE_AUTO) {
-    titleView = 'online';
-    void refreshAccount().then(() => {
-      const n = Number(identity.tokenId);
-      if (QS.get('demo') === '1' && identity.kind === 'bound' && tierOfMetadataId(n)) acct.choice = { demo: n };
-      joinOnline(ONLINE_AUTO);
-    });
+    titleView = 'main';
+    setMode(ONLINE_AUTO);
+    const n = Number(identity.tokenId);
+    if (QS.get('demo') === '1' && identity.kind === 'bound' && tierOfMetadataId(n)) acct.choice = { demo: n };
+    joinOnline(ONLINE_AUTO);
   }
+  // Squad invite link: ?squad=CODE joins that squad from the hub.
+  const SQUAD_AUTO = (QS.get('squad') ?? '').toUpperCase();
+  if (NET_URL && /^[2-9A-HJ-NP-Z]{5}$/.test(SQUAD_AUTO)) { net ??= newSession(); net.partyOp('join', SQUAD_AUTO); }
   // Hosted checks run in browsers that may render at a few frames per second: in drive mode the scripted player and
   // the snapshot view run on a timer, not the render loop, and the server-reported state goes on <body data-netlog>.
   if (onlineDriver) setInterval(() => {
@@ -1025,7 +1165,7 @@ async function start() {
   const hook = { fps: 0 } as { fps: number } & Record<string, unknown>;
   if (import.meta.env.DEV || location.search.includes('debug')) {
     Object.defineProperties(hook, { world: { get: () => world }, phase: { get: () => phase } });
-    Object.assign(hook, { renderer, go, setHero: (h: string) => (heroId = h), fx, records: () => records, identity: () => identity, resultsAt: () => resultsAt, autoplay: AUTOPLAY_SEED, hero: () => heroId, stats: debugStats,
+    Object.assign(hook, { renderer, go, setHero: (h: string) => (heroId = h), fx, records: () => curRecords(), identity: () => identity, acct: () => acct, mode: () => playMode, resultsAt: () => resultsAt, autoplay: AUTOPLAY_SEED, hero: () => heroId, stats: debugStats,
       // Debug lab: the bundled sim, so headless checks can run sim sweeps against the exact deployed code.
       lab: { createWorld, stepWorld, IDLE_INPUT, ROOM_ZERO, HEROES, walkable, sightClear, findPath },
       // RC-5 touch-play check: what the scripted autopilot would do now (NOT applied). tools/rc5-touchplay.mjs turns it
@@ -1034,7 +1174,7 @@ async function start() {
       // Landscape stage and launch state (tools/rc6-launch.mjs): how the stage sits on the screen, fullscreen, lock.
       stage: () => ({ ...stage(), fullscreen: isFullscreen(), canFs, launch, orientation: screen.orientation?.type ?? null }),
       // RC-7 menus and progression (tools/rc7-menus.mjs): device profile, settings, medals, shown tips, the open view.
-      profile: () => profile, settings: () => settings, medals: () => medals, tips: () => [...shownTips],
+      profile: () => curProfile(), settings: () => settings, medals: () => curMedals(), tips: () => [...shownTips],
       view: () => titleView, runFacts: () => ({ pickups: runPickups, abilities: runAbilities }), stick: () => touchStick.radius,
       resolution: () => renderer.app.renderer.resolution, volume: () => audio.volume,
       // RC-8 online (tools/rc8-online.mjs): the session and whether the shown world is an online match. Test builds only.
@@ -1114,7 +1254,7 @@ async function start() {
       if (recapLeft <= 0) go('recapDone');
     } else if (action) {
       if (phase === 'title' && titleView !== 'main') { if (titleView === 'howto') closeHowto(); else titleView = 'main'; render(); }
-      else if (phase === 'title') go('start');
+      else if (phase === 'title' && playMode === 'solo') hubPlay();
       else if (phase === 'select') go('pick');
       else if (phase === 'results') go('restart');
     }
