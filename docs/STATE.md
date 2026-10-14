@@ -1,12 +1,12 @@
 # Chog: Room Zero - shared state
 
 Source of truth for every agent. Rules: `docs/RULES.md`. Edit only in a handoff commit. Keep under 8,000 characters; move old rows to `docs/HANDOFFS.md`.
-Last verified: 2026-10-14 by claude (MI master integration pass).
+Last verified: 2026-10-14 by claude (QA final QA + bug elimination pass).
 
 ## Snapshot (EVIDENCE)
 - Repo `levithefirst/chog-room-zero` (private). Default/base branch `setup/skill-system` (LOCKED, owner 2026-10-11: no `main`). Never merge without the owner.
-- Open PRs, stacked #1 to #9 (head 43f5a5d), then PR #10 = branch `ccr-e7fadb8f-qtochk` (RC-3 to MB-1). Merge in order; README conflict at #1: keep the game README.
-- Vercel project `chog-room-zero` (protection off). Production `chogroomzero.xyz` -> MI (H22 has the deployment id). Rollback: `dpl_7TftYsmp4TmfckyYawSr2JVWeUT1` (MB-2), more in H18/H21. Sign-in env vars and `DATABASE_URL` (Neon) set by the owner. No `NFT_COMBAT` set: combat power is on by default (owner 2026-10-14). Game server: Render Free `https://room-zero-game.onrender.com` (redeploys on every push to this branch); `ALLOWED_ORIGINS` = both production domains + branch preview. `VITE_GAME_SERVER_URL` = Production + Preview. Test hooks are not in production builds.
+- Open PRs stacked #1 to #9, then PR #10 = this branch. Merge in order; README conflict at #1: keep the game README.
+- Vercel project `chog-room-zero` (protection off). Production `chogroomzero.xyz` -> `dpl_47vJS2AYM4Ly8EX8wyvCd9k46kSo` (b57a5a7, H23). Rollback: `dpl_7TftYsmp4TmfckyYawSr2JVWeUT1` (MB-2), more in H18/H21. Sign-in env vars and `DATABASE_URL` (Neon) set by the owner. No `NFT_COMBAT` set: combat power is on by default (owner 2026-10-14). Game server: Render Free `https://room-zero-game.onrender.com` (redeploys on every push to this branch); `ALLOWED_ORIGINS` = both production domains + branch preview. `VITE_GAME_SERVER_URL` = Production + Preview. Test hooks are not in production builds.
 - Chog Genesis (NFT-R1, EVIDENCE): Monad 143, contract `0xc96d31F8626c6D03Fae5dCD3d61e3FB9F4a73763` (ChogMint, Sourcify exact match), ERC-721, supply 1,969, catalogue in `data/chog-genesis/`; token id is NOT the displayed number. Live from production 2026-10-14 (`/api/game/chain`, rpc.monad.xyz): chain id 143, `metadataId(1)` = 1462 (so startingIndex 1461 holds), owner of token 1 lists token 1 in `tokensOfOwner`.
 - Hackathon: Chogathon 2026; deliverables in `docs/SUBMISSION.md`; judges gate on "the Chog NFT must be essential". Deadline and project start date: UNKNOWN (page contradicts itself).
 
@@ -27,6 +27,7 @@ Last verified: 2026-10-14 by claude (MI master integration pass).
 14. No scheduled or background jobs without owner approval.
 15. Stack: TypeScript, Vite, PixiJS v8, Vitest.
 16. Win condition: eliminate all bots. RC-8 (owner): a shrinking danger zone can end a run (zone death = loss); online, the last side standing wins.
+17. Owner 2026-10-14 FINAL QA: the default game is YOU + 2 AI TEAMMATES vs bots (never confused with online 3v3); "Sign in" opens a sign-in sheet (Continue with Google / Continue with Wallet), never Settings; minimal UI copy.
 
 ## PROPOSALS (not approved)
 - Class numbers, upgrade costs, rewards, revive timings, the ten signatures (`docs/design/power.md`; measured, not felt). Hub layout, medals, tips. Deps: @neondatabase/serverless 1.1.0, dev @electric-sql/pglite 0.5.8, @noble/*.
@@ -40,11 +41,12 @@ Last verified: 2026-10-14 by claude (MI master integration pass).
 - Whether a real holder can sign in and play 5v5 (no real holder wallet tried; fake-chain holder passes locally). A settled match on Neon (none played live yet; settles on PGlite end to end).
 
 ## Implemented (EVIDENCE)
-- MI (H22): separate loading screen; hub with identity, XP bar, shards, rating, class panel (Chog by name, tier power, 1:1 signature/telegraph/counter), PLAY + Practice/1v1/3v3/5v5 (CHOG HOLDERS ONLY), leaderboard preview, squads; Upgrades/Leaderboard/Career/Medals screens; rich online results. Account-owned profile (migration 3). Rescaled class numbers, pickup over-cap, downed/revive in team modes, per-1:1 cues, squads on the server.
-- Earlier: P2 base game (H5), RC-7 menus/medals/sign-in (H15), RC-8 online server, zone, palette (H16-H18), MB-1 class system, tickets, Monad read, 5v5 gate (H20), MB-2 Neon + kills leaderboard (H21). Details in `docs/HANDOFFS.md`.
+- QA (H23): AI teammates in the sim (shared brain, team vision, revive), sign-in sheet (Google + Wallet, return context), minimal hub/screens, centred Upgrades, Continue on results, fetch timeouts, Cancel while connecting, browser Back, phone fixes.
+- MI (H22): loading screen, hub (identity, XP, shards, rating, class panel, modes, leaderboard preview, squads), Upgrades/Leaderboard/Career/Medals, online results, account-owned profile (migration 3), class rescale, pickup over-cap, downed/revive, 1:1 cues, server squads.
+- Earlier: P2 (H5), RC-7 (H15), RC-8 online (H16-H18), MB-1 classes/5v5 gate (H20), MB-2 Neon leaderboard (H21). See `docs/HANDOFFS.md`.
 
 ## Automated tests (EVIDENCE, Node 22.22)
-`npx vitest run` 514/514 (52 files), `tsc --noEmit` clean. Browser (headless Chrome, emulated, local full stack): mi-journey 21/21, rc8-online 1v1 + 3v3 PASS, master-ui 7/7 (H22).
+`npx vitest run` 523/523 (54 files), `tsc --noEmit` clean. Browser (headless Chrome, emulated, local stack): qa-journey 31/31, qa-screens 5 devices clean, qa-errors 7/7, rc8-online 1v1+3v3, master-ui 8/8 (H23).
 
 ## Not performed (needs the owner)
 - RC-8: hosted 3v3/5v5, hosted reconnect, phones on separate networks, touch online, readability by a person, Mop balance.
@@ -57,8 +59,8 @@ Core Feel Gate: BLOCKED on owner playtests (tunes the class numbers; NFT combat 
 ## Current task
 | Id | Owner | Branch | Files | Done when | Status |
 |---|---|---|---|---|---|
-| MI | claude | ccr-e7fadb8f-qtochk | see H22 | Owner 2026-10-14 MASTER INTEGRATION PASS | in production; live journeys need real players |
+| QA | claude | ccr-e7fadb8f-qtochk | see H23 | Owner 2026-10-14 FINAL QA + BUG ELIMINATION | in production; live journeys need real players |
 | RC-8 | claude | ccr-e7fadb8f-qtochk, PR #10 | see H16 | Owner RC-8 mandate | PR #10 not merged (stacked on #9; owner decides) |
 
 ## Handoffs
-Latest: H22 (2026-10-14, claude -> owner; MI master integration pass). History: `docs/HANDOFFS.md`.
+Latest: H23 (2026-10-14, claude -> owner; QA final QA pass). History: `docs/HANDOFFS.md`.
