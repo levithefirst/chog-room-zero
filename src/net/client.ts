@@ -1,10 +1,11 @@
 // Online client (RC-8). Talks to the authoritative server (server/room.ts) and turns its snapshots into a local
 // "view world" the normal renderer and HUD can draw. The browser decides nothing about hits, damage, pickups or
 // the result: it sends controls and shows what the server says. You are always actor 0 in the view world.
+import { powerFor, signatureFor } from '../config/power';
 import { createWorld, type Actor, type ActorInput, type HitEvent, type SoundEvent, type SoundType, type World } from '../sim/world';
 import { WEAPONS } from '../config/weapons';
 import { TUNING } from '../config/tuning';
-import { PROTOCOL, type Mode, type NetActor, type PlayerResult, type ServerMsg } from './protocol';
+import { PROTOCOL, type Mode, type NetActor, type NetProfile, type PlayerResult, type ServerMsg } from './protocol';
 import type { Circle } from '../sim/zone';
 import type { Team } from '../sim/world';
 
@@ -25,7 +26,7 @@ export function serverUrl(search: string, envUrl: string | undefined): string | 
 
 interface Snap { tick: number; at: number; byId: Map<number, NetActor>; msg: Extract<ServerMsg, { t: 'snap' }> }
 
-export interface OverInfo { winner: Team | null; reason: string; results: PlayerResult[]; you: number; team: Team; mode: Mode }
+export interface OverInfo { winner: Team | null; reason: string; results: PlayerResult[]; you: number; team: Team; mode: Mode; matchId: string | null; settle: boolean }
 
 export class OnlineSession {
   state: NetState = 'offline';
@@ -55,6 +56,10 @@ export class OnlineSession {
     if (this.log.length > 40) this.log.shift();
   }
   rtt = 0;
+  /** What the server made of this connection's ticket (null before welcome). */
+  profile: NetProfile | null = null;
+  /** Gets a fresh game ticket before each hello (null: play as a free profile). Set by the game. */
+  ticketSource: (() => Promise<string | null>) | null = null;
   /** Snapshots received this session (debug and hosted checks). */
   snapCount = 0;
 
@@ -75,7 +80,12 @@ export class OnlineSession {
     this.note(`connect ${this.state}`);
     ws.onopen = () => {
       this.note('open');
-      ws.send(JSON.stringify({ t: 'hello', v: PROTOCOL, name: this.name(), hero: this.hero(), ...(this.token ? { token: this.token } : {}) }));
+      // A ticket is single use and lives 10 minutes, so each connection asks for a new one (resumes need none).
+      const ticket = this.state === 'reconnecting' || !this.ticketSource ? Promise.resolve(null) : this.ticketSource().catch(() => null);
+      void ticket.then((tk) => {
+        if (this.ws !== ws || ws.readyState !== WebSocket.OPEN) return;
+        ws.send(JSON.stringify({ t: 'hello', v: PROTOCOL, name: this.name(), hero: this.hero(), ...(this.token ? { token: this.token } : {}), ...(tk ? { ticket: tk } : {}) }));
+      });
       if (this.pingTimer) clearInterval(this.pingTimer);
       this.pingTimer = setInterval(() => { if (this.ws === ws) this.ping(performance.now()); }, 2000);
     };
@@ -155,6 +165,7 @@ export class OnlineSession {
     switch (m.t) {
       case 'welcome':
         this.token = m.token;
+        if (!m.resumed) this.profile = m.profile ?? null;
         try { this.store?.setItem('chog-room-zero:net-token', m.token); } catch { /* storage blocked */ }
         this.wakeUntil = 0;
         if (this.state === 'reconnecting' && !m.resumed) { this.state = 'error'; this.message = 'The match ended while you were away.'; return; }
@@ -183,7 +194,7 @@ export class OnlineSession {
         return;
       case 'over':
         this.state = 'over';
-        if (this.match) this.over = { winner: m.winner, reason: m.reason, results: m.results, you: this.match.you, team: this.match.team, mode: this.match.mode };
+        if (this.match) this.over = { winner: m.winner, reason: m.reason, results: m.results, you: this.match.you, team: this.match.team, mode: this.match.mode, matchId: m.matchId ?? null, settle: !!m.settle };
         return;
       case 'pong':
         this.rtt = performance.now() - m.at;
@@ -191,6 +202,7 @@ export class OnlineSession {
       case 'error':
         this.message = m.message;
         if (m.code === 'rate' || m.code === 'idle') this.state = 'error';
+        if (m.code === 'holders-only') { this.state = 'idle'; this.queue = null; }
         return;
     }
   }
@@ -202,8 +214,10 @@ export class OnlineSession {
     this.fromView = order.map((r) => r.id);
     this.world = createWorld({
       seed: m.seed, zone: false, friendlyFire: m.friendlyFire,
-      versus: order.map((r) => ({ name: r.name, hero: r.hero, team: r.team as 'alpha' | 'bravo', x: -100, y: -100, facing: 0 })),
+      versus: order.map((r) => ({ name: r.name, hero: r.hero, team: r.team as 'alpha' | 'bravo', x: -100, y: -100, facing: 0, power: powerFor(r.tier ?? 'free', null, null, !!r.demo) })),
     });
+    // The server's ability slot (hero ability or 1:1 signature, with upgrades) so the HUD and telegraphs match it.
+    order.forEach((r, i) => { const act = this.world!.actors[i]; if (r.ability) act.ability = { ...act.ability, ...r.ability, ...(r.metadataId && r.tier === 'legendary' ? signatureFor(r.metadataId) : {}), cooldown: r.ability.cooldown }; });
     this.world.zone = m.zone.length ? { plan: m.zone as Circle[], cfg: TUNING.zone } : null;
     this.snaps = [];
     this.over = null;
@@ -280,4 +294,5 @@ function copy(act: Actor, s: NetActor): void {
   act.hp = s.hp; act.maxHp = s.maxHp; act.armor = s.armor; act.maxArmor = s.maxArmor; act.alive = s.alive;
   act.ammo = s.ammo; act.reserve = s.reserve; act.reloadLeft = s.reloadLeft; act.abilityCd = s.abilityCd; act.revealLeft = s.revealLeft;
   act.muzzle = s.muzzle; act.hitFlash = s.hitFlash; act.deadFor = s.deadFor; act.lastSpread = s.lastSpread; act.stepAcc = s.stepAcc; act.kills = s.kills;
+  act.shieldLeft = s.shieldLeft ?? 0; act.frenzyLeft = s.frenzyLeft ?? 0; act.slowLeft = s.slowLeft ?? 0; act.burstLeft = s.burstLeft ?? 0;
 }

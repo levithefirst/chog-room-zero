@@ -97,14 +97,18 @@ export interface Fx {
   threats: number[];
   /** Pickups the player just took: a ring in the pickup's colour expands from the player (RC-7). */
   collects: { x: number; y: number; age: number; color: number }[];
+  /** 1:1 signature moments (burst, howl): a ring of the effect's real radius (RING_SECONDS). */
+  rings: { x: number; y: number; age: number; r: number; color: number }[];
 }
+
+export const RING_SECONDS = 0.45;
 
 /** How long the pickup ring lasts (s). */
 export const COLLECT_SECONDS = 0.5;
 
 export function createFx(): Fx {
   return {
-    markers: [], impacts: [], coverFlashes: [], hitMarks: [], shake: 0, corpses: [], damageArcs: [], pings: [], threats: [], collects: [],
+    markers: [], impacts: [], coverFlashes: [], hitMarks: [], shake: 0, corpses: [], damageArcs: [], pings: [], threats: [], collects: [], rings: [],
     sparks: Array.from({ length: R.maxSparks }, () => ({ x: 0, y: 0, vx: 0, vy: 0, age: 1, hostile: false })),
   };
 }
@@ -307,6 +311,16 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       g.moveTo(a.x - 0.2, a.y - 0.2).lineTo(a.x + 0.2, a.y + 0.2).moveTo(a.x + 0.2, a.y - 0.2).lineTo(a.x - 0.2, a.y + 0.2)
         .stroke({ width: 0.07, color: KEYLINE, alpha: 0.8 });
     }
+    // 1:1 signature telegraphs, drawn for both sides so the effect is readable before and while it acts.
+    if (a.alive && a.burstLeft > 0) {
+      // The burst's true radius, filling in as it winds up: step out of the ring.
+      const R0 = a.ability.radius ?? 3, t = 1 - a.burstLeft / (a.ability.windup ?? 0.5);
+      circle(g, a.x, a.y, R0, 48).stroke({ width: 0.05 + 0.1 * t, color: P.hostile, alpha: 0.5 + 0.5 * t });
+      circle(g, a.x, a.y, R0, 48).fill({ color: P.hostile, alpha: 0.08 + 0.12 * t });
+    }
+    if (a.alive && a.shieldLeft > 0) circle(g, a.x, a.y, r0 * 1.6, 28).stroke({ width: 0.12, color: px('ammo'), alpha: 0.95 });
+    if (a.alive && a.frenzyLeft > 0) g.poly(place(parts.body, a.x, a.y, a.facing, r * 1.22)).stroke({ width: 0.08, color: P.hostile, alpha: 0.6 + 0.3 * Math.sin(a.frenzyLeft * 12) });
+    if (a.alive && a.slowLeft > 0) for (let i = 0; i < 6; i++) arc(g, a.x, a.y, r0 * 1.9, i * Math.PI / 3, i * Math.PI / 3 + 0.5, 4).stroke({ width: 0.06, color: P.armor, alpha: 0.85 });
     if (a.alive && a.reloadLeft > 0) {
       const t = 1 - a.reloadLeft / a.weapon.reloadSeconds;
       arc(g, a.x, a.y, r0 * 1.7, -Math.PI / 2, -Math.PI / 2 + t * Math.PI * 2, 20).stroke({ width: 0.05, color: P.signal, alpha: 0.85 });
@@ -627,6 +641,10 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       for (const pg of fx.pings) {
         const t = pg.age / 0.7;
         circle(fxG, pg.x, pg.y, 0.5 + t * TUNING.abilities.sonarRadius, 48).stroke({ width: 0.08, color: pg.hostile ? P.hostile : P.armor, alpha: 0.7 * (1 - t) });
+      }
+      for (const rg of fx.rings) {
+        const t = rg.age / RING_SECONDS;
+        circle(fxG, rg.x, rg.y, rg.r * (0.6 + 0.4 * t), 48).stroke({ width: 0.14 * (1 - t) + 0.03, color: rg.color, alpha: 0.9 * (1 - t) });
       }
       for (const c of fx.collects) {
         const t = c.age / COLLECT_SECONDS;

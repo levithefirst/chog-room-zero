@@ -178,6 +178,32 @@ export function createAudio(): Audio {
           burst(0.15, 0.3, 'bandpass', 1200, 1.5, 0.25);
           len = 0.5;
           break;
+        // 1:1 signatures: each has its own sound, loud enough that the other side can react.
+        case 'windup': // a rising hiss: a burst is coming, get out of its ring
+          burst(0, 0.5, 'bandpass', 700, 0.6, 0.4);
+          thump(0, 0.5, 90, 220, 0.4);
+          len = 0.55;
+          break;
+        case 'burst': // the burst going off
+          thump(0, 0.35, 70, 30, 1);
+          burst(0, 0.25, 'lowpass', 1200, 0.7, 0.8);
+          len = 0.4;
+          break;
+        case 'scream': // a harsh wail
+          thump(0, 0.5, 900, 420, 0.45);
+          burst(0, 0.4, 'bandpass', 1800, 2, 0.35);
+          len = 0.55;
+          break;
+        case 'shield': // a bright bell
+          thump(0, 0.6, 1320, 1300, 0.3);
+          thump(0, 0.6, 1980, 1960, 0.15);
+          len = 0.65;
+          break;
+        case 'frenzy': // a low growl
+          thump(0, 0.4, 70, 110, 0.6);
+          burst(0, 0.3, 'lowpass', 500, 1.2, 0.4);
+          len = 0.45;
+          break;
         case 'hurt': // you were hit: close, low, unmistakable
           thump(0, 0.16, 120, 55, 0.9);
           burst(0, 0.1, 'lowpass', 420, 1, 0.7);

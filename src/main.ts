@@ -1,4 +1,4 @@
-import { createRenderer, createFx, COVER_FLASH_SECONDS, COLLECT_SECONDS } from './render/render';
+import { createRenderer, createFx, COVER_FLASH_SECONDS, COLLECT_SECONDS, RING_SECONDS } from './render/render';
 import { createInput, touchStick } from './input/input';
 import { createSummaryGate, overlayInputAllowed } from './input/gate';
 import { createAudio } from './audio/audio';
@@ -32,6 +32,13 @@ import { discoverWallets, fetchAuthConfig, fetchSession, googleSignIn, signOut, 
 import { SIDEGRADES } from './sim/operators';
 import { createAutopilot, type Autopilot } from './debug/autopilot';
 import { createOnlineDriver } from './debug/onlineDriver';
+import * as account from './net/account';
+import { emptyAcct, rewardLine } from './ui/account';
+import { powerForToken, signatureFor, tierOfMetadataId, BASE_POWER, TIER_DEFS, type Power } from './config/power';
+import { tierEffect } from './ui/account';
+
+// DEMO screen: the first token of each tier in the verified catalogue, plus two 1:1s with different signatures.
+const DEMO_TIER_SAMPLES = ['1', '2', '54', '31', '53', '1373'];
 
 const $ = (id: string) => document.getElementById(id)!;
 const root = $('app');
@@ -118,6 +125,10 @@ async function start() {
   let nickSaved = false;
   let nickReturn: TitleView = 'profile';
   const auth: AuthView = { config: null, session: [], wallets: [], busy: false, message: '' };
+  // Master build: the server account (XP, shards, upgrades, rating), the held Chogs read on Monad, and the ticket
+  // choice for online play. Loaded when Online or the Progress tab opens; never on a plain launch.
+  const acct = emptyAcct();
+  let lastReward: { pending: boolean; reward: account.Reward | null; note: string; matchId: string | null } = { pending: false, reward: null, note: '', matchId: null };
   const canVibrate = typeof navigator.vibrate === 'function';
   // Per-run counters for the results screen and medals (the sim does not track these).
   let runPickups = 0, runAbilities = 0;
@@ -151,7 +162,7 @@ async function start() {
   let runIndex = 0;
   let autopilot: Autopilot | null = null;
   let suggestPilot: Autopilot | null = null;
-  let world: World = createWorld({ seed: TUNING.seed, hero: heroId, sidegrade: identity.sidegrade, zone: true });
+  let world: World = createWorld({ seed: TUNING.seed, hero: heroId, sidegrade: identity.sidegrade, zone: true, power: soloPower() });
   let acc = 0;
   let recapLeft = 0;
   let playTime = 0;
@@ -331,6 +342,7 @@ async function start() {
     return {
       touch: input.mode === 'touch', profile, settings, records, medals, heroId, demoChip: demoChip(), marking: identity.marking,
       muted: audio.muted, canFs: canFs && !isFullscreen(), canVibrate, build: __BUILD_SHA__, auth,
+      acct, netProfile: net?.profile ?? null, demoToken: identity.kind === 'bound' ? identity.tokenId : null,
     };
   }
 
@@ -359,11 +371,14 @@ async function start() {
 
   function showDemo() {
     const rows = SIDEGRADES.map((sg) => { const t = TRAIT_INFO[sg.id]; return `<tr><td><b>${esc(t.name)}</b></td><td>${esc(t.effect)}</td><td>${esc(t.counterplay)}</td></tr>`; }).join('');
-    const picks = sampleTokens().map((t) => `<button class="btn" data-demo="${t}">#${t} · ${esc(traitsFor(t).sidegrade.name)}</button>`).join('');
-    card(`<div class="kicker"><span class="demo">DEMO</span> Chog traits</div><h2>Try a Chog</h2>
-      <p class="democopy">${esc(DEMO_COPY)} Anyone can play; a Chog changes how you play, never how strong you are.</p>
+    const picks = sampleTokens().map((t) => `<button class="btn" data-demo="${t}">#${t} · ${esc(TIER_DEFS[tierOfMetadataId(Number(t)) ?? 'free'].label)} · ${esc(traitsFor(t).sidegrade.name)}</button>`).join('');
+    // One real token per tier (from the verified catalogue) and a 1:1 with its signature ability.
+    const tiers = DEMO_TIER_SAMPLES.map((t) => { const n = Number(t); const tr = tierOfMetadataId(n)!; const sig = signatureFor(n); return `<tr><td><button class="btn small" data-demo="${t}">Chog #${t}</button></td><td>${esc(TIER_DEFS[tr].label)}</td><td>${esc(sig ? `${sig.name}: ${sig.text}` : tierEffect(tr))}</td></tr>`; }).join('');
+    card(`<div class="kicker"><span class="demo">DEMO</span> Chog class system</div><h2>Try a Chog</h2>
+      <p class="democopy">${esc(DEMO_COPY)} The tier is the token's real tier from the Chog Genesis catalogue. Demo power plays solo and in demo-only online rooms, and earns nothing.</p>
+      <table class="traits"><tr><th>Token</th><th>Tier</th><th>What it does</th></tr>${tiers}</table>
       <table class="traits"><tr><th>Trait</th><th>Effect</th><th>Counterplay</th></tr>${rows}</table>
-      <p style="font-size:13px">Token # maps to a trait (hash of the number, mod 4) and a cosmetic marking colour. Health, armour, damage and speed never change.</p>
+      <p style="font-size:13px">On top of the tier, the token number picks a play-shape trait (hash of the number, mod 4) and a marking colour. Speed never changes.</p>
       <div class="btns">${picks}<button class="btn" data-demo="">Play as guest</button></div>
       <div class="btns"><button class="btn primary" data-act="demo-close">Back</button></div>`);
   }
@@ -464,12 +479,14 @@ async function start() {
     switch (a) {
       case 'howto': titleView = 'howto'; break;
       case 'howto-close': closeHowto(); break;
-      case 'online': titleView = 'online'; if (NET_URL && !net) net = new OnlineSession(NET_URL, () => displayName(profile), () => heroId, sessionStorage); if (net && net.state === 'offline') net.connect(); break;
+      case 'online': titleView = 'online'; void refreshAccount(); if (NET_URL && !net) net = newSession(); if (net && net.state === 'offline') net.connect(); break;
+      case 'demo-online': if (identity.tokenId && tierOfMetadataId(Number(identity.tokenId))) setChoice({ demo: Number(identity.tokenId) }); break;
+      case 'demo-online-off': setChoice(null); break;
       case 'online-cancel': net?.leave(); break;
       case 'online-again': online = false; go('menu'); titleView = 'online'; joinOnline(onlineMode); break;
       case 'demo': titleView = 'demo'; break;
       case 'demo-close': titleView = 'main'; break;
-      case 'profile': titleView = 'profile'; profileTab = 'player'; break;
+      case 'profile': titleView = 'profile'; profileTab = 'player'; void refreshAccount(); break;
       case 'medals': titleView = 'profile'; profileTab = 'medals'; break;
       case 'settings': titleView = 'settings'; confirmReset = false; refreshAuth(); break;
       case 'nick': nickReturn = titleView === 'nick' ? nickReturn : titleView; titleView = 'nick'; nickError = ''; nickSaved = false; break;
@@ -520,7 +537,11 @@ async function start() {
       return;
     }
     const tab = t.closest('[data-tab]') as HTMLElement | null;
-    if (tab) { e.preventDefault(); profileTab = tab.dataset.tab as ProfileTab; render(); return; }
+    if (tab) { e.preventDefault(); profileTab = tab.dataset.tab as ProfileTab; if (profileTab === 'progress') void refreshAccount(); render(); return; }
+    const tk = t.closest('[data-token]') as HTMLElement | null;
+    if (tk) { e.preventDefault(); setChoice(tk.dataset.token ? { tokenId: Number(tk.dataset.token) } : null); render(); return; }
+    const up = t.closest('[data-upgrade]') as HTMLElement | null;
+    if (up) { e.preventDefault(); void buyUpgrade(up.dataset.upgrade!); return; }
     const fav = t.closest('[data-fav]') as HTMLElement | null;
     if (fav) {
       e.preventDefault();
@@ -615,11 +636,11 @@ async function start() {
 
   function beginWorld() {
     runIndex++;
-    world = createWorld({ seed: TUNING.seed + runIndex, hero: heroId, sidegrade: identity.sidegrade, zone: true });
+    world = createWorld({ seed: TUNING.seed + runIndex, hero: heroId, sidegrade: identity.sidegrade, zone: true, power: soloPower() });
     autopilot = AUTOPLAY_SEED !== null ? createAutopilot(AUTOPLAY_SEED + runIndex) : null;
     suggestPilot = null;
     renderer.reset(world);
-    fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = 0;
+    fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = fx.rings.length = 0;
     for (const s of fx.sparks) s.age = 1;
     fx.shake = 0;
     acc = 0;
@@ -629,9 +650,10 @@ async function start() {
     hurtNow = blockedNow = false;
     sinceHint = 0;
     const h = heroById(heroId);
-    $('hero').innerHTML = `${esc(h.name)} · ${identity.kind === 'bound' ? `<span class="demo">DEMO</span> #${esc(identity.tokenId!)} ${esc(identity.sidegrade.name)}` : 'Guest'}`;
+    const dp = world.actors[0].power;
+    $('hero').innerHTML = `${esc(h.name)} · ${identity.kind === 'bound' ? `<span class="demo">DEMO</span> #${esc(identity.tokenId!)} ${dp.tier !== 'free' ? `${esc(TIER_DEFS[dp.tier].label)} · ` : ''}${esc(identity.sidegrade.name)}` : 'Guest'}`;
     $('wname').textContent = world.actors[0].weapon.name;
-    $('abl').innerHTML = `${esc(h.ability.name)}<small class="keyhint">Space</small>`;
+    $('abl').innerHTML = `${esc(world.actors[0].ability.name)}<small class="keyhint">Space</small>`;
     $('pips').innerHTML = world.actors.slice(1).map(() => '<i></i>').join('');
     hint.innerHTML = input.mode === 'touch'
       ? 'Left thumb moves, half push creeps. Right thumb aims, push past the ring to fire.'
@@ -639,11 +661,69 @@ async function start() {
     showHint(hint.innerHTML, runIndex === 1 ? 6 : 0);
   }
 
+  // ---- Account and class system (master build) ----
+  function newSession(): OnlineSession {
+    const s = new OnlineSession(NET_URL!, () => displayName(profile), () => heroId, sessionStorage);
+    // Each connection gets a fresh single-use ticket from the site; the game server checks it with the site.
+    s.ticketSource = async () => {
+      if (!acct.config || (!acct.signedIn && !acct.choice?.demo)) return null;
+      const r = await account.fetchTicket(acct.choice ?? {}, displayName(profile));
+      acct.ticket = r?.profile ?? null;
+      acct.ticketWarning = r?.warning ?? null;
+      return r?.ticket ?? null;
+    };
+    return s;
+  }
+  /** A new token or demo choice applies from the next connection (a ticket is fixed for its connection). */
+  function setChoice(c: { tokenId?: number; demo?: number } | null) {
+    acct.choice = c;
+    acct.ticketWarning = null;
+    if (net && net.state !== 'match' && net.state !== 'reconnecting') { net.close(); net = null; }
+    render();
+  }
+  let accountLoading = false;
+  async function refreshAccount() {
+    if (accountLoading) return;
+    accountLoading = true;
+    try {
+      acct.config = await account.gameConfig();
+      if (!acct.config) return;
+      const [p, ids] = await Promise.all([account.loadProfile(), fetchSession()]);
+      acct.signedIn = !!p?.signedIn;
+      acct.progression = !!p?.progression;
+      acct.profile = p?.profile ?? null;
+      acct.hasWallet = ids.some((i) => i.provider === 'wallet');
+      if (acct.progression) acct.board = (await account.leaderboard())?.rows ?? null;
+      if (acct.hasWallet) {
+        const t = await account.loadTokens();
+        acct.tokens = t?.tokens ?? [];
+        acct.tokensError = t && t.ok === false ? t.error ?? 'chain_unavailable' : t ? null : 'chain_unavailable';
+        // Default to the strongest held Chog the first time (the server re-verifies it on every ticket).
+        if (!acct.choice && acct.tokens.length) acct.choice = { tokenId: acct.tokens[0].tokenId };
+      }
+    } finally {
+      accountLoading = false;
+      if (phase === 'title' && (titleView === 'online' || titleView === 'profile')) render();
+    }
+  }
+  async function buyUpgrade(id: string) {
+    acct.busy = true; acct.message = ''; render();
+    const r = await account.buyUpgrade(id);
+    acct.busy = false;
+    acct.message = r?.ok ? '' : r?.reason === 'shards' ? 'Not enough shards yet.' : r?.reason === 'maxed' ? 'That upgrade is maxed.' : 'Could not buy that upgrade right now.';
+    await refreshAccount();
+  }
+  /** Solo power: a labelled DEMO token shows its catalogue tier; everything else is the base operator. */
+  function soloPower(): Power {
+    const n = Number(identity.tokenId);
+    return identity.kind === 'bound' && tierOfMetadataId(n) ? powerForToken(n, null, true) : BASE_POWER;
+  }
+
   // ---- Online (RC-8) ----
   function joinOnline(mode: Mode) {
     if (!NET_URL) return;
     onlineMode = mode;
-    net ??= new OnlineSession(NET_URL, () => displayName(profile), () => heroId, sessionStorage);
+    net ??= newSession();
     const code = ((document.getElementById('roomcode') as HTMLInputElement | null)?.value ?? ONLINE_CODE).toUpperCase().replace(/[^A-Z0-9]/g, '');
     net.joinQueue(mode, code.length >= 4 ? code.slice(0, 8) : undefined);
     render();
@@ -653,26 +733,40 @@ async function start() {
   function beginOnlineWorld() {
     world = net!.world!;
     renderer.reset(world);
-    fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = 0;
+    fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = fx.rings.length = 0;
     for (const sp of fx.sparks) sp.age = 1;
     fx.shake = 0;
     fx.threats.length = 0;
     playTime = 0;
     hurtNow = blockedNow = false;
     const me = world.actors[0];
-    $('hero').innerHTML = `${esc(me.hero.name)} · <b>Online ${esc(onlineMode)}</b>`;
+    $('hero').innerHTML = `${esc(me.hero.name)} · <b>Online ${esc(onlineMode)}</b>${net?.match?.demo ? ' · <span class="demo">DEMO</span>' : ''}`;
     $('wname').textContent = me.weapon.name;
     $('abl').innerHTML = `${esc(me.ability.name)}<small class="keyhint">Space</small>`;
     $('pips').innerHTML = world.actors.filter((a) => a.team !== me.team).map(() => '<i></i>').join('');
     lastHud = '';
-    showHint(`Online ${esc(onlineMode)}: ${MODE_SIZE[onlineMode] / 2} a side, real players. Your side is ringed green.`, 5);
+    const others = (net?.match?.roster ?? []).filter((r) => r.team !== me.team && r.tier !== 'free');
+    showHint(`Online ${esc(onlineMode)}: ${MODE_SIZE[onlineMode] / 2} a side, real players. Your side is ringed green.${others.length ? ` Facing: ${others.map((r) => `${esc(r.name)} (${r.tier === 'legendary' ? `1:1, ${esc(r.ability.name)}` : esc(r.tier)})`).join(', ')}.` : ''}`, 6);
   }
 
   function showOnlineResults() {
     const o = net?.over;
     if (!o) { show('<div class="card"><h2>Match over</h2><div class="btns"><button class="btn" data-go="menu">Menu</button></div></div>'); return; }
-    const rows = o.results.map((x) => ({ name: x.name, hero: x.hero, team: x.team, kills: x.kills, damageDealt: x.damageDealt, damageTaken: x.damageTaken, alive: x.alive, cause: x.cause, you: x.id === o.you }));
-    show(onlineResultsHtml({ mode: o.mode, won: o.winner === null ? null : o.winner === o.team, reason: o.reason, team: o.team, rows }));
+    const roster = net?.match?.roster ?? [];
+    const rows = o.results.map((x) => {
+      const r = roster.find((y) => y.id === x.id);
+      return { name: x.name, hero: x.hero, team: x.team, kills: x.kills, damageDealt: x.damageDealt, damageTaken: x.damageTaken, alive: x.alive, cause: x.cause, you: x.id === o.you, tier: r?.tier ?? 'free', demo: !!r?.demo };
+    });
+    // Rewards are settled by the site pulling this match from the game server, once (never from what this page says).
+    if (o.settle && o.matchId && lastReward.matchId !== o.matchId) {
+      lastReward = { pending: true, reward: null, note: '', matchId: o.matchId };
+      void account.settle(o.matchId).then((r) => {
+        lastReward = { pending: false, reward: r?.mine ?? null, note: r?.error === 'progression_offline' ? 'Saved progression is offline (no database connected yet).' : r?.mine ? '' : 'Result not saved to your account.', matchId: o.matchId };
+        if (phase === 'results' && online) render();
+      });
+    }
+    const reward = rewardLine(o, !!net?.match?.demo, acct.signedIn, lastReward.reward, lastReward.pending, lastReward.note);
+    show(onlineResultsHtml({ mode: o.mode, won: o.winner === null ? null : o.winner === o.team, reason: o.reason, team: o.team, rows, reward }));
   }
 
   // Watches the session from the frame loop: refreshes the Online screen, enters a found match, ends a finished one.
@@ -733,7 +827,7 @@ async function start() {
   }, 50);
   else try {
     if (NET_URL && sessionStorage.getItem('chog-room-zero:net-token')) {
-      net = new OnlineSession(NET_URL, () => displayName(profile), () => heroId, sessionStorage);
+      net = newSession();
       net.connect();
     }
   } catch { /* storage blocked: no resume */ }
@@ -857,12 +951,13 @@ async function start() {
       const own = s.sourceId === 0;
       const dx = s.x - p.x, dy = s.y - p.y;
       if (s.type === 'sonar') fx.pings.push({ x: s.x, y: s.y, age: 0, hostile: !own });
+      if (s.type === 'burst' || s.type === 'scream') fx.rings.push({ x: s.x, y: s.y, age: 0, r: world.actors[s.sourceId]?.ability.radius ?? 3, color: s.type === 'burst' ? TUNING.palette.hostile : TUNING.palette.armor });
       // The one reveal rule (docs/design/bots.md): a muzzle flash with wall line of sight shows the shooter
       // briefly, at any range. Bots get the same signal from the player's flash.
       if (s.type === 'shot' && !own && s.team !== p.team && muzzleFlashSeen(world.level, p.x, p.y, s.x, s.y))
         fx.threats[s.sourceId] = TUNING.perception.flashSeconds;
       // RC-7 run facts (results, medals, tips): own ability uses, pickups, shots stopped by cover.
-      if (own && (s.type === 'dash' || s.type === 'sonar' || s.type === 'barrier' || s.type === 'mend')) runAbilities++;
+      if (own && ['dash', 'sonar', 'barrier', 'mend', 'windup', 'scream', 'shield', 'frenzy'].includes(s.type)) runAbilities++;
       if (own && s.type === 'pickup') collected(s.x, s.y);
       if (own && s.type === 'impact' && s.blocked) blockedNow = true;
       const heard = own || hears(world.level, p.x, p.y, s);
@@ -1031,6 +1126,8 @@ async function start() {
       hintLeft -= dt;
       if (hintLeft <= 0) hint.style.opacity = '0';
     } else if (phase === 'play') sinceHint += dt;
+    for (const c of fx.rings) c.age += dt;
+    fx.rings = fx.rings.filter((c) => c.age < RING_SECONDS);
     for (const c of fx.collects) c.age += dt;
     fx.collects = fx.collects.filter((c) => c.age < COLLECT_SECONDS);
     $('toast').style.opacity = toastLeft > 0 ? '1' : '0';

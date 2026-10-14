@@ -138,6 +138,19 @@
       .loadbar i { display: block; height: 100%; width: 40%; background: var(--signal); animation: load 0.9s ease-in-out infinite; }
       @keyframes load { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
       .mock { display: inline-block; font-size: 12px; letter-spacing: 0.12em; border: 1px solid var(--line); padding: 2px 8px; color: var(--dim); text-transform: uppercase; margin-top: 10px; }
+      /* Class system (master build): tier badges are shape + text, not colour alone. */
+      .tier { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; border: 1px solid var(--border); border-radius: 3px; padding: 0 5px; line-height: 1.5; vertical-align: middle; color: var(--chog-cream); }
+      .tier-free { opacity: 0.7; }
+      .tier-common { border-color: var(--border); }
+      .tier-uncommon { border-color: var(--ally); }
+      .tier-rare { border-color: var(--armor); }
+      .tier-epic { border-color: var(--chog-purple-bright); }
+      .tier-legendary { border-color: var(--ammo); background: var(--bg-elevated); }
+      .xpbar { height: 8px; background: var(--bg-elevated); border-radius: 4px; overflow: hidden; margin: 6px 0; }
+      .xpbar i { display: block; height: 100%; background: var(--chog-purple-bright); }
+      .btn.mode.locked { opacity: 0.55; }
+      .online-card.ident { margin-top: 12px; }
+      .btns.tokens .btn.on, .btn.small.on { outline: 2px solid var(--chog-purple-bright); }
       .demo { display: inline-block; font-size: 11px; letter-spacing: 0.14em; font-weight: 700; color: var(--bg-deep); background: var(--signal); border-radius: 3px; padding: 1px 5px; vertical-align: middle; line-height: 1.4; }
       .pb { font-size: 14px !important; color: var(--ink) !important; } .pb span { color: var(--dim); } .pb b { color: var(--heal); font-size: 12px; }
       .democopy { color: var(--ink) !important; border: 1px solid var(--signal); border-radius: 4px; padding: 6px 10px; font-size: 14px !important; }

@@ -1,6 +1,6 @@
 // Menu screens (RC-7) as HTML strings from plain data, so main.ts only routes and every screen reads the same,
-// honest sources: device records, medals, the guest profile and settings. No currencies, shop, chests or
-// leaderboards: those systems do not exist, so no screen pretends they do.
+// honest sources: device records, medals, the guest profile and settings, and (master build) the server account:
+// XP, shards earned in play, upgrades and ratings (src/ui/account.ts). Nothing is sold; no chests.
 // Test hooks kept from earlier builds: data-go/data-act/data-hero/data-demo, #idchip, #selchip, #titlepb, #resultpb,
 // table.howto, table.stats, the title's h1 (no h2), the results h2.
 import { HEROES, heroById, type HeroDef } from '../config/heroes';
@@ -10,12 +10,15 @@ import { fmtTime, type Best, type Records } from './records';
 import { MEDALS, medalProgress, type MedalDef, type Unlocked } from './medals';
 import { displayName, NICK_MAX, STICK_PX, type Profile, type Settings } from './profile';
 import { controlsSvg, medalSvg, portraitSvg, RARITY_LABEL, tokenSvg } from './art';
+import { fiveLock, onlineIdentityHtml, progressTabHtml, tierBadge, type AcctView } from './account';
+import type { NetProfile } from '../net/protocol';
+import type { Tier } from '../config/power';
 
 export function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
 
-export type ProfileTab = 'player' | 'operators' | 'medals' | 'loadout';
+export type ProfileTab = 'player' | 'progress' | 'operators' | 'medals' | 'loadout';
 
 export interface AuthView {
   /** null while asking the server; false when there is no auth server at this address. */
@@ -41,6 +44,11 @@ export interface ScreenCtx {
   canVibrate: boolean;
   build: string;
   auth: AuthView;
+  acct: AcctView;
+  /** What the game server made of this connection (null when not connected). */
+  netProfile: NetProfile | null;
+  /** The DEMO token number chosen on the DEMO screen, if any. */
+  demoToken: string | null;
 }
 
 const ICON = {
@@ -217,8 +225,8 @@ ${rows([
 }
 
 export function profileHtml(c: ScreenCtx, tab: ProfileTab): string {
-  const tabs: [ProfileTab, string][] = [['player', 'Player'], ['operators', 'Operators'], ['medals', 'Medals'], ['loadout', 'Loadout']];
-  const body = tab === 'operators' ? operatorsTab(c) : tab === 'medals' ? medalsTab(c) : tab === 'loadout' ? loadoutTab(c) : playerTab(c);
+  const tabs: [ProfileTab, string][] = [['player', 'Player'], ['progress', 'Progress'], ['operators', 'Operators'], ['medals', 'Medals'], ['loadout', 'Loadout']];
+  const body = tab === 'progress' ? progressTabHtml(c.acct) : tab === 'operators' ? operatorsTab(c) : tab === 'medals' ? medalsTab(c) : tab === 'loadout' ? loadoutTab(c) : playerTab(c);
   return `<div class="screen profile">${topbar('Player card')}
 <nav class="tabs" role="tablist">${tabs.map(([id, label]) => `<button class="tab${id === tab ? ' on' : ''}" role="tab" aria-selected="${id === tab}" data-tab="${id}">${label}</button>`).join('')}</nav>
 <div class="prof-body">${playerCard(c)}${body}</div></div>`;
@@ -245,7 +253,7 @@ function accountRows(c: ScreenCtx): string {
   else if (!a.wallets.length) wallet = '<p class="note">No wallet found in this browser. Open the game in MetaMask, Rabby or Zerion, or install the extension.</p>';
   else wallet = a.wallets.map((w) => `<button class="btn signin" data-wallet="${esc(w.id)}">Sign in with ${esc(w.name)}</button>`).join('');
   return `${signedIn}<div class="signins">${google}${wallet}</div>${a.message ? `<p class="note${a.busy ? '' : ' warn'}" id="authmsg">${esc(a.message)}</p>` : ''}
-<p class="note">Signing in proves who you are and links that identity to this device's player card. Progress is still saved on this device only (no cloud save yet). It never checks Chog ownership.</p>`;
+<p class="note">Signing in gives you an account: XP, level, shards, upgrades and rating from online matches are saved on the server. Solo records and medals stay on this device. Signing in with a wallet lets the server check, on Monad, which Chog Genesis tokens that wallet holds. Signing is free and sends no transaction.</p>`;
 }
 
 export function settingsHtml(c: ScreenCtx, confirmReset: boolean): string {
@@ -343,7 +351,11 @@ built and tested, but not deployed: hosting it is the owner's decision (free and
 <div class="btns"><button class="btn primary" data-go="start">Play solo</button></div></section></div></div>`;
   }
   const busy = v.state === 'queued' || v.state === 'connecting';
-  const modes = (['1v1', '3v3', '5v5'] as const).map((m) => `<button class="btn mode${v.queue?.mode === m ? ' on' : ''}" data-online="${m}"${busy ? ' disabled' : ''}><b>${m}</b><small>${MODE_TEXT[m]}</small></button>`).join('');
+  const lock = fiveLock(c.acct, c.netProfile);
+  const modes = (['1v1', '3v3', '5v5'] as const).map((m) => {
+    const locked = m === '5v5' && lock;
+    return `<button class="btn mode${v.queue?.mode === m ? ' on' : ''}${locked ? ' locked' : ''}" data-online="${m}"${busy || locked ? ' disabled' : ''}><b>${m}</b><small>${locked ? esc(lock) : MODE_TEXT[m]}</small></button>`;
+  }).join('');
   const status = v.state === 'queued' && v.queue
     ? `<p class="status num">Finding a ${esc(v.queue.mode)} match: ${v.queue.have} / ${v.queue.need} players${v.queue.code ? ` · code ${esc(v.queue.code)}` : ''}</p><div class="loadbar"><i></i></div>
 <div class="btns"><button class="btn" data-act="online-cancel">Cancel</button></div>`
@@ -357,20 +369,20 @@ built and tested, but not deployed: hosting it is the owner's decision (free and
 <input id="roomcode" class="field small" maxlength="8" placeholder="e.g. CHOG7" autocomplete="off" spellcheck="false"${busy ? ' disabled' : ''} /></label>
 ${status}${v.message ? `<p class="note warn">${esc(v.message)}</p>` : ''}
 <p class="note">You play ${esc(h.name)}; change operator from Play. Teams are split evenly, west against east, with the
-same rules, danger zone and pickups as solo. Guest play: no account needed${v.rtt ? ` · ping ${Math.round(v.rtt)} ms` : ''}.</p>
-</section></div></div>`;
+same rules, danger zone and pickups as solo. Every player's tier is shown to both sides. 1v1 and 3v3 need no account${v.rtt ? ` · ping ${Math.round(v.rtt)} ms` : ''}.</p>
+</section>${onlineIdentityHtml(c.acct, c.netProfile, c.demoToken)}</div></div>`;
 }
 
-export interface OnlineResult { name: string; hero: string; team: string; kills: number; damageDealt: number; damageTaken: number; alive: boolean; cause: string | null; you: boolean }
+export interface OnlineResult { name: string; hero: string; team: string; kills: number; damageDealt: number; damageTaken: number; alive: boolean; cause: string | null; you: boolean; tier: Tier; demo: boolean }
 
-export function onlineResultsHtml(r: { mode: string; won: boolean | null; reason: string; team: string; rows: OnlineResult[] }): string {
+export function onlineResultsHtml(r: { mode: string; won: boolean | null; reason: string; team: string; rows: OnlineResult[]; reward: string }): string {
   const title = r.won === null ? 'Draw' : r.won ? 'Victory' : 'Defeat';
   const why = r.reason === 'time' ? 'Time ran out: the side with more health standing takes it.' : r.won === null ? 'Nobody was left standing.' : r.won ? 'The other side is down.' : 'Your side is down.';
-  const row = (x: OnlineResult) => `<tr class="${x.you ? 'me' : ''}"><td>${esc(x.name)}${x.you ? ' (you)' : ''}</td><td>${esc(heroById(x.hero).name)}</td><td class="num">${x.kills}</td><td class="num">${x.damageDealt}</td><td class="num">${x.damageTaken}</td><td>${x.alive ? 'standing' : x.cause === 'zone' ? 'zone' : x.cause === 'left' ? 'left' : 'down'}</td></tr>`;
+  const row = (x: OnlineResult) => `<tr class="${x.you ? 'me' : ''}"><td>${esc(x.name)}${x.you ? ' (you)' : ''}</td><td>${esc(heroById(x.hero).name)} ${tierBadge(x.tier, x.demo)}</td><td class="num">${x.kills}</td><td class="num">${x.damageDealt}</td><td class="num">${x.damageTaken}</td><td>${x.alive ? 'standing' : x.cause === 'zone' ? 'zone' : x.cause === 'left' ? 'left' : 'down'}</td></tr>`;
   const side = (team: string, label: string) => `<h3>${label}</h3><table class="kv online-res"><tr><th>Player</th><th>Operator</th><th>Kills</th><th>Dealt</th><th>Taken</th><th></th></tr>${r.rows.filter((x) => x.team === team).map(row).join('')}</table>`;
   const other = r.team === 'alpha' ? 'bravo' : 'alpha';
   return `<div class="card results"><div class="kicker">Online ${esc(r.mode)} · real players</div><h2 class="${r.won === null ? '' : r.won ? 'good' : 'bad'}">${title}</h2><p>${why}</p>
 <div class="res-grid"><div>${side(r.team, 'Your side')}</div><div>${side(other, 'Other side')}</div></div>
-<p class="pb">Online matches are not saved to your solo records or medals.</p>
+${r.reward}<p class="pb">Online matches are not saved to your solo records or medals.</p>
 <div class="btns"><button class="btn primary" data-act="online-again">Play ${esc(r.mode)} again</button><button class="btn" data-go="menu">Menu</button></div></div>`;
 }
