@@ -67,8 +67,9 @@ beforeEach(async () => {
 
 describe('config and profile', () => {
   it('reports what is on; refuses without AUTH_SECRET', async () => {
-    expect((await call('GET', 'config')).j).toEqual({ db: true, nftCombat: false, demo: true });
-    expect((await call('GET', 'config', {}, { NFT_COMBAT: '1' })).j.nftCombat).toBe(true);
+    // Owner 2026-10-14: NFT combat power is on unless NFT_COMBAT=0.
+    expect((await call('GET', 'config')).j).toEqual({ db: true, nftCombat: true, demo: true });
+    expect((await call('GET', 'config', {}, { NFT_COMBAT: '0' })).j.nftCombat).toBe(false);
     const r = await handleGame(req('GET', 'config'), 'config', { ...deps(), env: {} });
     expect(r.status).toBe(503);
   });
@@ -85,7 +86,9 @@ describe('ownership (live chain read, fails closed)', () => {
   const walletCookie = () => cookieFor([{ provider: 'wallet', subject: WALLET, label: 'w' }]);
   it('lists held tokens with tier from the contract metadata id, best first', async () => {
     const { j } = await call('GET', 'tokens', { cookie: await walletCookie() });
-    expect(j.tokens.map((t: { tokenId: number; tier: string; name: string }) => [t.tokenId, t.tier, t.name])).toEqual([[5, 'legendary', 'Chog #53'], [900, 'uncommon', 'Chog #1462']]);
+    expect(j.tokens.map((t: { tokenId: number; tier: string; name: string }) => [t.tokenId, t.tier, t.name])).toEqual([[5, 'legendary', 'Blaze (#53)'], [900, 'uncommon', 'Chog #1462']]);
+    expect(j.tokens[0].oneOfOne).toBe('Blaze');
+    expect(j.tokens[0].signature.counter).toBeTruthy();
     expect(j.tokens[0].signature.name).toBe('Flashfire');
   });
   it('wrong chain or RPC down: no holder rights', async () => {
@@ -96,11 +99,11 @@ describe('ownership (live chain read, fails closed)', () => {
     expect(t.j.profile.holder).toBe(false);
     expect(t.j.warning).toBe('chain_unavailable');
   });
-  it('ticket for a holder: verified holding; combat power only when NFT_COMBAT is on', async () => {
-    const off = await call('POST', 'ticket', { cookie: await walletCookie(), body: { tokenId: 5 } });
+  it('ticket for a holder: verified holding with its tier power (on by default); NFT_COMBAT=0 plays at free power', async () => {
+    const off = await call('POST', 'ticket', { cookie: await walletCookie(), body: { tokenId: 5 } }, { NFT_COMBAT: '0' });
     expect(off.j.profile).toMatchObject({ holder: true, tokenId: 5, metadataId: 53, tokenTier: 'legendary', tier: 'free', demo: false, account: true });
-    const on = await call('POST', 'ticket', { cookie: await walletCookie(), body: { tokenId: 5 } }, { NFT_COMBAT: '1' });
-    expect(on.j.profile).toMatchObject({ tier: 'legendary', signature: 'Flashfire' });
+    const on = await call('POST', 'ticket', { cookie: await walletCookie(), body: { tokenId: 5 } });
+    expect(on.j.profile).toMatchObject({ tier: 'legendary', signature: 'Flashfire', oneOfOne: 'Blaze' });
     const check = await call('POST', 'ticket-check', { body: { ticket: on.j.ticket }, origin: null });
     expect(check.j.ticket).toMatchObject({ holder: true, tok: 5, mid: 53, own: WALLET, tier: 'legendary' });
   });
@@ -140,7 +143,7 @@ describe('settlement pulled from the game server', () => {
       { acc: b, team: 'bravo', tier: 'free', tok: null, mid: null, own: null, kills: 0, damage: 50, left: false }] });
     const cookie = await cookieFor([{ provider: 'google', subject: 'a', label: 'a' }]);
     const s1 = await call('POST', 'settle', { cookie, body: { matchId: '0123456789abcdef' } });
-    expect(s1.j).toMatchObject({ ok: true, already: false, mine: { acc: a, xp: 110, shards: 15 } });
+    expect(s1.j).toMatchObject({ ok: true, already: false, mine: { acc: a, xp: 110, shards: 20 } });
     expect(s1.j.players).toBeUndefined();
     const s2 = await call('POST', 'settle', { cookie, body: { matchId: '0123456789abcdef' } });
     expect(s2.j.already).toBe(true);
@@ -174,7 +177,7 @@ describe('leaderboard and health endpoints', () => {
     const mine = await call('GET', 'leaderboard', { cookie: await cookieFor([{ provider: 'google', subject: 'a', label: 'a' }]) });
     expect(mine.j.me).toMatchObject({ name: 'Alpha', rank: 2, you: true });
     const h = await call('GET', 'health');
-    expect(h.j.migrations.map((m: { version: number }) => m.version)).toEqual([1, 2]);
+    expect(h.j.migrations.map((m: { version: number }) => m.version)).toEqual([1, 2, 3]);
     expect(h.j.tables).toContain('match_players');
     db = null;
     expect((await call('GET', 'health')).j).toEqual({ db: false });

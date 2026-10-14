@@ -206,7 +206,13 @@ export class Lobby {
           if (!t) note = 'Your ticket could not be checked: playing as a free profile.';
           else if (this.usedTickets.has(t.tid)) note = 'That ticket was already used: playing as a free profile.';
           else if (t.acc && [...this.players.values()].some((o) => o !== p && o.ticket?.acc === t.acc && (o.conn || o.state === 'playing'))) note = 'This account is already playing on another connection: playing as a free profile.';
-          else { this.usedTickets.set(t.tid, t.exp); p.ticket = t; }
+          else {
+            this.usedTickets.set(t.tid, t.exp);
+            p.ticket = t;
+            // A signed-in account plays under its own callsign (the site put it in the signed ticket).
+            const n = t.acc && t.name ? validateNickname(t.name) : null;
+            if (n?.ok) p.name = n.value;
+          }
           this.welcome(p, note);
         });
         return;
@@ -396,7 +402,7 @@ export class Lobby {
       id: room.id, mode: room.mode, demo: room.demo, winner: w.winner, reason, seconds: Math.round(matchSeconds(w)), endedAt: Math.floor(Date.now() / 1000),
       players: w.actors.map((a) => {
         const t = room.members[a.id].ticket;
-        return { acc: t?.acc ?? null, team: a.team, tier: a.power.tier, tok: t?.holder ? t.tok : null, mid: t?.holder ? t.mid : null, own: t?.holder ? t.own : null, kills: a.kills, damage: Math.round(a.damageDealt), left: room.left[a.id], name: a.name };
+        return { acc: t?.acc ?? null, team: a.team, tier: a.power.tier, tok: t?.holder ? t.tok : null, mid: t?.holder ? t.mid : null, own: t?.holder ? t.own : null, kills: a.kills, damage: Math.round(a.damageDealt), left: room.left[a.id], name: a.name, hero: a.hero.id, survived: a.alive };
       }),
     };
     this.results.set(room.id, { at: this.opts.now(), record });

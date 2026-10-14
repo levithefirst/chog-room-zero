@@ -2,7 +2,10 @@
 // Hobby plan's function count. Dependencies are passed in so tests run it with PGlite and a fake chain.
 //
 //   GET  config        what is switched on: database, NFT combat power, demo mode
-//   GET  profile       the signed-in account: level, XP, shards, rating, upgrades
+//   GET  profile       the signed-in account: level, XP, shards, rating, upgrades, callsign, medals, career, Chog
+//   POST callsign      set the account's callsign (validated; shown in matches and on the leaderboard)
+//   POST prefs         favourite operator and pinned medals (earned ones only)
+//   POST practice      store one solo practice run (bounded, rate limited, once per run id): career and medals only
 //   GET  tokens        Chog Genesis tokens the signed-in wallet holds, read live from Monad (fails closed)
 //   POST ticket        a 10 minute game ticket for the game server: account, verified holding, power (or a demo token)
 //   POST ticket-check  the game server asks whether a ticket is genuine (no cookie, no origin: the ticket is the proof)
@@ -14,8 +17,9 @@
 import { env as authEnv, json, readSession, sameOrigin, secretOk, type Env, type Identity } from './auth.js';
 import { schemaStatus, type Db } from './db.js';
 import { readOwnership, selfCheck, type Fetch, type Holding, type SelfCheck } from './chain.js';
-import { setNftTier, accountFor, buyUpgrade, checkTicket, issueTicket, leaderboard, profileOf, settleMatch, ticketSecret, tokenHistory, upgradesOf, validRecord, type GameTicket } from './game.js';
-import { NO_UPGRADES, SIGNATURES, TIER_DEFS, TIERS, tierOfMetadataId, type Tier } from '../../src/config/power.js';
+import { setNftTier, accountFor, buyUpgrade, callsignOf, checkTicket, issueTicket, leaderboard, settleMatch, ticketSecret, tokenHistory, upgradesOf, validRecord, type GameTicket } from './game.js';
+import { accountView, recordPractice, setCallsign, setPrefs } from './career.js';
+import { NO_UPGRADES, ONE_OF_ONE, SIGNATURES, TIER_DEFS, TIERS, chogName, tierOfMetadataId, type Tier } from '../../src/config/power.js';
 
 export interface GameEnv extends Env {
   NFT_COMBAT?: string;
@@ -31,7 +35,8 @@ export interface Deps {
 }
 
 const DEFAULT_GAME_SERVER = 'https://room-zero-game.onrender.com';
-export const nftCombatOn = (e: GameEnv) => e.NFT_COMBAT === '1';
+// Owner 2026-10-14 (master integration pass): NFT combat power is ON for verified holders. NFT_COMBAT=0 switches it off.
+export const nftCombatOn = (e: GameEnv) => e.NFT_COMBAT !== '0';
 const gameServer = (e: GameEnv) => (e.GAME_SERVER_URL || e.VITE_GAME_SERVER_URL || DEFAULT_GAME_SERVER).replace(/\/+$/, '').replace(/^ws/, 'http');
 
 async function body(req: Request): Promise<Record<string, unknown>> {
@@ -49,7 +54,8 @@ const tierRank = (t: Tier) => TIERS.indexOf(t);
 function describe(h: Holding) {
   const tier = tierOfMetadataId(h.metadataId)!;
   const sig = SIGNATURES[h.metadataId];
-  return { tokenId: h.tokenId, metadataId: h.metadataId, name: `Chog #${h.metadataId}`, tier, tierLabel: TIER_DEFS[tier].label, signature: sig ? { name: sig.name, text: sig.text } : null };
+  return { tokenId: h.tokenId, metadataId: h.metadataId, name: chogName(h.metadataId), oneOfOne: ONE_OF_ONE[h.metadataId]?.name ?? null, tier, tierLabel: TIER_DEFS[tier].label,
+    signature: sig ? { name: sig.name, text: sig.text, telegraph: sig.telegraph ?? '', counter: sig.counter ?? '' } : null };
 }
 
 /** Live holdings of every wallet in the session. ok:false if any read failed (fail closed: no holder rights). */
@@ -87,7 +93,22 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
         if (!s?.ids.length) return json({ signedIn: false });
         if (!db) return json({ signedIn: true, progression: false });
         const acc = await accountFor(db, s.ids);
-        return json({ signedIn: true, progression: true, profile: await profileOf(db, acc!) });
+        return json({ signedIn: true, progression: true, identities: s.ids.map((i) => ({ provider: i.provider, label: i.label })), profile: await accountView(db, acc!) });
+      }
+
+      case 'POST callsign':
+      case 'POST prefs':
+      case 'POST practice': {
+        if (!sameOrigin(req, e)) return json({ error: 'bad_origin' }, 403);
+        if (!db) return json({ error: 'progression_offline' }, 503);
+        const s = await readSession(req, e);
+        if (!s?.ids.length) return json({ error: 'sign_in' }, 401);
+        const acc = (await accountFor(db, s.ids))!;
+        const b = await body(req);
+        if (action === 'callsign') { const r = await setCallsign(db, acc, b.name); return json(r, r.ok ? 200 : 400); }
+        if (action === 'prefs') { const r = await setPrefs(db, acc, b); return json(r, r.ok ? 200 : 400); }
+        const r = await recordPractice(db, acc, b);
+        return json(r, r.ok ? 200 : r.reason === 'rate' ? 429 : 400);
       }
 
       case 'GET tokens': {
@@ -120,6 +141,8 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
         const ids = s?.ids ?? [];
         const acc = db && ids.length ? await accountFor(db, ids) : null;
         const up = db && acc ? await upgradesOf(db, acc) : NO_UPGRADES;
+        // A signed-in account plays under its own callsign (the one on its profile and the leaderboard).
+        const own = db && acc ? await callsignOf(db, acc) : null;
         let holding: (Holding & { owner: string }) | null = null;
         let chain: string | null = null;
         if (wallets(ids).length) {
@@ -137,7 +160,7 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
         }
         const tokTier = holding ? tierOfMetadataId(holding.metadataId) : null;
         const t = await issueTicket({
-          acc, up, name,
+          acc, up, name: own ?? name,
           tier: holding && nftCombatOn(e) ? tokTier! : 'free',
           tok: holding?.tokenId ?? null, mid: holding?.metadataId ?? null, tokTier, own: holding?.owner ?? null,
           holder: !!holding, demo: false,
@@ -207,7 +230,8 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
 
 /** What the browser may see of its ticket (the same data the game server will get). */
 function publicTicket(t: GameTicket) {
-  return { account: !!t.acc, tier: t.tier, tierLabel: TIER_DEFS[t.tier].label, tokenId: t.tok, metadataId: t.mid, tokenTier: t.tokTier, holder: t.holder, demo: t.demo, upgrades: t.up, signature: t.mid && t.tokTier === 'legendary' ? SIGNATURES[t.mid]?.name ?? null : null };
+  return { account: !!t.acc, name: t.name, tier: t.tier, tierLabel: TIER_DEFS[t.tier].label, tokenId: t.tok, metadataId: t.mid, tokenTier: t.tokTier, holder: t.holder, demo: t.demo, upgrades: t.up,
+    signature: t.mid && t.tokTier === 'legendary' ? SIGNATURES[t.mid]?.name ?? null : null, oneOfOne: t.mid ? ONE_OF_ONE[t.mid]?.name ?? null : null };
 }
 
 export const defaultDeps = async (): Promise<Deps> => ({

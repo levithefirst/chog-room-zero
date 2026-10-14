@@ -2,11 +2,21 @@
 // /api/game/<action>; the browser never decides ownership, power or rewards, it only shows what the site and the game
 // server answered. Each call fails soft: on any error the game plays on as a free profile.
 import type { Tier, Upgrades } from '../config/power';
+import type { Records } from '../ui/records';
 
 export interface GameConfig { db: boolean; nftCombat: boolean; demo: boolean }
-export interface AccountProfile { account: string; xp: number; level: number; into: number; next: number; shards: number; rating: number; matches: number; wins: number; upgrades: Upgrades }
-export interface OwnedToken { tokenId: number; metadataId: number; name: string; tier: Tier; tierLabel: string; signature: { name: string; text: string } | null; history: { matches: number; wins: number; kills: number } | null }
-export interface TicketProfile { account: boolean; tier: Tier; tierLabel: string; tokenId: number | null; metadataId: number | null; tokenTier: Tier | null; holder: boolean; demo: boolean; upgrades: Upgrades; signature: string | null }
+export interface OnlineCareer { matches: number; wins: number; kills: number; damage: number; survived: number; heroes: Record<string, { matches: number; wins: number; kills: number }> }
+/** The signed-in account as the site stores it (api/_lib/career.ts AccountView): the one source of progression. */
+export interface AccountProfile {
+  account: string; xp: number; level: number; into: number; next: number; shards: number; rating: number; matches: number; wins: number; upgrades: Upgrades;
+  callsign: string | null; favourite: string | null; pins: string[]; medals: Record<string, string>; practice: Records; online: OnlineCareer;
+  nft: { tier: Tier; tokenId: number | null } | null;
+}
+export interface OwnedToken {
+  tokenId: number; metadataId: number; name: string; oneOfOne: string | null; tier: Tier; tierLabel: string;
+  signature: { name: string; text: string; telegraph: string; counter: string } | null; history: { matches: number; wins: number; kills: number } | null;
+}
+export interface TicketProfile { account: boolean; name: string; tier: Tier; tierLabel: string; tokenId: number | null; metadataId: number | null; tokenTier: Tier | null; holder: boolean; demo: boolean; upgrades: Upgrades; signature: string | null; oneOfOne: string | null }
 export interface Reward { xp: number; shards: number; ratingBefore: number; ratingAfter: number }
 
 async function api<T>(action: string, body?: object): Promise<T | null> {
@@ -22,7 +32,11 @@ async function api<T>(action: string, body?: object): Promise<T | null> {
 }
 
 export const gameConfig = () => api<GameConfig>('config');
-export const loadProfile = () => api<{ signedIn: boolean; progression?: boolean; profile?: AccountProfile }>('profile');
+export const loadProfile = () => api<{ signedIn: boolean; progression?: boolean; identities?: { provider: 'google' | 'wallet'; label: string }[]; profile?: AccountProfile }>('profile');
+export const setCallsign = (name: string) => api<{ ok: boolean; callsign?: string; error?: string }>('callsign', { name });
+export const setPrefs = (p: { favourite?: string | null; pins?: string[] }) => api<{ ok: boolean; error?: string }>('prefs', p);
+export interface PracticeRun { runId: string; hero: string; won: boolean; seconds: number; kills: number; bullets: number; hits: number; damageDealt: number; damageTaken: number; hpLeft: number; pickups: number; abilities: number }
+export const practice = (r: PracticeRun) => api<{ ok: boolean; reason?: string; already?: boolean; earned?: string[]; newBest?: { time: boolean; kills: boolean }; records?: Records; medals?: Record<string, string> }>('practice', r);
 export const loadTokens = () => api<{ wallet: boolean; ok?: boolean; error?: string; tokens: OwnedToken[] }>('tokens');
 export interface BoardRow { rank: number; name: string; kills: number; matches: number; wins: number; xp: number; level: number; rating: number; nftTier: Tier | null; you: boolean }
 export const leaderboard = () => api<{ progression: boolean; rows: BoardRow[]; me: BoardRow | null }>('leaderboard');

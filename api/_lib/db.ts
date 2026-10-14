@@ -115,6 +115,42 @@ export const MIGRATIONS: { version: number; name: string; sql: string }[] = [
       CREATE INDEX IF NOT EXISTS match_players_account ON room_zero.match_players(account_id)
     `,
   },
+  {
+    version: 3,
+    name: 'account-owned profile: callsign, favourite, pins, medals, practice career, match hero',
+    sql: `
+      ALTER TABLE room_zero.accounts ADD COLUMN IF NOT EXISTS callsign text;
+      ALTER TABLE room_zero.accounts ADD COLUMN IF NOT EXISTS favourite_hero text;
+      ALTER TABLE room_zero.accounts ADD COLUMN IF NOT EXISTS pins text[] NOT NULL DEFAULT '{}';
+      ALTER TABLE room_zero.match_players ADD COLUMN IF NOT EXISTS hero text;
+      ALTER TABLE room_zero.match_players ADD COLUMN IF NOT EXISTS survived boolean;
+      CREATE TABLE IF NOT EXISTS room_zero.medals (
+        account_id text NOT NULL REFERENCES room_zero.accounts(id),
+        medal_id text NOT NULL,
+        earned_at timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY (account_id, medal_id)
+      );
+      CREATE TABLE IF NOT EXISTS room_zero.practice_runs (
+        account_id text NOT NULL REFERENCES room_zero.accounts(id),
+        run_id text NOT NULL,
+        hero text NOT NULL,
+        won boolean NOT NULL,
+        seconds integer NOT NULL,
+        kills integer NOT NULL,
+        bullets integer NOT NULL,
+        hits integer NOT NULL,
+        damage_dealt integer NOT NULL,
+        damage_taken integer NOT NULL,
+        pickups integer NOT NULL,
+        abilities integer NOT NULL,
+        hp_left integer NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY (account_id, run_id)
+      );
+      CREATE INDEX IF NOT EXISTS practice_runs_recent ON room_zero.practice_runs(account_id, created_at);
+      CREATE INDEX IF NOT EXISTS matches_settled ON room_zero.matches(settled_at)
+    `,
+  },
 ];
 
 /** Applies every migration not yet recorded. Safe to call on every cold start: concurrent callers wait on the lock. */

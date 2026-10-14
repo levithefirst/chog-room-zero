@@ -139,7 +139,7 @@ export interface MatchRecord {
   reason: string;
   seconds: number;
   endedAt: number;
-  players: { acc: string | null; team: string; tier: Tier; tok: number | null; mid: number | null; own: string | null; kills: number; damage: number; left: boolean; name?: string }[];
+  players: { acc: string | null; team: string; tier: Tier; tok: number | null; mid: number | null; own: string | null; kills: number; damage: number; left: boolean; name?: string; hero?: string; survived?: boolean }[];
 }
 
 /** A callsign as the game server validated it, made safe again for storage and display (length, no control characters). */
@@ -204,9 +204,10 @@ export async function settleMatch(db: Db, m: MatchRecord): Promise<SettleResult>
       if (p.tok && p.mid && tierOfMetadataId(p.mid)) await setNftTier(tx, acc, { tokenId: p.tok, metadataId: p.mid });
       if (r.xp) await tx.query(`INSERT INTO room_zero.ledger (account_id, kind, delta, reason, ref) VALUES ($1, 'xp', $2, 'match', $3) ON CONFLICT DO NOTHING`, [acc, r.xp, m.id]);
       if (r.shards) await tx.query(`INSERT INTO room_zero.ledger (account_id, kind, delta, reason, ref) VALUES ($1, 'shards', $2, 'match', $3) ON CONFLICT DO NOTHING`, [acc, r.shards, m.id]);
-      await tx.query(`INSERT INTO room_zero.match_players (match_id, account_id, team, tier, token_id, kills, damage, won, left_early, xp, shards, rating_before, rating_after)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-        [m.id, acc, p.team, p.tier, p.tok, Math.round(p.kills), Math.round(p.damage), won, p.left, r.xp, r.shards, before, before + delta]);
+      await tx.query(`INSERT INTO room_zero.match_players (match_id, account_id, team, tier, token_id, kills, damage, won, left_early, xp, shards, rating_before, rating_after, hero, survived)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+        [m.id, acc, p.team, p.tier, p.tok, Math.round(p.kills), Math.round(p.damage), won, p.left, r.xp, r.shards, before, before + delta,
+          typeof p.hero === 'string' ? p.hero.slice(0, 16) : null, typeof p.survived === 'boolean' ? p.survived : null]);
       if (p.tok && p.mid && p.own) {
         await tx.query(`INSERT INTO room_zero.token_history (token_id, match_id, account_id, owner_address, metadata_id, kills, won) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING`,
           [p.tok, m.id, acc, p.own, p.mid, Math.round(p.kills), won]);
@@ -247,25 +248,31 @@ export interface BoardRow {
  * are shown but never decide the order. Account-based: guests and demo matches never appear.
  */
 export async function leaderboard(db: Tx, limit = 20, me: string | null = null): Promise<{ rows: BoardRow[]; me: BoardRow | null }> {
-  const rows = await db.query<{ id: string; display_name: string | null; xp: string; rating: number; matches: number; wins: number; nft_tier: string | null; kills: string; rank: string }>(
+  const rows = await db.query<{ id: string; display_name: string | null; callsign: string | null; xp: string; rating: number; matches: number; wins: number; nft_tier: string | null; kills: string; rank: string }>(
     `WITH k AS (
        SELECT mp.account_id, coalesce(sum(mp.kills) FILTER (WHERE m.rewarded), 0) AS kills
        FROM room_zero.match_players mp JOIN room_zero.matches m ON m.id = mp.match_id GROUP BY mp.account_id
      ), ranked AS (
-       SELECT a.id, a.display_name, a.xp, a.rating, a.matches, a.wins, a.nft_tier, coalesce(k.kills, 0) AS kills,
+       SELECT a.id, a.display_name, a.callsign, a.xp, a.rating, a.matches, a.wins, a.nft_tier, coalesce(k.kills, 0) AS kills,
          row_number() OVER (ORDER BY coalesce(k.kills, 0) DESC, a.wins DESC, a.matches ASC, a.id) AS rank
        FROM room_zero.accounts a LEFT JOIN k ON k.account_id = a.id
        WHERE a.matches > 0
      )
      SELECT * FROM ranked WHERE rank <= $1 OR id = $2 ORDER BY rank`, [limit, me]);
   const toRow = (r: (typeof rows)[number]): BoardRow => ({
-    rank: Number(r.rank), name: r.display_name ?? `Player ${r.id.slice(0, 4)}`, kills: Number(r.kills), matches: Number(r.matches), wins: Number(r.wins),
+    rank: Number(r.rank), name: r.callsign ?? r.display_name ?? `Player ${r.id.slice(0, 4)}`, kills: Number(r.kills), matches: Number(r.matches), wins: Number(r.wins),
     xp: Number(r.xp), level: levelOf(Number(r.xp)).level, rating: Number(r.rating),
     nftTier: r.nft_tier && ['common', 'uncommon', 'rare', 'epic', 'legendary'].includes(r.nft_tier) ? (r.nft_tier as Tier) : null,
     you: !!me && r.id === me,
   });
   const all = rows.map(toRow);
   return { rows: all.filter((r) => r.rank <= limit), me: all.find((r) => r.you) ?? null };
+}
+
+/** The callsign an account chose (shown everywhere the account plays), or null. */
+export async function callsignOf(q: Tx, acc: string): Promise<string | null> {
+  const r = await q.query<{ callsign: string | null }>(`SELECT callsign FROM room_zero.accounts WHERE id = $1`, [acc]);
+  return r[0]?.callsign ?? null;
 }
 
 export async function tokenHistory(db: Db, tokenId: number): Promise<{ matches: number; wins: number; kills: number }> {
