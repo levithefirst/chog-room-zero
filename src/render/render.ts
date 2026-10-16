@@ -136,6 +136,8 @@ export interface DrawOpts {
   debug?: boolean;
   /** HUD panel rects in screen (CSS) px; pickup labels avoid them (CHOG-HUD-002). */
   hud?: readonly Rect[];
+  /** CF hub backdrop: the live room behind the menus, zoomed in this much on the operator, camera fixed on it. */
+  menu?: number;
 }
 
 export interface Renderer {
@@ -601,11 +603,12 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       const p = player(w);
       const sw = app.screen.width, sh = app.screen.height;
       const portrait = sh > sw;
-      ppu = viewScale(sw, sh, R);
+      ppu = viewScale(sw, sh, R) * (opts.menu ?? 1);
       stepCamera(cam, p.x, p.y, p.facing, dt, portrait ? PORTRAIT_CAM : R);
       camX = cam.x;
       camY = cam.y;
-      if (portrait) {
+      if (opts.menu) { cam.x = camX = p.x; cam.y = camY = p.y; cam.lx = cam.ly = 0; }
+      else if (portrait) {
         // HUD bands (px -> u): panels hugging the top/bottom edge, and side panels between them (Ability, Reload).
         let top = 0, bottom = 0, left = 0, right = 0;
         for (const h of opts.hud ?? []) {
@@ -735,7 +738,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
           if (a.alive) visBots++;
           const br = w.brains.get(a.id) as Brain | undefined;
           drawBody(actors, a, true, null, br?.state === 'alert', br?.state === 'investigate' || (br?.listen ?? 0) > 0);
-          if (a.alive) drawBar(a, true);
+          if (a.alive && !opts.menu) drawBar(a, true);
         }
       }
       // LAST KNOWN (CF-D): where a hostile was when it left every view, fading. SPOTTED (CF-E): a teammate's sighting.
@@ -756,7 +759,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
         circle(actors, sp.x, sp.y, 0.07, 8).fill({ color: P.hostile, alpha: 0.9 * (1 - t) });
       }
       drawBody(actors, p, false, opts.marking, false);
-      if (p.alive) drawBar(p, false);
+      if (p.alive && !opts.menu) drawBar(p, false);
       if (opts.debug) drawDebug(w);
       else if (debugG.children.length || debugTexts.length) { debugG.clear(); for (const t of debugTexts) t.visible = false; }
       // Firing arc on touch (CF-B): always drawn faintly in play so you see it close when you stop, brighter while aiming.

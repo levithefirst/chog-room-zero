@@ -17,6 +17,7 @@ import { medalSvg, portraitSvg, tokenSvg } from './art';
 import { displayName } from './profile';
 import { TICKET_WARN, tierBadge, type AcctView } from './account';
 import { esc, type ScreenCtx } from './screens';
+import { CHOG_ERRORS, type ChogStep } from './auth';
 
 export type PlayMode = 'solo' | '1v1' | '3v3' | '5v5';
 
@@ -46,6 +47,12 @@ const ICON = {
   star: '<svg viewBox="0 0 24 24" class="ico"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg>',
   lock: '<svg viewBox="0 0 24 24" class="ico"><path d="M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5z"/></svg>',
   edit: '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
+  // CF hub nav: one plain glyph per place, drawn in the HUD's stroke style.
+  up: '<svg viewBox="0 0 24 24" class="ico"><path d="M12 4l7 7h-4v8H9v-8H5z"/></svg>',
+  card: '<svg viewBox="0 0 24 24" class="ico"><rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="10" cy="11" r="2.4"/><path d="M6.5 16.5c1-2 5-2 6 0M15 10h3M15 13h3"/></svg>',
+  medal: '<svg viewBox="0 0 24 24" class="ico"><circle cx="12" cy="14" r="5"/><path d="M9 3l3 6 3-6M10.5 14l1.5-1.5V17"/></svg>',
+  board: '<svg viewBox="0 0 24 24" class="ico"><path d="M4 20V10h4v10M10 20V5h4v15M16 20v-7h4v7"/></svg>',
+  help: '<svg viewBox="0 0 24 24" class="ico"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.6a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .8-1 1.6M12 16.6v.3"/></svg>',
 };
 
 const hexColor = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
@@ -98,25 +105,31 @@ export function upgradesReady(a: AcctView): number {
   return UPGRADE_IDS.filter((id) => p.upgrades[id] < UPGRADES[id].ranks && p.shards >= UPGRADES[id].costs[p.upgrades[id]]).length;
 }
 
-// ---- identity strip ----
+// ---- identity strip (CF): who you are, your Chog, your currencies ----
 function identity(c: HubCtx): string {
   const a = c.acct;
   const p = a.profile;
   const fav = c.profile.favourite ? HEROES.find((x) => x.id === c.profile.favourite) : null;
   const lv = p ? { level: p.level, into: p.into, next: p.next } : levelOf(0);
   const ready = upgradesReady(a);
+  const nick = a.signedIn && p && !p.callsign;
+  const k = classOf(a);
+  const one = k.metadataId ? ONE_OF_ONE[k.metadataId] : undefined;
+  // Your Chog is your identity: shown by name and tier once verified (or demo); otherwise the way to bring it.
+  const chog = k.source !== 'free'
+    ? `<span class="chog-chip${one ? ' one' : ''}" style="--accent:${one ? hexColor(one.color) : 'var(--chog-pink)'}">${tierBadge(k.tokenTier ?? k.tier, k.source === 'demo')}<b>${one ? esc(one.name) : `Chog #${k.metadataId}`}</b>${k.source === 'token' ? '<i class="ok" title="Verified on Monad">✓</i>' : ''}</span>`
+    : a.hasWallet && a.tokens && !a.tokens.length ? '<span class="chog-chip none">No Chog · Free class</span>'
+      : `<button class="chog-cta" data-act="chog" id="chog-cta"><span>Enter with CHOG</span></button>`;
   return `<div class="ident">
-${a.signedIn && p && !p.callsign
-    // No callsign yet: the chip opens the callsign editor (a pencil says so), not the career screen.
-    ? `<button class="player-chip" data-act="nick" aria-label="Set your callsign">${tokenSvg(fav ? fav.accent : null, fav?.id)}<b id="callsign">${esc(displayName(c.profile))}</b><i class="new edit">${ICON.edit}</i></button>`
-    : `<button class="player-chip" data-act="career" aria-label="Career">${tokenSvg(fav ? fav.accent : null, fav?.id)}<b id="callsign">${esc(displayName(c.profile))}</b></button>`}
-<div class="lvl"><div class="lvl-top"><b class="num" id="hublevel">LV ${lv.level}</b><span class="num" id="hubxp">${p ? `${p.into} / ${p.next} XP` : '0 XP'}</span></div><div class="xpbar"><i style="width:${Math.round((lv.into / lv.next) * 100)}%"></i></div></div>
-<div class="wallet">
+<button class="player-chip" data-act="${nick ? 'nick' : 'career'}" aria-label="${nick ? 'Set your callsign' : 'Career'}">${tokenSvg(fav ? fav.accent : null, fav?.id)}<span class="pc-txt"><b id="callsign">${esc(displayName(c.profile))}</b>${nick ? `<i class="new edit">${ICON.edit}</i>` : ''}
+<span class="lvl"><b class="num" id="hublevel">LV ${lv.level}</b><span class="xpbar"><i style="width:${Math.round((lv.into / lv.next) * 100)}%"></i></span><span class="num" id="hubxp">${p ? `${p.into} / ${p.next} XP` : '0 XP'}</span></span></span></button>
+${chog}
+<div class="ident-right">
   <button class="cur" data-act="upgrades" aria-label="Shards">${ICON.shard}<b class="num" id="hubshards">${p?.shards ?? 0}</b>${ready ? `<i class="dot num">${ready}</i>` : ''}</button>
   <button class="cur" data-act="ranks" aria-label="Rating">${ICON.star}<b class="num" id="hubrating">${p?.rating ?? 1000}</b></button>
+  ${a.signedIn ? '' : '<button class="btn small ghost" data-act="signin" id="signin-cta">Sign in</button>'}
+  <button class="icon-btn" data-act="settings" aria-label="Settings">${ICON.gear}</button>
 </div>
-${a.signedIn ? '' : '<button class="btn small primary" data-act="signin" id="signin-cta">Sign in</button>'}
-<button class="icon-btn" data-act="settings" aria-label="Settings">${ICON.gear}</button>
 </div>`;
 }
 
@@ -164,8 +177,22 @@ export function fiveLockReason(a: AcctView): string | null {
   return 'No Chog in this wallet';
 }
 
-function playPanel(c: HubCtx): string {
+/** The live operator (drawn by the game's own renderer behind the hub, CF) with the roster arrows and its name plate. */
+function heroStage(c: HubCtx): string {
   const h = heroById(c.heroId);
+  const i = HEROES.findIndex((x) => x.id === h.id);
+  const prev = HEROES[(i + HEROES.length - 1) % HEROES.length].id, next = HEROES[(i + 1) % HEROES.length].id;
+  const ab = classOf(c.acct).power.signature?.name ?? h.ability.name;
+  return `<div class="op-stage">
+  <button class="icon-btn op-arrow" data-hero="${prev}" data-pick="1" aria-label="Previous operator">${ICON.prev}</button>
+  <button class="op-show" data-go="start" aria-label="Operator details: ${esc(h.name)}"></button>
+  <button class="icon-btn op-arrow" data-hero="${next}" data-pick="1" aria-label="Next operator">${ICON.next}</button>
+</div>
+<div class="op-name"><b>${esc(h.name)}</b><small><i class="dept dept-${h.dept}">${esc(h.role)}</i> · ${esc(WEAPONS[h.weapon].name)} · ${esc(ab)}</small></div>`;
+}
+
+/** Mode, the one PLAY, and what the server says about the queue. */
+function playBar(c: HubCtx): string {
   const v = c.net;
   const lock = fiveLockReason(c.acct);
   const busy = v.state === 'queued' || v.state === 'connecting';
@@ -179,10 +206,11 @@ function playPanel(c: HubCtx): string {
   let playLabel = 'Play';
   let playAttr = 'data-act="play"';
   let disabled = false;
+  let state = '';
   let status = '';
   if (sel === '5v5' && lock) {
     disabled = true;
-    status = `<p class="status warn" id="lockwhy"><b>CHOG HOLDERS ONLY</b> · ${esc(lock)}</p>${!c.acct.signedIn || !c.acct.hasWallet ? '<button class="btn small" data-act="signin">Connect wallet</button>' : ''}`;
+    status = `<p class="status warn" id="lockwhy"><b>CHOG HOLDERS ONLY</b> · ${esc(lock)}</p>${!c.acct.signedIn || !c.acct.hasWallet ? '<button class="btn small" data-act="chog">Enter with CHOG</button>' : ''}`;
   }
   if (sel !== 'solo' && !v.url) { disabled = true; status = '<p class="status warn">Online unavailable</p>'; }
   if (v.follower && sel !== 'solo') { disabled = true; status = '<p class="status">Leader starts the match</p>'; }
@@ -190,27 +218,16 @@ function playPanel(c: HubCtx): string {
     playLabel = 'Cancel';
     playAttr = 'data-act="online-cancel"';
     disabled = false;
+    state = ' loading';
     status = v.state === 'connecting'
-      ? `<p class="status" id="queuestatus">${esc(v.message || 'Connecting…')}</p><div class="loadbar"><i></i></div>`
-      : `<p class="status num" id="queuestatus">${esc(v.queue?.mode ?? sel)} · ${v.queue?.have ?? 0}/${v.queue?.need ?? 0}</p><div class="loadbar"><i></i></div>`;
-  } else if (v.state === 'match') status = '<p class="status good">Match found</p>';
+      ? `<p class="status" id="queuestatus">${esc(v.message || 'Connecting…')}</p>`
+      : `<p class="status num" id="queuestatus">Finding players · ${esc(v.queue?.mode ?? sel)} · ${v.queue?.have ?? 0}/${v.queue?.need ?? 0}</p>`;
+  } else if (v.state === 'match') { status = '<p class="status good">Match found</p>'; state = ' found'; }
   else if (v.message && !status) status = `<p class="status warn">${esc(v.message)}</p>`;
-  // What the server made of the last ticket (a fail-closed ownership read, a reused ticket): said plainly, never hidden.
   const warn = c.acct.ticketWarning ? TICKET_WARN[c.acct.ticketWarning] ?? c.acct.ticketWarning : c.netProfile?.note ?? '';
   if (warn) status += `<p class="status warn small">${esc(warn)}</p>`;
-  const i = HEROES.findIndex((x) => x.id === h.id);
-  const prev = HEROES[(i + HEROES.length - 1) % HEROES.length].id, next = HEROES[(i + 1) % HEROES.length].id;
-  return `<section class="hub-play">
-<div class="op-stage">
-  <button class="icon-btn small" data-hero="${prev}" data-pick="1" aria-label="Previous operator">${ICON.prev}</button>
-  <button class="op-show" data-go="start" aria-label="Operator details">${portraitSvg(h, 'hub', c.marking)}</button>
-  <button class="icon-btn small" data-hero="${next}" data-pick="1" aria-label="Next operator">${ICON.next}</button>
-</div>
-<div class="op-name"><b>${esc(h.name)}</b><small><i class="dept dept-${h.dept}">${esc(h.role)}</i> · ${esc(WEAPONS[h.weapon].name)} · ${esc(classOf(c.acct).power.signature?.name ?? h.ability.name)}</small></div>
-<div class="modes4">${modes}</div>
-<button class="btn primary play" ${playAttr}${disabled ? ' disabled' : ''} id="playbtn">${esc(playLabel)}</button>
-${status}
-</section>`;
+  return `<div class="modes4" role="group" aria-label="Mode">${modes}</div>
+<div class="play-wrap"><button class="play-cta${state}" ${playAttr}${disabled ? ' disabled' : ''} id="playbtn"><span class="pl">${esc(playLabel)}</span><small>${busy ? '' : esc(`${MODE_INFO[sel].label} · ${MODE_INFO[sel].sub}`)}</small></button>${status}</div>`;
 }
 
 // ---- right: leaderboard preview + squad ----
@@ -245,23 +262,24 @@ function squadPanel(c: HubCtx): string {
 <ul class="squad-list">${rows}</ul><p class="note small num">${p.members.length}/5</p></section>`;
 }
 
-// ---- the hub ----
+// ---- the hub (CF): the live room is the background; the operator stands in it; one PLAY ----
 export function hubHtml(c: HubCtx): string {
-  return `<div class="screen hub" id="hub">
+  const ready = upgradesReady(c.acct);
+  return `<div class="screen hub cf" id="hub">
 <header class="hub-top">${identity(c)}</header>
-<div class="hub-body">
-  <div class="hub-left">${chogPanel(c)}</div>
-  <div class="hub-center">${playPanel(c)}</div>
-  <div class="hub-right">${boardPreview(c)}${squadPanel(c)}</div>
-</div>
-<nav class="hub-nav">
-  <button class="navbtn" data-act="upgrades">Upgrades${upgradesReady(c.acct) ? ` <span class="num">${upgradesReady(c.acct)}</span>` : ''}</button>
-  <button class="navbtn" data-act="ranks">Leaderboard</button>
-  <button class="navbtn" data-act="career">Career</button>
-  <button class="navbtn" data-act="medals">Medals <span class="num">${Object.keys(c.medals).length}/${MEDALS.length}</span></button>
-  <button class="navbtn" data-act="howto">Help</button>
-  <button class="navbtn" data-act="demo"><span class="demo">DEMO</span></button>
-</nav></div>`;
+<div class="hub-mark" aria-hidden="true"><span>CHOG</span><b>ROOM ZERO</b></div>
+<div class="hub-hero">${heroStage(c)}</div>
+<nav class="hub-nav" aria-label="More">
+  <button class="navbtn" data-act="upgrades">${ICON.up}<span>Upgrades</span>${ready ? ` <i class="num dot">${ready}</i>` : ''}</button>
+  <button class="navbtn" data-act="career">${ICON.card}<span>Career</span></button>
+  <button class="navbtn" data-act="medals">${ICON.medal}<span>Medals</span> <i class="num">${Object.keys(c.medals).length}/${MEDALS.length}</i></button>
+  <button class="navbtn" data-act="ranks">${ICON.board}<span>Leaderboard</span></button>
+  <button class="navbtn" data-act="howto">${ICON.help}<span>Help</span></button>
+  <button class="navbtn demo-link" data-act="demo"><span class="demo">DEMO</span></button>
+</nav>
+<aside class="hub-right">${classOf(c.acct).source !== 'free' ? chogPanel(c) : ''}${squadPanel(c)}${boardPreview(c)}</aside>
+<footer class="hub-bottom">${playBar(c)}</footer>
+</div>`;
 }
 
 // ---- Upgrades ----
@@ -414,4 +432,42 @@ export function authHtml(s: AuthSheet, host: string): string {
 <div class="auth-btns">${google}${wallet}</div>
 ${s.config === false ? '<p class="note warn" id="authmsg">Sign-in unavailable right now</p>' : s.message ? `<p class="note${s.busy ? '' : ' warn'}" id="authmsg">${esc(s.message)}</p>` : ''}
 ${s.session.length ? '<button class="btn small" data-act="signout">Sign out</button>' : ''}</div>`;
+}
+
+// ---- Enter with CHOG (CF): your Chog is your game identity. Ownership = eligibility; the signature = authentication ----
+export interface ChogSheet { step: ChogStep; wallets: { id: string; name: string }[]; wallet: string; ready: boolean; off: boolean }
+
+const CHOG_MARK = '<svg viewBox="0 0 120 120" class="chog-mark" aria-hidden="true"><circle cx="60" cy="60" r="40" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="10 7"/><path d="M60 22l8 14 15-6-3 16 15 5-12 11 9 13-16 1-1 16-14-8-12 11-4-16-16 3 7-15-14-8 15-6-4-16 16 5z" fill="#6B3FA0" stroke="#0E091C" stroke-width="3"/><ellipse cx="60" cy="66" rx="17" ry="13" fill="#FFF8E7"/><circle cx="53" cy="63" r="3.4" fill="#0E091C"/><circle cx="67" cy="63" r="3.4" fill="#0E091C"/><circle cx="47" cy="71" r="3" fill="#FF6B9D" opacity=".85"/><circle cx="73" cy="71" r="3" fill="#FF6B9D" opacity=".85"/></svg>';
+
+/** The four steps the player sees, in order, so every state says where it is. */
+const CHOG_TRACK = ['Wallet', 'Chog', 'Signature', 'Room Zero'];
+
+export function chogHtml(c: ChogSheet, host: string): string {
+  const st = c.step;
+  const at = st.s === 'pick' || st.s === 'connecting' || st.s === 'network' ? 0 : st.s === 'checking' || st.s === 'none' ? 1 : st.s === 'signing' || st.s === 'verifying' ? 2 : st.s === 'error' ? -1 : 3;
+  const track = `<ol class="chog-track" aria-label="Steps">${CHOG_TRACK.map((t, i) => `<li class="${i < at ? 'done' : i === at ? 'now' : ''}">${t}</li>`).join('')}</ol>`;
+  const busy = (t: string, sub = '', key: string = st.s) => `<div class="chog-busy" id="chogstate" data-state="${key}"><i class="spin" aria-hidden="true"></i><p><b>${t}</b>${sub ? `<small>${sub}</small>` : ''}</p></div>`;
+  let body = '';
+  switch (st.s) {
+    case 'pick':
+      if (c.off) body = '<p class="note warn" id="chogstate" data-state="off">Sign-in is not available right now.</p>';
+      else if (!c.ready) body = busy('Looking for wallets', '', 'finding');
+      else if (!c.wallets.length) body = `<p class="note" id="chogstate" data-state="nowallet">No wallet in this browser.</p><div class="btns"><a class="btn" href="https://metamask.app.link/dapp/${esc(host)}" rel="noopener">Open in MetaMask</a></div>`;
+      else body = `<p class="chog-lede" id="chogstate" data-state="pick">Your Chog is your operator. We look for it in your wallet, then you sign a free message to prove the wallet is yours.</p>
+<div class="chog-wallets">${c.wallets.map((w) => `<button class="btn chog-wallet" data-chogwallet="${esc(w.id)}">${esc(w.name)}</button>`).join('')}</div>`;
+      break;
+    case 'connecting': body = busy(`Connecting to ${esc(st.wallet)}`, 'Approve in your wallet'); break;
+    case 'network': body = `<p class="note warn" id="chogstate" data-state="network"><b>Switch networks to continue.</b> Chog Genesis lives on Monad.</p><div class="btns"><button class="btn primary" data-act="chog-switch">Switch to Monad</button><button class="btn" data-act="chog-other">Back</button></div>`; break;
+    case 'checking': body = busy('Looking for your Chog', 'Reading Monad'); break;
+    case 'none': body = `<p class="note warn" id="chogstate" data-state="none"><b>CHOG not found in this wallet.</b> You can still play every mode except 5v5.</p><div class="btns"><button class="btn" data-act="chog-other">Try another wallet</button><button class="btn primary" data-act="chog-free">Play free</button></div>`; break;
+    case 'signing': body = busy(`${st.count} Chog found${st.best ? ` · best ${esc(st.best)}` : ''}`, 'Sign the message in your wallet. It is free and sends nothing.'); break;
+    case 'verifying': body = busy('Checking your signature'); break;
+    case 'loading': body = busy('Verifying your Chog', 'Reading your tokens on Monad'); break;
+    case 'done': body = `<p class="note good" id="chogstate" data-state="done"><b>CHOG verified.</b> ${esc(st.name)}</p>`; break;
+    case 'error': body = `<p class="note warn" id="chogstate" data-state="error" data-code="${st.code}"><b>${esc(CHOG_ERRORS[st.code])}</b></p><div class="btns"><button class="btn primary" data-act="chog-retry">Try again</button><button class="btn" data-act="chog-other">Back</button></div>`; break;
+  }
+  return `<div class="card dialog chog-sheet" id="chogsheet" role="dialog" aria-label="Enter with CHOG">
+<button class="icon-btn small close" data-act="back" aria-label="Close">×</button>
+<div class="chog-head">${CHOG_MARK}<div><div class="kicker">Chog Genesis · Monad</div><h2>Enter with CHOG</h2></div></div>
+${track}${body}</div>`;
 }

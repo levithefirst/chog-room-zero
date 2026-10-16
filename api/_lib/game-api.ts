@@ -123,6 +123,21 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
         return json({ wallet: true, ok: true, tokens });
       }
 
+      case 'POST eligibility': {
+        // "Enter with CHOG" (CF, owner 2026-10-16): CHOG ownership is ELIGIBILITY, never authentication. Before the
+        // wallet is asked to sign, the address it shared is checked on Monad so a wallet without a Chog hears so first.
+        // Nothing here signs anyone in, sets a cookie or grants power: only the signed-in session's own read (GET
+        // tokens, POST ticket) does. Answers a count and the best tier, the same public facts any block explorer shows.
+        if (!sameOrigin(req, e)) return json({ error: 'bad_origin' }, 403);
+        const b = await body(req);
+        const address = typeof b.address === 'string' ? b.address : '';
+        if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return json({ error: 'bad_address' }, 400);
+        const r = await readOwnership(address, d.fetch);
+        if (!r.ok) return json({ ok: false, error: 'chain_unavailable' }, 503);
+        const best = r.holdings.map((h) => tierOfMetadataId(h.metadataId)!).sort((x, y) => tierRank(y) - tierRank(x))[0] ?? null;
+        return json({ ok: true, count: r.holdings.length, best: best ? TIER_DEFS[best].label : null });
+      }
+
       case 'POST ticket': {
         if (!sameOrigin(req, e)) return json({ error: 'bad_origin' }, 403);
         const b = await body(req);

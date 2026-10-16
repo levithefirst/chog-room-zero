@@ -34,7 +34,10 @@ describe('hub', () => {
     expect(h).toMatch(/Holders only/);
     expect(h).toMatch(/id="boardpreview"/);
     expect(h).toMatch(/id="squad"/);
-    expect(h).toMatch(/<button class="btn small primary" data-act="signin" id="signin-cta">Sign in<\/button>/);
+    // CF: Sign in is a quiet secondary button; the Chog entry is "Enter with CHOG", never "Connect wallet".
+    expect(h).toMatch(/<button class="btn small ghost" data-act="signin" id="signin-cta">Sign in<\/button>/);
+    expect(h).toMatch(/data-act="chog" id="chog-cta"><span>Enter with CHOG<\/span>/);
+    expect(h).not.toMatch(/connect wallet/i);
     expect(h).not.toMatch(/data-act="settings"[^>]*id="signin-cta"/);
     // Minimal: no explanatory paragraphs on the hub.
     expect(h).not.toMatch(/nothing is saved|this device only|Sign in to earn|Play 3v3 and 5v5 with friends|Ranked by kills, then wins/i);
@@ -62,7 +65,7 @@ describe('hub', () => {
     const h = hubHtml(ctx(signed(), { mode: '5v5' }));
     expect(h).toMatch(/id="playbtn" disabled|disabled id="playbtn"|data-act="play" disabled/);
     expect(h).toMatch(/CHOG HOLDERS ONLY<\/b> · Sign in with your Chog wallet/);
-    expect(h).toMatch(/data-act="signin">Connect wallet/);
+    expect(h).toMatch(/data-act="chog">Enter with CHOG/);
   });
   it('signed in: level, XP, shards, rating and upgrades ready are in the top strip', () => {
     const h = hubHtml(ctx(signed()));

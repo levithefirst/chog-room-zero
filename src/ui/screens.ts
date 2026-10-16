@@ -202,5 +202,5 @@ export function resultsHtml(_c: ScreenCtx, r: RunReport): string {
   return `<div class="card results practice-results"><div class="kicker">Vs bots · ${esc(r.hero.name)}</div><h2 class="${r.won ? 'good' : 'bad'}">${r.won ? 'Room cleared' : 'Run over'}</h2>${r.why}
 <div class="reward-grid practice-grid" id="resultpb">${stat('Time', fmtTime(Math.round(r.time)), !!nb?.time)}${stat('Hostiles', `${r.kills + r.teamKills}/${r.bots}`)}${stat('Your kills', String(r.kills), !!nb?.kills)}${stat('Accuracy', `${acc}%`)}${stat('Dealt', String(Math.round(r.dealt)))}</div>
 ${medals}<p class="note small" id="savedwhere">${saved}</p>
-<div class="btns"><button class="btn primary" data-go="menu" id="continuebtn">Continue</button><button class="btn" data-go="restart">Again</button></div></div>`;
+<div class="btns"><button class="btn" data-go="menu" id="continuebtn">Continue</button><button class="btn primary again" data-go="restart">Again</button></div></div>`;
 }

@@ -29,8 +29,8 @@ import { DEFAULT_SETTINGS, QUALITY_DPR, SETTINGS_KEY, STICK_PX, displayName, loa
 import { MEDALS, awardMedals, loadMedals, type MedalDef, type Unlocked } from './ui/medals';
 import { TIPS_KEY, loadShownTips, nextTip, saveShownTips, tipText, type TipId } from './ui/tips';
 import { esc, howtoHtml, medalCard, nickHtml, resultsHtml, selectHtml, settingsHtml, type AuthView } from './ui/screens';
-import { authHtml, boardScreenHtml, careerHtml, classOf, hubHtml, medalsScreenHtml, onlineResultsHtml, upgradesHtml, upgradesReady, type HubCtx, type NetView, type PlayMode } from './ui/hub';
-import { discoverWallets, fetchAuthConfig, fetchSession, googleSignIn, signOut, walletSignIn } from './ui/auth';
+import { authHtml, chogHtml, boardScreenHtml, careerHtml, classOf, hubHtml, medalsScreenHtml, onlineResultsHtml, upgradesHtml, upgradesReady, type HubCtx, type NetView, type PlayMode } from './ui/hub';
+import { chogConnect, chogEligibility, chogNetwork, chogSign, discoverWallets, fetchAuthConfig, fetchSession, googleSignIn, signOut, walletSignIn, type ChogStep } from './ui/auth';
 import { SIDEGRADES } from './sim/operators';
 import { createAutopilot, type Autopilot } from './debug/autopilot';
 import { createOnlineDriver } from './debug/onlineDriver';
@@ -90,14 +90,17 @@ const BOOT_TIPS = [
   'The ten 1:1 legends each have their own signature, telegraph and counter.',
   'The leaderboard counts kills in saved online matches, then wins.',
 ];
-const bootStart = performance.now();
 let bootTipTimer: ReturnType<typeof setInterval> | null = null;
+// CF: the same real steps as a checklist (done, now, to come), so the screen says what it is waiting on.
+const BOOT_SHORT = ['Fonts', 'Renderer', 'Room', 'Player', 'Account'];
 function boot(i: number) {
   const fill = document.getElementById('bootfill'), step = document.getElementById('bootstep'), pctEl = document.getElementById('bootpct');
   const share = Math.round((i / BOOT_STEPS.length) * 100);
   if (fill) fill.style.width = `${share}%`;
   if (pctEl) pctEl.textContent = `${share}%`;
   if (step) step.textContent = BOOT_STEPS[i] ?? '';
+  const list = document.getElementById('bootsteps');
+  if (list) list.innerHTML = BOOT_SHORT.map((t, k) => `<li class="${k < i ? 'done' : k === i ? 'now' : ''}">${t}</li>`).join('');
   const tip = document.getElementById('boottip');
   if (tip && !bootTipTimer) {
     let k = Math.floor(Math.random() * BOOT_TIPS.length);
@@ -112,10 +115,11 @@ async function bootDone() {
   const pctEl = document.getElementById('bootpct');
   if (pctEl) pctEl.textContent = '100%';
   const step = document.getElementById('bootstep');
-  if (step) step.textContent = 'Ready';
-  // Long enough to read the title and see the bar finish, never a flash.
-  const wait = Math.max(0, 900 - (performance.now() - bootStart));
-  await new Promise((r) => setTimeout(r, wait + 250));
+  if (step) step.textContent = 'Entering Room Zero';
+  const list = document.getElementById('bootsteps');
+  if (list) list.innerHTML = BOOT_SHORT.map((t) => `<li class="done">${t}</li>`).join('');
+  // CF: no minimum display time (the owner: never fake loading). One frame for the bar to land, then the hub.
+  await new Promise((r) => requestAnimationFrame(() => r(null)));
   if (bootTipTimer) clearInterval(bootTipTimer);
   b.classList.add('done');
   document.body.classList.add('hub-in');
@@ -148,7 +152,7 @@ async function start() {
     : 'Guest';
   // Onboarding: shown once on first launch, re-openable from the title.
   const ONBOARD_KEY = 'chog.onboarded';
-  type TitleView = 'main' | 'howto' | 'demo' | 'settings' | 'nick' | 'upgrades' | 'ranks' | 'career' | 'medals' | 'auth';
+  type TitleView = 'main' | 'howto' | 'demo' | 'settings' | 'nick' | 'upgrades' | 'ranks' | 'career' | 'medals' | 'auth' | 'chog';
   let titleView: TitleView = (() => { try { return localStorage.getItem(ONBOARD_KEY) === '1' ? 'main' : 'howto'; } catch { return 'main'; } })();
   let lastRun: { newBest: { time: boolean; kills: boolean }; earned: MedalDef[]; saved: 'account' | 'session' | 'saving' | 'failed' } | null = null;
   // Progression belongs to the account (master integration pass): records, medals, callsign, favourite and pins come
@@ -168,6 +172,10 @@ async function start() {
   let nickSaved = false;
   let nickReturn: TitleView = 'career';
   const auth: AuthView = { config: null, session: [], wallets: [], busy: false, message: '' };
+  // Enter with CHOG (CF): where the flow is, which wallet and address it is using.
+  let chog: ChogStep = { s: 'pick' };
+  let chogWallet: { id: string; name: string } | null = null;
+  let chogAddr = '';
   // The sign-in sheet: shown over the screen that asked for it, and closed back to that screen.
   let pickWallet = false;
   let authReturn: TitleView = 'main';
@@ -233,6 +241,48 @@ async function start() {
   const fx = createFx();
   const debugStats = { blockedCues: 0 };
   renderer.reset(world);
+
+  // CF hub backdrop: the real room, live, behind the hub. Your operator stands in the north office under its lamp,
+  // sweeping the door; a patrol walks the concourse below, heard through the wall before the lamp catches it. Its
+  // input is scripted (it never fights) and the backdrop plays no sound. Nothing here is saved or sent anywhere.
+  const MENU_SPOT = { x: 16.5, y: 3.4 };
+  const MENU_ROUTE = [{ x: 14.5, y: 8.5 }, { x: 19.5, y: 8.5 }];
+  let menuWorld: World | null = null, menuHero = '', menuAcc = 0, menuT = 0, menuLeg = 0, menuWait = 0;
+  let drawnWorld: World = world;
+  function menuWorldNow(): World {
+    if (!menuWorld || menuHero !== heroId) {
+      menuWorld = createWorld({ seed: 7, hero: heroId, zone: false, bots: [{ name: 'Rounds', hero: 'tonashiro', patrol: [[14, 8]], flanker: false }] });
+      const p = menuWorld.actors[0];
+      p.x = MENU_SPOT.x; p.y = MENU_SPOT.y; p.facing = Math.PI / 2; p.hp = p.maxHp = 1e9;
+      menuWorld.pickups.length = 0; // the hub shows the operator and the room, not a health crate beside it
+      menuHero = heroId;
+    }
+    return menuWorld;
+  }
+  function menuPatrol(a: { x: number; y: number }) {
+    const t = MENU_ROUTE[menuLeg], dx = t.x - a.x, dy = t.y - a.y, d = Math.hypot(dx, dy);
+    if (d < 0.3) { menuWait += TUNING.simStepSeconds; if (menuWait > 1.6) { menuWait = 0; menuLeg = 1 - menuLeg; } return { ...IDLE_INPUT, aim: Math.PI / 2 }; }
+    const k = TUNING.bots.patrolSpeed / d;
+    return { ...IDLE_INPUT, moveX: dx * k, moveY: dy * k, aim: Math.atan2(dy, dx) };
+  }
+  function menuStep(dt: number) {
+    const w = menuWorldNow();
+    const r = fixedSteps(menuAcc, dt, TUNING.simStepSeconds, 3);
+    menuAcc = r.remainder;
+    for (let i = 0; i < r.steps; i++) {
+      menuT += TUNING.simStepSeconds;
+      stepWorld(w, { ...IDLE_INPUT, aim: Math.PI / 2 + 0.85 * Math.sin(menuT * 0.32) }, TUNING.simStepSeconds, (a) => menuPatrol(a));
+      const p = w.actors[0];
+      p.hp = p.maxHp;
+      for (const sd of w.sounds) {
+        if (sd.team === p.team || !hears(w.level, p.x, p.y, sd)) continue;
+        const src = w.actors[sd.sourceId];
+        if (canSee(w.level, p.x, p.y, p.facing, p.view, src.x, src.y)) continue;
+        if (!sightClear(w.level, p.x, p.y, sd.x, sd.y)) fx.dirTicks.push({ ang: Math.atan2(sd.y - p.y, sd.x - p.x), age: 0, big: false });
+        else fx.markers.push({ x: sd.x, y: sd.y, age: 0, life: TUNING.sound.markerLife, big: false, kind: markKind(sd.type), ang: Math.atan2(src.vy, src.vx) });
+      }
+    }
+  }
 
   // Settings that reach into running systems: volume, render sharpness, touch stick travel.
   function applySettings() {
@@ -438,13 +488,14 @@ async function start() {
       case 'career': return show(careerHtml(c));
       case 'medals': return show(medalsScreenHtml(c, (m) => medalCard(m, c)));
       case 'auth': return show(authHtml({ config: auth.config, session: auth.session, wallets: auth.wallets, busy: auth.busy, message: auth.message, pickWallet }, location.host));
+      case 'chog': return show(chogHtml({ step: chog, wallets: auth.wallets, wallet: chogWallet?.name ?? '', ready: auth.config !== null, off: auth.config === false || (!!auth.config && !auth.config.wallet) }, location.host));
       case 'nick': {
         show(nickHtml(c, nickError, nickSaved));
         const inp = document.getElementById('nickin') as HTMLInputElement | null;
         if (inp && !c.touch) { inp.focus(); inp.select(); }
         return;
       }
-      default: return show(hubHtml(c));
+      default: show(hubHtml(c)); overlay.classList.add('hubbg'); return;
     }
   }
 
@@ -615,6 +666,15 @@ async function start() {
         void refreshAuth();
         break;
       case 'signin-wallet': void walletButton(); return;
+      case 'chog':
+        if (titleView !== 'chog' && titleView !== 'auth') authReturn = titleView;
+        titleView = 'chog'; chog = { s: 'pick' };
+        void refreshAuth();
+        break;
+      case 'chog-switch': if (chogWallet) void chogAfterConnect(true); return;
+      case 'chog-retry': if (chogWallet) void runChog(chogWallet.id); else chog = { s: 'pick' }; break;
+      case 'chog-other': chog = { s: 'pick' }; chogWallet = null; break;
+      case 'chog-free': titleView = authReturn === 'chog' || authReturn === 'auth' ? 'main' : authReturn; chog = { s: 'pick' }; break;
       case 'replay':
         shownTips = new Set();
         saveShownTips(localStorage, shownTips);
@@ -690,6 +750,8 @@ async function start() {
     if (pin) { e.preventDefault(); void setCard({ pins: togglePin(curProfile(), pin.dataset.pin!).pinned }); return; }
     const set = t.closest('[data-set]') as HTMLElement | null;
     if (set) { e.preventDefault(); settingAct(set.dataset.set!, set.dataset.val!); return; }
+    const cw = t.closest('[data-chogwallet]') as HTMLElement | null;
+    if (cw) { e.preventDefault(); void runChog(cw.dataset.chogwallet!); return; }
     const wal = t.closest('[data-wallet]') as HTMLElement | null;
     if (wal) { e.preventDefault(); void doWalletSignIn(wal.dataset.wallet!); return; }
     const demo = t.closest('[data-demo]') as HTMLElement | null;
@@ -734,7 +796,7 @@ async function start() {
     auth.config = config;
     auth.session = config ? session : [];
     auth.wallets = wallets;
-    if (phase === 'title' && (titleView === 'settings' || titleView === 'auth')) render();
+    if (phase === 'title' && (titleView === 'settings' || titleView === 'auth' || titleView === 'chog')) render();
   }
   /** Continue with Wallet: one wallet signs straight away; several are listed; none shows how to get one. */
   async function walletButton() {
@@ -765,6 +827,49 @@ async function start() {
     }
     if (phase === 'title') render();
   }
+  // ---- Enter with CHOG (CF): connect -> Monad -> CHOG eligibility -> signature -> server session -> your Chog ----
+  const chogShow = (st: ChogStep) => {
+    chog = st;
+    // Test builds: the order of the steps, for tools/cf-chog.mjs (a fast flow outruns any poll).
+    if (__TEST_HOOKS__) document.body.dataset.chogTrail = `${document.body.dataset.chogTrail ?? ''}${document.body.dataset.chogTrail ? ',' : ''}${st.s}`;
+    if (phase === 'title' && titleView === 'chog') render();
+  };
+  async function runChog(id: string) {
+    chogWallet = auth.wallets.find((w) => w.id === id) ?? { id, name: 'Wallet' };
+    chogShow({ s: 'connecting', wallet: chogWallet.name });
+    const c = await chogConnect(id);
+    if (typeof c === 'string') return chogShow({ s: 'error', code: c });
+    chogAddr = c.address;
+    await chogAfterConnect(false);
+  }
+  async function chogAfterConnect(askSwitch: boolean) {
+    const id = chogWallet!.id;
+    const n = await chogNetwork(id, askSwitch);
+    if (n === 'wrong') return chogShow({ s: 'network', wallet: chogWallet!.name });
+    if (n !== 'ok') return chogShow({ s: 'error', code: n });
+    chogShow({ s: 'checking' });
+    const el = await chogEligibility(chogAddr);
+    if (typeof el === 'string') return chogShow({ s: 'error', code: el });
+    if (el.count === 0) return chogShow({ s: 'none' });
+    chogShow({ s: 'signing', count: el.count, best: el.best });
+    const who = await chogSign(id, chogAddr, () => chogShow({ s: 'verifying' }));
+    if (typeof who === 'string') return chogShow({ s: 'error', code: who });
+    chogShow({ s: 'loading' });
+    auth.session = await fetchSession();
+    acct.tokens = null;
+    acct.choice = null;
+    if (net && net.state !== 'match') { net.close(); net = null; }
+    while (accountLoading) await new Promise((r) => setTimeout(r, 80));
+    await refreshAccount();
+    const top = (acct.tokens as account.OwnedToken[] | null)?.[0];
+    const name = top ? top.oneOfOne ?? `Chog #${top.metadataId}` : 'your Chog';
+    chog = { s: 'done', name };
+    // Straight into the hub, which now shows the Chog as your identity; the toast says what the server verified.
+    if (titleView === 'chog') titleView = authReturn === 'chog' || authReturn === 'auth' ? 'main' : authReturn;
+    toast(top ? `CHOG verified · ${name}` : 'Signed in');
+    if (phase === 'title') render();
+  }
+
   // Back from Google (?signedin=google or ?signin_error=...): back to the screen sign-in started from (an error reopens
   // the sign-in sheet with the reason).
   if (QS.has('signedin') || QS.has('signin_error')) {
@@ -790,6 +895,7 @@ async function start() {
     autopilot = AUTOPLAY_SEED !== null ? createAutopilot(AUTOPLAY_SEED + runIndex) : null;
     suggestPilot = null;
     renderer.reset(world);
+    drawnWorld = world;
     fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = fx.rings.length = fx.noise.length = fx.dirTicks.length = 0;
     for (const s of fx.sparks) s.age = 1;
     fx.shake = 0;
@@ -902,6 +1008,7 @@ async function start() {
   function beginOnlineWorld() {
     world = net!.world!;
     renderer.reset(world);
+    drawnWorld = world;
     fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = fx.rings.length = fx.noise.length = fx.dirTicks.length = 0;
     for (const sp of fx.sparks) sp.age = 1;
     fx.shake = 0;
@@ -1400,7 +1507,12 @@ async function start() {
     fx.collects = fx.collects.filter((c) => c.age < COLLECT_SECONDS);
     $('toast').style.opacity = toastLeft > 0 ? '1' : '0';
 
-    renderer.draw(world, fx, input, dt, { recap: phase === 'recap' || (phase === 'results' && world.outcome === 'dead'), marking: identity.marking, showSticks: phase === 'play' && input.mode === 'touch', playing: phase === 'play', debug: DEBUG_OVERLAY, hud: hudRects() });
+    // The hub draws the live backdrop room (CF); everything else draws the match world.
+    const menuOn = phase === 'title' && !online;
+    if (menuOn) menuStep(dt);
+    const shown = menuOn ? menuWorldNow() : world;
+    if (shown !== drawnWorld) { renderer.reset(shown); drawnWorld = shown; }
+    renderer.draw(shown, fx, input, dt, { recap: phase === 'recap' || (phase === 'results' && world.outcome === 'dead'), marking: identity.marking, showSticks: phase === 'play' && input.mode === 'touch', playing: phase === 'play', debug: DEBUG_OVERLAY && !menuOn, hud: hudRects(), menu: menuOn ? (stage().w < 1000 ? 1.8 : 2) : undefined });
 
     // HUD: only touch the DOM when a value changed.
     const p = player(world);
