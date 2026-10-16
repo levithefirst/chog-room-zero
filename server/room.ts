@@ -13,6 +13,7 @@ import { TUNING } from '../src/config/tuning';
 import { validateNickname } from '../src/ui/profile';
 import { MODE_SIZE, PROTOCOL, parseClientMsg, toActorInput, type ClientMsg, type Mode, type NetActor, type NetBullet, type NetGrenade, type NetHit, type NetProfile, type NetSound, type PlayerResult, type ServerMsg } from '../src/net/protocol';
 import { BASE_POWER, powerFor, signatureFor, type Power, type Tier } from '../src/config/power';
+import { RATING } from '../src/config/progression';
 import type { GameTicket, MatchRecord } from '../api/_lib/game';
 
 export interface Conn {
@@ -84,6 +85,10 @@ interface Room {
   world: World;
   members: Player[];
   inputs: ActorInput[];
+  /** SB: the newest input seq each member has sent, and how many steps it has been applied so far (the client's own
+   * movement prediction replays exactly what the server has not applied yet). */
+  acks: number[];
+  ackSteps: number[];
   fireLatch: boolean[];
   startTick: number;
   steps: number;
@@ -110,6 +115,7 @@ export class Lobby {
   /** Finished matches for settlement (GET /results/:id), dropped after resultsKeepSec. */
   private results = new Map<string, { at: number; record: MatchRecord }>();
   private lastSweep = 0;
+  private lastRetry = 0;
 
   constructor(opts: Partial<LobbyOptions> & Pick<LobbyOptions, 'now'>) {
     this.opts = { ...DEFAULT_OPTIONS, seed: () => randomBytes(4).readUInt32LE(0), ...opts };
@@ -164,6 +170,15 @@ export class Lobby {
         this.unqueue(p);
         p.state = 'idle';
         p.conn?.send({ t: 'queueTimeout' });
+      }
+    }
+    // SB: the matchmaking band widens with waiting, so queues are retried once a second.
+    if (now - this.lastRetry >= 1) {
+      this.lastRetry = now;
+      for (const key of [...this.queues.keys()]) {
+        const [mode, rest] = [key.slice(0, key.indexOf(':')), key.slice(key.indexOf(':') + 1)];
+        const code = rest.replace('|demo', '');
+        this.tryMatch(key, mode as Mode, code || null);
       }
     }
     for (const room of [...this.rooms.values()]) this.stepRoom(room, now);
@@ -269,6 +284,7 @@ export class Lobby {
         r.inputs[p.actorId] = { ...inp, reload: inp.reload || prev.reload, ability: inp.ability || prev.ability, grenade: !!inp.grenade || !!prev.grenade,
           throwDist: inp.grenade ? inp.throwDist : prev.throwDist, throwAim: inp.grenade ? inp.throwAim : prev.throwAim };
         if (inp.firing) r.fireLatch[p.actorId] = true;
+        if (m.seq > r.acks[p.actorId]) { r.acks[p.actorId] = m.seq; r.ackSteps[p.actorId] = 0; }
         return;
       }
       case 'ping':
@@ -282,6 +298,14 @@ export class Lobby {
     const t = p.ticket;
     const profile: NetProfile = { verified: !!t, tier: t?.tier ?? 'free', holder: !!t?.holder, demo: !!t?.demo, account: !!t?.acc, metadataId: t?.mid ?? null, note };
     p.conn?.send({ t: 'welcome', v: PROTOCOL, token: p.token, name: p.name, resumed: false, profile });
+  }
+
+  /** SB matchmaking strength: rating (new accounts no higher than the start) plus the power offset of its tier. */
+  static strength(p: { ticket: GameTicket | null }): number {
+    const t = p.ticket;
+    const rated = t?.rating ?? RATING.start;
+    const r = (t?.played ?? 0) < TUNING.match.newMatches ? Math.min(rated, RATING.start) : rated;
+    return r + (RATING.tierOffset[t?.tier ?? 'free'] ?? 0);
   }
 
   /** Power a player's ticket entitles them to. No ticket: base power. */
@@ -302,8 +326,28 @@ export class Lobby {
     // so the earliest players are matched whenever any split of the queue fills both teams exactly.
     const pool = q.slice(0, 12);
     const pick: (0 | 1 | 2)[] = [];
+    // SB fairness: a split counts only if everyone in it is within the band (widened by the oldest group's wait) and the
+    // teams' average strengths are close. Private codes skip it (friends play who they invite).
+    const M = TUNING.match, now = this.opts.now();
+    const band = code ? Infinity : M.band + M.widenPerSec * Math.max(0, now - Math.min(...pool.map((g) => g.at)));
+    const str = pool.map((g) => g.players.reduce((a, p) => a + Lobby.strength(p), 0) / g.players.length);
+    const fair = (): boolean => {
+      if (band === Infinity) return true;
+      const inRoom = pool.map((_, i) => i).filter((i) => pick[i] !== 2 && pick[i] !== undefined);
+      const all = inRoom.map((i) => str[i]);
+      if (Math.max(...all) - Math.min(...all) > band) return false;
+      const mean = (side: 0 | 1) => { const g = inRoom.filter((i) => pick[i] === side); return g.reduce((a, i) => a + str[i] * pool[i].players.length, 0) / Math.max(1, g.reduce((a, i) => a + pool[i].players.length, 0)); };
+      // Team modes: also balance the sides (in 1v1 the band already is the gap between the two).
+      return half === 1 || Math.abs(mean(0) - mean(1)) <= band * M.teamGapShare;
+    };
+    // The fairness check can reject leaves, so the search is capped: a busy tick never stalls (it retries next second).
+    let budget = 20000;
     const fill = (i: number, na: number, nb: number): boolean => {
-      if (na === half && nb === half) return true;
+      if (--budget < 0) return false;
+      if (na === half && nb === half) {
+        for (let k = i; k < pool.length; k++) pick[k] = 2;
+        return fair();
+      }
       if (i === pool.length) return false;
       const n = pool[i].players.length;
       for (const side of [0, 1, 2] as const) {
@@ -342,7 +386,7 @@ export class Lobby {
     });
     const world = createWorld({ seed: this.opts.seed(), versus, zone: true, friendlyFire: this.opts.friendlyFire });
     const room: Room = {
-      id, mode, world, members, inputs: members.map(() => ({ ...IDLE_INPUT })), fireLatch: members.map(() => false),
+      id, mode, world, members, inputs: members.map(() => ({ ...IDLE_INPUT })), acks: members.map(() => 0), ackSteps: members.map(() => 0), fireLatch: members.map(() => false),
       startTick: Math.round(this.opts.countdownSec / STEP), steps: 0, lastShot: members.map(() => -1e9), left: members.map(() => false), over: false,
       demo: members.some((p) => p.ticket?.demo),
     };
@@ -389,6 +433,7 @@ export class Lobby {
         const out = { ...inp, firing: inp.firing || room.fireLatch[i] };
         room.fireLatch[i] = false;
         room.inputs[i] = { ...room.inputs[i], reload: false, ability: false, grenade: false };
+        room.ackSteps[i]++;
         return out;
       });
       for (const s of w.sounds) if (s.type === 'shot') room.lastShot[s.sourceId] = w.tick;
@@ -424,6 +469,7 @@ export class Lobby {
       deadFor: r3(a.deadFor), lastSpread: r3(a.lastSpread), stepAcc: r3(a.stepAcc), kills: a.kills, connected: !!room.members[a.id].conn,
       shieldLeft: r3(a.shieldLeft), frenzyLeft: r3(a.frenzyLeft), slowLeft: r3(a.slowLeft), burstLeft: r3(a.burstLeft),
       downed: a.downed, reviveProgress: r3(a.reviveProgress), nades: a.grenades, maxNades: a.maxGrenades, focus: r3(a.focus),
+      ...(a.slowLeft > 0 ? { slowMul: r3(a.slowMul) } : {}),
     }));
     // Grenades: your team's always; a hostile one when your team can see it or it is close to one of you (you hear it
     // land and see the ring), so every client can read the danger it is in.
@@ -437,7 +483,7 @@ export class Lobby {
       .map((h) => ({ target: h.target, by: h.by, x: r3(h.x), y: r3(h.y), fromX: r3(h.fromX), fromY: r3(h.fromY), killed: h.killed, downed: h.downed, grenade: h.grenade }));
     return {
       t: 'snap', tick: w.tick, actors, bullets, grenades, pickups: w.pickups.map((k) => k.active), sounds, hits,
-      barriers: w.barriers.map((b) => ({ ...b.box, left: r3(b.left) })),
+      barriers: w.barriers.map((b) => ({ ...b.box, left: r3(b.left) })), ack: room.acks[p.actorId], as: room.ackSteps[p.actorId],
     };
   }
 

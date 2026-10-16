@@ -39,6 +39,8 @@ export interface NetActor {
   nades?: number; maxNades?: number;
   /** CF-E gait focus (-1 run .. 1 steady): the client reshapes the lamp from it. */
   focus?: number;
+  /** SB: how hard a Snare slows it (with slowLeft), so its own client predicts the slowed walk. */
+  slowMul?: number;
 }
 
 /** What everyone in a match knows about each player: power is never hidden from the opponent. */
@@ -68,7 +70,9 @@ export type ServerMsg =
   | { t: 'queued'; mode: Mode; have: number; need: number; code: string | null }
   | { t: 'queueTimeout' }
   | { t: 'match'; room: string; mode: Mode; you: number; team: Team; seed: number; friendlyFire: boolean; roster: RosterEntry[]; startsIn: number; demo?: boolean; zone: { x: number; y: number; r: number }[] }
-  | { t: 'snap'; tick: number; actors: NetActor[]; bullets: NetBullet[]; grenades?: NetGrenade[]; pickups: boolean[]; sounds: NetSound[]; hits: NetHit[]; barriers: { x0: number; y0: number; x1: number; y1: number; left: number }[] }
+  /** ack/as (SB): the newest input seq the server had from you when it took this snapshot, and how many sim steps it has
+   * applied it so far (your movement prediction replays the rest). Optional: an older server sends neither. */
+  | { t: 'snap'; tick: number; actors: NetActor[]; bullets: NetBullet[]; grenades?: NetGrenade[]; pickups: boolean[]; sounds: NetSound[]; hits: NetHit[]; barriers: { x0: number; y0: number; x1: number; y1: number; left: number }[]; ack?: number; as?: number }
   | { t: 'over'; winner: Team | null; reason: 'eliminated' | 'time'; results: PlayerResult[]; matchId?: string; settle?: boolean }
   | { t: 'pong'; at: number; tick: number }
   | { t: 'party'; code: string | null; members: PartyMember[] }

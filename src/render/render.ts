@@ -21,6 +21,7 @@ import { ONE_OF_ONE } from '../config/power';
 import { outsideCircle, zoneAt, type Circle } from '../sim/zone';
 import { matchSeconds } from '../sim/world';
 import { clampMarker, edgeAnchor, enemyDrawMode, teamSighting } from './visibility';
+import { createIntel, type Intel } from '../sim/intel';
 import { LAB } from '../config/lab';
 
 const P = TUNING.palette;
@@ -67,7 +68,8 @@ function arc(g: Graphics, x: number, y: number, r: number, a0: number, a1: numbe
 }
 
 /** What a heard sound was (CF-D): each kind has its own mark, so it reads with the sound off. */
-export type MarkKind = 'step' | 'shot' | 'reload' | 'impact' | 'ability' | 'grenade' | 'death' | 'other';
+export type { MarkKind } from '../sim/intel';
+import type { MarkKind } from '../sim/intel';
 
 export interface Marker {
   x: number;
@@ -111,8 +113,10 @@ export interface Fx {
   rings: { x: number; y: number; age: number; r: number; color: number }[];
   /** CF-C your own noise: a ring that runs out to the radius it is really heard at, then is gone. */
   noise: { x: number; y: number; r: number; age: number }[];
-  /** CF-D a sound heard through a wall: a direction tick around you, no position. */
-  dirTicks: { ang: number; age: number; big: boolean }[];
+  /** SB: what the player believes about each hostile (src/sim/intel.ts). The game feeds it, this draws it. */
+  intel: Intel;
+  /** SB: AI teammates' call-outs on screen: the line above the caller (TUNING.comms.chipSeconds). */
+  comms: { from: number; text: string; age: number }[];
 }
 
 export const RING_SECONDS = 0.45;
@@ -122,7 +126,7 @@ export const COLLECT_SECONDS = 0.5;
 
 export function createFx(): Fx {
   return {
-    markers: [], impacts: [], coverFlashes: [], hitMarks: [], shake: 0, corpses: [], damageArcs: [], pings: [], threats: [], collects: [], rings: [], noise: [], dirTicks: [],
+    markers: [], impacts: [], coverFlashes: [], hitMarks: [], shake: 0, corpses: [], damageArcs: [], pings: [], threats: [], collects: [], rings: [], noise: [], intel: createIntel(), comms: [],
     sparks: Array.from({ length: R.maxSparks }, () => ({ x: 0, y: 0, vx: 0, vy: 0, age: 1, hostile: false })),
   };
 }
@@ -210,11 +214,8 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
   let visBots = 0, flashBots = 0;
   let exploreTimer = 0;
   const pickupLabels: Text[] = [];
-  // CF-D/E information memory, per actor id: how it was drawn last frame, its last seen pose (afterimage), and the
-  // SPOTTED mark a teammate's sighting leaves (refreshed every TUNING.sound.spottedRefresh s, not live).
-  let lastMode: (string | null)[] = [];
-  const ghosts = new Map<number, { x: number; y: number; facing: number; age: number }>();
-  const spotted = new Map<number, { x: number; y: number; age: number }>();
+  // SB call-out lines above AI teammates, pooled (one per caller on screen at a time).
+  const commsTexts: Text[] = [];
   // Pickups as you last saw them (CF-E): out of your light you remember, you do not watch the respawn.
   let pickupSeen: boolean[] = [];
   const barGhost = new Map<number, { hp: number; hold: number }>();
@@ -383,8 +384,12 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
 
   /** A heard sound (CF-D): one shape per kind, so a step, a shot and a reload read apart with the sound off. */
   function drawMark(m: Marker) {
-    const t = m.age / m.life, al = 0.8 * (1 - t), g = marks, c = P.signal;
-    switch (m.kind) {
+    glyph(m.kind, m.x, m.y, 0.8 * (1 - m.age / m.life), m.age / m.life, m.ang ?? 0, m.big);
+  }
+  /** One heard-sound shape at (x, y): alpha `al`, animation phase `t` (0 = just heard), heading `ang` for steps. */
+  function glyph(kind: MarkKind | undefined, x: number, y: number, al: number, t: number, ang: number, big: boolean) {
+    const g = marks, c = P.signal, m = { x, y, ang, big };
+    switch (kind) {
       case 'step': {
         // Two footprints along the walker's heading.
         const a = m.ang ?? 0, cx = Math.cos(a), sy = Math.sin(a);
@@ -416,6 +421,96 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
         circle(g, m.x, m.y, rad).stroke({ width: 0.06, color: c, alpha: 0.75 * (1 - t) });
       }
     }
+  }
+
+  /** Where a hostile could be by now: a red DOTTED ring (your own noise is a cream dashed one; a blast ring is solid). */
+  function guessRing(g: Graphics, x: number, y: number, rad: number, width: number, alpha: number) {
+    const rr = Math.min(rad, 8), n = Math.max(12, Math.round(rr * 9));
+    for (let i = 0; i < n; i++) { const a0 = (i / n) * Math.PI * 2; circle(g, x + Math.cos(a0) * rr, y + Math.sin(a0) * rr, width, 5); }
+    g.fill({ color: P.hostile, alpha });
+  }
+
+  /**
+   * SB contact intel (src/sim/intel.ts): ONE mark per hostile you believe in, shaped by how you know it and faded by how
+   * sure you still are. Live bodies (your light, a muzzle flash) and Ping outlines are drawn with the actors.
+   * PARTIAL   a teammate's sighting: a red diamond where they saw it (re-placed twice a second, not a live feed).
+   * LAST KNOWN where it was when it left every view: its outline and heading, inside a circle that grows as it could
+   *            have moved on, fading over ~6 s.
+   * HEARD      the sound's own shape (steps leave a short trail of footprints) inside its error circle.
+   * DIRECTION  heard through a wall: a tick on a ring around you, pointing at the guess. No spot.
+   * SUSPECTED  confidence nearly gone: only the circle. LOST: the circle fades out.
+   */
+  function drawContacts(w: World, intel: Intel, p: Actor) {
+    const I = TUNING.intel;
+    for (const c of intel.contacts.values()) {
+      if (c.state === 'visible' || (c.state === 'partial' && c.source === 'ping')) continue;
+      const fade = c.state === 'lost' ? Math.max(0, 1 - c.lostFor / I.lostSeconds) * 0.3 : c.conf;
+      if (c.state !== 'directional' && c.r > 0.5) guessRing(marks, c.x, c.y, c.r, 0.045, (c.state === 'suspected' || c.state === 'lost' ? 0.5 : 0.42) * fade);
+      const pulse = c.fresh > 0 ? 1 - c.fresh / I.freshSeconds : 1;
+      switch (c.state) {
+        case 'partial': case 'last_known': {
+          const fromMate = c.source === 'teammate' || c.source === 'callout';
+          if (fromMate) {
+            const z = 0.38, al = (c.state === 'partial' ? 0.9 : 0.6) * fade;
+            actors.poly([c.x, c.y - z, c.x + z, c.y, c.x, c.y + z, c.x - z, c.y]).stroke({ width: 0.07, color: P.hostile, alpha: al });
+            circle(actors, c.x, c.y, 0.07, 8).fill({ color: P.hostile, alpha: al });
+            // "Lost him, heading west": the way it was going when they last saw it.
+            if (c.source === 'callout' && c.state === 'last_known') actors.moveTo(c.x + Math.cos(c.facing) * z, c.y + Math.sin(c.facing) * z).lineTo(c.x + Math.cos(c.facing) * 1.1, c.y + Math.sin(c.facing) * 1.1).stroke({ width: 0.05, color: P.hostile, alpha: al });
+            break;
+          }
+          // Its outline and heading where you last saw it: strong for the first seconds, then just the growing circle.
+          const a = w.actors[c.id];
+          const al = 0.6 * fade * Math.max(0, Math.min(1, 1 - (c.age - 2.5) / 2));
+          if (a && al > 0.02) {
+            const parts = partsOf(a.hero.id), r0 = TUNING.movement.radius * R.actorScale;
+            actors.poly(place(parts.body, c.x, c.y, c.facing, r0)).stroke({ width: 0.05, color: P.hostile, alpha: al });
+            actors.moveTo(c.x, c.y).lineTo(c.x + Math.cos(c.facing) * 0.7, c.y + Math.sin(c.facing) * 0.7).stroke({ width: 0.04, color: P.hostile, alpha: al * 0.85 });
+          }
+          break;
+        }
+        case 'heard': {
+          if (c.kind === 'step') {
+            for (let i = 0; i < c.trail.length; i++) {
+              const t = c.trail[i], prev = c.trail[i - 1] ?? t, next = c.trail[i + 1] ?? t;
+              const ang = Math.atan2(next.y - prev.y, next.x - prev.x);
+              glyph('step', t.x, t.y, 0.8 * fade * Math.max(0, 1 - t.age / I.trailSeconds), 1, ang, false);
+            }
+          } else glyph(c.kind, c.x, c.y, 0.85 * fade, pulse, 0, c.kind === 'shot');
+          break;
+        }
+        case 'directional': {
+          const ang = Math.atan2(c.y - p.y, c.x - p.x), big = c.kind === 'shot' || c.kind === 'grenade';
+          arc(marks, p.x, p.y, 1.15, ang - (big ? 0.32 : 0.2), ang + (big ? 0.32 : 0.2), 8).stroke({ width: big ? 0.11 : 0.07, color: P.signal, alpha: Math.min(1, 0.95 * fade + 0.3 * (1 - pulse)) });
+          break;
+        }
+        default:
+          break;
+      }
+    }
+  }
+
+  /** SB: a teammate's call-out above its head: cream, short, fading out over its last third. */
+  function drawComms(w: World, fx: Fx) {
+    let i = 0;
+    for (const c of fx.comms) {
+      const a = w.actors[c.from];
+      if (!a?.alive) continue;
+      let t = commsTexts[i];
+      if (!t) {
+        t = new Text({ text: '', style: { fontFamily: 'Plex Mono, monospace', fontSize: 22, fontWeight: '600', fill: 0xf4ecd8, stroke: { color: 0x0b0c0d, width: 5 } } });
+        t.anchor.set(0.5, 1);
+        t.scale.set(1 / 70);
+        labels.addChild(t);
+        commsTexts.push(t);
+      }
+      if (t.text !== c.text) t.text = c.text;
+      const life = TUNING.comms.chipSeconds;
+      t.alpha = c.age < life * 0.66 ? 1 : Math.max(0, (life - c.age) / (life * 0.34));
+      t.position.set(a.x, a.y - TUNING.movement.radius * R.actorScale - 0.62);
+      t.visible = true;
+      i++;
+    }
+    for (; i < commsTexts.length; i++) commsTexts[i].visible = false;
   }
 
   // Compact overhead bar for a visible actor: 34x4 px HP, 34x2 px armour (at ppu ~35).
@@ -571,7 +666,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
         } else light.setTexture(baked.lit, w.level.w, w.level.h);
       }
       level = w.level;
-      lastMode = []; ghosts.clear(); spotted.clear(); barGhost.clear(); pickupSeen = w.pickups.map(() => true);
+      barGhost.clear(); pickupSeen = w.pickups.map(() => true);
       explored = new Uint8Array(level.w * level.h);
       exploredDirty = true;
       const p = player(w);
@@ -660,11 +755,6 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
         }
         marks.stroke({ width: 0.045, color: P.signal, alpha: 0.38 * (1 - t) });
       }
-      // CF-D: heard through a wall: which way, not where. A tick on a ring just outside your body.
-      for (const d of fx.dirTicks) {
-        const t = d.age / TUNING.sound.dirTickLife, R0 = 1.15;
-        arc(marks, p.x, p.y, R0, d.ang - (d.big ? 0.32 : 0.2), d.ang + (d.big ? 0.32 : 0.2), 8).stroke({ width: d.big ? 0.11 : 0.07, color: P.signal, alpha: 0.85 * (1 - t) });
-      }
       for (const c of fx.corpses) {
         marks.ellipse(c.x, c.y, 0.42, 0.3).fill({ color: c.hostile ? P.hostileDark : P.teamDark, alpha: 0.55 });
       }
@@ -710,18 +800,9 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
           // Team vision: a hostile one of your standing teammates sees (AI teammates in the default game, real ones
           // online). Nobody sees through walls: it is their cone, with their line of sight. Before CF it was drawn as a
           // live body; CF-E makes it a SPOTTED mark that updates twice a second: your teammate saw something, you did not.
-          const mateSees = mode === null && a.alive && mates.some((m) => canSee(level, m.x, m.y, m.facing, m.view, a.x, a.y));
-          if (mateSees && teamSighting() === 'body') mode = 'body';
-          const prev = lastMode[a.id] ?? null;
-          lastMode[a.id] = mode;
-          if (mode !== null) ghosts.delete(a.id);
-          else if (LAB.enemySound && a.alive && (prev === 'body' || prev === 'flash')) ghosts.set(a.id, { x: a.x, y: a.y, facing: a.facing, age: 0 });
-          if (mateSees && teamSighting() === 'spotted') {
-            const sp = spotted.get(a.id);
-            if (!sp || sp.age >= TUNING.sound.spottedRefresh) spotted.set(a.id, { x: a.x, y: a.y, age: 0 });
-          }
+          // (SB: with LAB.dark on that sighting is the player's PARTIAL contact, drawn by drawContacts below.)
+          if (mode === null && teamSighting() === 'body' && a.alive && mates.some((m) => canSee(level, m.x, m.y, m.facing, m.view, a.x, a.y))) mode = 'body';
           if (mode === null) continue;
-          spotted.delete(a.id);
           if (a.alive) shownHostiles.push(a);
           if (mode === 'ping') {
             // Ping reveal: an outline only, so it reads as information, not presence.
@@ -741,25 +822,10 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
           if (a.alive && !opts.menu) drawBar(a, true);
         }
       }
-      // LAST KNOWN (CF-D): where a hostile was when it left every view, fading. SPOTTED (CF-E): a teammate's sighting.
-      for (const [id, g] of ghosts) {
-        g.age += dt;
-        const t = g.age / TUNING.sound.ghostSeconds;
-        if (t >= 1 || !w.actors[id]?.alive) { ghosts.delete(id); continue; }
-        const parts = partsOf(w.actors[id].hero.id), r0 = TUNING.movement.radius * R.actorScale;
-        actors.poly(place(parts.body, g.x, g.y, g.facing, r0)).stroke({ width: 0.05, color: P.hostile, alpha: 0.6 * (1 - t) });
-        actors.moveTo(g.x, g.y).lineTo(g.x + Math.cos(g.facing) * 0.7, g.y + Math.sin(g.facing) * 0.7).stroke({ width: 0.04, color: P.hostile, alpha: 0.5 * (1 - t) });
-      }
-      for (const [id, sp] of spotted) {
-        sp.age += dt;
-        const t = sp.age / TUNING.sound.spottedLife;
-        if (t >= 1 || !w.actors[id]?.alive) { spotted.delete(id); continue; }
-        const z = 0.38;
-        actors.poly([sp.x, sp.y - z, sp.x + z, sp.y, sp.x, sp.y + z, sp.x - z, sp.y]).stroke({ width: 0.07, color: P.hostile, alpha: 0.9 * (1 - t) });
-        circle(actors, sp.x, sp.y, 0.07, 8).fill({ color: P.hostile, alpha: 0.9 * (1 - t) });
-      }
+      drawContacts(w, fx.intel, p);
       drawBody(actors, p, false, opts.marking, false);
       if (p.alive && !opts.menu) drawBar(p, false);
+      drawComms(w, fx);
       if (opts.debug) drawDebug(w);
       else if (debugG.children.length || debugTexts.length) { debugG.clear(); for (const t of debugTexts) t.visible = false; }
       // Firing arc on touch (CF-B): always drawn faintly in play so you see it close when you stop, brighter while aiming.
@@ -886,16 +952,18 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
         screen.poly([e.x + c * z, e.y + sn * z, e.x - sn * z * 0.7, e.y + c * z * 0.7, e.x + sn * z * 0.7, e.y - c * z * 0.7])
           .fill({ color: P.hostile, alpha: 0.95 }).stroke({ width: 1.5, color: 0x15140f, alpha: 0.8 });
       }
+      // A fresh heard contact past the screen edge: a cream chevron toward it (direction only, like the sound).
       const margin = 22;
-      for (const m of fx.markers) {
-        const s = r.toScreen(m.x, m.y);
+      for (const c of fx.intel.contacts.values()) {
+        if (opts.menu || (c.state !== 'heard' && c.state !== 'directional') || c.age > TUNING.sound.markerLife) continue;
+        const s = r.toScreen(c.x, c.y);
         if (s.x > 0 && s.x < sw && s.y > 0 && s.y < sh) continue;
         const ang = Math.atan2(s.y - sh / 2, s.x - sw / 2);
         const ex = Math.max(margin, Math.min(sw - margin, sw / 2 + Math.cos(ang) * sw));
         const ey = Math.max(margin, Math.min(sh - margin, sh / 2 + Math.sin(ang) * sh));
-        const c = Math.cos(ang), sn = Math.sin(ang), z = m.big ? 13 : 9;
-        screen.poly([ex + c * z, ey + sn * z, ex - sn * z * 0.6, ey + c * z * 0.6, ex + sn * z * 0.6, ey - c * z * 0.6])
-          .fill({ color: P.signal, alpha: 0.85 * (1 - m.age / m.life) });
+        const cs = Math.cos(ang), sn = Math.sin(ang), z = c.kind === 'shot' ? 13 : 9;
+        screen.poly([ex + cs * z, ey + sn * z, ex - sn * z * 0.6, ey + cs * z * 0.6, ex + sn * z * 0.6, ey - cs * z * 0.6])
+          .fill({ color: P.signal, alpha: 0.85 * c.conf * (1 - c.age / TUNING.sound.markerLife) });
       }
     },
   };

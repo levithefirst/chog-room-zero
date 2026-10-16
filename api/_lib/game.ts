@@ -32,6 +32,9 @@ export interface GameTicket {
   holder: boolean;
   demo: boolean;
   name: string;
+  /** SB matchmaking: the account's rating and saved online matches when the ticket was issued (absent: a guest). */
+  rating?: number;
+  played?: number;
   exp: number;
 }
 
@@ -270,6 +273,12 @@ export async function leaderboard(db: Tx, limit = 20, me: string | null = null):
 }
 
 /** The callsign an account chose (shown everywhere the account plays), or null. */
+/** SB matchmaking: an account's rating and how many online matches it has saved. */
+export async function standingOf(q: Tx, acc: string): Promise<{ rating: number; played: number }> {
+  const r = await q.query<{ rating: number; matches: number }>(`SELECT rating, matches FROM room_zero.accounts WHERE id = $1`, [acc]);
+  return { rating: Number(r[0]?.rating ?? 1000), played: Number(r[0]?.matches ?? 0) };
+}
+
 export async function callsignOf(q: Tx, acc: string): Promise<string | null> {
   const r = await q.query<{ callsign: string | null }>(`SELECT callsign FROM room_zero.accounts WHERE id = $1`, [acc]);
   return r[0]?.callsign ?? null;

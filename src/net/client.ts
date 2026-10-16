@@ -6,6 +6,8 @@ import { applyFocus, createWorld, wrapAngle, type Actor, type ActorInput, type H
 import { WEAPONS } from '../config/weapons';
 import { TUNING } from '../config/tuning';
 import { LAB } from '../config/lab';
+import { Predictor } from './predict';
+import type { Box } from '../sim/geom';
 import { PROTOCOL, type Mode, type NetActor, type NetProfile, type PartyMember, type PlayerResult, type ServerMsg } from './protocol';
 import type { Circle } from '../sim/zone';
 import type { Team } from '../sim/world';
@@ -39,6 +41,11 @@ export class OnlineSession {
   /** Your own drawn facing and when it was drawn (CF-A turn cap on the cosmetic own facing). */
   private ownFacing: number | null = null;
   private ownAt = 0;
+  /** SB: your own movement, predicted from your inputs and corrected by each snapshot (src/net/predict.ts). */
+  readonly predictor = new Predictor();
+  private lastFrameAt = 0;
+  /** Slabs (barriers) from the last snapshot, added to the view level so the prediction walks around them. */
+  private barrierBoxes: Box[] = [];
   /** Server actor id -> view index (you are 0). */
   private toView = new Map<number, number>();
   private fromView: number[] = [];
@@ -174,10 +181,25 @@ export class OnlineSession {
     this.lastFire = inp.firing;
     if (!urgent && now - this.lastSent < 1000 / INPUT_HZ) return;
     this.lastSent = now;
+    this.predictor.sent(this.seq + 1, inp);
     this.send({ t: 'input', seq: ++this.seq, mx: inp.moveX, my: inp.moveY, aim: inp.aim, fire: inp.firing, quiet: inp.quiet, reload: inp.reload, ability: inp.ability,
       ...(inp.grenade ? { nade: true, nd: Math.round((inp.throwDist ?? TUNING.grenade.touchThrow) * 100) / 100, ...(inp.throwAim !== undefined ? { na: Math.round(inp.throwAim * 1000) / 1000 } : {}) } : {}) });
   }
   private lastFire = false;
+
+  /**
+   * Let go of every control NOW (SB lifecycle): the page is being hidden (a call, an app switch, a locked screen) and
+   * its render loop is about to stop, so the throttled per-frame send would never deliver the release. Without this
+   * the server keeps your last input and a held W keeps walking you into the open.
+   */
+  release(aim: number): void {
+    if (this.state !== 'match') return;
+    const idle: ActorInput = { moveX: 0, moveY: 0, quiet: false, aim, firing: false, reload: false, ability: false, grenade: false };
+    this.lastSent = 0;
+    this.lastFire = false;
+    this.predictor.sent(this.seq + 1, idle);
+    this.send({ t: 'input', seq: ++this.seq, mx: 0, my: 0, aim, fire: false, quiet: false, reload: false, ability: false });
+  }
 
   ping(now: number): void { this.send({ t: 'ping', at: now }); }
 
@@ -246,6 +268,8 @@ export class OnlineSession {
     order.forEach((r, i) => { const act = this.world!.actors[i]; if (r.ability) act.ability = { ...act.ability, ...r.ability, ...(r.metadataId && r.tier === 'legendary' ? signatureFor(r.metadataId) : {}), cooldown: r.ability.cooldown }; });
     this.world.zone = m.zone.length ? { plan: m.zone as Circle[], cfg: TUNING.zone } : null;
     this.snaps = [];
+    this.predictor.reset();
+    this.barrierBoxes = [];
     this.over = null;
   }
 
@@ -262,6 +286,18 @@ export class OnlineSession {
     });
     m.pickups.forEach((on, i) => { if (w.pickups[i]) w.pickups[i].active = on; });
     w.barriers = m.barriers.map((b) => ({ box: { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 }, left: b.left, owner: -1 }));
+    // The view level's solid boxes carry the slabs too, so your predicted walk stops at one like the server's does.
+    const solid = w.level.solidBoxes;
+    for (const b of this.barrierBoxes) { const i = solid.indexOf(b); if (i >= 0) solid.splice(i, 1); }
+    this.barrierBoxes = w.barriers.map((b) => b.box);
+    solid.push(...this.barrierBoxes);
+    // SB prediction: the server's word on where you are, with the inputs it has not applied yet replayed on top.
+    const mine = m.actors.find((a) => a.id === this.fromView[0]);
+    if (m.ack === undefined || !mine) return;
+    if (!mine.alive) { this.predictor.reset(); return; }
+    const me = w.actors[0];
+    this.predictor.reconcile(w.level, { x: mine.x, y: mine.y, vx: mine.vx, vy: mine.vy, hero: me.hero, slowLeft: mine.slowLeft ?? 0, slowMul: mine.slowMul ?? 1,
+      dashLeft: 0, dashX: 0, dashY: 0, downed: !!mine.downed }, m.ack, m.as ?? 0);
   }
 
   /** Events from snapshots received since the last call, in order (feed them to the same handlers as solo). */
@@ -288,9 +324,14 @@ export class OnlineSession {
       const act = w.actors[vi];
       const id = this.fromView[vi];
       if (vi === 0) {
-        // You: the newest server state, nudged forward by your server velocity (no waiting on interpolation).
         const s = newest.byId.get(id);
-        if (s) { copy(act, s); const dt = Math.min(0.1, (now - newest.at) / 1000); if (s.alive) { act.x += s.vx * dt; act.y += s.vy * dt; } }
+        if (s) copy(act, s);
+        // You (SB): predicted from your own inputs by the server's movement rule, so the operator answers the stick at once.
+        // Before the first acknowledged snapshot (or with an older server) the newest server state, nudged forward.
+        this.predictor.advance(w.level, Math.min(0.1, (now - (this.lastFrameAt || now)) / 1000));
+        const d = s?.alive ? this.predictor.drawn() : null;
+        if (d) { act.x = d.x; act.y = d.y; act.vx = d.vx; act.vy = d.vy; }
+        else if (s) { const dt = Math.min(0.1, (now - newest.at) / 1000); if (s.alive) { act.x += s.vx * dt; act.y += s.vy * dt; } }
         // Drawn at once toward your aim, at the same turn cap the server applies (CF-A), so the lamp you see is the
         // lamp the server will have.
         if (aim !== null && act.alive) {
@@ -312,6 +353,7 @@ export class OnlineSession {
       } else if (sb ?? newest.byId.get(id)) copy(act, (sb ?? newest.byId.get(id))!);
       else { act.x = act.y = -100; act.vx = act.vy = 0; } // not visible to your team: drawn nowhere
     }
+    this.lastFrameAt = now;
     // Bullets: the newest server bullets, carried forward along their path to now.
     const ahead = Math.min(0.15, (serverNow - newest.tick) * STEP);
     w.bullets = newest.msg.bullets.map((x) => {

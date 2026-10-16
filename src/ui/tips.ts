@@ -6,7 +6,7 @@ import type { AbilityKind } from '../config/heroes';
 import type { PickupKind } from '../sim/world';
 import { TUNING } from '../config/tuning';
 
-export type TipId = 'pickup-health' | 'pickup-armor' | 'pickup-ammo' | 'reload' | 'hurt' | 'cover' | 'ability';
+export type TipId = 'pickup-health' | 'pickup-armor' | 'pickup-ammo' | 'reload' | 'hurt' | 'cover' | 'ability' | 'callout' | 'lastknown';
 
 export interface TipState {
   /** Seconds since the run started. */
@@ -26,6 +26,10 @@ export interface TipState {
   hurt: boolean;
   /** This frame: one of the player's bullets was stopped by a crate or slab. */
   blockedShot: boolean;
+  /** SB: a teammate made a call this frame. */
+  callout?: boolean;
+  /** SB: a hostile the player saw has just left every light (its LAST KNOWN ring is on screen). */
+  lostContact?: boolean;
 }
 
 // Nothing over the opening instruction (the movement pill is shown for 6 s); one tip at a time, spaced out.
@@ -40,6 +44,8 @@ export function nextTip(s: TipState, shown: ReadonlySet<TipId>): TipId | null {
   if (s.blockedShot) want.push('cover');
   if (s.wantedPickup) want.push(`pickup-${s.wantedPickup}`);
   if (!s.reloading && s.reserve > 0 && s.ammo <= Math.floor(s.magazine * 0.25)) want.push('reload');
+  if (s.callout) want.push('callout');
+  if (s.lostContact) want.push('lastknown');
   if (s.abilityReady && s.t >= 12) want.push('ability');
   return want.find((id) => !shown.has(id)) ?? null;
 }
@@ -56,6 +62,8 @@ export function tipText(id: TipId, touch: boolean, ability: { kind: AbilityKind;
     case 'reload': return `Magazine low. Reload with ${touch ? 'the <b>Reload</b> button' : '<b>R</b>'} before the next fight.`;
     case 'hurt': return 'Hit! The <b>red arc</b> points at the shooter. Break line of sight behind a wall.';
     case 'cover': return 'Crates and slabs <b>stop bullets</b>. Shoot over them from right behind.';
+    case 'callout': return 'Your teammates <b>call</b> what they see and hear. A red diamond is where they saw it.';
+    case 'lastknown': return 'Lost them. The <b>red dotted ring</b> is where they could be by now: it grows as you wait.';
     case 'ability': {
       const what: Partial<Record<AbilityKind, string>> = {
         mend: 'restores 35 health. Save it for after a fight.',

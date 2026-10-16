@@ -3,7 +3,7 @@
 // Positional: pan by direction, volume by distance within the event's radius, muffled through walls.
 import type { SoundType } from '../sim/world';
 
-export type CueType = SoundType | 'hurt' | 'ui' | 'blocked' | 'confirm' | 'kill' | 'ready';
+export type CueType = SoundType | 'hurt' | 'ui' | 'blocked' | 'confirm' | 'kill' | 'ready' | 'comm';
 
 export interface Audio {
   unlock(): void;
@@ -19,8 +19,12 @@ export interface Audio {
 const MIX: Partial<Record<CueType, number>> = { step: 0.8, quietStep: 0.8, shot: 0.9, pickup: 0.7, ui: 0.4, hurt: 0.9, blocked: 0.6 };
 const MUTE_KEY = 'chog.muted';
 
-// Simultaneous voice cap; extra sounds are dropped (lowest priority first is approximated by arrival).
+// Simultaneous voice cap; extra sounds are dropped. SB: never the ones that decide a fight. Danger and confirmation
+// (a shot, your hurt, your hit, a blast, a teammate's call) get PRIORITY_EXTRA voices past the cap, so a crowd of
+// footsteps can never swallow the gunshot that tells you where the shooter is.
 const MAX_VOICES = 24;
+const PRIORITY = new Set<CueType>(['shot', 'hurt', 'confirm', 'kill', 'boom', 'comm', 'downed', 'windup', 'sonar']);
+const PRIORITY_EXTRA = 8;
 
 export function createAudio(): Audio {
   let ctx: AudioContext | null = null;
@@ -78,7 +82,7 @@ export function createAudio(): Audio {
       if (ctx.state === 'suspended') void ctx.resume();
     },
     play(type, dx, dy, radius, muffled, own, weapon, sig) {
-      if (!ctx || !noise || a.muted || ctx.state !== 'running' || voices >= MAX_VOICES) return;
+      if (!ctx || !noise || a.muted || ctx.state !== 'running' || voices >= MAX_VOICES + (PRIORITY.has(type) ? PRIORITY_EXTRA : 0)) return;
       const dist = Math.hypot(dx, dy);
       if (!own && dist > radius) return;
       const t = ctx.currentTime;
@@ -249,6 +253,12 @@ export function createAudio(): Audio {
           thump(0.09, 0.18, 420, 160, 0.55);
           burst(0, 0.03, 'bandpass', 2200, 5, 0.4);
           len = 0.3;
+          break;
+        case 'comm': // SB: a teammate's call-out: a short radio squelch from their side, then a click
+          burst(0, 0.045, 'bandpass', 2400, 2.5, 0.35);
+          thump(0.05, 0.08, 1180, 1180, 0.16);
+          burst(0.14, 0.02, 'bandpass', 3000, 5, 0.3);
+          len = 0.18;
           break;
         case 'ready': // CF: your ability is back: one soft rising note
           thump(0, 0.14, 520, 780, 0.22);

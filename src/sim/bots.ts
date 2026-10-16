@@ -8,7 +8,7 @@ import { angleDiff } from './geom';
 import { findPath, shotClear, sightClear, tileAt, walkable } from './level';
 import { canSee, muzzleFlashSeen } from './vision';
 import { safeSpot, zoneAt, zoneGoal } from './zone';
-import { hears, player, rand, revealed, viewOf, type Actor, type ActorInput, type World } from './world';
+import { hears, player, rand, revealed, viewOf, type Actor, type ActorInput, type CommsEvent, type CommsKind, type SoundType, type World } from './world';
 import { LAB } from '../config/lab';
 
 const DEG = Math.PI / 180;
@@ -59,9 +59,24 @@ export interface Brain {
   /** CF-D: seconds to stand at this patrol point (drawn on arrival), and seconds left of a listen stop. */
   pause: number;
   listen: number;
+  /** What it heard last (the type and who made it), for its call-outs (SB). */
+  heardType: SoundType | null;
+  heardFrom: number;
+  /** SB comms (AI teammates): the hostile it sees now (-1 none), when it last saw each one, a contact it has not
+   * called yet, the one it was tracking (for "lost him"), when it last made each kind of call, and the spot a
+   * teammate's call asked it to cover. */
+  seenId: number;
+  seenAt: Map<number, number>;
+  pendingContact: number;
+  track: { id: number; x: number; y: number; heading: number; at: number; called: boolean } | null;
+  rest: Partial<Record<CommsKind, number>>;
+  watch: { x: number; y: number; until: number } | null;
+  /** SB death insight: the signal that started its current hunt (how it found its target), or null. */
+  foundBy: PerceptionSource | null;
 }
 
-export type PerceptionSource = 'seen' | 'flash' | 'heard' | 'shot' | 'sonar' | 'memory';
+/** callout (SB): a teammate's call-out, itself backed by that teammate's own signal. */
+export type PerceptionSource = 'seen' | 'flash' | 'heard' | 'shot' | 'sonar' | 'callout' | 'memory';
 
 /** One acquisition: a bot updated its belief about the player from a signal. Logged for the omniscience test. */
 export interface PerceptionEvent {
@@ -89,6 +104,7 @@ export function createBrain(spawn: BotSpawn): Brain {
     lastKnown: null, goal: null, path: [], stuckTimer: 0, stuckRepaths: 0, avoid: [], stuckFrom: { x: 0, y: 0 }, lookBase: 0, sawPlayer: false, heardAt: null,
     source: null, suspicion: 0, reaction: TUNING.perception.reactionMax, pathAt: -1e9, zoneRun: false,
     nadeAt: 0, anchorLeft: 0, strafe: 1, pause: TUNING.bots.patrolPause, listen: 0,
+    heardType: null, heardFrom: -1, seenId: -1, seenAt: new Map(), pendingContact: -1, track: null, rest: {}, watch: null, foundBy: null,
   };
 }
 
@@ -110,6 +126,8 @@ function setGoal(w: World, a: Actor, br: Brain, gx: number, gy: number): void {
 
 /** Record a belief update with its signal. */
 function learn(w: World, a: Actor, br: Brain, source: PerceptionEvent['source'], x: number, y: number, suspicion: number, truth: Actor = player(w)): void {
+  // A hunt starts when it had nothing (or had forgotten): remember what started it (SB death insight).
+  if (!br.lastKnown || br.suspicion < 0.05) br.foundBy = source;
   br.lastKnown = { x, y };
   br.source = source;
   br.suspicion = Math.max(br.suspicion, suspicion);
@@ -221,7 +239,73 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
   think(w, a, br, dt);
   dodgeGrenades(w, a);
   maybeThrow(w, a, br);
+  if (a.team !== 'bot') callOut(w, a, br);
   return out;
+}
+
+const STEPS = new Set<SoundType>(['step', 'quietStep']);
+
+/**
+ * SB: an AI teammate says what it perceives, in one short call, when it matters (TUNING.comms). One voice at a time
+ * for the whole squad, and each teammate rests each kind of call. Every call is its own belief: a sighting it has
+ * (exact), a sound it heard (with its own error), a hostile it just lost (where, and which way it was going).
+ */
+function callOut(w: World, a: Actor, br: Brain): void {
+  if (!a.alive || a.downed) return;
+  const C = TUNING.comms, now = w.tick * TUNING.simStepSeconds, lead = player(w);
+  const seen = br.seenId >= 0 ? w.actors[br.seenId] : null;
+  if (seen) {
+    if (now - (br.seenAt.get(seen.id) ?? -1e9) > C.recontactSeconds) br.pendingContact = seen.id;
+    br.seenAt.set(seen.id, now);
+    br.track = { id: seen.id, x: seen.x, y: seen.y, heading: Math.atan2(seen.vy, seen.vx), at: now, called: br.track?.id === seen.id ? br.track.called : false };
+  } else if (br.pendingContact >= 0) br.pendingContact = -1;
+  if (now - w.commsAt < C.gap) return;
+  const can = (k: CommsKind) => now - (br.rest[k] ?? -1e9) >= (C.rest[k] ?? 5);
+  const say = (e: Omit<CommsEvent, 'from' | 'tick'>) => {
+    w.comms.push({ ...e, from: a.id, tick: w.tick });
+    w.commsAt = now;
+    br.rest[e.kind] = now;
+  };
+  if (seen && br.pendingContact === seen.id) {
+    // Behind us: well off where YOU face (the player's back is what nobody else is watching).
+    const off = Math.abs(angleDiff(lead.facing, Math.atan2(seen.y - lead.y, seen.x - lead.x)));
+    const kind: CommsKind = off > C.behindDeg * DEG ? 'behind' : 'contact';
+    if (can(kind)) { say({ kind, target: seen.id, x: seen.x, y: seen.y, r: 0 }); br.pendingContact = -1; br.track!.called = false; return; }
+  }
+  if (a.hp < a.maxHp * 0.35 && a.lastHitTick >= w.tick - 2 && can('hurt')) { say({ kind: 'hurt', target: -1, x: a.x, y: a.y, r: 0 }); return; }
+  const t = br.track;
+  if (!seen && t && !t.called && now - t.at >= C.lostAfter) {
+    const tgt = w.actors[t.id];
+    // Only worth saying if it is still a threat and the player is not looking at the spot (judged from the spot it
+    // reports, never from where the hostile really is).
+    if (!tgt?.alive || now - t.at > 3 || canSee(w.level, lead.x, lead.y, lead.facing, lead.view, t.x, t.y)) t.called = true;
+    else if (can('lost')) { say({ kind: 'lost', target: t.id, x: t.x, y: t.y, heading: t.heading, r: 0.5 }); t.called = true; return; }
+  }
+  if (!seen && br.heardAt && br.heardType && br.heardFrom >= 0 && w.actors[br.heardFrom]?.team !== a.team) {
+    const kind: CommsKind | null = STEPS.has(br.heardType) ? 'steps' : br.heardType === 'shot' ? 'shots' : null;
+    const src = w.actors[br.heardFrom];
+    const d = Math.hypot(br.heardAt.x - a.x, br.heardAt.y - a.y);
+    // Said only when the player is not standing beside the caller (then they heard it too), judged from the two of them.
+    const together = Math.hypot(lead.x - a.x, lead.y - a.y) < TUNING.comms.nearPlayer;
+    if (kind && can(kind) && src.alive && !together && !canSee(w.level, lead.x, lead.y, lead.facing, lead.view, br.heardAt.x, br.heardAt.y)) {
+      say({ kind, target: br.heardFrom, x: br.heardAt.x, y: br.heardAt.y, r: d * TUNING.perception.hearErrorShare });
+      return;
+    }
+  }
+  if (out.reload && a.reloadLeft === 0 && a.ammo < a.weapon.magazine && br.suspicion > 0.5 && can('reloading')) say({ kind: 'reloading', target: -1, x: a.x, y: a.y, r: 0 });
+}
+
+/** SB: a teammate heard a squad call: it covers that way, and a heard call becomes its own (weaker) belief. */
+function hearCalls(w: World, a: Actor, br: Brain): void {
+  const C = TUNING.comms, now = w.tick * TUNING.simStepSeconds;
+  for (const c of w.prevComms) {
+    if (c.from === a.id || w.actors[c.from]?.team !== a.team || c.target < 0) continue;
+    // Cover only what nobody is watching (a heard call, a lost contact). A seen contact is the caller's: everyone else
+    // keeps their own arc, so the squad never all stares at one hostile while another walks in behind.
+    const unwatched = c.kind === 'steps' || c.kind === 'shots' || c.kind === 'lost';
+    if (!br.sawPlayer && unwatched) br.watch = { x: c.x, y: c.y, until: now + C.watchSeconds };
+    if (!br.sawPlayer && br.suspicion < C.conf && w.actors[c.target]?.alive) learn(w, a, br, 'callout', c.x, c.y, C.conf, w.actors[c.target]);
+  }
 }
 
 /** A grenade it can see (or that landed within a step of it) whose ring it stands in: move straight out of it. */
@@ -283,6 +367,8 @@ function think(w: World, a: Actor, br: Brain, dt: number): void {
   // Perception (docs/design/bots.md). Every belief about the player comes from a signal, logged by learn().
   const P = TUNING.perception;
   br.sawPlayer = !!seen;
+  br.seenId = seen?.id ?? -1;
+  if (a.team !== 'bot') hearCalls(w, a, br);
   br.heardAt = null;
   br.suspicion = Math.max(0, br.suspicion - dt / P.memorySeconds);
   if (br.sawPlayer) {
@@ -307,6 +393,8 @@ function think(w: World, a: Actor, br: Brain, dt: number): void {
     const d = Math.hypot(s.x - a.x, s.y - a.y);
     const err = d * P.hearErrorShare;
     br.heardAt = { x: s.x + (rand(w) * 2 - 1) * err, y: s.y + (rand(w) * 2 - 1) * err };
+    br.heardType = s.type;
+    br.heardFrom = s.sourceId;
   }
   if (br.heardAt && !br.sawPlayer && !flashed) learn(w, a, br, 'heard', br.heardAt.x, br.heardAt.y, 0.6);
   if (br.suspicion === 0 && !br.sawPlayer && br.lastKnown && (br.state === 'patrol')) {
@@ -462,12 +550,15 @@ function think(w: World, a: Actor, br: Brain, dt: number): void {
             break;
           }
         }
+        const covering = br.watch && w.tick * TUNING.simStepSeconds < br.watch.until ? br.watch : null;
         if (follow(w, a, br, dt)) {
           br.timer += dt;
           const mates = w.actors.filter((m) => m.ai && m.team === a.team);
           const role = mates.indexOf(a) % 2 === 0 ? Math.PI : (a.id % 2 ? 1 : -1) * Math.PI / 2;
           out.aim = lead.facing + role + Math.sin(br.timer * 1.3) * 0.6;
         } else br.lookBase = out.aim;
+        // SB: a teammate called something: point the lamp at it, a slow sweep across the spot (cover, do not chase).
+        if (covering) out.aim = Math.atan2(covering.y - a.y, covering.x - a.x) + Math.sin(br.timer * 1.7) * 0.25;
         out.quiet = !far;
         break;
       }

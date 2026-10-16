@@ -13,6 +13,7 @@ import { findPath, parseLevel, sightClear, WALL } from '../src/sim/level';
 import { createAutopilot } from '../src/debug/autopilot';
 import { OWN_NOISE, markKind } from '../src/render/marks';
 import { teamSighting } from '../src/render/visibility';
+import { createIntel, rung, senseFor } from '../src/sim/intel';
 
 const OPEN = ['########################', ...Array.from({ length: 10 }, () => '#......................#'), '########################'];
 const out: Record<string, { metric: string; before: unknown; after: unknown; criterion: string }> = {};
@@ -128,6 +129,9 @@ describe('C: your own noise is shown at the radius it is heard at', () => {
  * sampled at 10 Hz. VISIBLE = drawn as a live body (your light; before CF also a teammate's). PARTIAL = a teammate's
  * SPOTTED mark (after CF). LAST KNOWN = its afterimage, within ghostSeconds of leaving your light (after CF). HEARD = a
  * heard mark at a spot. DIRECTION = heard through a wall (after CF). UNKNOWN = nothing.
+ * SB: with the CF switches on, the rung is read from the contact model the game now draws (src/sim/intel.ts), not
+ * rebuilt from CF-era timers (a 1.6 s afterimage the game no longer shows); suspected counts as last known. Before
+ * (switches off) is still the pre-CF game reconstructed from its own rules.
  */
 function infoShares(seeds: number) {
   const c = { visible: 0, partial: 0, last: 0, heard: 0, dir: 0, unknown: 0 };
@@ -135,14 +139,17 @@ function infoShares(seeds: number) {
   for (let seed = 1; seed <= seeds; seed++) {
     const hero = HEROES[seed % HEROES.length].id;
     const w = createWorld({ hero, seed, zone: true, allies: squadFor(hero, seed) });
-    const p = w.actors[0], ap = createAutopilot(seed, 3);
+    const p = w.actors[0], ap = createAutopilot(seed, 3), intel = createIntel(), model = LAB.dark && LAB.enemySound;
     const lastHeard = new Map<number, { t: number; dir: boolean }>();
     const lastSeen = new Map<number, number>();
     const spottedAt = new Map<number, number>();
+    const believed = new Map<number, number>();
     let first = -1;
     for (let i = 0; i < 240 * 60 && w.outcome === 'playing'; i++) {
       stepWorld(w, ap.next(w));
+      if (model) senseFor(w, p, intel, TUNING.simStepSeconds);
       const t = i / 60;
+      if (model) for (const k of intel.contacts.values()) if (k.state !== 'visible' && k.state !== 'lost') believed.set(k.id, t);
       for (const s of w.sounds) {
         if (s.team === p.team || !hears(w.level, p.x, p.y, s)) continue;
         if (s.type === 'step' || s.type === 'quietStep') steps++;
@@ -153,6 +160,19 @@ function infoShares(seeds: number) {
       for (const a of w.actors) {
         if (a.team === p.team || !a.alive) continue;
         const h = lastHeard.get(a.id), seen = lastSeen.get(a.id);
+        if (model) {
+          const s = rung(intel, a.id);
+          if (s === 'visible') {
+            const prevSeen = lastSeen.get(a.id);
+            if (prevSeen === undefined || t - prevSeen > 3) { contacts++; if ((believed.get(a.id) ?? -9) > t - 3) warned++; }
+            c.visible++; if (first < 0) first = t; lastSeen.set(a.id, t);
+          } else if (s === 'partial') c.partial++;
+          else if (s === 'last_known' || s === 'suspected') c.last++;
+          else if (s === 'heard') c.heard++;
+          else if (s === 'directional') c.dir++;
+          else c.unknown++;
+          continue;
+        }
         const mine = canSee(w.level, p.x, p.y, p.facing, p.view, a.x, a.y);
         const mate = !mine && mates.some((m) => canSee(w.level, m.x, m.y, m.facing, m.view, a.x, a.y));
         if (mine || (mate && teamSighting() === 'body')) {
@@ -179,7 +199,9 @@ function infoShares(seeds: number) {
 
 describe('D: enemies are heard before they are seen', () => {
   it('the middle of the information ladder at least doubles, and more contacts are heard or spotted before they are seen', () => {
-    const r = both(() => infoShares(12));
+    // SB: 24 seeds, not 12. Same 2x criterion; at 12 the ratio swung across the bar with unrelated changes (1.99x and
+    // 2.19x); 24 seeds measure 2.4x (0.069 -> 0.163).
+    const r = both(() => infoShares(24));
     record('D', 'hostile time in the middle of the ladder (partial + last known + heard + direction) / contacts heard or spotted first', `${r.before.middle} / ${r.before.warnedContacts}`, `${r.after.middle} / ${r.after.warnedContacts}`, 'middle share >= 2x; more contacts announced before they are seen');
     record('D-detail', 'visible / partial / last known / heard / direction / unknown', r.before, r.after, 'information has a gradient');
     expect(r.after.middle).toBeGreaterThanOrEqual(r.before.middle * 2);

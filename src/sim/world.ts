@@ -204,6 +204,26 @@ export interface KillInfo {
   tick: number;
 }
 
+/**
+ * An AI teammate's call-out (SB): a short report of what IT perceives, at the spot it believes. The UI words it
+ * ("Contact, north"), the player's contact intel and the other AI teammates use it. Never carries what the caller does
+ * not know: x/y are the caller's own belief (a sighting is exact, a heard guess carries the caller's error).
+ */
+export type CommsKind = 'contact' | 'behind' | 'lost' | 'steps' | 'shots' | 'reloading' | 'hurt';
+export interface CommsEvent {
+  from: number;
+  kind: CommsKind;
+  /** The hostile it is about (-1 for reloading / hurt), and where the caller believes it is. */
+  target: number;
+  x: number;
+  y: number;
+  /** Lost: which way it was heading when the caller last saw it. */
+  heading?: number;
+  /** How far off the caller's own belief may be (0 = it saw it). */
+  r: number;
+  tick: number;
+}
+
 export type PickupKind = 'health' | 'armor' | 'ammo';
 
 export interface Pickup {
@@ -231,6 +251,11 @@ export interface World {
   nadeSeq: number;
   sounds: SoundEvent[];
   prevSounds: SoundEvent[];
+  /** AI teammates' call-outs this step, and the last step's (what the squad heard said). */
+  comms: CommsEvent[];
+  prevComms: CommsEvent[];
+  /** Sim seconds of the last call-out (one voice at a time, TUNING.comms.gap). */
+  commsAt: number;
   hits: HitEvent[];
   pickups: Pickup[];
   barriers: Barrier[];
@@ -323,7 +348,7 @@ export function createWorld(opts: WorldOptions = {}): World {
       return { x: m.reduce((a, v) => a + v.x, 0) / Math.max(1, m.length), y: m.reduce((a, v) => a + v.y, 0) / Math.max(1, m.length) };
     });
     return {
-      tick: 0, rng: seed, level, actors, bullets: [], grenades: [], nadeSeq: 0, sounds: [], prevSounds: [], hits: [],
+      tick: 0, rng: seed, level, actors, bullets: [], grenades: [], nadeSeq: 0, sounds: [], prevSounds: [], comms: [], prevComms: [], commsAt: -1e9, hits: [],
       pickups: level.pickupSpawns.map((p) => ({ ...p, active: true, respawnLeft: 0 })), barriers: [],
       brains, attackTokens: [], perceptionLog: null, outcome: 'playing', playerKill: null,
       mode: 'versus', winner: null, friendlyFire: !!opts.friendlyFire,
@@ -349,7 +374,7 @@ export function createWorld(opts: WorldOptions = {}): World {
     brains.set(a.id, createBrain(b));
   });
   return {
-    tick: 0, rng: seed, level, actors, bullets: [], grenades: [], nadeSeq: 0, sounds: [], prevSounds: [], hits: [],
+    tick: 0, rng: seed, level, actors, bullets: [], grenades: [], nadeSeq: 0, sounds: [], prevSounds: [], comms: [], prevComms: [], commsAt: -1e9, hits: [],
     pickups: level.pickupSpawns.map((p) => ({ ...p, active: true, respawnLeft: 0 })), barriers: [],
     brains, attackTokens: [], perceptionLog: opts.log ? [] : null, outcome: 'playing', playerKill: null,
     mode: 'solo', winner: null, friendlyFire: !!opts.friendlyFire,
@@ -509,7 +534,7 @@ function detonate(w: World, a: Actor): void {
 function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
   const M = TUNING.movement;
   // Downed: crawl, nothing else (no fire, reload, ability or pickups). The bleed-out runs in stepRevive.
-  if (a.downed) inp = { ...inp, firing: false, reload: false, ability: false, grenade: false, quiet: false, moveX: inp.moveX * TUNING.revive.crawl, moveY: inp.moveY * TUNING.revive.crawl };
+  if (a.downed) inp = downedInput(inp);
   // Holding the trigger (even between shots) counts as firing: a rescuer must let go of it.
   a.firedLast = inp.firing;
   if (isHuman(a) && !LAB.turn) a.facing = inp.aim;
@@ -534,32 +559,8 @@ function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
   if (inp.grenade && a.grenades > 0 && a.nadeCd === 0 && a.shieldLeft === 0) throwGrenade(w, a, inp.throwAim ?? inp.aim, inp.throwDist);
 
   const speedMul = a.hero.speed * (a.slowLeft > 0 ? a.slowMul : 1);
-  if (a.dashLeft > 0) {
-    a.dashLeft = Math.max(0, a.dashLeft - dt);
-    a.vx = a.dashX * TUNING.abilities.dashSpeed;
-    a.vy = a.dashY * TUNING.abilities.dashSpeed;
-  } else {
-    move.x = inp.moveX;
-    move.y = inp.moveY;
-    moveTuning.maxSpeed = M.maxSpeed * speedMul;
-    stepVelocity(a.vx, a.vy, move, dt, moveTuning, inp.quiet ? M.quietSpeedScale : 1, vel);
-    a.vx = vel.x;
-    a.vy = vel.y;
-  }
   const ox = a.x, oy = a.y;
-  a.x += a.vx * dt;
-  a.y += a.vy * dt;
-  resolveCircle(a, M.radius, w.level.solidBoxes);
-  if (a.dashLeft <= 0) {
-    // Corner assist: never stop dead on a crate/wall edge you are nearly past (CHOG-MAP-001).
-    const t = cornerAssistDir(a.x, a.y, M.radius, inp.moveX, inp.moveY, w.level.solidBoxes, M.cornerAssist);
-    if (t.x !== 0 || t.y !== 0) {
-      const sp = M.maxSpeed * speedMul * M.cornerAssistSpeed * (inp.quiet ? M.quietSpeedScale : 1) * dt;
-      a.x += t.x * sp;
-      a.y += t.y * sp;
-      resolveCircle(a, M.radius, w.level.solidBoxes);
-    }
-  }
+  moveBody(w.level, a, inp, dt);
   a.stepAcc += Math.hypot(a.x - ox, a.y - oy);
   const speed = Math.hypot(a.vx, a.vy);
   if (a.stepAcc >= M.stepDistance) {
@@ -605,6 +606,46 @@ function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
     fireRound(w, a);
   }
   if (a.ammo === 0 && !a.downed) startReload(w, a);
+}
+
+/**
+ * One step of a body's movement: acceleration toward the input (hero speed, slow, creep), a dash if one is running,
+ * walls and crates, and the corner assist. The ONE movement rule: the sim runs it for everyone, and an online client
+ * runs the same function on its own operator to predict it before the server's answer arrives (SB, src/net/client.ts).
+ */
+export function moveBody(level: Level, a: Actor, inp: ActorInput, dt: number): void {
+  const M = TUNING.movement;
+  const speedMul = a.hero.speed * (a.slowLeft > 0 ? a.slowMul : 1);
+  if (a.dashLeft > 0) {
+    a.dashLeft = Math.max(0, a.dashLeft - dt);
+    a.vx = a.dashX * TUNING.abilities.dashSpeed;
+    a.vy = a.dashY * TUNING.abilities.dashSpeed;
+  } else {
+    move.x = inp.moveX;
+    move.y = inp.moveY;
+    moveTuning.maxSpeed = M.maxSpeed * speedMul;
+    stepVelocity(a.vx, a.vy, move, dt, moveTuning, inp.quiet ? M.quietSpeedScale : 1, vel);
+    a.vx = vel.x;
+    a.vy = vel.y;
+  }
+  a.x += a.vx * dt;
+  a.y += a.vy * dt;
+  resolveCircle(a, M.radius, level.solidBoxes);
+  if (a.dashLeft <= 0) {
+    // Corner assist: never stop dead on a crate/wall edge you are nearly past (CHOG-MAP-001).
+    const t = cornerAssistDir(a.x, a.y, M.radius, inp.moveX, inp.moveY, level.solidBoxes, M.cornerAssist);
+    if (t.x !== 0 || t.y !== 0) {
+      const sp = M.maxSpeed * speedMul * M.cornerAssistSpeed * (inp.quiet ? M.quietSpeedScale : 1) * dt;
+      a.x += t.x * sp;
+      a.y += t.y * sp;
+      resolveCircle(a, M.radius, level.solidBoxes);
+    }
+  }
+}
+
+/** Downed: crawl, nothing else. The same input shaping for the sim and for an online client's prediction. */
+export function downedInput(inp: ActorInput): ActorInput {
+  return { ...inp, firing: false, reload: false, ability: false, grenade: false, quiet: false, moveX: inp.moveX * TUNING.revive.crawl, moveY: inp.moveY * TUNING.revive.crawl };
 }
 
 /** Normalise to -PI..PI so a facing never grows without bound across many turns. */
@@ -998,6 +1039,8 @@ export function stepWorld(
 ): void {
   w.prevSounds = w.sounds;
   w.sounds = [];
+  w.prevComms = w.comms;
+  w.comms = [];
   w.hits = [];
   for (const a of w.actors) {
     if (!a.alive) {

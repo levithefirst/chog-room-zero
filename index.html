@@ -132,6 +132,12 @@
       .card h2 { font-size: 34px; letter-spacing: 0.14em; font-weight: 600; margin: 0 0 8px; text-transform: uppercase; }
       .card p { margin: 6px auto; color: var(--dim); font-size: 17px; max-width: 34em; }
       .card .bad { color: var(--hostile); } .card .good { color: var(--heal); }
+      /* SB ?perf overlay: real-device numbers for playtests (frame times, load, network, match telemetry). */
+      #perf { position: fixed; left: 6px; bottom: 6px; z-index: 50; margin: 0; padding: 4px 6px; font: 10px/1.35 'Plex Mono', monospace; color: #e8f1ff; background: rgba(11, 12, 13, 0.78); border-radius: 6px; pointer-events: none; white-space: pre; max-width: calc(100vw - 12px); overflow: hidden; }
+      /* SB death insight: one or two plain reasons under the cause, the first a touch brighter. */
+      .card p.insight { color: var(--ink); font-size: 15px; line-height: 1.35; max-width: 30em; margin: 4px auto; padding-left: 14px; text-indent: -14px; }
+      .card p.insight::before { content: "\203A  "; color: var(--hostile); }
+      .card p.insight + p.insight { color: var(--dim); font-size: 14px; }
       .kicker { font-size: 13px; letter-spacing: 0.3em; color: var(--dim); text-transform: uppercase; margin-bottom: 10px; }
       .btns { display: flex; gap: 10px; justify-content: center; margin-top: 18px; flex-wrap: wrap; }
       /* Buttons (brand guide): default --bg-elevated with a --border keyline, hover --chog-purple-bright, pressed

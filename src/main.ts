@@ -40,6 +40,11 @@ import { chogName, powerForToken, signatureFor, tierOfMetadataId, ONE_OF_ONE, TI
 import { tierEffect } from './ui/account';
 import { LAB, applyLab } from './config/lab';
 import { OWN_NOISE, markKind } from './render/marks';
+import { createIntel, locatesSource, senseFor } from './sim/intel';
+import { commsLine, compass } from './ui/comms';
+import { createFightRecord, deathInsights, gaitOf, offFacing, trimFight, type Insight } from './sim/insight';
+import { rung } from './sim/intel';
+import { createTelemetry, stepTelemetry, summary as teleSummary } from './sim/telemetry';
 
 // DEMO screen: the first token of each tier in the verified catalogue, plus two 1:1s with different signatures.
 const DEMO_TIER_SAMPLES = ['1', '2', '54', '31', '53', '1373'];
@@ -62,11 +67,6 @@ const LAB_ON = (import.meta.env.DEV || __TEST_HOOKS__) && QS.has('lab');
 const LAB_SET = LAB_ON ? applyLab(QS.get('lab') ?? '') : [];
 
 
-function compass(dx: number, dy: number): string {
-  const names = ['east', 'south-east', 'south', 'south-west', 'west', 'north-west', 'north', 'north-east'];
-  const i = Math.round(((Math.atan2(dy, dx) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI / 4)) % 8;
-  return names[i];
-}
 
 const SPEAKER_ON = '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9c1.5 1.5 1.5 4.5 0 6M18.5 6.5c3 3 3 8 0 11"/></svg>';
 const SPEAKER_OFF = '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9l5 6M21 9l-5 6"/></svg>';
@@ -92,6 +92,8 @@ const BOOT_TIPS = [
   'The leaderboard counts kills in saved online matches, then wins.',
 ];
 let bootTipTimer: ReturnType<typeof setInterval> | null = null;
+// SB ?perf: milliseconds from navigation to the hub (the real load time a player waits).
+let bootAt = 0;
 // CF: the same real steps as a checklist (done, now, to come), so the screen says what it is waiting on.
 const BOOT_SHORT = ['Fonts', 'Renderer', 'Room', 'Player', 'Account'];
 function boot(i: number) {
@@ -240,7 +242,7 @@ async function start() {
   let playTime = 0;
   let toastLeft = 0;
   const fx = createFx();
-  const debugStats = { blockedCues: 0 };
+  const debugStats = { blockedCues: 0, callouts: 0 };
   renderer.reset(world);
 
   // CF hub backdrop: the real room, live, behind the hub. Your operator stands in the north office under its lamp,
@@ -249,9 +251,18 @@ async function start() {
   const MENU_SPOT = { x: 16.5, y: 3.4 };
   const MENU_ROUTE = [{ x: 14.5, y: 8.5 }, { x: 19.5, y: 8.5 }];
   let menuWorld: World | null = null, menuHero = '', menuAcc = 0, menuT = 0, menuLeg = 0, menuWait = 0;
+  // SB: what the player believes about each hostile, per world (the hub backdrop has its own).
+  let matchIntel = createIntel(), menuIntel = createIntel();
+  // SB death insight: the last seconds of the player's fight (hits taken, own shots), and the reasons shown at death.
+  let fight = createFightRecord();
+  let deathWhy: Insight[] = [];
+  // SB telemetry, on the device only (never sent): this match's numbers, and this session's match funnel.
+  let tele = createTelemetry();
+  const product = { started: 0, completed: 0, won: 0, died: 0, quits: 0, retries: 0 };
   let drawnWorld: World = world;
   function menuWorldNow(): World {
     if (!menuWorld || menuHero !== heroId) {
+      menuIntel = createIntel();
       menuWorld = createWorld({ seed: 7, hero: heroId, zone: false, bots: [{ name: 'Rounds', hero: 'tonashiro', patrol: [[14, 8]], flanker: false }] });
       const p = menuWorld.actors[0];
       p.x = MENU_SPOT.x; p.y = MENU_SPOT.y; p.facing = Math.PI / 2; p.hp = p.maxHp = 1e9;
@@ -275,13 +286,8 @@ async function start() {
       stepWorld(w, { ...IDLE_INPUT, aim: Math.PI / 2 + 0.85 * Math.sin(menuT * 0.32) }, TUNING.simStepSeconds, (a) => menuPatrol(a));
       const p = w.actors[0];
       p.hp = p.maxHp;
-      for (const sd of w.sounds) {
-        if (sd.team === p.team || !hears(w.level, p.x, p.y, sd)) continue;
-        const src = w.actors[sd.sourceId];
-        if (canSee(w.level, p.x, p.y, p.facing, p.view, src.x, src.y)) continue;
-        if (!sightClear(w.level, p.x, p.y, sd.x, sd.y)) fx.dirTicks.push({ ang: Math.atan2(sd.y - p.y, sd.x - p.x), age: 0, big: false });
-        else fx.markers.push({ x: sd.x, y: sd.y, age: 0, life: TUNING.sound.markerLife, big: false, kind: markKind(sd.type), ang: Math.atan2(src.vy, src.vx) });
-      }
+      // The backdrop patrol is heard through the wall the way any hostile is (SB contact intel).
+      senseFor(w, p, menuIntel, TUNING.simStepSeconds);
     }
   }
 
@@ -377,7 +383,7 @@ async function start() {
     if (ringHintDone) return;
     ringHintDone = true;
     try { localStorage.setItem(RING_HINT_KEY, '1'); } catch { /* ignore */ }
-    showHint('Footprints, bursts and clicks are noises you <b>heard</b>, not saw; a tick around you came through a wall. Your own dashed ring is how far you are heard.', 6);
+    showHint('Marks are noises you <b>heard</b>, not saw. A tick around you: through a wall. A red dotted ring: where they could be now.', 6);
   }
 
   // HUD panel rects for label avoidance (CHOG-HUD-002). Measured from the DOM, so safe-area insets count, and turned
@@ -415,6 +421,8 @@ async function start() {
     const next = nextPhase(phase, e);
     if (next === phase) return;
     const from = phase;
+    if (e === 'restart') product.retries++;
+    if (e === 'quit' && (from === 'play' || from === 'pause')) product.quits++;
     phase = next;
     if (next === 'results') {
       resultsAt = performance.now();
@@ -556,13 +564,32 @@ async function start() {
       <p style="font-size:13px">${input.mode === 'touch' ? '' : 'Esc or P to resume.'}</p>`);
   }
 
+  /** SB: the one or two reasons this death happened (src/sim/insight.ts), from the player's own fight record. */
+  function explainDeath(): Insight[] {
+    const p = player(world);
+    // Online the view world has no kill record: the last hit you took is the killing one.
+    const lastHit = fight.hits[fight.hits.length - 1];
+    const k = world.playerKill ?? p.death ?? (online && lastHit ? { cause: 'shot' as const, killerId: lastHit.by, weapon: '', fromX: lastHit.fromX, fromY: lastHit.fromY, toX: p.x, toY: p.y, tick: world.tick } : null);
+    if (!k || k.cause !== 'shot' || k.killerId < 0) return [];
+    const killer = world.actors[k.killerId];
+    return deathInsights(fight, {
+      now: matchIntel.now, killer: k.killerId, dist: Math.hypot(k.fromX - p.x, k.fromY - p.y),
+      weapon: { name: p.weapon.name, falloffEnd: p.weapon.falloffEnd, pellets: p.weapon.pellets },
+      foundBy: killer?.ai ? world.brains.get(k.killerId)?.foundBy ?? null : null, dir: compass(k.fromX - p.x, k.fromY - p.y),
+    });
+  }
+  const whyHtml = () => deathWhy.map((i) => `<p class="insight">${esc(i.text)}</p>`).join('');
+
   function showRecap() {
+    // The death screen speaks alone: no gameplay tip under or over the DOWN headline (mobile overlap, SB).
+    hintLeft = 0;
+    hint.style.opacity = '0';
     const k = world.playerKill!;
     if (k.cause === 'zone') { card('<h2 class="bad">Down</h2><p>The danger zone got you. Stay inside the circle when it closes.</p>', 'layer clear'); return; }
     const killer = world.actors[k.killerId];
     const p = player(world);
     const d = Math.hypot(k.fromX - p.x, k.fromY - p.y);
-    card(`<h2 class="bad">Down</h2><p>${esc(killer.name)} (${esc(killer.hero.name)}, ${esc(k.weapon)}) from ${d.toFixed(0)} m ${compass(k.fromX - p.x, k.fromY - p.y)}.</p>`, 'layer clear');
+    card(`<h2 class="bad">Down</h2><p>${esc(killer.name)} (${esc(killer.hero.name)}, ${esc(k.weapon)}) from ${d.toFixed(0)} m ${compass(k.fromX - p.x, k.fromY - p.y)}.</p>${whyHtml()}`, 'layer clear');
   }
 
   // The after-action report: only numbers the game tracked this run.
@@ -572,7 +599,7 @@ async function start() {
     const k = world.playerKill;
     return {
       won, hero: heroById(heroId), weaponName: p.weapon.name,
-      why: !won && k?.cause === 'zone' ? '<p class="bad">Danger zone</p>' : !won && k && k.killerId >= 0 ? `<p class="bad">${esc(world.actors[k.killerId].name)} · ${esc(k.weapon)} · ${Math.hypot(k.fromX - p.x, k.fromY - p.y).toFixed(0)} m ${compass(k.fromX - p.x, k.fromY - p.y)}</p>` : '',
+      why: !won && k?.cause === 'zone' ? '<p class="bad">Danger zone</p>' : !won && k && k.killerId >= 0 ? `<p class="bad">${esc(world.actors[k.killerId].name)} · ${esc(k.weapon)} · ${Math.hypot(k.fromX - p.x, k.fromY - p.y).toFixed(0)} m ${compass(k.fromX - p.x, k.fromY - p.y)}</p>${whyHtml()}` : '',
       time: playTime, kills: p.kills, teamKills: world.actors.filter((a) => a.team === 'player' && a.ai).reduce((n, a) => n + a.kills, 0),
       bots: world.actors.filter((a) => a.team === 'bot').length, left: world.actors.filter((a) => a.team === 'bot' && a.alive).length,
       // Per bullet, so a shotgun's 8 pellets per shot can never read above 100% (RC-3: Brick showed 59/16).
@@ -897,7 +924,12 @@ async function start() {
     suggestPilot = null;
     renderer.reset(world);
     drawnWorld = world;
-    fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = fx.rings.length = fx.noise.length = fx.dirTicks.length = 0;
+    fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = fx.rings.length = fx.noise.length = fx.comms.length = 0;
+    matchIntel = createIntel();
+    fight = createFightRecord();
+    deathWhy = [];
+    tele = createTelemetry();
+    product.started++;
     for (const s of fx.sparks) s.age = 1;
     fx.shake = 0;
     acc = 0;
@@ -1010,7 +1042,12 @@ async function start() {
     world = net!.world!;
     renderer.reset(world);
     drawnWorld = world;
-    fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = fx.rings.length = fx.noise.length = fx.dirTicks.length = 0;
+    fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = fx.rings.length = fx.noise.length = fx.comms.length = 0;
+    matchIntel = createIntel();
+    fight = createFightRecord();
+    deathWhy = [];
+    tele = createTelemetry();
+    product.started++;
     for (const sp of fx.sparks) sp.age = 1;
     fx.shake = 0;
     fx.threats.length = 0;
@@ -1086,6 +1123,8 @@ async function start() {
   // Match end: the one place a practice run is saved. Signed in: the site stores it on the account and awards medals
   // there. Guest: this session's memory only. Never per frame, never to localStorage.
   function endRun(won: boolean) {
+    product.completed++;
+    if (won) product.won++; else product.died++;
     // The lab room keeps no records anywhere: no progression, no medals (CF lab).
     if (LAB_ON) { lastRun = { newBest: { time: false, kills: false }, earned: [], saved: 'session' }; return; }
     const p = player(world);
@@ -1116,6 +1155,7 @@ async function start() {
   boot(3);
   await Promise.race([refreshAccount(() => boot(4)), new Promise((r) => setTimeout(r, 5000))]);
   render();
+  bootAt = performance.now();
   void bootDone();
   // CF lab room: straight into a solo room, no hub, with the experiment switches on screen. Each switch reloads.
   if (LAB_ON) {
@@ -1172,10 +1212,14 @@ async function start() {
     if (phase === 'title' && titleView !== 'main') { titleView = titleView === 'nick' ? nickReturn : 'main'; confirmReset = false; render(); }
     else if (phase === 'play') go('pause');
   });
-  // Leaving the tab pauses the match: the sim must never run while nobody is watching.
+  // Leaving the tab pauses the match: the sim must never run while nobody is watching. Online the match goes on, so
+  // every control is released at once (SB): the render loop stops with the page and would never send the release.
+  const releaseOnline = () => { if (online && net) net.release(player(world).facing); input.releaseAll(); };
   document.addEventListener('visibilitychange', () => {
+    if (document.hidden) releaseOnline();
     if (document.hidden && phase === 'play') go('pause');
   });
+  window.addEventListener('pagehide', releaseOnline);
   // Every resize re-lays the stage out first (a phone turning upright turns the stage, src/ui/stage.ts), then the
   // canvas follows at once. An orientation flip of the browser mid-run moves every thumb position on the glass, so the
   // run pauses (same run, nothing lost; Resume continues) and every held stick/key is released: their coordinates
@@ -1206,6 +1250,7 @@ async function start() {
   document.addEventListener('webkitfullscreenchange', onFullscreen);
   // Losing window focus (alt-tab, notification shade, another window) pauses too.
   window.addEventListener('blur', () => {
+    releaseOnline();
     if (phase === 'play') go('pause');
   });
   // Fresh presses for the summary gate (auto-repeat does not count).
@@ -1255,7 +1300,7 @@ async function start() {
   }
 
   // Contextual tips (src/ui/tips.ts): what is true this frame.
-  let hurtNow = false, blockedNow = false, sinceHint = 0;
+  let hurtNow = false, blockedNow = false, calledNow = false, sinceHint = 0;
   function wantedPickup(): PickupKind | null {
     const p = player(world);
     let best: PickupKind | null = null, bestD = 6;
@@ -1268,14 +1313,15 @@ async function start() {
     return best;
   }
   function maybeTip() {
-    if (!settings.tips || AUTOPLAY_SEED !== null) { hurtNow = blockedNow = false; return; }
+    if (!settings.tips || AUTOPLAY_SEED !== null) { hurtNow = blockedNow = calledNow = false; return; }
     const p = player(world);
     const id: TipId | null = nextTip({
       t: playTime, sinceLastHint: sinceHint, hintShowing: hintLeft > 0, wantedPickup: world.tick % 6 === 0 ? wantedPickup() : null,
       ammo: p.ammo, magazine: p.weapon.magazine, reserve: p.reserve, reloading: p.reloadLeft > 0, abilityReady: p.abilityCd === 0,
-      hurt: hurtNow, blockedShot: blockedNow,
+      hurt: hurtNow, blockedShot: blockedNow, callout: calledNow,
+      lostContact: [...matchIntel.contacts.values()].some((c) => c.state === 'last_known' && c.source === 'sight' && c.age > 0.6 && c.age < 3),
     }, shownTips);
-    hurtNow = blockedNow = false;
+    hurtNow = blockedNow = calledNow = false;
     if (!id) return;
     shownTips.add(id);
     saveShownTips(localStorage, shownTips);
@@ -1312,6 +1358,13 @@ async function start() {
       if (own && ['dash', 'sonar', 'barrier', 'mend', 'windup', 'scream', 'shield', 'frenzy'].includes(s.type)) runAbilities++;
       if (own && s.type === 'pickup') collected(s.x, s.y);
       if (own && s.type === 'impact' && s.blocked) blockedNow = true;
+      if (own && s.type === 'shot') {
+        const g = gaitOf(p);
+        fight.shots.push({ t: matchIntel.now, gait: g });
+        tele.shots[g]++;
+        tele.firstShotS ??= +tele.seconds.toFixed(1);
+      }
+      if (s.type === 'revive' && s.team === p.team) tele.revives++;
       // CF-C: your own noise, drawn out to the radius it is really heard at (steps by speed, reload, abilities).
       if (own && LAB.ownNoise && p.alive && OWN_NOISE.has(s.type)) fx.noise.push({ x: s.x, y: s.y, r: s.radius, age: 0 });
       const heard = own || hears(world.level, p.x, p.y, s);
@@ -1330,17 +1383,31 @@ async function start() {
       if (own || s.team === p.team) continue;
       const src = world.actors[s.sourceId];
       if (src.alive && canSee(world.level, p.x, p.y, p.facing, view, src.x, src.y)) continue;
-      const big = s.type === 'shot' || s.type === 'death' || s.type === 'sonar' || s.type === 'boom';
       ringHint();
-      // CF-D information ladder: through a wall you learn a DIRECTION; with a clear line, a spot and what it was.
-      if (LAB.enemySound && !sightClear(world.level, p.x, p.y, s.x, s.y)) {
-        fx.dirTicks.push({ ang: Math.atan2(dy, dx), age: 0, big });
-        continue;
-      }
+      // SB: a sound that says where its maker is becomes (or refreshes) that hostile's contact (senseFor, below). What
+      // is left is where something LANDED (an impact, a blast, a death): a mark at that spot, with a clear line only.
+      if (locatesSource(s.type) || !sightClear(world.level, p.x, p.y, s.x, s.y)) continue;
+      const big = s.type === 'death' || s.type === 'boom';
       const err = Math.hypot(dx, dy) * 0.08;
       const m = clampMarker(world.level, s.x + (Math.random() * 2 - 1) * err, s.y + (Math.random() * 2 - 1) * err, src.x, src.y, walkable);
       fx.markers.push({ x: m.x, y: m.y, age: 0, life: TUNING.sound.markerLife, big, kind: LAB.enemySound ? markKind(s.type) : undefined, ang: Math.atan2(src.vy, src.vx) });
     }
+    // SB: AI teammates' call-outs this step: a line above the caller and a squelch from its side (solo only).
+    for (const e of world.comms) {
+      const from = world.actors[e.from];
+      if (!from) continue;
+      fx.comms = fx.comms.filter((c) => c.from !== e.from);
+      fx.comms.push({ from: e.from, text: commsLine(e, p.x, p.y), age: 0 });
+      audio.play('comm', from.x - p.x, from.y - p.y, 40, false, false);
+      debugStats.callouts++;
+      tele.callouts++;
+      calledNow = true;
+    }
+    // SB contact intel: everything the player now sees, hears or is told, folded into one belief per hostile. Solo it
+    // runs once per sim step; online once per snapshot's events (sight and decay then run per frame).
+    senseFor(world, p, matchIntel, online ? 0 : TUNING.simStepSeconds);
+    trimFight(fight, matchIntel.now);
+    if (!online && p.alive) stepTelemetry(tele, gaitOf(p), matchIntel, TUNING.simStepSeconds);
     let confirmed = false;
     for (const h of world.hits) {
       if (h.by === 0) {
@@ -1349,6 +1416,7 @@ async function start() {
         if (h.killed) audio.play('kill', 0, 0, 1, false, true);
         else if (!confirmed) audio.play('confirm', 0, 0, 1, false, true);
         confirmed = true;
+        tele.ranges.push(Math.hypot(h.x - p.x, h.y - p.y));
         fx.hitMarks.push({ x: h.x, y: h.y, age: 0, kill: h.killed });
         spark(h.x, h.y, h.killed ? 10 : 4, true);
         if (h.killed) toast(`${world.actors[h.target].name} eliminated`);
@@ -1356,6 +1424,11 @@ async function start() {
       }
       if (h.target === 0) {
         hurtNow = true;
+        const known = matchIntel.contacts.get(h.by);
+        tele.hitsTaken[gaitOf(p)]++;
+        tele.firstHitTakenS ??= +tele.seconds.toFixed(1);
+        fight.hits.push({ t: matchIntel.now, by: h.by, fromX: h.fromX, fromY: h.fromY, off: offFacing(p.facing, p.x, p.y, h.fromX, h.fromY), gait: gaitOf(p), reloading: p.reloadLeft > 0, grenade: !!h.grenade,
+          knew: rung(matchIntel, h.by), knewFor: known && known.state !== 'lost' ? matchIntel.now - known.since : 0 });
         if (settings.vibration && canVibrate) navigator.vibrate(h.killed ? 80 : 25);
         // Shake by how much it hurt (CF): a graze nudges, a shotgun blast shoves. 25 damage = the base shake.
         fx.shake = Math.max(fx.shake, TUNING.render.shakeSeconds * Math.max(0.6, Math.min(1.8, (h.hpDamage + h.armorDamage) / 25)));
@@ -1373,6 +1446,20 @@ async function start() {
   }
 
   let fpsAcc = 0, fpsFrames = 0;
+  // SB ?perf: frame times (last 240 frames), load time to the hub, memory, network, and the match telemetry, drawn twice
+  // a second in a corner. For playtests on real phones: what the owner reads off the screen, never sent anywhere.
+  const PERF_ON = QS.has('perf');
+  const frameMs: number[] = [];
+  let perfAcc = 0;
+  const perfEl = PERF_ON ? Object.assign(document.body.appendChild(document.createElement('pre')), { id: 'perf' }) : null;
+  function perfNow() {
+    const sorted = [...frameMs].sort((a, b) => a - b);
+    const q = (f: number) => sorted.length ? +sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * f))].toFixed(1) : 0;
+    const mem = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
+    return { fps: +hook.fps.toFixed(0), frameMs50: q(0.5), frameMs95: q(0.95), frameMsMax: q(1), heapMb: mem ? Math.round(mem.usedJSHeapSize / 1048576) : null,
+      bootMs: Math.round(bootAt), dpr: renderer.app.renderer.resolution, rttMs: net ? Math.round(net.rtt) : null, snaps: net?.snapCount ?? null,
+      predict: net ? { error: +net.predictor.lastError.toFixed(2), corrections: net.predictor.corrections, snaps: net.predictor.snaps } : null };
+  }
   // Test hook for the scripted browser run. Only in dev builds or with ?debug in the URL.
   const hook = { fps: 0 } as { fps: number } & Record<string, unknown>;
   if (import.meta.env.DEV || location.search.includes('debug')) {
@@ -1388,6 +1475,8 @@ async function start() {
       // RC-7 menus and progression (tools/rc7-menus.mjs): device profile, settings, medals, shown tips, the open view.
       profile: () => curProfile(), settings: () => settings, medals: () => curMedals(), tips: () => [...shownTips],
       view: () => titleView, runFacts: () => ({ pickups: runPickups, abilities: runAbilities }), stick: () => touchStick.radius,
+      // SB telemetry (on the device only): this match, the session funnel, frame timing.
+      telemetry: () => teleSummary(tele), product: () => ({ ...product }), perf: () => perfNow(),
       resolution: () => renderer.app.renderer.resolution, volume: () => audio.volume,
       // RC-8 online (tools/rc8-online.mjs): the session and whether the shown world is an online match. Test builds only.
       ...(__TEST_HOOKS__ ? { net: () => net, online: () => online } : {}) });
@@ -1403,6 +1492,18 @@ async function start() {
 
   renderer.app.ticker.add((ticker) => {
     const dt = Math.min(0.1, ticker.deltaMS / 1000);
+    frameMs.push(ticker.deltaMS);
+    if (frameMs.length > 240) frameMs.shift();
+    if (perfEl && (perfAcc += dt) >= 0.5) {
+      perfAcc = 0;
+      const pf = perfNow(), tm = teleSummary(tele);
+      perfEl.textContent = `fps ${pf.fps}  frame ${pf.frameMs50}/${pf.frameMs95}/${pf.frameMsMax} ms  heap ${pf.heapMb ?? '-'} MB  dpr ${pf.dpr}  load ${pf.bootMs} ms`
+        + (pf.rttMs !== null ? `\nrtt ${pf.rttMs} ms  snaps ${pf.snaps}  predict err ${pf.predict!.error} u  corr ${pf.predict!.corrections}  snapped ${pf.predict!.snaps}` : '')
+        + `\nmatch ${tm.s} s  gait still/creep/run ${tm.gait}  shots ${tm.shotsByGait}  hit-on ${tm.hitsTakenByGait}  range ${tm.fightRange ?? '-'} u`
+        + `\nfirst contact ${tm.firstContactS ?? '-'} s  shot ${tm.firstShotS ?? '-'} s  hit ${tm.firstHitTakenS ?? '-'} s  calls ${tm.callouts}  revives ${tm.revives}`
+        + `\ninfo ${Object.entries(tm.info as Record<string, number>).map(([k, v]) => `${k} ${v}`).join(' ')}`
+        + `\nsession started ${product.started} done ${product.completed} won ${product.won} died ${product.died} quit ${product.quits} again ${product.retries}`;
+    }
     fpsAcc += dt;
     fpsFrames++;
     if (fpsAcc >= 1) {
@@ -1427,6 +1528,7 @@ async function start() {
       net.update(p.alive ? inp.aim : null);
       for (const ev of net.takeEvents()) { world.sounds = ev.sounds; world.hits = ev.hits; afterStep(); }
       playTime += dt;
+      if (!p.alive && !deathWhy.length && fight.hits.length) { deathWhy = explainDeath(); if (deathWhy.length) showHint(esc(deathWhy[0].text), 5); }
       if (!p.alive && hintLeft <= 0) showHint('You are out. Your side plays on; the result comes when it ends.', 4);
       else if (p.downed && hintLeft <= 0) showHint(`DOWNED: crawl to cover. A teammate within ${TUNING.revive.range} m who holds fire revives you in ${TUNING.revive.seconds} s.`, 3);
       if (net.state === 'reconnecting' || net.state === 'error') showHint(esc(net.message), 1);
@@ -1454,6 +1556,7 @@ async function start() {
       }
       if (r.steps > 0 && world.outcome === 'playing') { maybeTip(); checkFull(); }
       if (world.outcome === 'dead') {
+        deathWhy = explainDeath();
         recapLeft = TUNING.render.deathFreeze;
         endRun(false);
         go('died');
@@ -1476,8 +1579,11 @@ async function start() {
     for (const m of fx.markers) m.age += dt;
     for (const n of fx.noise) n.age += dt;
     fx.noise = fx.noise.filter((n) => n.age < TUNING.sound.ownNoiseSeconds);
-    for (const d of fx.dirTicks) d.age += dt;
-    fx.dirTicks = fx.dirTicks.filter((d) => d.age < TUNING.sound.dirTickLife);
+    // Online: sight and decay every frame (snapshot sounds were folded in by afterStep).
+    if (online && net && simRuns(phase)) {
+      senseFor(world, player(world), matchIntel, dt, []);
+      if (player(world).alive) stepTelemetry(tele, gaitOf(player(world)), matchIntel, dt);
+    }
     for (const m of fx.impacts) m.age += dt;
     for (const m of fx.hitMarks) m.age += dt;
     for (const m of fx.damageArcs) m.age += dt;
@@ -1502,6 +1608,8 @@ async function start() {
       hintLeft -= dt;
       if (hintLeft <= 0) hint.style.opacity = '0';
     } else if (phase === 'play') sinceHint += dt;
+    for (const c of fx.comms) c.age += dt;
+    fx.comms = fx.comms.filter((c) => c.age < TUNING.comms.chipSeconds);
     for (const c of fx.rings) c.age += dt;
     fx.rings = fx.rings.filter((c) => c.age < RING_SECONDS);
     for (const c of fx.collects) c.age += dt;
@@ -1512,6 +1620,7 @@ async function start() {
     const menuOn = phase === 'title' && !online;
     if (menuOn) menuStep(dt);
     const shown = menuOn ? menuWorldNow() : world;
+    fx.intel = menuOn ? menuIntel : matchIntel;
     if (shown !== drawnWorld) { renderer.reset(shown); drawnWorld = shown; }
     renderer.draw(shown, fx, input, dt, { recap: phase === 'recap' || (phase === 'results' && world.outcome === 'dead'), marking: identity.marking, showSticks: phase === 'play' && input.mode === 'touch', playing: phase === 'play', debug: DEBUG_OVERLAY && !menuOn, hud: hudRects(), menu: menuOn ? (stage().w < 1000 ? 1.8 : 2) : undefined });
 

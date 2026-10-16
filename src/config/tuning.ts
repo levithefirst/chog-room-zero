@@ -155,6 +155,95 @@ export const TUNING = {
     spottedLife: 1.2,
   },
 
+  // SB matchmaking (server/room.ts tryMatch): like meets like, and the bar drops the longer anyone waits, so a quiet
+  // queue still starts a match within seconds. Strength = rating + its tier's power offset (progression.ts RATING), so
+  // a holder's starting power is matched, not hidden. Private room codes ignore it (friends play who they invite).
+  match: {
+    // Everyone in a room within this many rating points of each other at first...
+    band: 150,
+    // ...plus this many per second the oldest group has waited (after 20 s: 550, anyone in a small queue).
+    widenPerSec: 20,
+    // The two teams' average strength within this share of the band.
+    teamGapShare: 0.5,
+    // Accounts with fewer saved online matches than this count as new (rated no higher than the start rating), so a
+    // first match is never against someone's main account.
+    newMatches: 5,
+  },
+
+  // SB online own-movement prediction (src/net/predict.ts).
+  net: {
+    // A server correction is blended out over this long (s): short enough that you end where the server says, long
+    // enough that a 10 cm disagreement never reads as a twitch.
+    correctSeconds: 0.1,
+    // A disagreement bigger than this (u) is a real event (a dash, a knockback, a resume): snap instead of sliding.
+    snapDistance: 2.5,
+  },
+
+  // SB contact intel (src/sim/intel.ts): what you believe about each hostile, how sure, how precisely, and how fast it
+  // goes stale. LAW 3: information decays. The numbers are PROPOSALS for the owner's playtest; the lab measures them.
+  intel: {
+    // How fast an out-of-sight hostile's "could be anywhere in here" circle grows (u/s). A walk is 3.4 u/s, a creep
+    // 2.3: 2 u/s means the circle is honest for someone moving carefully and a little generous for a runner, so a
+    // last-known mark after 3 s says "about 6 m around here", not "here".
+    spreadSpeed: 2,
+    // Seconds until a belief has faded to nothing, by how it was learned. A sighting is worth remembering longest; a
+    // footstep through a wall is a hint that is stale in a few seconds.
+    lastKnownSeconds: 6,
+    spottedSeconds: 4,
+    heardSeconds: 4,
+    directionSeconds: 3,
+    // Below this share of its reported confidence it is only SUSPECTED (a faint circle: something was around here),
+    // then LOST. 0.4: a direction tick shows for 1.8 of its 3 s, a sighting's outline for 3.6 of its 6 s.
+    suspectBelow: 0.4,
+    // A LOST contact stays drawn this long as it fades out, so a mark never just blinks away.
+    lostSeconds: 0.6,
+    // Heard with a clear line: the guess is off by up to this share of the distance (a shot 8 u away lands within
+    // ~0.8 u). Per sound: a shot is loud and sharp, a creep step muffled and vague.
+    hearShare: 0.1,
+    hearMul: { shot: 0.6, step: 1, quietStep: 1.6, reload: 1.2, other: 1.3 } as Record<string, number>,
+    // Heard through a wall: a direction within this many degrees and a distance within +/- this share. You know which
+    // way, roughly how far, never the spot.
+    dirErrDeg: 16,
+    dirDistShare: 0.3,
+    // A teammate's sighting: where they saw it, within this much (a call-out is a place, not a pixel).
+    spottedRadius: 0.9,
+    // Footprints kept per contact so a walker's path reads (older ones fade first).
+    trail: 4,
+    trailSeconds: 2.2,
+    // A fresh update pulses for this long (the sound "lands" on the mark).
+    freshSeconds: 0.45,
+    // Confidence each source gives (sight is certain; a quiet step through a wall is a maybe).
+    conf: { sight: 1, teammate: 0.85, shot: 0.9, reload: 0.75, step: 0.7, quietStep: 0.5, impact: 0.55, ability: 0.8, grenade: 0.7, other: 0.6 } as Record<string, number>,
+    dirConfMul: 0.7,
+  },
+
+  // SB AI teammate call-outs (src/sim/bots.ts comms): short reports of what THEY perceive, never what they cannot.
+  // Spam is the failure mode: one voice at a time, and each kind of call rests a while per teammate.
+  comms: {
+    // Seconds between any two call-outs from the squad (one voice at a time). Measured (16 default matches,
+    // tests/sb-comms.test.ts): gap 1.4 with 7 s rests made 13.5 calls a minute, a stream; 2.2 s and longer rests on
+    // the noisy kinds bring it under 10 while still calling a third of what the player then sees.
+    gap: 2.2,
+    // Seconds before the same teammate makes the same kind of call again.
+    rest: { contact: 4, behind: 4, lost: 8, steps: 10, shots: 10, reloading: 12, hurt: 10 } as Record<string, number>,
+    // A heard call (footsteps, shots) is skipped when the player stands this close to the caller: they heard it too.
+    nearPlayer: 5,
+    // "Behind us": a contact more than this many degrees off where you face.
+    behindDeg: 115,
+    // A new sighting of the same hostile only counts as a fresh contact after this long out of the caller's sight.
+    recontactSeconds: 4,
+    // "Lost him": called this long after the caller stops seeing a hostile it was tracking.
+    lostAfter: 0.5,
+    // A teammate who hears a call turns to cover that way for this long (unless it has something of its own).
+    watchSeconds: 3.5,
+    // How sure a heard call is to whoever receives it (they did not hear it themselves), and its spread (u): the
+    // caller's own error plus the distance between them.
+    conf: 0.55,
+    baseRadius: 1.5,
+    // Above a teammate's head, this long.
+    chipSeconds: 1.8,
+  },
+
   // Grenades (owner 2026-10-14, docs/design/roster-grenades.md). Every player carries them; capacity is by tier
   // (src/config/power.ts GRENADES). PROPOSAL numbers for the Core Feel Gate.
   grenade: {

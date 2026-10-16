@@ -17,7 +17,7 @@
 import { env as authEnv, json, readSession, sameOrigin, secretOk, type Env, type Identity } from './auth.js';
 import { schemaStatus, type Db } from './db.js';
 import { readOwnership, selfCheck, type Fetch, type Holding, type SelfCheck } from './chain.js';
-import { setNftTier, accountFor, buyUpgrade, callsignOf, checkTicket, issueTicket, leaderboard, settleMatch, ticketSecret, tokenHistory, upgradesOf, validRecord, type GameTicket } from './game.js';
+import { setNftTier, accountFor, buyUpgrade, callsignOf, standingOf, checkTicket, issueTicket, leaderboard, settleMatch, ticketSecret, tokenHistory, upgradesOf, validRecord, type GameTicket } from './game.js';
 import { accountView, recordPractice, setCallsign, setPrefs } from './career.js';
 import { NO_UPGRADES, ONE_OF_ONE, SIGNATURES, TIER_DEFS, TIERS, chogName, tierOfMetadataId, type Tier } from '../../src/config/power.js';
 
@@ -159,6 +159,8 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
         const up = db && acc ? await upgradesOf(db, acc) : NO_UPGRADES;
         // A signed-in account plays under its own callsign (the one on its profile and the leaderboard).
         const own = db && acc ? await callsignOf(db, acc) : null;
+        // SB: rating and experience ride in the signed ticket, so the game server can match like with like.
+        const standing = db && acc ? await standingOf(db, acc) : null;
         let holding: (Holding & { owner: string }) | null = null;
         let chain: string | null = null;
         if (wallets(ids).length) {
@@ -179,7 +181,7 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
           acc, up, name: own ?? name,
           tier: holding && nftCombatOn(e) ? tokTier! : 'free',
           tok: holding?.tokenId ?? null, mid: holding?.metadataId ?? null, tokTier, own: holding?.owner ?? null,
-          holder: !!holding, demo: false,
+          holder: !!holding, demo: false, ...(standing ? { rating: standing.rating, played: standing.played } : {}),
         }, secret, d.now());
         log(`ticket issued: ${holding ? 'holder' : 'free'}${acc ? ' with account' : ''}${chain ? ` (${chain})` : ''}`);
         return json({ ticket: t.ticket, profile: publicTicket(t.data), nftCombat: nftCombatOn(e), warning: chain });
