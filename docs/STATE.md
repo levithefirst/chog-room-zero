@@ -1,12 +1,12 @@
 # Chog: Room Zero - shared state
 
 Source of truth for every agent. Rules: `docs/RULES.md`. Edit only in a handoff commit. Keep under 8,000 characters; move old rows to `docs/HANDOFFS.md`.
-Last verified: 2026-10-16 by claude (CF core feel + first impression, branch claude/cf-core-feel, not deployed).
+Last verified: 2026-10-16 by claude (CF deployed to production, H26).
 
 ## Snapshot (EVIDENCE)
 - Repo `levithefirst/chog-room-zero` (private). Default/base branch `setup/skill-system` (LOCKED, owner 2026-10-11: no `main`). Never merge without the owner.
-- Open PRs stacked #1 to #9, then PR #10 = ccr-e7fadb8f-qtochk. CF work is on `claude/cf-core-feel` (from eb8e45f), NOT deployed: Render builds only ccr-e7fadb8f-qtochk, and the sim is shared with the server, so client and server must ship together.
-- Vercel project `chog-room-zero` (protection off). Production `chogroomzero.xyz` -> `dpl_EA71LQQByJRTvXiEAuifqHcjDJnt` (986b2a6, H24). Rollback: `dpl_47vJS2AYM4Ly8EX8wyvCd9k46kSo` (H23). Sign-in env vars and `DATABASE_URL` (Neon) set by the owner. No `NFT_COMBAT` set: combat power is on by default (owner 2026-10-14). Game server: Render Free `https://room-zero-game.onrender.com` (redeploys on every push to ccr-e7fadb8f-qtochk); `ALLOWED_ORIGINS` = production domains + that branch's preview. Test hooks are not in production builds.
+- Open PRs stacked #1 to #9, then PR #10 = ccr-e7fadb8f-qtochk. CF merged into ccr-e7fadb8f-qtochk and live (H26). The sim is shared with the server: client and server always ship from the same commit (Render `/stats` names its commit).
+- Vercel project `chog-room-zero` (protection off). Production `chogroomzero.xyz` -> `dpl_2zr1LtzY5Z5qSceoANeFC2wmfWnM` (970c948, H26). Rollback: `dpl_EA71LQQByJRTvXiEAuifqHcjDJnt` (986b2a6, pre-CF; Render must go back with it). Sign-in env vars and `DATABASE_URL` (Neon) set by the owner. No `NFT_COMBAT` set: combat power is on by default (owner 2026-10-14). Game server: Render Free `https://room-zero-game.onrender.com` (redeploys on every push to ccr-e7fadb8f-qtochk); `ALLOWED_ORIGINS` = production domains + that branch's preview. Test hooks are not in production builds.
 - Chog Genesis (NFT-R1, EVIDENCE): Monad 143, contract `0xc96d31F8626c6D03Fae5dCD3d61e3FB9F4a73763` (ChogMint, Sourcify exact match), ERC-721, supply 1,969, catalogue in `data/chog-genesis/`; token id is NOT the displayed number. Live check 2026-10-14 (`/api/game/chain`): chain 143, `metadataId(1)` = 1462, ownerOf/tokensOfOwner agree.
 - Chogathon 2026 (`docs/SUBMISSION.md`); judges gate on "the Chog NFT must be essential". Deadline and start date: UNKNOWN.
 
@@ -38,18 +38,18 @@ Last verified: 2026-10-16 by claude (CF core feel + first impression, branch cla
 ## UNKNOWN (never guess)
 - Chog Genesis art and name rights; `baseURI`, totalSupply read from chain; metadata hash check (`docs/research/chog-genesis/`).
 - Owner access to Pixel 7 / iPhone 13. Chogathon submission deadline.
-- Whether a real holder can sign in and play 5v5 (fake-chain holder passes locally). A settled match on Neon (PGlite only so far).
+- Whether a real holder can sign in and play 5v5 (fake-chain holder passes locally).
 
 ## Implemented (EVIDENCE)
-- CF (H25, branch only): steady rule, turn cap, own-noise ring, typed heard marks, direction ticks, afterimages, SPOTTED, dark map, pillar map, feedback (confirm/kill/ready cues, bar ghosts, grenade aim preview), audible bots, ally roles; live-room hub, Enter with CHOG (eligibility then SIWE), loading checklist. `docs/ROOM_ZERO_CORE_FEEL_AUDIT.md`.
+- CF (H25, live H26; H26 also fixed settlement, which had never worked in production): steady rule, turn cap, own-noise ring, typed heard marks, direction ticks, afterimages, SPOTTED, dark map, pillar map, feedback (confirm/kill/ready cues, bar ghosts, grenade aim preview), audible bots, ally roles; live-room hub, Enter with CHOG (eligibility then SIWE), loading checklist. `docs/ROOM_ZERO_CORE_FEEL_AUDIT.md`.
 - GR (H24): free roster, grenades, department AI. QA (H23), MI (H22) and earlier: `docs/HANDOFFS.md`.
 
 ## Automated tests (EVIDENCE, Node 22.22)
-CF branch (H25): `npx vitest run` 603/603 (60 files), `tsc` clean. Browser (headless Chromium, emulated, local stack): cf-chog 18/18, qa-journey 38/38, qa-errors 7/7, master-ui 8/8, qa-screens clean, rc8-online 1v1+3v3 PASS, cf-visual 48 frames.
+Production smoke H26 (970c948, from a Vercel Sandbox): 31/31. CF (H25): `npx vitest run` 603/603 (604 at H26) (60 files), `tsc` clean. Browser (headless Chromium, emulated, local stack): cf-chog 18/18, qa-journey 38/38, qa-errors 7/7, master-ui 8/8, qa-screens clean, rc8-online 1v1+3v3 PASS, cf-visual 48 frames.
 
 ## Not performed (needs the owner)
 - CF: any human play of the steady rule, turn cap, dark and sound (lab A/B), CF balance (Bill 33/40 solo), a real wallet through Enter with CHOG.
-- Pixel 7 / iPhone 13, real-GPU FPS, audio by ear, hosted 3v3/5v5 and reconnect, a live Neon settlement, a real holder, art rights in writing, the demo video.
+- Pixel 7 / iPhone 13, real-GPU FPS, audio by ear, hosted 5v5 with a holder and reconnect, a real holder, art rights in writing, the demo video.
 
 ## Gates
 Core Feel Gate: BLOCKED on owner playtests (class numbers and now CF). G10: automated part PASS; playtest part not run.
@@ -57,9 +57,9 @@ Core Feel Gate: BLOCKED on owner playtests (class numbers and now CF). G10: auto
 ## Current task
 | Id | Owner | Branch | Files | Done when | Status |
 |---|---|---|---|---|---|
-| CF | claude | claude/cf-core-feel | see H25 | Owner 2026-10-16 CORE FEEL + GAME UX | built + tested, NOT deployed; owner playtest (lab A/B), then deploy client+server together |
+| CF | claude | claude/cf-core-feel | see H25 | Owner 2026-10-16 CORE FEEL + GAME UX | in production (H26); owner playtest (lab A/B) |
 | GR | claude | ccr-e7fadb8f-qtochk | see H24 | Owner 2026-10-14 ROSTER + GRENADES | in production |
 | RC-8 | claude | ccr-e7fadb8f-qtochk, PR #10 | see H16 | Owner RC-8 mandate | PR #10 not merged (stacked on #9; owner decides) |
 
 ## Handoffs
-Latest: H25 (2026-10-16, claude -> owner; CF core feel + UX, not deployed). History: `docs/HANDOFFS.md`.
+Latest: H26 (2026-10-16, claude -> owner; CF deployed, settlement fixed). History: `docs/HANDOFFS.md`.

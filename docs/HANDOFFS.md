@@ -368,3 +368,17 @@ Blockers        : deploying needs client (Vercel) and server (Render, builds ccr
 Not verified    : any human play (feel, turn cap with a real mouse, darkness on a real phone screen, sound by ear), a real wallet and real Monad through Enter with CHOG, Pixel 7 / iPhone 13, real-GPU frame rate with the live hub backdrop.
 Locked decisions touched : LOCKED 7 now states humans turn at a cap (owner 2026-10-16 asked for it). No env var, spend, schedule or deploy.
 Next smallest task : owner plays ?debug&lab in a dev or preview build, A1 vs A0 and E1 vs E0 (5 minutes each, desktop then phone) and answers: "did facing matter without feeling slow?" and "did the empty room feel dangerous?". No files.
+
+HANDOFF H26  2026-10-16  claude -> owner
+Branch @ commit : ccr-e7fadb8f-qtochk @ 970c94857134548ca3c759a262e1f9ee2d829af6 (the next commit is this handoff, docs only)   pushed: yes
+Task            : owner "DEPLOY ROOM ZERO CORE FEEL". claude/cf-core-feel (4af7df7 + d735db3 /stats commit) fast-forwarded into ccr-e7fadb8f-qtochk, pushed.
+Deploy          : Vercel production dpl_2zr1LtzY5Z5qSceoANeFC2wmfWnM (970c948) READY, aliasError null, chogroomzero.xyz -> it; bundle index-Dho3_GVl.js carries build 970c948. Render /stats commit = 970c948. The interim d735db3 pair (dpl_Ho8KAjYbeCAYyM4qCP2M75p9g8HL) also matched.
+Fix             : settlement 500 (server_error) in production, never worked before: VITE_GAME_SERVER_URL is the client's wss://.../ws, so the site fetched /ws/results/<id>, got Render's plain-text page and res.json() threw. gameServer() now strips /ws. Neon had 0 settled matches; the same SQL dry-run (rolled back) passed on Neon.
+Files changed   : api/_lib/game-api.ts, tests/game-api.test.ts (+1 test: fails with server_error without the fix), docs/STATE.md, docs/HANDOFFS.md
+Tests run       : npx vitest run -> 604/604 (60 files); npx tsc --noEmit -> clean. Production smoke (node script in a Vercel Sandbox, real HTTPS + WebSockets) -> 31/31: landing, entry scripts, build sha, server commit, auth/game config, health (Neon migrations), chain self-check, Google start 302, eligibility (empty 0, owner of token 1 count 1, foreign origin 403), SIWE challenge, bad signature 401, real signature sign-in, session, tokens, profile, 1v1 entry + snapshots + leave -> over -> settle ok + idempotent, 3v3 six in one room, 5v5 refused for signed-in non-holder and guest (holders-only).
+Known failures  : none
+Blockers        : none
+Not verified    : Google consent screen and callback (needs a person), a real Chog holder signing in and entering 5v5, a real wallet extension, real phones, any human play of CF.
+Data written    : smoke test accounts (random wallets, callsigns SmokeA/Smoke5v5) in room_zero on Neon, three settled 1v1 rows with 0 kills (the account always left, 0 XP). Not removed (migrations never delete).
+Locked decisions touched : none
+Next smallest task : owner signs in with Google and with the wallet that holds a Chog on chogroomzero.xyz, plays one 1v1 and checks that the results screen shows XP and the leaderboard lists the match.
