@@ -33,7 +33,8 @@ const http = createServer((req, res) => {
     return;
   }
   res.writeHead(200, { 'content-type': 'text/plain', 'cache-control': 'no-store' });
-  res.end(req.url === '/stats' ? JSON.stringify(lobby.stats()) : 'room-zero game server ok');
+  // /stats names the commit this server runs (Render sets RENDER_GIT_COMMIT), so a deploy can be matched to the client.
+  res.end(req.url === '/stats' ? JSON.stringify({ ...lobby.stats(), commit: env.RENDER_GIT_COMMIT ?? null }) : 'room-zero game server ok');
 });
 
 const wss = new WebSocketServer({
