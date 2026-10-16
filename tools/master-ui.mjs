@@ -7,7 +7,7 @@ const [base, shotDir] = process.argv.slice(2);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const port = 9400 + Math.floor(Math.random() * 300);
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rz-ui-'));
-const proc = spawn('google-chrome', ['--headless=new', '--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', `--user-data-dir=${dir}`, `--remote-debugging-port=${port}`, 'about:blank'], { stdio: 'ignore', detached: true });
+const proc = spawn(process.env.CHROME_BIN ?? 'google-chrome', ['--headless=new', '--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', `--user-data-dir=${dir}`, `--remote-debugging-port=${port}`, 'about:blank'], { stdio: 'ignore', detached: true });
 let t; for (let i = 0; i < 60 && !t; i++) { await sleep(200); try { t = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find((x) => x.type === 'page'); } catch {} }
 const ws = new WebSocket(t.webSocketDebuggerUrl); await new Promise((r) => (ws.onopen = r));
 let id = 0; const P = new Map(); const errors = [];
@@ -43,7 +43,9 @@ await cmd('Page.navigate', { url: `${base}/?debug&server=ws://127.0.0.1:9/ws` })
 for (let i = 0; i < 60; i++) { await sleep(200); if (await ev('!!document.getElementById("hub") && !document.getElementById("boot")')) break; }
 const hub = await ev(`(() => { const b = document.querySelector('[data-mode="5v5"]'); return { five: b?.innerText ?? '', text: document.getElementById('overlay').innerText }; })()`);
 check('Hub: 5v5 marked holders only for a guest', /holders only/i.test(hub?.five ?? ''), JSON.stringify(hub?.five));
-check('Hub: class panel (free class) and leaderboard preview present', /\bclass\b/i.test(hub?.text ?? '') && /\bfree\b/i.test(hub?.text ?? '') && /leaderboard/i.test(hub?.text ?? ''));
+// CF: a guest sees the way to bring a Chog (Enter with CHOG), not an empty free-class card; the class card appears once
+// a Chog is verified (tools/cf-chog.mjs, tools/qa-journey.mjs).
+check('Hub: a guest is offered Enter with CHOG, and the leaderboard preview is present', /enter with chog/i.test(hub?.text ?? '') && /leaderboard/i.test(hub?.text ?? ''));
 await click('[data-mode="5v5"]'); await sleep(200);
 const lock = await ev(`({ text: document.getElementById('overlay').innerText, play: document.getElementById('playbtn')?.disabled })`);
 check('Hub: selecting 5v5 as a guest shows CHOG HOLDERS ONLY and Play is disabled', /chog holders only/i.test(lock?.text ?? '') && lock?.play === true, JSON.stringify({ play: lock?.play }));

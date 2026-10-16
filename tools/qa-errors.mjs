@@ -39,9 +39,10 @@ try {
   await g.go('/?debug'); await g.ev(`localStorage.setItem('chog.onboarded','1')`);
   await g.go('/?debug&server=' + encodeURIComponent('ws://127.0.0.1:9/ws')); await g.hub();
   await g.click('[data-mode="1v1"]'); await g.click('#playbtn');
-  const busy = await g.until(`document.getElementById('playbtn')?.innerText.trim().toUpperCase() === 'CANCEL'`, 5000);
+  // CF: the PLAY button carries its label in .pl (the mode line sits under it).
+  const busy = await g.until(`(document.querySelector('#playbtn .pl') ?? document.getElementById('playbtn'))?.innerText.trim().toUpperCase() === 'CANCEL'`, 5000);
   await g.click('#playbtn');
-  const idle = await g.until(`document.getElementById('playbtn')?.innerText.trim().toUpperCase() === 'PLAY'`, 5000);
+  const idle = await g.until(`(document.querySelector('#playbtn .pl') ?? document.getElementById('playbtn'))?.innerText.trim().toUpperCase() === 'PLAY'`, 5000);
   await g.shot('03-server-down');
   check('game server down: Play shows Cancel while connecting, and Cancel always returns to Play', busy && idle);
   // 4. Browser Back from a sub-screen returns to the hub instead of leaving the game.

@@ -3,7 +3,7 @@
 import { spawn } from 'node:child_process'; import fs from 'node:fs';
 const [base, prefix, dir = '/workspace/shots'] = process.argv.slice(2);
 const port = 9600 + Math.floor(Math.random() * 50);
-const chrome = spawn('google-chrome', ['--headless=new','--no-sandbox','--use-angle=swiftshader','--enable-unsafe-swiftshader',`--remote-debugging-port=${port}`,'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(process.env.CHROME_BIN ?? 'google-chrome', ['--headless=new','--no-sandbox','--use-angle=swiftshader','--enable-unsafe-swiftshader',`--remote-debugging-port=${port}`,'about:blank'], { stdio: 'ignore' });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms)); let t;
 for (let i = 0; i < 50 && !t; i++) { await sleep(200); try { t = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find((x) => x.type === 'page'); } catch {} }
 const ws = new WebSocket(t.webSocketDebuggerUrl); await new Promise((r) => (ws.onopen = r));

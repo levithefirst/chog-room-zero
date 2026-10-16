@@ -69,7 +69,9 @@ export function howtoHtml(c: ScreenCtx): string {
 <tr><td>Creep (quiet)</td><td>${t ? 'Half push on the left stick' : 'Hold Shift'}</td></tr>
 <tr><td>Ability</td><td>${t ? 'Ability button' : 'Space'} · reload ${t ? 'button' : 'R'}</td></tr>
 <tr><td>Grenade</td><td>${t ? 'Grenade button: thrown along your aim' : 'G or right click: lands at the cursor'}</td></tr>
-<tr><td>Pale rings</td><td>A noise you heard, not saw. Running is loud; enemies hear you too.</td></tr>
+<tr><td>Heard marks</td><td>Footprints, a burst (shot), two dots (reload): noises you heard, not saw. A tick around you: through a wall.</td></tr>
+<tr><td>Your ring</td><td>The dashed ring when you move is how far you are heard. Creep and it shrinks; stand still and it is gone.</td></tr>
+<tr><td>Stand still</td><td>Your aim tightens and your lamp reaches further. Running loosens both.</td></tr>
 <tr><td>Team</td><td>You + 2 AI teammates vs 5 bots. Down: a teammate revives you.</td></tr><tr><td>Win</td><td>Your side downs all five hostiles.</td></tr></table></div>
 <div class="btns"><button class="btn primary" data-act="howto-close">Got it</button></div></div>`;
 }

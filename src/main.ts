@@ -83,7 +83,8 @@ const BOOT_STEPS = ['Loading fonts', 'Starting the renderer', 'Building the base
 const BOOT_TIPS = [
   'Walls block bullets and sight. If you cannot see them, they cannot hit you.',
   'Running is loud. Creep (half push or Shift) and they hear nothing.',
-  'Pale rings are noises you heard, not saw.',
+  'Footprints are steps you heard. A tick around you is a noise through a wall.',
+  'Stand still and your aim tightens and your lamp reaches further. Run and both loosen.',
   'In 3v3 and 5v5 a downed teammate can be revived: stand next to them and hold fire.',
   'A health pickup at full health still overheals you for a while.',
   'Your Chog sets your starting class. Your account upgrades take it further.',
@@ -376,7 +377,7 @@ async function start() {
     if (ringHintDone) return;
     ringHintDone = true;
     try { localStorage.setItem(RING_HINT_KEY, '1'); } catch { /* ignore */ }
-    showHint('Pale rings: a noise you <b>heard</b>, not saw. Enemies hear you too: running is loud, creeping is quiet.', 6);
+    showHint('Footprints, bursts and clicks are noises you <b>heard</b>, not saw; a tick around you came through a wall. Your own dashed ring is how far you are heard.', 6);
   }
 
   // HUD panel rects for label avoidance (CHOG-HUD-002). Measured from the DOM, so safe-area insets count, and turned

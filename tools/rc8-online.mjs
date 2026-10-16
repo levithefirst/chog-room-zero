@@ -20,7 +20,7 @@ const WS = `ws://127.0.0.1:${serverPort}/ws`;
 async function launch(n) {
   const port = 9700 + Math.floor(Math.random() * 280);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rz-client-'));
-  const proc = spawn('google-chrome', ['--headless=new', '--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', `--user-data-dir=${dir}`,
+  const proc = spawn(process.env.CHROME_BIN ?? 'google-chrome', ['--headless=new', '--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', `--user-data-dir=${dir}`,
     `--remote-debugging-port=${port}`, '--disable-background-timer-throttling', '--disable-renderer-backgrounding', 'about:blank'], { stdio: 'ignore', detached: true });
   let t;
   for (let i = 0; i < 60 && !t; i++) { await sleep(200); try { t = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find((x) => x.type === 'page'); } catch {} }

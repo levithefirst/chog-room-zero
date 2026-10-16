@@ -627,7 +627,7 @@
       .hub.cf .navbtn .dot { background: var(--chog-pink); color: var(--bg-deep) !important; border-radius: 9px; padding: 0 5px; }
       .hub.cf .navbtn.demo-link { min-height: 28px; opacity: .8; }
       /* Right: your Chog, squad, top ranks. Secondary: translucent, no heavy borders. */
-      .hub.cf .hub-right { position: absolute; right: 0; top: 54px; bottom: 96px; width: clamp(190px, 21%, 290px); display: flex; flex-direction: column; gap: 8px; overflow-y: auto; scrollbar-width: none; }
+      .hub.cf .hub-right { position: absolute; right: 0; top: 54px; bottom: calc(clamp(62px, calc(var(--vh) * 15), 96px) + 16px); width: clamp(190px, 21%, 290px); display: flex; flex-direction: column; gap: 8px; overflow-y: auto; scrollbar-width: none; }
       .hub.cf .hub-right::-webkit-scrollbar { display: none; }
       .hub.cf .hub-right .hub-card { background: rgba(26, 18, 40, 0.66); border: 0; border-left: 2px solid var(--accent, var(--line)); border-radius: 0 6px 6px 0; padding: 8px 10px; }
       /* Bottom: mode, then the one PLAY on the right thumb. */
@@ -657,7 +657,7 @@
       .play-cta.found { background: linear-gradient(100deg, #0f9a6c, var(--ally)); }
       @keyframes playwait { 50% { box-shadow: 0 0 0 3px rgba(255, 107, 157, .55), 0 10px 34px -12px rgba(139, 92, 246, 1); } }
       @media (prefers-reduced-motion: reduce) { .play-cta.loading { animation: none; } }
-      body.compact .hub.cf .hub-right { top: 50px; bottom: 84px; }
+      body.compact .hub.cf .hub-right { top: 50px; bottom: 78px; }
       body.compact .hub.cf .navbtn { min-height: 30px; font-size: 12px; }
       body.compact .hub.cf .mode-btn { min-height: 44px; min-width: 64px; padding: 2px 6px; } body.compact .hub.cf .mode-btn b { font-size: 15px; }
       body.compact .hub.cf .player-chip > svg { width: 32px; height: 32px; } body.compact .hub.cf .pc-txt > b { font-size: 15px; max-width: 120px; }
@@ -684,7 +684,7 @@
 
       /* ---- CF results: the outcome first, big; the numbers land one after another; AGAIN (Enter) is the primary. ---- */
       .card.results { background: linear-gradient(180deg, rgba(26, 18, 40, .92), rgba(14, 9, 28, .96)); border-color: transparent; box-shadow: 0 20px 60px -20px #000; }
-      .card.results h2 { font-size: clamp(36px, calc(var(--vh) * 10), 76px); letter-spacing: .2em; line-height: 1; margin: 4px 0 8px; animation: outin 420ms cubic-bezier(.2, .7, .2, 1) both; }
+      #overlay .card.results h2 { font-size: clamp(36px, calc(var(--vh) * 10), 76px); letter-spacing: .2em; line-height: 1; margin: 4px 0 8px; animation: outin 420ms cubic-bezier(.2, .7, .2, 1) both; }
       .card.results h2.good { color: var(--ally); text-shadow: 0 0 30px rgba(16, 185, 129, .45); }
       .card.results h2.bad { color: var(--hostile); text-shadow: 0 0 30px rgba(239, 68, 68, .4); }
       @keyframes outin { from { opacity: 0; transform: scale(1.12); letter-spacing: .34em; } to { opacity: 1; transform: none; } }
