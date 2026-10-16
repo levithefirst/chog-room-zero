@@ -379,6 +379,6 @@ Tests run       : npx vitest run -> 604/604 (60 files); npx tsc --noEmit -> clea
 Known failures  : none
 Blockers        : none
 Not verified    : Google consent screen and callback (needs a person), a real Chog holder signing in and entering 5v5, a real wallet extension, real phones, any human play of CF.
-Data written    : smoke test accounts (random wallets, callsigns SmokeA/Smoke5v5) in room_zero on Neon, three settled 1v1 rows with 0 kills (the account always left, 0 XP). Not removed (migrations never delete).
+Data written    : 4 smoke test accounts (random wallets, one per run) in room_zero on Neon; 1 settled 1v1 match (the account left: 0 kills, 0 XP, rating 1000 -> 988). Not removed (migrations never delete).
 Locked decisions touched : none
 Next smallest task : owner signs in with Google and with the wallet that holds a Chog on chogroomzero.xyz, plays one 1v1 and checks that the results screen shows XP and the leaderboard lists the match.
