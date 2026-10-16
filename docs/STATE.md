@@ -1,14 +1,14 @@
 # Chog: Room Zero - shared state
 
 Source of truth for every agent. Rules: `docs/RULES.md`. Edit only in a handoff commit. Keep under 8,000 characters; move old rows to `docs/HANDOFFS.md`.
-Last verified: 2026-10-14 by claude (GR free roster + grenades pass).
+Last verified: 2026-10-16 by claude (CF core feel + first impression, branch claude/cf-core-feel, not deployed).
 
 ## Snapshot (EVIDENCE)
 - Repo `levithefirst/chog-room-zero` (private). Default/base branch `setup/skill-system` (LOCKED, owner 2026-10-11: no `main`). Never merge without the owner.
-- Open PRs stacked #1 to #9, then PR #10 = this branch. Merge in order; README conflict at #1: keep the game README.
-- Vercel project `chog-room-zero` (protection off). Production `chogroomzero.xyz` -> `dpl_EA71LQQByJRTvXiEAuifqHcjDJnt` (986b2a6, H24). Rollback: `dpl_47vJS2AYM4Ly8EX8wyvCd9k46kSo` (H23), more in H18/H21. Sign-in env vars and `DATABASE_URL` (Neon) set by the owner. No `NFT_COMBAT` set: combat power is on by default (owner 2026-10-14). Game server: Render Free `https://room-zero-game.onrender.com` (redeploys on every push to this branch); `ALLOWED_ORIGINS` = both production domains + branch preview. `VITE_GAME_SERVER_URL` = Production + Preview. Test hooks are not in production builds.
-- Chog Genesis (NFT-R1, EVIDENCE): Monad 143, contract `0xc96d31F8626c6D03Fae5dCD3d61e3FB9F4a73763` (ChogMint, Sourcify exact match), ERC-721, supply 1,969, catalogue in `data/chog-genesis/`; token id is NOT the displayed number. Live from production 2026-10-14 (`/api/game/chain`, rpc.monad.xyz): chain id 143, `metadataId(1)` = 1462 (so startingIndex 1461 holds), owner of token 1 lists token 1 in `tokensOfOwner`.
-- Hackathon: Chogathon 2026; deliverables in `docs/SUBMISSION.md`; judges gate on "the Chog NFT must be essential". Deadline and project start date: UNKNOWN (page contradicts itself).
+- Open PRs stacked #1 to #9, then PR #10 = ccr-e7fadb8f-qtochk. CF work is on `claude/cf-core-feel` (from eb8e45f), NOT deployed: Render builds only ccr-e7fadb8f-qtochk, and the sim is shared with the server, so client and server must ship together.
+- Vercel project `chog-room-zero` (protection off). Production `chogroomzero.xyz` -> `dpl_EA71LQQByJRTvXiEAuifqHcjDJnt` (986b2a6, H24). Rollback: `dpl_47vJS2AYM4Ly8EX8wyvCd9k46kSo` (H23). Sign-in env vars and `DATABASE_URL` (Neon) set by the owner. No `NFT_COMBAT` set: combat power is on by default (owner 2026-10-14). Game server: Render Free `https://room-zero-game.onrender.com` (redeploys on every push to ccr-e7fadb8f-qtochk); `ALLOWED_ORIGINS` = production domains + that branch's preview. Test hooks are not in production builds.
+- Chog Genesis (NFT-R1, EVIDENCE): Monad 143, contract `0xc96d31F8626c6D03Fae5dCD3d61e3FB9F4a73763` (ChogMint, Sourcify exact match), ERC-721, supply 1,969, catalogue in `data/chog-genesis/`; token id is NOT the displayed number. Live check 2026-10-14 (`/api/game/chain`): chain 143, `metadataId(1)` = 1462, ownerOf/tokensOfOwner agree.
+- Chogathon 2026 (`docs/SUBMISSION.md`); judges gate on "the Chog NFT must be essential". Deadline and start date: UNKNOWN.
 
 ## LOCKED (owner; 2026-10-07, 2026-10-11, 2026-10-12, 2026-10-13)
 1. Dark top-down tactical survival shooter, ~90 s rooms, mobile and PC, original IP. Bullet Echo is a benchmark only (P2 mandate): nothing copied.
@@ -17,7 +17,7 @@ Last verified: 2026-10-14 by claude (GR free roster + grenades pass).
 4. Controls: mobile LANDSCAPE (owner 2026-10-13); upright devices get the landscape game turned 90 deg, first tap asks fullscreen + lock. Left thumb move, right thumb aim and fire outside deadzone, ability in right-thumb reach, no auto-fire; idle aim faces the walk (RC-5). PC: WASD, mouse aim, click fire, Space ability.
 5. Test devices: Pixel 7, iPhone 13.
 6. Projectiles travel visibly, no hitscan. Walls block bullets and vision via real occlusion.
-7. Movement has deliberate acceleration, turning, stopping.
+7. Movement has deliberate acceleration, turning, stopping. Humans turn at a cap too (owner 2026-10-16 CF: "capped/weighted human turning").
 8. Bots: patrol, investigate, detect, pursue, attack, reposition, disengage, lose target; cover, angles, break LOS; never just rush.
 9. Class system (owner 2026-10-13, 2026-10-14 MASTER INTEGRATION PASS): rarity sets starting power (real, not cosmetic), the ten 1:1s are dominant with their real names and a signature each, a maxed free player reaches the lower tiers, rating separate from power, nothing sold. Numbers: `src/config/power.ts`, `docs/design/power.md`. NFT combat power ON for verified holders (`NFT_COMBAT=0` turns it off).
 10. Solo, 1v1, 3v3 open to all; 5v5 verified holders only, server-enforced (every squad member). Ownership verified server-side (SIWE wallet, then Monad reads); fails closed. Labelled demo mode, isolated, no rewards. 1:1 names used (owner 2026-10-14); art rights still pending.
@@ -30,38 +30,36 @@ Last verified: 2026-10-14 by claude (GR free roster + grenades pass).
 17. Owner 2026-10-14 FINAL QA: the default game is YOU + 2 AI TEAMMATES vs bots (never confused with online 3v3); "Sign in" opens a sign-in sheet (Continue with Google / Continue with Wallet), never Settings; minimal UI copy.
 
 ## PROPOSALS (not approved)
-- Class numbers, upgrade costs, rewards, revive timings, the ten signatures (`docs/design/power.md`; measured, not felt). Hub layout, medals, tips. Deps: @neondatabase/serverless 1.1.0, dev @electric-sql/pglite 0.5.8, @noble/*.
-- NFT-R1 layers (sidegrades by trait, prestige, cosmetics, display names): `docs/research/chog-genesis/IDENTITY-AND-MAPPING.md`.
-- RC-8: PROVISIONAL CHOG palette (`docs/BRAND.md`), zone tuning, operator art. Marksman does not pierce crates/slabs (owner RC-8).
-- All tuning numbers (roster, weapons, grenades), lean rules, art direction, the map, sidegrades, fonts.
+- Class numbers, upgrades, rewards, revive timings, the ten signatures (`docs/design/power.md`). Hub, medals, tips. Deps: @neondatabase/serverless 1.1.0, dev @electric-sql/pglite 0.5.8, @noble/*.
+- NFT-R1 layers (`docs/research/chog-genesis/IDENTITY-AND-MAPPING.md`). PROVISIONAL CHOG palette (`docs/BRAND.md`), zone tuning, operator art.
+- All tuning numbers (roster, weapons, grenades), lean rules, art direction, the map, fonts.
+- CF (H25): turn 720 deg/s, per-weapon run spread, wall muffle 0.8, dark 0.2, gait lamp, SPOTTED teammate marks (owner said "test whether"), the pillar map, Toad armour 55, Ray cone 52, LMG run 3.5. Lab switches A-F (`?lab`) for the owner's A/B.
 
 ## UNKNOWN (never guess)
 - Chog Genesis art and name rights; `baseURI`, totalSupply read from chain; metadata hash check (`docs/research/chog-genesis/`).
 - Owner access to Pixel 7 / iPhone 13. Chogathon submission deadline.
-- Whether a real holder can sign in and play 5v5 (no real holder wallet tried; fake-chain holder passes locally). A settled match on Neon (none played live yet; settles on PGlite end to end).
+- Whether a real holder can sign in and play 5v5 (fake-chain holder passes locally). A settled match on Neon (PGlite only so far).
 
 ## Implemented (EVIDENCE)
-- GR (H24): free roster (3 new weapons, scrambled abilities, legacy ids), grenades (sim, server, HUD, AI), department AI styles, teammates wander.
-- QA (H23): AI teammates, sign-in sheet (Google + Wallet), minimal hub/screens, centred Upgrades, Continue on results, timeouts, browser Back.
-- MI (H22): loading screen, hub, sub-screens, online results, account profile (migration 3), over-cap pickups, revive, squads.
-- Earlier: H5, H15, H16-H18, H20, H21 in `docs/HANDOFFS.md`.
+- CF (H25, branch only): steady rule, turn cap, own-noise ring, typed heard marks, direction ticks, afterimages, SPOTTED, dark map, pillar map, feedback (confirm/kill/ready cues, bar ghosts, grenade aim preview), audible bots, ally roles; live-room hub, Enter with CHOG (eligibility then SIWE), loading checklist. `docs/ROOM_ZERO_CORE_FEEL_AUDIT.md`.
+- GR (H24): free roster, grenades, department AI. QA (H23), MI (H22) and earlier: `docs/HANDOFFS.md`.
 
 ## Automated tests (EVIDENCE, Node 22.22)
-`npx vitest run` 581/581 (58 files), `tsc --noEmit` clean. Browser (headless Chrome, emulated, local stack): qa-journey 38/38, qa-screens 5 devices clean, qa-errors 7/7, rc8-online 1v1+3v3, master-ui 8/8 (H24).
+CF branch (H25): `npx vitest run` 603/603 (60 files), `tsc` clean. Browser (headless Chromium, emulated, local stack): cf-chog 18/18, qa-journey 38/38, qa-errors 7/7, master-ui 8/8, qa-screens clean, rc8-online 1v1+3v3 PASS, cf-visual 48 frames.
 
 ## Not performed (needs the owner)
-- RC-8: hosted 3v3/5v5, hosted reconnect, phones on separate networks, touch online, readability by a person.
-- Pixel 7 / iPhone 13 / tablets, real-GPU FPS, feel, fairness, audio by ear, a human win, the demo video.
-- NFT-R1: `verify-ipfs.ts`, art rights in writing. MI: Core Feel Gate playtest of tier gaps, signatures, revive timings (`docs/design/power.md`); a real holder wallet; hosted 3v3/5v5 with squads; a live match settling on Neon; the hub on a real phone.
+- CF: any human play of the steady rule, turn cap, dark and sound (lab A/B), CF balance (Bill 33/40 solo), a real wallet through Enter with CHOG.
+- Pixel 7 / iPhone 13, real-GPU FPS, audio by ear, hosted 3v3/5v5 and reconnect, a live Neon settlement, a real holder, art rights in writing, the demo video.
 
 ## Gates
-Core Feel Gate: BLOCKED on owner playtests (tunes the class numbers; NFT combat already on by owner decision). G10: automated part PASS (tests above, live chain self-check); playtest part not run.
+Core Feel Gate: BLOCKED on owner playtests (class numbers and now CF). G10: automated part PASS; playtest part not run.
 
 ## Current task
 | Id | Owner | Branch | Files | Done when | Status |
 |---|---|---|---|---|---|
-| GR | claude | ccr-e7fadb8f-qtochk | see H24 | Owner 2026-10-14 FREE ROSTER + GRENADES + COMBAT UX | in production; feel needs the owner's playtest |
+| CF | claude | claude/cf-core-feel | see H25 | Owner 2026-10-16 CORE FEEL + GAME UX | built + tested, NOT deployed; owner playtest (lab A/B), then deploy client+server together |
+| GR | claude | ccr-e7fadb8f-qtochk | see H24 | Owner 2026-10-14 ROSTER + GRENADES | in production |
 | RC-8 | claude | ccr-e7fadb8f-qtochk, PR #10 | see H16 | Owner RC-8 mandate | PR #10 not merged (stacked on #9; owner decides) |
 
 ## Handoffs
-Latest: H24 (2026-10-14, claude -> owner; GR roster + grenades). History: `docs/HANDOFFS.md`.
+Latest: H25 (2026-10-16, claude -> owner; CF core feel + UX, not deployed). History: `docs/HANDOFFS.md`.
