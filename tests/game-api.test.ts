@@ -149,6 +149,15 @@ describe('settlement pulled from the game server', () => {
     expect(s2.j.already).toBe(true);
     expect((await profileOf(db!, a))!.xp).toBe(110);
   });
+  it('production env (VITE_GAME_SERVER_URL = the client\'s wss://.../ws) still pulls from the host root', async () => {
+    const a = (await accountFor(db!, [{ provider: 'google', subject: 'a', label: 'a' }]))!;
+    records['0123456789abcdef'] = record({ players: [
+      { acc: a, team: 'alpha', tier: 'free', tok: null, mid: null, own: null, kills: 0, damage: 0, left: false },
+      { acc: null, team: 'bravo', tier: 'free', tok: null, mid: null, own: null, kills: 0, damage: 0, left: true }] });
+    const s = await call('POST', 'settle', { body: { matchId: '0123456789abcdef' } }, { VITE_GAME_SERVER_URL: 'wss://room-zero-game.onrender.com/ws' });
+    expect(s.j).toMatchObject({ ok: true, already: false });
+    expect(calls).toContain('https://room-zero-game.onrender.com/results/0123456789abcdef');
+  });
   it('refuses unknown, mismatched and demo matches; offline database', async () => {
     expect((await call('POST', 'settle', { body: { matchId: 'ffffffffffffffff' } })).status).toBe(404);
     expect((await call('POST', 'settle', { body: { matchId: '../etc' } })).status).toBe(400);

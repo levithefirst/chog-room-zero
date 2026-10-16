@@ -37,7 +37,8 @@ export interface Deps {
 const DEFAULT_GAME_SERVER = 'https://room-zero-game.onrender.com';
 // Owner 2026-10-14 (master integration pass): NFT combat power is ON for verified holders. NFT_COMBAT=0 switches it off.
 export const nftCombatOn = (e: GameEnv) => e.NFT_COMBAT !== '0';
-const gameServer = (e: GameEnv) => (e.GAME_SERVER_URL || e.VITE_GAME_SERVER_URL || DEFAULT_GAME_SERVER).replace(/\/+$/, '').replace(/^ws/, 'http');
+// The client's address is the WebSocket path (wss://host/ws); results live at the host root (https://host/results/:id).
+const gameServer = (e: GameEnv) => (e.GAME_SERVER_URL || e.VITE_GAME_SERVER_URL || DEFAULT_GAME_SERVER).replace(/\/+$/, '').replace(/\/ws$/, '').replace(/^ws/, 'http');
 
 async function body(req: Request): Promise<Record<string, unknown>> {
   try {
