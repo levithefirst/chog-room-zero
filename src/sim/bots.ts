@@ -9,6 +9,7 @@ import { findPath, shotClear, sightClear, tileAt, walkable } from './level';
 import { canSee, muzzleFlashSeen } from './vision';
 import { safeSpot, zoneAt, zoneGoal } from './zone';
 import { hears, player, rand, revealed, viewOf, type Actor, type ActorInput, type World } from './world';
+import { LAB } from '../config/lab';
 
 const DEG = Math.PI / 180;
 
@@ -55,6 +56,9 @@ export interface Brain {
   anchorLeft: number;
   /** Flankers: strafe direction (+1 / -1) while trading shots, flipped now and then. */
   strafe: number;
+  /** CF-D: seconds to stand at this patrol point (drawn on arrival), and seconds left of a listen stop. */
+  pause: number;
+  listen: number;
 }
 
 export type PerceptionSource = 'seen' | 'flash' | 'heard' | 'shot' | 'sonar' | 'memory';
@@ -70,6 +74,9 @@ export interface PerceptionEvent {
   ox: number;
   oy: number;
   ofacing: number;
+  /** The observer's view at that moment (its gait reshapes the lamp every step, CF-E). */
+  orange: number;
+  ocone: number;
   px: number;
   py: number;
 }
@@ -81,7 +88,7 @@ export function createBrain(spawn: BotSpawn): Brain {
     patrolIndex: 0, flanker: spawn.flanker, timer: 0, seenFor: 0, engagedFor: 0, aimOffset: 0, aimTimer: 0,
     lastKnown: null, goal: null, path: [], stuckTimer: 0, stuckRepaths: 0, avoid: [], stuckFrom: { x: 0, y: 0 }, lookBase: 0, sawPlayer: false, heardAt: null,
     source: null, suspicion: 0, reaction: TUNING.perception.reactionMax, pathAt: -1e9, zoneRun: false,
-    nadeAt: 0, anchorLeft: 0, strafe: 1,
+    nadeAt: 0, anchorLeft: 0, strafe: 1, pause: TUNING.bots.patrolPause, listen: 0,
   };
 }
 
@@ -106,7 +113,7 @@ function learn(w: World, a: Actor, br: Brain, source: PerceptionEvent['source'],
   br.lastKnown = { x, y };
   br.source = source;
   br.suspicion = Math.max(br.suspicion, suspicion);
-  if (w.perceptionLog) w.perceptionLog.push({ tick: w.tick, bot: a.id, source, x, y, ox: a.x, oy: a.y, ofacing: a.facing, px: truth.x, py: truth.y });
+  if (w.perceptionLog) w.perceptionLog.push({ tick: w.tick, bot: a.id, source, x, y, ox: a.x, oy: a.y, ofacing: a.facing, orange: a.view.range, ocone: a.view.coneRad, px: truth.x, py: truth.y });
 }
 
 /** The hostile this bot sees best right now: nearest standing one in its cone with a clear line; a downed one last. */
@@ -248,7 +255,9 @@ function maybeThrow(w: World, a: Actor, br: Brain): void {
   const covered = !!seen && !shotClear(w.level, a.x, a.y, spot.x, spot.y, a.weapon.piercesCover, TUNING.combat.coverLean);
   const pair = w.actors.filter((t) => t.alive && t.team !== a.team && Math.hypot(t.x - spot.x, t.y - spot.y) <= G.radius * 0.8
     && canSee(w.level, a.x, a.y, a.facing, viewOf(a), t.x, t.y)).length >= 2;
-  const unseen = !seen && (br.source === 'heard' || br.source === 'shot' || br.source === 'flash');
+  // Hostiles flush out what they only heard; AI teammates never spend a grenade on a guess (CF: they threw 91% of
+  // their grenades, mostly at heard spots, before).
+  const unseen = !seen && a.team === 'bot' && (br.source === 'heard' || br.source === 'shot' || br.source === 'flash');
   if (!covered && !pair && !unseen) return;
   out.grenade = true;
   out.throwDist = d;
@@ -338,6 +347,8 @@ function think(w: World, a: Actor, br: Brain, dt: number): void {
     }
   }
   if (br.heardAt && (br.state === 'patrol' || br.state === 'investigate' || br.state === 'search')) {
+    // CF-D: a fresh noise stops it to listen (turned toward it) before it creeps over; a repeat keeps it moving.
+    if (LAB.enemySound && br.state !== 'investigate') br.listen = B.listenSeconds;
     br.state = 'investigate';
     br.lastKnown = br.heardAt;
     br.goal = null;
@@ -398,7 +409,7 @@ function think(w: World, a: Actor, br: Brain, dt: number): void {
     setGoal(w, a, br, spot.x, spot.y);
     follow(w, a, br, dt);
     const toP = Math.atan2(p.y - a.y, p.x - a.x);
-    const range = Math.min(a.weapon.falloffEnd + 2, p.view.range - 0.25);
+    const range = Math.min(a.weapon.falloffEnd + 2, p.baseView.range - 0.25);
     if (br.sawPlayer && br.seenFor >= br.reaction && token(w, a, true)) {
       out.aim = toP;
       out.firing = Math.abs(angleDiff(a.facing, toP)) < B.fireToleranceDeg * DEG && Math.hypot(p.x - a.x, p.y - a.y) <= range
@@ -438,8 +449,12 @@ function think(w: World, a: Actor, br: Brain, dt: number): void {
         const far = Math.hypot(lead.x - a.x, lead.y - a.y) > 9;
         if (br.anchorLeft <= 0 || far || !br.goal) {
           br.anchorLeft = 2.5 + rand(w) * 2.5;
+          // Roles (CF): the first teammate covers the arc behind you, the second a side, so between you three the room
+          // is watched all round instead of everyone looking where you look.
+          const mates = w.actors.filter((m) => m.ai && m.team === a.team);
+          const role = mates.indexOf(a) % 2 === 0 ? Math.PI : (a.id % 2 ? 1 : -1) * Math.PI / 2;
           for (let i = 0; i < 8; i++) {
-            const ang = lead.facing + (rand(w) - 0.5) * Math.PI * 1.5, r = 2.5 + rand(w) * 3.5;
+            const ang = lead.facing + role + (rand(w) - 0.5) * Math.PI * 0.8, r = 2.5 + rand(w) * 3;
             const gx = Math.floor(lead.x + Math.cos(ang) * r) + 0.5, gy = Math.floor(lead.y + Math.sin(ang) * r) + 0.5;
             if (!walkable(tileAt(w.level, gx, gy)) || !sightClear(w.level, lead.x, lead.y, gx, gy)) continue;
             br.goal = null;
@@ -449,7 +464,9 @@ function think(w: World, a: Actor, br: Brain, dt: number): void {
         }
         if (follow(w, a, br, dt)) {
           br.timer += dt;
-          out.aim = lead.facing + (a.id % 2 ? 1 : -1) * 0.9 + Math.sin(br.timer * 1.3) * 0.7;
+          const mates = w.actors.filter((m) => m.ai && m.team === a.team);
+          const role = mates.indexOf(a) % 2 === 0 ? Math.PI : (a.id % 2 ? 1 : -1) * Math.PI / 2;
+          out.aim = lead.facing + role + Math.sin(br.timer * 1.3) * 0.6;
         } else br.lookBase = out.aim;
         out.quiet = !far;
         break;
@@ -459,18 +476,30 @@ function think(w: World, a: Actor, br: Brain, dt: number): void {
       if (follow(w, a, br, dt)) {
         br.timer += dt;
         out.aim = br.lookBase + Math.sin(br.timer * 1.5) * 0.6;
-        if (br.timer > 1.2) {
+        if (br.timer > (LAB.enemySound ? br.pause : 1.2)) {
           br.timer = 0;
           br.patrolIndex = (br.patrolIndex + 1) % br.patrol.length;
           br.goal = null;
+          br.pause = B.patrolPause + rand(w) * B.patrolPauseJitter;
         }
-      } else br.lookBase = out.aim;
+      } else {
+        br.lookBase = out.aim;
+        // CF-D: walking its rounds, not creeping: its steps carry ~6 u, so a patrol is heard before it is seen.
+        if (LAB.enemySound) { out.quiet = false; out.moveX *= B.patrolSpeed; out.moveY *= B.patrolSpeed; }
+      }
       break;
     }
     case 'investigate':
     case 'search': {
       const t = br.lastKnown!;
+      if (br.listen > 0) {
+        // Listening: stand still, turned toward the noise. Silent, and the steady lamp reaches further.
+        br.listen -= dt;
+        out.aim = Math.atan2(t.y - a.y, t.x - a.x);
+        break;
+      }
       setGoal(w, a, br, t.x, t.y);
+      const close = Math.hypot(t.x - a.x, t.y - a.y) < B.creepWithin;
       if (follow(w, a, br, dt)) {
         if (br.timer === 0) br.lookBase = a.facing;
         br.timer += dt;
@@ -482,6 +511,11 @@ function think(w: World, a: Actor, br: Brain, dt: number): void {
           br.goal = null;
           br.lastKnown = null;
         }
+      } else if (LAB.enemySound) {
+        // Going to check a noise: it walks over (heard ~6 u) and creeps the last few metres, so what it heard can hear
+        // it coming, but not right on top of it.
+        out.quiet = close;
+        if (!close) { out.moveX *= B.patrolSpeed; out.moveY *= B.patrolSpeed; }
       }
       break;
     }
@@ -518,7 +552,7 @@ function think(w: World, a: Actor, br: Brain, dt: number): void {
       out.aim = toP + br.aimOffset * err;
       // Hold the angle: stand still and shoot, only when the shot is not blocked by cover.
       // Fire gate (fairness rule): never beyond the player's own sight distance, whatever this bot can see.
-      const range = Math.min(a.weapon.falloffEnd + 2, p.view.range - 0.25);
+      const range = Math.min(a.weapon.falloffEnd + 2, p.baseView.range - 0.25);
       // Attack tokens: at most N bots shoot at once; the rest flank (flankers) or hold the angle.
       if (!token(w, a, true)) {
         if (br.flanker) {

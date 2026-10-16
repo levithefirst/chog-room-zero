@@ -200,6 +200,10 @@ describe('server authority', () => {
     // Extra fields (a count, a capacity) are not part of the message and are dropped.
     const m = parseClientMsg(JSON.stringify({ ...base, nade: true, nd: 5, grenades: 99, maxNades: 99 })) as Record<string, unknown>;
     expect(Object.keys(m).sort()).toEqual(['ability', 'aim', 'fire', 'mx', 'my', 'nade', 'nd', 'quiet', 'reload', 'seq', 't']);
+    // CF: a touch drag also sends the throw direction (na), normalised; it is the only other grenade field.
+    const d = parseClientMsg(JSON.stringify({ ...base, nade: true, nd: 5, na: 7 })) as never;
+    expect(toActorInput(d).throwAim).toBeCloseTo(Math.atan2(Math.sin(7), Math.cos(7)), 9);
+    expect(parseClientMsg(JSON.stringify({ ...base, nade: true, na: 'left' }))).toBeNull();
   });
   it('online, capacity comes from the verified ticket; a throw is spent on the server and the snapshot shows it', async () => {
     class FakeConn {

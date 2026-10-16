@@ -172,7 +172,7 @@ describe('no omniscience across seeded matches', () => {
           counts[e.source] = (counts[e.source] ?? 0) + 1;
           switch (e.source) {
             case 'seen':
-              expect(canSee(w.level, e.ox, e.oy, e.ofacing, viewOf(bot), e.px, e.py)).toBe(true);
+              expect(canSee(w.level, e.ox, e.oy, e.ofacing, { ...viewOf(bot), range: e.orange, coneRad: e.ocone }, e.px, e.py)).toBe(true);
               expect(Math.hypot(e.x - e.px, e.y - e.py)).toBeLessThan(1e-9);
               break;
             case 'flash':

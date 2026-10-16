@@ -55,6 +55,10 @@ export interface Input {
   ability(): void;
   /** Touch grenade button: throw along the aim. */
   grenade(): void;
+  /** CF: the grenade button pressed (pointer id, stage px): a drag sets direction and distance, release throws. */
+  nadeDown(id: number, x: number, y: number): void;
+  /** CF landing preview while aiming a grenade (G held on PC, a drag on the touch button): angle and distance in u. */
+  nadePreview(aimFromX: number, aimFromY: number, pxPerUnit: number): { ang: number; dist: number } | null;
   /** Escape / P pressed since last call. */
   /** Is fire physically held right now (vs a latched tap)? */
   fireHeld(): boolean;
@@ -89,6 +93,17 @@ export function createInput(el: HTMLElement): Input {
   let reloadQueued = false;
   let abilityQueued = false;
   let grenadeQueued = false;
+  // CF grenade aiming: G held on PC (lands at the cursor on release), or a drag that started on the touch button.
+  let nadeHeld = false;
+  let nadeDrag: { id: number; sx: number; sy: number; x: number; y: number } | null = null;
+  let nadeThrow: { ang: number; dist: number } | null = null;
+  const NADE_TAP_PX = 14;
+  const dragThrow = (d: { sx: number; sy: number; x: number; y: number }) => {
+    const dx = d.x - d.sx, dy = d.y - d.sy, len = Math.hypot(dx, dy);
+    if (len < NADE_TAP_PX) return null;
+    const G = TUNING.grenade;
+    return { ang: Math.atan2(dy, dx), dist: G.minThrow + (G.maxThrow - G.minThrow) * Math.min(1, (len - NADE_TAP_PX) / (touchStick.radius * 1.5)) };
+  };
   let action = false;
   let pauseQueued = false;
   let lastAim = 0;
@@ -109,6 +124,8 @@ export function createInput(el: HTMLElement): Input {
       reloadQueued = false;
       abilityQueued = false;
       grenadeQueued = false;
+      if (out.grenade && nadeThrow) { out.throwAim = nadeThrow.ang; out.throwDist = nadeThrow.dist; }
+      nadeThrow = null;
       if (inp.mode === 'pc') {
         const m = keysToMove(held);
         out.moveX = m.x;
@@ -151,6 +168,18 @@ export function createInput(el: HTMLElement): Input {
     },
     grenade() {
       grenadeQueued = true;
+    },
+    nadeDown(id, x, y) {
+      nadeDrag = { id, sx: x, sy: y, x, y };
+    },
+    nadePreview(ax, ay, ppu) {
+      const G = TUNING.grenade;
+      if (nadeDrag) {
+        const t = dragThrow(nadeDrag);
+        return t ?? { ang: lastAim, dist: G.touchThrow };
+      }
+      if (nadeHeld && inp.mode === 'pc') return { ang: Math.atan2(inp.mouseY - ay, inp.mouseX - ax), dist: Math.max(G.minThrow, Math.min(G.maxThrow, Math.hypot(inp.mouseX - ax, inp.mouseY - ay) / ppu)) };
+      return null;
     },
     fireHeld() {
       if (inp.mode === 'pc') return firing;
@@ -204,12 +233,18 @@ export function createInput(el: HTMLElement): Input {
       e.preventDefault();
       abilityQueued = true;
     }
-    if (e.code === 'KeyG' && !e.repeat) grenadeQueued = true;
+    // CF: hold G to see where it lands (the ring at the cursor), release to throw.
+    if (e.code === 'KeyG' && !e.repeat) nadeHeld = true;
     inp.mode = 'pc';
   };
-  const up = (e: KeyboardEvent) => void held.delete(e.code);
+  const up = (e: KeyboardEvent) => {
+    held.delete(e.code);
+    if (e.code === 'KeyG' && nadeHeld) { nadeHeld = false; grenadeQueued = true; }
+  };
   const clear = () => {
     held.clear();
+    nadeHeld = false;
+    nadeDrag = null;
     pointersDown.clear(); // a release we never saw (blur, tab switch) must not block the next press
     blocked.clear();
     firing = false;
@@ -238,6 +273,7 @@ export function createInput(el: HTMLElement): Input {
   };
   const pmove = (e: PointerEvent) => {
     const pt = toStage(stage(), e.clientX, e.clientY);
+    if (nadeDrag && e.pointerId === nadeDrag.id) { nadeDrag.x = pt.x; nadeDrag.y = pt.y; return; }
     if (e.pointerType !== 'touch') {
       inp.mouseX = pt.x;
       inp.mouseY = pt.y;
@@ -264,6 +300,11 @@ export function createInput(el: HTMLElement): Input {
   };
   const track = (e: PointerEvent) => { pointersDown.add(e.pointerId); };
   const pup = (e: PointerEvent) => {
+    if (nadeDrag && e.pointerId === nadeDrag.id) {
+      // Released: a drag throws that way and that far, a tap along the aim at the touch default.
+      if (e.type === 'pointerup') { nadeThrow = dragThrow(nadeDrag); grenadeQueued = true; }
+      nadeDrag = null;
+    }
     pointersDown.delete(e.pointerId);
     blocked.delete(e.pointerId); // released: the next press may fire
     if (e.pointerType !== 'touch') {

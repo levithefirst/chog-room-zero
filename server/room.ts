@@ -267,7 +267,7 @@ export class Lobby {
         const prev = r.inputs[p.actorId];
         // Edge-triggered actions survive until a step uses them; a tap of fire fires once.
         r.inputs[p.actorId] = { ...inp, reload: inp.reload || prev.reload, ability: inp.ability || prev.ability, grenade: !!inp.grenade || !!prev.grenade,
-          throwDist: inp.grenade ? inp.throwDist : prev.throwDist };
+          throwDist: inp.grenade ? inp.throwDist : prev.throwDist, throwAim: inp.grenade ? inp.throwAim : prev.throwAim };
         if (inp.firing) r.fireLatch[p.actorId] = true;
         return;
       }
@@ -423,7 +423,7 @@ export class Lobby {
       reloadLeft: r3(a.reloadLeft), abilityCd: r3(a.abilityCd), revealLeft: r3(a.revealLeft), muzzle: r3(a.muzzle), hitFlash: r3(a.hitFlash),
       deadFor: r3(a.deadFor), lastSpread: r3(a.lastSpread), stepAcc: r3(a.stepAcc), kills: a.kills, connected: !!room.members[a.id].conn,
       shieldLeft: r3(a.shieldLeft), frenzyLeft: r3(a.frenzyLeft), slowLeft: r3(a.slowLeft), burstLeft: r3(a.burstLeft),
-      downed: a.downed, reviveProgress: r3(a.reviveProgress), nades: a.grenades, maxNades: a.maxGrenades,
+      downed: a.downed, reviveProgress: r3(a.reviveProgress), nades: a.grenades, maxNades: a.maxGrenades, focus: r3(a.focus),
     }));
     // Grenades: your team's always; a hostile one when your team can see it or it is close to one of you (you hear it
     // land and see the ring), so every client can read the danger it is in.

@@ -20,7 +20,7 @@ export type ClientMsg =
   | { t: 'party'; op: 'create' | 'leave' }
   | { t: 'party'; op: 'join'; code: string }
   /** nade: throw a grenade (edge); nd: how far, in u (the server clamps it; capacity is the server's, from the ticket). */
-  | { t: 'input'; seq: number; mx: number; my: number; aim: number; fire: boolean; quiet: boolean; reload: boolean; ability: boolean; nade?: boolean; nd?: number }
+  | { t: 'input'; seq: number; mx: number; my: number; aim: number; fire: boolean; quiet: boolean; reload: boolean; ability: boolean; nade?: boolean; nd?: number; na?: number }
   | { t: 'ping'; at: number };
 
 /** One actor as a client may see it. Enemies the client's team cannot see are left out of the snapshot. */
@@ -37,6 +37,8 @@ export interface NetActor {
   downed?: boolean; reviveProgress?: number;
   /** Grenades left and capacity (the server's count). */
   nades?: number; maxNades?: number;
+  /** CF-E gait focus (-1 run .. 1 steady): the client reshapes the lamp from it. */
+  focus?: number;
 }
 
 /** What everyone in a match knows about each player: power is never hidden from the opponent. */
@@ -101,8 +103,8 @@ export function parseClientMsg(raw: string): ClientMsg | null {
     case 'input': {
       if (!isNum(m.seq) || !isNum(m.mx) || !isNum(m.my) || !isNum(m.aim)) return null;
       if (!isBool(m.fire) || !isBool(m.quiet) || !isBool(m.reload) || !isBool(m.ability)) return null;
-      if ((m.nade !== undefined && !isBool(m.nade)) || (m.nd !== undefined && !isNum(m.nd))) return null;
-      return { t: 'input', seq: m.seq, mx: m.mx, my: m.my, aim: m.aim, fire: m.fire, quiet: m.quiet, reload: m.reload, ability: m.ability, ...(m.nade === true ? { nade: true, nd: m.nd as number | undefined } : {}) };
+      if ((m.nade !== undefined && !isBool(m.nade)) || (m.nd !== undefined && !isNum(m.nd)) || (m.na !== undefined && !isNum(m.na))) return null;
+      return { t: 'input', seq: m.seq, mx: m.mx, my: m.my, aim: m.aim, fire: m.fire, quiet: m.quiet, reload: m.reload, ability: m.ability, ...(m.nade === true ? { nade: true, nd: m.nd as number | undefined, ...(m.na !== undefined ? { na: m.na as number } : {}) } : {}) };
     }
     case 'ping':
       return isNum(m.at) ? { t: 'ping', at: m.at } : null;
@@ -119,6 +121,7 @@ export function toActorInput(m: Extract<ClientMsg, { t: 'input' }>): ActorInput 
   const aim = Math.atan2(Math.sin(m.aim), Math.cos(m.aim));
   // Throw distance: clamped again in the sim; a missing or absurd value throws at the touch default.
   const nd = m.nd !== undefined && m.nd >= 0 && m.nd <= 30 ? m.nd : undefined;
-  return { moveX: mx, moveY: my, aim, firing: m.fire, quiet: m.quiet, reload: m.reload, ability: m.ability, grenade: !!m.nade, throwDist: nd };
+  const na = m.na !== undefined ? Math.atan2(Math.sin(m.na), Math.cos(m.na)) : undefined;
+  return { moveX: mx, moveY: my, aim, firing: m.fire, quiet: m.quiet, reload: m.reload, ability: m.ability, grenade: !!m.nade, throwDist: nd, throwAim: na };
 }
 

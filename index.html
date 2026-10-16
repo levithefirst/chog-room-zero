@@ -53,6 +53,8 @@
       .bar { position: relative; height: 10px; background: var(--bg-elevated); border-radius: 2px; overflow: hidden; margin: 3px 0 5px; }
       .bar > i { position: absolute; inset: 0 auto 0 0; width: 100%; transition: width 120ms linear; }
       #hpfill { background: var(--health); } #hpfill.low { background: var(--damage); }
+      /* CF: the health you just lost stays as a pale segment for a moment, then drains: you see the size of the hit. */
+      #hpghost { background: var(--chog-cream); opacity: 0.8; transition: none; }
       #arfill { background: var(--armor); }
       #arbar { height: 6px; }
       .row { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.08em; }
@@ -85,6 +87,10 @@
         background: conic-gradient(rgba(139, 92, 246, 0.95) var(--cd, 360deg), rgba(42, 31, 61, 0.92) 0); border: none; display: grid; place-items: center; }
       #ability span { width: 54px; height: 54px; border-radius: 50%; background: var(--bg-panel); display: grid; place-items: center; font-size: 13px; line-height: 1.05; text-transform: uppercase; letter-spacing: 0.06em; }
       #ability.ready span { background: var(--bg-elevated); color: var(--signal); }
+      /* CF: one pulse when the ability comes back (the 'ready' tone plays with it). */
+      #ability.pulse { animation: abpulse 420ms ease-out 1; }
+      @keyframes abpulse { 0% { box-shadow: 0 0 0 0 rgba(255, 122, 182, 0.75); } 100% { box-shadow: 0 0 0 16px rgba(255, 122, 182, 0); } }
+      @media (prefers-reduced-motion: reduce) { #ability.pulse { animation: none; } }
       #ability small { display: block; font-size: 10px; color: var(--dim); }
       #reload { display: none; right: calc(var(--sr) + 8px); bottom: calc(var(--sb) + 76px); width: 58px; height: 58px; border-radius: 50%; pointer-events: auto;
         background: var(--panel); border: 1px solid var(--line); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
@@ -108,6 +114,10 @@
       body.touch #ability .keyhint { display: none; }
       /* Tutorial / one-time hints: a small pill under the top HUD row, never over the play centre. */
       #hint { left: 50%; top: calc(var(--st) + 40px); transform: translateX(-50%); max-width: min(36%, 520px); text-align: center; opacity: 0; transition: opacity 600ms ease; font-size: 11px; line-height: 1.35; padding: 4px 10px; border-radius: 12px; background: rgba(26, 18, 40, 0.86); border: 1px solid rgba(196, 191, 212, 0.28); text-shadow: none; pointer-events: none; }
+      /* CF lab switches (dev/test builds only, ?lab): small, out of the HUD's way. */
+      #lab { position: fixed; left: 50%; bottom: 6px; transform: translateX(-50%); z-index: 50; display: flex; gap: 4px; align-items: center; font: 600 11px/1 'Plex Mono', monospace; color: var(--dim); background: rgba(10, 10, 14, 0.7); padding: 4px 6px; border-radius: 4px; }
+      #lab a { color: var(--dim); text-decoration: none; padding: 3px 5px; border: 1px solid var(--line); border-radius: 3px; }
+      #lab a.on { color: var(--signal); border-color: var(--signal); }
       #toast { left: 50%; top: calc(var(--st) + 82px); transform: translateX(-50%); font-size: 18px; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0; transition: opacity 200ms; text-shadow: 0 1px 3px #000; }
 
       /* Screens: one overlay, one card style, fade + rise transitions. */
@@ -570,7 +580,7 @@
     <div id="hud" class="layer">
       <div id="vitals" class="panel">
         <div class="row"><span>Health</span><span class="num" id="hpn">100</span></div>
-        <div class="bar"><i id="hpfill"></i></div>
+        <div class="bar"><i id="hpghost"></i><i id="hpfill"></i></div>
         <div class="row"><span>Armour</span><span class="num" id="arn">0</span></div>
         <div class="bar" id="arbar"><i id="arfill"></i></div>
         <div id="hero"></div>

@@ -3,6 +3,7 @@ import type { ViewShape } from '../sim/vision';
 import { canSee } from '../sim/vision';
 import { sightClear, type Level } from '../sim/level';
 import { TUNING } from '../config/tuning';
+import { LAB } from '../config/lab';
 
 export type EnemyDraw = 'body' | 'flash' | 'ping' | null;
 
@@ -23,6 +24,14 @@ export function enemyDrawMode(
   if (a.alive && o.threatLeft > 0 && sightClear(l, viewer.x, viewer.y, a.x, a.y)) return 'flash';
   if (a.alive && o.pinged) return 'ping';
   return null;
+}
+
+/**
+ * A hostile only a teammate sees (CF-E): before CF its live body was drawn for you; now a SPOTTED mark at where the
+ * teammate saw it, refreshed twice a second. Your teammate saw something; you did not.
+ */
+export function teamSighting(): 'body' | 'spotted' {
+  return LAB.dark ? 'spotted' : 'body';
 }
 
 /** Seconds a shooter stays drawn after its muzzle flash is seen (single source: TUNING.perception.flashSeconds). */

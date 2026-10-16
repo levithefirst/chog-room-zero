@@ -65,10 +65,14 @@ const RUSH: AbilityDef = { kind: 'frenzy', name: 'Rush', cooldown: 18, seconds: 
 export const HEROES: HeroDef[] = [
   { id: 'benja', name: 'Benja', dept: 'assault', role: 'Assault', weapon: 'rifle', maxHp: 100, maxArmor: 15, speed: 1,
     vision: { range: 9, coneDeg: 70 }, ability: ABILITIES.sonar, accent: 0x9fb39a },
-  { id: 'toad', name: 'Toad', dept: 'tank', role: 'Tank', weapon: 'lmg', maxHp: 120, maxArmor: 45, speed: 0.92,
+  // CF: armour 45 -> 55. The tank was the weakest solo hero before CF (2 of 40 autopilot wins) and 1 of 40 after the
+  // tighter map and better hearing; 55 gives 3-4 of 40 on two seed sets.
+  { id: 'toad', name: 'Toad', dept: 'tank', role: 'Tank', weapon: 'lmg', maxHp: 120, maxArmor: 55, speed: 0.92,
     vision: { range: 8, coneDeg: 72 }, ability: { ...ABILITIES.dash, cooldown: 8 }, accent: 0x7fae7a },
+  // CF: cone 46 -> 52. The steady lamp narrows it by 15% (44 deg), and in the darker CF map with its lanes broken the
+  // 46 deg sniper won 1 of 40 solo autopilot runs (11 before CF); 52 gives 2. Still the narrowest, longest lamp.
   { id: 'ray', name: 'Ray', dept: 'sniper', role: 'Sniper', weapon: 'marksman', maxHp: 85, maxArmor: 15, speed: 0.95,
-    vision: { range: 12, coneDeg: 46 }, ability: SNARE, accent: 0x93a0b4 },
+    vision: { range: 12, coneDeg: 52 }, ability: SNARE, accent: 0x93a0b4 },
   { id: 'tabsu', name: 'Tabsu', dept: 'flanker', role: 'Flanker', weapon: 'smg', maxHp: 85, maxArmor: 0, speed: 1.1,
     vision: { range: 8, coneDeg: 85 }, ability: SHELL, accent: 0xc9b37a },
   { id: 'tonashiro', name: 'Tonashiro', dept: 'bruiser', role: 'Bruiser', weapon: 'shotgun', maxHp: 115, maxArmor: 40, speed: 0.95,

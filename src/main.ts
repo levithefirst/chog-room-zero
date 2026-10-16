@@ -19,7 +19,7 @@ import { heroForKey } from './ui/heroKeys';
 import { portraitSvg } from './ui/art';
 import { WEAPONS } from './config/weapons';
 import { orientationOf, ORIENTATION_QUERY } from './ui/orientation';
-import { fullscreenSupported, isFullscreen, layoutStage, rectToStage, requestLandscape, stage, type LaunchResult } from './ui/stage';
+import { fullscreenSupported, isFullscreen, layoutStage, rectToStage, requestLandscape, stage, toStage, type LaunchResult } from './ui/stage';
 import { coverBoxAt } from './sim/cover';
 import { adapterFromUrl, resolveIdentity, GUEST, type Identity } from './nft/identity';
 import { boundIdentity } from './nft/identity';
@@ -38,6 +38,8 @@ import * as account from './net/account';
 import { emptyAcct } from './ui/account';
 import { chogName, powerForToken, signatureFor, tierOfMetadataId, ONE_OF_ONE, TIER_DEFS, type Power } from './config/power';
 import { tierEffect } from './ui/account';
+import { LAB, applyLab } from './config/lab';
+import { OWN_NOISE, markKind } from './render/marks';
 
 // DEMO screen: the first token of each tier in the verified catalogue, plus two 1:1s with different signatures.
 const DEMO_TIER_SAMPLES = ['1', '2', '54', '31', '53', '1373'];
@@ -54,6 +56,11 @@ const HERO_KEY = 'chog.hero';
 // through the normal game loop. Menus still need real clicks/keys. Never active without ?debug.
 const QS = new URLSearchParams(location.search);
 const AUTOPLAY_SEED = QS.has('debug') && QS.get('autoplay') !== null ? Number(QS.get('autoplay')) || 1 : null;
+// CF lab (docs/ROOM_ZERO_CORE_FEEL_AUDIT.md): ?lab=A0,E0 switches experiments off in dev and test-hook builds, never in
+// production, so the owner can play the old and new rules side by side. The game server always plays the defaults.
+const LAB_ON = (import.meta.env.DEV || __TEST_HOOKS__) && QS.has('lab');
+const LAB_SET = LAB_ON ? applyLab(QS.get('lab') ?? '') : [];
+
 
 function compass(dx: number, dy: number): string {
   const names = ['east', 'south-east', 'south', 'south-west', 'west', 'north-west', 'north', 'north-east'];
@@ -270,7 +277,9 @@ async function start() {
   };
   $('nade').onpointerdown = (e) => {
     e.stopPropagation();
-    input.grenade();
+    // CF: press and drag to aim the throw (the landing ring shows), release to throw; a tap throws along your aim.
+    const pt = toStage(stage(), e.clientX, e.clientY);
+    input.nadeDown(e.pointerId, pt.x, pt.y);
   };
 
   // Fullscreen + landscape lock (src/ui/stage.ts). Tried by itself once, on the first tap of a touch device (the
@@ -781,7 +790,7 @@ async function start() {
     autopilot = AUTOPLAY_SEED !== null ? createAutopilot(AUTOPLAY_SEED + runIndex) : null;
     suggestPilot = null;
     renderer.reset(world);
-    fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = fx.rings.length = 0;
+    fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = fx.rings.length = fx.noise.length = fx.dirTicks.length = 0;
     for (const s of fx.sparks) s.age = 1;
     fx.shake = 0;
     acc = 0;
@@ -893,7 +902,7 @@ async function start() {
   function beginOnlineWorld() {
     world = net!.world!;
     renderer.reset(world);
-    fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = fx.rings.length = 0;
+    fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = fx.rings.length = fx.noise.length = fx.dirTicks.length = 0;
     for (const sp of fx.sparks) sp.age = 1;
     fx.shake = 0;
     fx.threats.length = 0;
@@ -969,6 +978,8 @@ async function start() {
   // Match end: the one place a practice run is saved. Signed in: the site stores it on the account and awards medals
   // there. Guest: this session's memory only. Never per frame, never to localStorage.
   function endRun(won: boolean) {
+    // The lab room keeps no records anywhere: no progression, no medals (CF lab).
+    if (LAB_ON) { lastRun = { newBest: { time: false, kills: false }, earned: [], saved: 'session' }; return; }
     const p = player(world);
     const seconds = Math.round(playTime);
     const facts = { hero: heroId, won, seconds, kills: p.kills, bullets: p.bullets, hits: p.hits, damageDealt: Math.round(p.damageDealt), damageTaken: Math.round(p.damageTaken), pickups: runPickups, abilities: runAbilities, hpLeft: Math.max(0, Math.round(p.hp)) };
@@ -998,6 +1009,24 @@ async function start() {
   await Promise.race([refreshAccount(() => boot(4)), new Promise((r) => setTimeout(r, 5000))]);
   render();
   void bootDone();
+  // CF lab room: straight into a solo room, no hub, with the experiment switches on screen. Each switch reloads.
+  if (LAB_ON) {
+    const lab = document.createElement('div');
+    lab.id = 'lab';
+    const keys = Object.entries({ A: 'turn', B: 'steady', C: 'ownNoise', D: 'enemySound', E: 'dark', F: 'pacing' } as const);
+    const link = (k: string, on: boolean) => {
+      const q = new URLSearchParams(location.search);
+      const set = new Map(keys.map(([kk, f]) => [kk, LAB[f]]));
+      set.set(k, !on);
+      q.set('lab', [...set].map(([kk, v]) => `${kk}${v ? 1 : 0}`).join(','));
+      return `?${q.toString()}`;
+    };
+    lab.innerHTML = `<b>LAB</b>${keys.map(([k, f]) => `<a href="${link(k, LAB[f])}" class="${LAB[f] ? 'on' : ''}" title="${f}">${k}${LAB[f] ? 1 : 0}</a>`).join('')}`;
+    document.body.appendChild(lab);
+    document.body.dataset.lab = LAB_SET.join(',');
+    playMode = 'solo';
+    hubPlay();
+  }
   // Reload or crash mid online match: this tab still holds its session token, so it quietly asks the server to
   // resume. If the match is still on, the server hands the operator back (pollOnline enters it); if not, nothing shows.
   // Demo invite link (judges, no wallet): ?mockChog=<n>&online=1v1&demo=1[&code=X] joins as that labelled DEMO token,
@@ -1175,6 +1204,8 @@ async function start() {
       if (own && ['dash', 'sonar', 'barrier', 'mend', 'windup', 'scream', 'shield', 'frenzy'].includes(s.type)) runAbilities++;
       if (own && s.type === 'pickup') collected(s.x, s.y);
       if (own && s.type === 'impact' && s.blocked) blockedNow = true;
+      // CF-C: your own noise, drawn out to the radius it is really heard at (steps by speed, reload, abilities).
+      if (own && LAB.ownNoise && p.alive && OWN_NOISE.has(s.type)) fx.noise.push({ x: s.x, y: s.y, r: s.radius, age: 0 });
       const heard = own || hears(world.level, p.x, p.y, s);
       if (!heard) continue;
       if (s.type === 'impact' && s.blocked) debugStats.blockedCues++;
@@ -1191,13 +1222,25 @@ async function start() {
       if (own || s.team === p.team) continue;
       const src = world.actors[s.sourceId];
       if (src.alive && canSee(world.level, p.x, p.y, p.facing, view, src.x, src.y)) continue;
+      const big = s.type === 'shot' || s.type === 'death' || s.type === 'sonar' || s.type === 'boom';
+      ringHint();
+      // CF-D information ladder: through a wall you learn a DIRECTION; with a clear line, a spot and what it was.
+      if (LAB.enemySound && !sightClear(world.level, p.x, p.y, s.x, s.y)) {
+        fx.dirTicks.push({ ang: Math.atan2(dy, dx), age: 0, big });
+        continue;
+      }
       const err = Math.hypot(dx, dy) * 0.08;
       const m = clampMarker(world.level, s.x + (Math.random() * 2 - 1) * err, s.y + (Math.random() * 2 - 1) * err, src.x, src.y, walkable);
-      ringHint();
-      fx.markers.push({ x: m.x, y: m.y, age: 0, life: TUNING.sound.markerLife, big: s.type === 'shot' || s.type === 'death' || s.type === 'sonar' });
+      fx.markers.push({ x: m.x, y: m.y, age: 0, life: TUNING.sound.markerLife, big, kind: LAB.enemySound ? markKind(s.type) : undefined, ang: Math.atan2(src.vy, src.vx) });
     }
+    let confirmed = false;
     for (const h of world.hits) {
       if (h.by === 0) {
+        // CF feedback: a tick in your ear for every step a bullet of yours lands (once per step: eight pellets are
+        // one tick), a kill sound for the kill. Heard at any range, so a far hit is never in doubt.
+        if (h.killed) audio.play('kill', 0, 0, 1, false, true);
+        else if (!confirmed) audio.play('confirm', 0, 0, 1, false, true);
+        confirmed = true;
         fx.hitMarks.push({ x: h.x, y: h.y, age: 0, kill: h.killed });
         spark(h.x, h.y, h.killed ? 10 : 4, true);
         if (h.killed) toast(`${world.actors[h.target].name} eliminated`);
@@ -1206,7 +1249,8 @@ async function start() {
       if (h.target === 0) {
         hurtNow = true;
         if (settings.vibration && canVibrate) navigator.vibrate(h.killed ? 80 : 25);
-        fx.shake = TUNING.render.shakeSeconds;
+        // Shake by how much it hurt (CF): a graze nudges, a shotgun blast shoves. 25 damage = the base shake.
+        fx.shake = Math.max(fx.shake, TUNING.render.shakeSeconds * Math.max(0.6, Math.min(1.8, (h.hpDamage + h.armorDamage) / 25)));
         fx.damageArcs.push({ ang: Math.atan2(h.fromY - p.y, h.fromX - p.x), age: 0 });
         // Fairness rule: every hit comes from within your sight range with line of sight, so the shooter is
         // always shown (ringed) for the reveal window, even when it stands outside the lamp cone. A grenade's
@@ -1246,6 +1290,7 @@ async function start() {
   const pipsEl = $('pips');
   let lastHud = '';
   let lastZone = '';
+  let hpGhost = 0, ghostHold = 0, lastGhost = '', abilityWas = 0;
   let zoneTickLeft = 0;
 
   renderer.app.ticker.add((ticker) => {
@@ -1321,6 +1366,10 @@ async function start() {
     }
 
     for (const m of fx.markers) m.age += dt;
+    for (const n of fx.noise) n.age += dt;
+    fx.noise = fx.noise.filter((n) => n.age < TUNING.sound.ownNoiseSeconds);
+    for (const d of fx.dirTicks) d.age += dt;
+    fx.dirTicks = fx.dirTicks.filter((d) => d.age < TUNING.sound.dirTickLife);
     for (const m of fx.impacts) m.age += dt;
     for (const m of fx.hitMarks) m.age += dt;
     for (const m of fx.damageArcs) m.age += dt;
@@ -1405,6 +1454,14 @@ async function start() {
         if (zoneTickLeft <= 0) { zoneTickLeft = 0.75; audio.play('hurt', 0, 0, 1, false, true); }
       } else zoneTickLeft = 0;
     }
+    // CF damage ghost: hold the lost health 0.35 s, then drain it over ~0.5 s.
+    if (p.hp >= hpGhost) { hpGhost = p.hp; ghostHold = 0.35; }
+    else if ((ghostHold -= dt) <= 0) hpGhost = Math.max(p.hp, hpGhost - p.maxHp * 2 * dt);
+    const gw = `${Math.max(0, Math.min(100, (hpGhost / p.maxHp) * 100)).toFixed(1)}%`;
+    if (gw !== lastGhost) { lastGhost = gw; ($('hpghost') as HTMLElement).style.width = gw; }
+    // CF: the ability coming back off cooldown is heard and the button pulses once.
+    if (abilityWas > 0 && p.abilityCd === 0 && p.alive && phase === 'play') { audio.play('ready', 0, 0, 1, false, true); const ab = $('ability'); ab.classList.remove('pulse'); void ab.offsetWidth; ab.classList.add('pulse'); }
+    abilityWas = p.abilityCd;
     const low = p.alive && p.hp / p.maxHp <= TUNING.render.lowHpShare;
     $('vignette').style.opacity = low ? String(0.45 + 0.35 * (0.5 + 0.5 * Math.sin(performance.now() / 180))) : '0';
   });

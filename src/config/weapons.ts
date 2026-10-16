@@ -13,6 +13,9 @@ export interface WeaponDef {
   fireInterval: number;
   // Max deviation either side of the aim, degrees (uniform). Shotgun pellets spread evenly across it.
   spreadDeg: number;
+  /** CF-B steady rule: extra spread at full run (scales with speed). Chosen so a running shot at the measured fight
+   * range (~5 u) lands about half the time with the rifle family, while a steady one lands every time. */
+  moveSpreadDeg: number;
   magazine: number;
   reserve: number;
   reloadSeconds: number;
@@ -36,7 +39,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
   // Auto rifle: the honest middle. Accurate in bursts, fine at most ranges.
   rifle: {
     id: 'rifle', name: 'Auto rifle', damage: 18, pellets: 1, falloffStart: 9, falloffEnd: 18, minDamageMul: 0.6,
-    fireInterval: 0.11, spreadDeg: 2.5, magazine: 24, reserve: 72, reloadSeconds: 1.8,
+    fireInterval: 0.11, spreadDeg: 2.5, moveSpreadDeg: 5, magazine: 24, reserve: 72, reloadSeconds: 1.8,
     bulletSpeed: 32, bulletLife: 0.7, armorPen: 0.2, piercesCover: false, sound: 'rifle', barrel: 0.8, tracer: 0.07,
   },
   // Pump shotgun: seven pellets, brutal inside ~4.5 u, weak past 8 u. Rewards corners and doors.
@@ -45,42 +48,43 @@ export const WEAPONS: Record<string, WeaponDef> = {
   // pellets 7->8, spread 8->7.5 -> wins <=4 u vs the rifle, the rifle keeps 6 u+, the marksman keeps its lanes.
   shotgun: {
     id: 'shotgun', name: 'Pump shotgun', damage: 14, pellets: 8, falloffStart: 4.5, falloffEnd: 8, minDamageMul: 0.2,
-    fireInterval: 0.8, spreadDeg: 7.5, magazine: 5, reserve: 20, reloadSeconds: 2.2,
+    fireInterval: 0.8, spreadDeg: 7.5, moveSpreadDeg: 2, magazine: 5, reserve: 20, reloadSeconds: 2.2,
     bulletSpeed: 26, bulletLife: 0.4, armorPen: 0, piercesCover: false, sound: 'shotgun', barrel: 0.65, tracer: 0.05,
   },
   // Marksman: slow, heavy, long reach. Punishes anyone who peeks a long lane. Crates and slabs stop it (RC-8).
   marksman: {
     id: 'marksman', name: 'Marksman rifle', damage: 55, pellets: 1, falloffStart: 22, falloffEnd: 30, minDamageMul: 0.85,
-    fireInterval: 0.75, spreadDeg: 0.5, magazine: 5, reserve: 20, reloadSeconds: 2.1,
+    fireInterval: 0.75, spreadDeg: 0.5, moveSpreadDeg: 9, magazine: 5, reserve: 20, reloadSeconds: 2.1,
     bulletSpeed: 46, bulletLife: 0.65, armorPen: 0.5, piercesCover: false, sound: 'marksman', barrel: 1.05, tracer: 0.09,
   },
   // SMG: fast and loose, strong when moving close, falls apart at range. Damage 11->12 with the free roster: Tabsu
   // lost Mop's Slip and the scripted player won 1 of 40 (tests/rc-victory.test.ts floor is 2); now 4 of 40.
   smg: {
     id: 'smg', name: 'SMG', damage: 12, pellets: 1, falloffStart: 5, falloffEnd: 12, minDamageMul: 0.45,
-    fireInterval: 0.07, spreadDeg: 5.5, magazine: 30, reserve: 90, reloadSeconds: 1.5,
+    fireInterval: 0.07, spreadDeg: 5.5, moveSpreadDeg: 2.5, magazine: 30, reserve: 90, reloadSeconds: 1.5,
     bulletSpeed: 30, bulletLife: 0.5, armorPen: 0.1, piercesCover: false, sound: 'smg', barrel: 0.55, tracer: 0.05,
   },
   // Burst carbine (Yot): three accurate rounds per pull. Reaches further than the rifle, but a missed burst costs
   // the whole cycle and it loses the point-blank trade to shotguns.
   carbine: {
     id: 'carbine', name: 'Burst carbine', damage: 20, pellets: 1, falloffStart: 12, falloffEnd: 22, minDamageMul: 0.7,
-    fireInterval: 0.36, spreadDeg: 1.6, magazine: 24, reserve: 72, reloadSeconds: 2.0, burst: 3, burstGap: 0.07,
+    fireInterval: 0.36, spreadDeg: 1.6, moveSpreadDeg: 5, magazine: 24, reserve: 72, reloadSeconds: 2.0, burst: 3, burstGap: 0.07,
     bulletSpeed: 36, bulletLife: 0.7, armorPen: 0.25, piercesCover: false, sound: 'rifle', barrel: 0.85, tracer: 0.07,
   },
   // Drum LMG (Toad): a 60-round drum that holds a lane, loose at range, and the longest reload (2.6 s) to bait.
+  // CF: run penalty 3.5 (total 7 deg at a run, like the rifle's 7.5): at +5 Toad won 1 of 40 autopilot runs, 2 at 3.5.
   // Measured: 4.5 deg and a 3.2 s reload left Toad at 0-1 of 40 (tests/rc-victory.test.ts); 15 dmg made him win
   // 74% of all duels (tests/gr-roster.test.ts).
   lmg: {
     id: 'lmg', name: 'Drum LMG', damage: 14, pellets: 1, falloffStart: 8, falloffEnd: 16, minDamageMul: 0.55,
-    fireInterval: 0.1, spreadDeg: 3.5, magazine: 60, reserve: 120, reloadSeconds: 2.6,
+    fireInterval: 0.1, spreadDeg: 3.5, moveSpreadDeg: 3.5, magazine: 60, reserve: 120, reloadSeconds: 2.6,
     bulletSpeed: 30, bulletLife: 0.65, armorPen: 0.15, piercesCover: false, sound: 'rifle', barrel: 0.95, tracer: 0.07,
   },
   // Sawn-off (Bill): two shells that win any fight inside ~4 u, nothing past 6.5 u, then a reload. Duel matrix
   // (tests/gr-roster.test.ts): 15 dmg / 11 deg / 2.5-5.5 u lost even at 3 u, so it hits harder and tighter.
   sawnoff: {
     id: 'sawnoff', name: 'Sawn-off', damage: 18, pellets: 9, falloffStart: 3.5, falloffEnd: 6.5, minDamageMul: 0.2,
-    fireInterval: 0.25, spreadDeg: 8, magazine: 2, reserve: 18, reloadSeconds: 1.5,
+    fireInterval: 0.25, spreadDeg: 8, moveSpreadDeg: 2, magazine: 2, reserve: 18, reloadSeconds: 1.5,
     bulletSpeed: 26, bulletLife: 0.32, armorPen: 0, piercesCover: false, sound: 'shotgun', barrel: 0.45, tracer: 0.05,
   },
 };

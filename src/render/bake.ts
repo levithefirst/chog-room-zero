@@ -5,6 +5,7 @@ import { TUNING } from '../config/tuning';
 import { ZONES, type Material } from '../config/map';
 import { BARRIER, COVER, DOOR, WALL, walkable, type Level } from '../sim/level';
 import { coverDrawBox } from './footprint';
+import { LAB } from '../config/lab';
 
 // Material base colours (lit). Floors sit in the middle of the value range; walls are dark masses with a lit rim.
 export const MAT = {
@@ -199,15 +200,26 @@ export function bakeMap(renderer: PixiRenderer, l: Level): Baked {
   const ctx = canvas.getContext('2d')!;
   const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const d = img.data;
-  const k = 0.5, keep = 0.3;
+  // CF-E: much darker (TUNING.render.dimStructure / dimAmbient): out of the light you keep the walls' rims and the
+  // doors, not the floor detail. LAB.dark off: the RC-8 values (0.5 over 14, 20, 26).
+  const k = LAB.dark ? TUNING.render.dimStructure : 0.5, keep = 0.3;
+  const [ar, ag, ab] = LAB.dark ? TUNING.render.dimAmbient : [14, 20, 26];
   for (let i = 0; i < d.length; i += 4) {
     const L = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-    // Ambient floor #0E141A + scaled, cooled structure.
-    d[i] = Math.min(255, 14 + k * 0.86 * (keep * d[i] + (1 - keep) * L));
-    d[i + 1] = Math.min(255, 20 + k * 0.97 * (keep * d[i + 1] + (1 - keep) * L));
-    d[i + 2] = Math.min(255, 26 + k * 1.12 * (keep * d[i + 2] + (1 - keep) * L));
+    // Ambient floor + scaled, cooled structure.
+    d[i] = Math.min(255, ar + k * 0.86 * (keep * d[i] + (1 - keep) * L));
+    d[i + 1] = Math.min(255, ag + k * 0.97 * (keep * d[i + 1] + (1 - keep) * L));
+    d[i + 2] = Math.min(255, ab + k * 1.12 * (keep * d[i + 2] + (1 - keep) * L));
   }
   ctx.putImageData(img, 0, 0);
+  if (LAB.dark) {
+    // The remembered outline: every wall edge as a thin cool line, so the room's shape survives the dark.
+    ctx.strokeStyle = 'rgba(122, 134, 148, 0.55)';
+    ctx.lineWidth = Math.max(1, ppu * 0.06);
+    ctx.beginPath();
+    for (const sg of l.segments) { ctx.moveTo(sg.ax * ppu, sg.ay * ppu); ctx.lineTo(sg.bx * ppu, sg.by * ppu); }
+    ctx.stroke();
+  }
   const dim = Texture.from(canvas);
   g.destroy();
   return { lit, dim, ppu };

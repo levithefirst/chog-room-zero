@@ -2,9 +2,10 @@
 // "view world" the normal renderer and HUD can draw. The browser decides nothing about hits, damage, pickups or
 // the result: it sends controls and shows what the server says. You are always actor 0 in the view world.
 import { powerFor, signatureFor } from '../config/power';
-import { createWorld, type Actor, type ActorInput, type HitEvent, type SoundEvent, type SoundType, type World } from '../sim/world';
+import { applyFocus, createWorld, wrapAngle, type Actor, type ActorInput, type HitEvent, type SoundEvent, type SoundType, type World } from '../sim/world';
 import { WEAPONS } from '../config/weapons';
 import { TUNING } from '../config/tuning';
+import { LAB } from '../config/lab';
 import { PROTOCOL, type Mode, type NetActor, type NetProfile, type PartyMember, type PlayerResult, type ServerMsg } from './protocol';
 import type { Circle } from '../sim/zone';
 import type { Team } from '../sim/world';
@@ -35,6 +36,9 @@ export class OnlineSession {
   match: Extract<ServerMsg, { t: 'match' }> | null = null;
   over: OverInfo | null = null;
   world: World | null = null;
+  /** Your own drawn facing and when it was drawn (CF-A turn cap on the cosmetic own facing). */
+  private ownFacing: number | null = null;
+  private ownAt = 0;
   /** Server actor id -> view index (you are 0). */
   private toView = new Map<number, number>();
   private fromView: number[] = [];
@@ -171,7 +175,7 @@ export class OnlineSession {
     if (!urgent && now - this.lastSent < 1000 / INPUT_HZ) return;
     this.lastSent = now;
     this.send({ t: 'input', seq: ++this.seq, mx: inp.moveX, my: inp.moveY, aim: inp.aim, fire: inp.firing, quiet: inp.quiet, reload: inp.reload, ability: inp.ability,
-      ...(inp.grenade ? { nade: true, nd: Math.round((inp.throwDist ?? TUNING.grenade.touchThrow) * 100) / 100 } : {}) });
+      ...(inp.grenade ? { nade: true, nd: Math.round((inp.throwDist ?? TUNING.grenade.touchThrow) * 100) / 100, ...(inp.throwAim !== undefined ? { na: Math.round(inp.throwAim * 1000) / 1000 } : {}) } : {}) });
   }
   private lastFire = false;
 
@@ -287,7 +291,16 @@ export class OnlineSession {
         // You: the newest server state, nudged forward by your server velocity (no waiting on interpolation).
         const s = newest.byId.get(id);
         if (s) { copy(act, s); const dt = Math.min(0.1, (now - newest.at) / 1000); if (s.alive) { act.x += s.vx * dt; act.y += s.vy * dt; } }
-        if (aim !== null && act.alive) act.facing = aim;
+        // Drawn at once toward your aim, at the same turn cap the server applies (CF-A), so the lamp you see is the
+        // lamp the server will have.
+        if (aim !== null && act.alive) {
+          const prev = this.ownFacing ?? act.facing, cap = TUNING.movement.turnRateDegPerSec * Math.PI / 180 * Math.min(0.1, (now - this.ownAt) / 1000);
+          const d = Math.atan2(Math.sin(aim - prev), Math.cos(aim - prev));
+          act.facing = LAB.turn ? wrapAngle(prev + Math.max(-cap, Math.min(cap, d))) : aim;
+          this.ownFacing = act.facing;
+          act.aimLag = Math.abs(Math.atan2(Math.sin(aim - act.facing), Math.cos(aim - act.facing)));
+        }
+        this.ownAt = now;
         continue;
       }
       const sa = a.byId.get(id), sb = b.byId.get(id);
@@ -325,4 +338,6 @@ function copy(act: Actor, s: NetActor): void {
   act.downed = !!s.downed; act.reviveProgress = s.reviveProgress ?? 0;
   if (s.nades !== undefined) act.grenades = s.nades;
   if (s.maxNades !== undefined) act.maxGrenades = s.maxNades;
+  act.focus = s.focus ?? 0;
+  applyFocus(act);
 }

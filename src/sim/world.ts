@@ -1,6 +1,6 @@
 // The match simulation. Deterministic: fixed step, seeded random, no wall-clock time, no rendering.
 import { TUNING } from '../config/tuning';
-import { BOT_SPAWNS, ROOM_ZERO, ZONE_CENTRES, type BotSpawn } from '../config/map';
+import { BOT_SPAWNS, BOT_SPAWNS_RC8, ROOM_ZERO, ROOM_ZERO_RC8, ZONE_CENTRES, type BotSpawn } from '../config/map';
 import { heroById, type AbilityDef, type HeroDef } from '../config/heroes';
 import { BASE_POWER, type Power } from '../config/power';
 import { WEAPONS, damageAt, type WeaponDef } from '../config/weapons';
@@ -11,6 +11,7 @@ import { NO_SIDEGRADE, type Sidegrade } from './operators';
 import type { ViewShape } from './vision';
 import { botThink, createBrain, type Brain, type PerceptionEvent } from './bots';
 import { outsideCircle, planZone, zoneAt, type ZoneState } from './zone';
+import { LAB } from '../config/lab';
 
 const DEG = Math.PI / 180;
 
@@ -33,6 +34,8 @@ export interface ActorInput {
   grenade?: boolean;
   /** How far to throw it, in u (clamped to TUNING.grenade minThrow..maxThrow); unset = the touch default. */
   throwDist?: number;
+  /** Which way to throw it (a touch drag on the grenade button, CF); unset = along the aim. */
+  throwAim?: number;
 }
 
 export interface Actor {
@@ -47,7 +50,16 @@ export interface Actor {
   /** Tier power (free, holder tier, demo). Applied once at spawn, except damageMul which applies per hit. */
   power: Power;
   weapon: WeaponDef;
+  /** What this actor sees right now: baseView reshaped by its gait (CF-E, TUNING.vision focus*). */
   view: ViewShape;
+  /** The hero's own view shape (with sidegrade), before gait. */
+  baseView: ViewShape;
+  /** Gait focus -1 (running: wide, short lamp) .. 0 (creep) .. 1 (steady: narrow, long lamp). Eased. */
+  focus: number;
+  /** Seconds below TUNING.movement.steadySpeed (STEADY once >= steadySeconds). */
+  stillFor: number;
+  /** Radians between where the body faces and where the player aims (CF-A turn lag). */
+  aimLag: number;
   x: number;
   y: number;
   vx: number;
@@ -271,7 +283,8 @@ function makeActor(id: number, team: Team, name: string, hero: HeroDef, sg: Side
   // Grenades: the tier's capacity (free 3 ... 1:1 13), never upgrades; hostile bots carry a fixed few (solo difficulty).
   const nades = team === 'bot' ? TUNING.grenade.botCount : power.grenades;
   return {
-    id, team, ai: team === 'bot', name, hero, ability: { ...ab, cooldown: ab.cooldown * power.cooldownMul }, power, weapon, view: viewFor(hero, sg), x, y, vx: 0, vy: 0, facing,
+    id, team, ai: team === 'bot', name, hero, ability: { ...ab, cooldown: ab.cooldown * power.cooldownMul }, power, weapon, view: viewFor(hero, sg), baseView: viewFor(hero, sg),
+    focus: 0, stillFor: 0, aimLag: 0, x, y, vx: 0, vy: 0, facing,
     hp: maxHp, maxHp, armor: hero.maxArmor + power.armor, maxArmor: Math.max(hero.maxArmor, 50) + power.armor, alive: true,
     ammo: weapon.magazine, reserve: weapon.reserve, cooldown: 0, reloadLeft: 0, abilityCd: 0, dashLeft: 0, dashX: 0, dashY: 0,
     revealLeft: 0, shieldLeft: 0, frenzyLeft: 0, slowLeft: 0, slowMul: 1, burstLeft: 0, stepAcc: 0, hitFlash: 0, muzzle: 0, deadFor: 0, lastSpread: weapon.spreadDeg, lastHitTick: -999, lastHitFrom: null,
@@ -300,7 +313,7 @@ export interface WorldOptions {
 }
 
 export function createWorld(opts: WorldOptions = {}): World {
-  const level = parseLevel(opts.map ?? ROOM_ZERO);
+  const level = parseLevel(opts.map ?? (LAB.pacing ? ROOM_ZERO : ROOM_ZERO_RC8));
   const seed = (opts.seed ?? TUNING.seed) | 0;
   const brains = new Map<number, Brain>();
   if (opts.versus) {
@@ -329,7 +342,7 @@ export function createWorld(opts: WorldOptions = {}): World {
     actors.push(a);
     brains.set(a.id, createBrain({ name: m.name, hero: m.hero, patrol: [[Math.floor(q.x), Math.floor(q.y)]], flanker: a.hero.dept === 'flanker' }));
   });
-  (opts.bots ?? BOT_SPAWNS).forEach((b) => {
+  (opts.bots ?? (LAB.pacing ? BOT_SPAWNS : BOT_SPAWNS_RC8)).forEach((b) => {
     const [tx, ty] = b.patrol[0];
     const a = makeActor(actors.length, 'bot', b.name, heroById(b.hero), NO_SIDEGRADE, tx + 0.5, ty + 0.5, Math.PI);
     actors.push(a);
@@ -354,7 +367,9 @@ export function player(w: World): Actor {
  * A Wick bot's 12 m sight is its own; it must close to the player's range before it can shoot or hit.
  */
 export function playerSightRange(w: World): number {
-  return w.actors[0].view.range;
+  // The hero's own sight, not the gait-shaped one (CF-E): running shortens your lamp, but it must never make you
+  // immune to a bot that stands where your normal sight reaches (the muzzle flash still shows that shooter).
+  return w.actors[0].baseView.range;
 }
 
 export function viewOf(a: Actor): ViewShape {
@@ -497,12 +512,14 @@ function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
   if (a.downed) inp = { ...inp, firing: false, reload: false, ability: false, grenade: false, quiet: false, moveX: inp.moveX * TUNING.revive.crawl, moveY: inp.moveY * TUNING.revive.crawl };
   // Holding the trigger (even between shots) counts as firing: a rescuer must let go of it.
   a.firedLast = inp.firing;
-  if (isHuman(a)) a.facing = inp.aim;
+  if (isHuman(a) && !LAB.turn) a.facing = inp.aim;
   else {
-    const turn = TUNING.bots.turnRateDegPerSec * DEG * dt;
+    // CF-A: people turn at a cap too (fast: a small correction lands in one step, a 180 takes ~0.25 s); bots slower.
+    const turn = (isHuman(a) ? TUNING.movement.turnRateDegPerSec : TUNING.bots.turnRateDegPerSec) * DEG * dt;
     const d = angleDiff(a.facing, inp.aim);
-    a.facing += Math.max(-turn, Math.min(turn, d));
+    a.facing = wrapAngle(a.facing + Math.max(-turn, Math.min(turn, d)));
   }
+  a.aimLag = Math.abs(angleDiff(a.facing, inp.aim));
   a.abilityCd = Math.max(0, a.abilityCd - dt);
   a.revealLeft = Math.max(0, a.revealLeft - dt);
   a.shieldLeft = Math.max(0, a.shieldLeft - dt);
@@ -514,7 +531,7 @@ function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
   }
   if (inp.ability && a.abilityCd === 0) useAbility(w, a, inp);
   a.nadeCd = Math.max(0, a.nadeCd - dt);
-  if (inp.grenade && a.grenades > 0 && a.nadeCd === 0 && a.shieldLeft === 0) throwGrenade(w, a, inp.aim, inp.throwDist);
+  if (inp.grenade && a.grenades > 0 && a.nadeCd === 0 && a.shieldLeft === 0) throwGrenade(w, a, inp.throwAim ?? inp.aim, inp.throwDist);
 
   const speedMul = a.hero.speed * (a.slowLeft > 0 ? a.slowMul : 1);
   if (a.dashLeft > 0) {
@@ -544,18 +561,25 @@ function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
     }
   }
   a.stepAcc += Math.hypot(a.x - ox, a.y - oy);
+  const speed = Math.hypot(a.vx, a.vy);
   if (a.stepAcc >= M.stepDistance) {
     a.stepAcc -= M.stepDistance;
-    const quiet = a.dashLeft > 0 || Math.hypot(a.vx, a.vy) <= M.maxSpeed * speedMul * M.quietSpeedScale + 0.05;
-    emit(w, quiet ? 'quietStep' : 'step', a.x, a.y, quiet ? TUNING.sound.quietStep : TUNING.sound.runStep, a);
+    const r = stepRadius(a.dashLeft > 0 ? 0 : speed / (M.maxSpeed * speedMul));
+    emit(w, r <= TUNING.sound.quietStep + 0.01 ? 'quietStep' : 'step', a.x, a.y, r, a);
   }
+  // Steady rule (CF): standing still for a moment focuses the lamp; running widens and shortens it.
+  a.stillFor = speed < M.steadySpeed ? a.stillFor + dt : 0;
+  const want = a.stillFor >= M.steadySeconds ? 1 : speed > M.maxSpeed * speedMul * M.quietSpeedScale + 0.05 ? -1 : 0;
+  const fr = TUNING.vision.focusRate * dt;
+  a.focus = LAB.dark ? a.focus + Math.max(-fr, Math.min(fr, want - a.focus)) : 0;
+  applyFocus(a);
 
   // Weapon
   const W = a.weapon;
   a.cooldown = Math.max(0, a.cooldown - dt);
   a.muzzle = Math.max(0, a.muzzle - dt);
   a.hitFlash = Math.max(0, a.hitFlash - dt);
-  a.lastSpread = W.spreadDeg + TUNING.combat.moveSpreadDeg * Math.min(1, Math.hypot(a.vx, a.vy) / M.maxSpeed);
+  a.lastSpread = spreadStep(a, dt);
   if (a.reloadLeft > 0) {
     a.reloadLeft -= dt;
     if (a.reloadLeft <= 0) {
@@ -581,6 +605,43 @@ function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
     fireRound(w, a);
   }
   if (a.ammo === 0 && !a.downed) startReload(w, a);
+}
+
+/** Normalise to -PI..PI so a facing never grows without bound across many turns. */
+export const wrapAngle = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+
+/**
+ * Step noise radius by speed share (CF-D): creep pace and below is a quiet step (3 u), a full run 8 u, and a walk in
+ * between scales linearly, so a patrolling bot at 80% is heard ~6 u away. Before CF: two values only.
+ */
+export function stepRadius(speedShare: number): number {
+  const S = TUNING.sound, q = TUNING.movement.quietSpeedScale;
+  if (!LAB.enemySound) return speedShare <= q + 0.02 ? S.quietStep : S.runStep;
+  const t = Math.max(0, Math.min(1, (speedShare - q - 0.02) / (1 - q - 0.02)));
+  return S.quietStep + (S.runStep - S.quietStep) * t;
+}
+
+/** The view an actor has at its current gait focus (CF-E). */
+export function applyFocus(a: Actor): void {
+  const V = TUNING.vision, f = a.focus, b = a.baseView;
+  a.view.nearRadius = b.nearRadius;
+  a.view.coneRad = b.coneRad * (1 - f * V.focusCone);
+  a.view.range = b.range * (f >= 0 ? 1 + f * V.focusRange : 1 + f * V.runRange);
+}
+
+/**
+ * Fire quality (CF steady rule): base spread + the weapon's run penalty by speed + turn lag; it widens at once and
+ * settles over TUNING.combat.settleSeconds when you slow down. LAB.steady off: the flat pre-CF rule.
+ */
+function spreadStep(a: Actor, dt: number): number {
+  const C = TUNING.combat, W = a.weapon;
+  const share = Math.min(1, Math.hypot(a.vx, a.vy) / TUNING.movement.maxSpeed);
+  if (!LAB.steady) return W.spreadDeg + C.moveSpreadDeg * share;
+  const lagDeg = LAB.turn ? a.aimLag / DEG : 0;
+  const lag = Math.max(0, Math.min(1, (lagDeg - C.turnFreeDeg) / (C.turnFullDeg - C.turnFreeDeg)));
+  const target = W.spreadDeg + W.moveSpreadDeg * share + C.turnSpreadDeg * lag;
+  if (target >= a.lastSpread) return target;
+  return a.lastSpread + (target - a.lastSpread) * (1 - Math.exp(-dt / C.settleSeconds));
 }
 
 /** One round of the current trigger pull: every pellet, one ammo, the shot sound. Ends the burst on its last round. */
@@ -698,7 +759,7 @@ function stepBullets(w: World, dt: number): void {
       if (!a.alive || a.id === b.owner || (a.team === team && !w.friendlyFire)) continue;
       // Damage range cap: a bot bullet fired from beyond the player's sight distance never hurts the player.
       // (Each target's own sight distance: the same rule protects the player and the player's AI teammates.)
-      if (team === 'bot' && a.team === 'player' && Math.hypot(b.ox - a.x, b.oy - a.y) > a.view.range) continue;
+      if (team === 'bot' && a.team === 'player' && Math.hypot(b.ox - a.x, b.oy - a.y) > a.baseView.range) continue;
       const t = segmentCircleT(b.x, b.y, nx, ny, a.x, a.y, r);
       if (t >= 0 && t < bestT) {
         bestT = t;

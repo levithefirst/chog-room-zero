@@ -43,9 +43,15 @@ describe('Room Zero map', () => {
     for (let i = 0; i < l.tiles.length; i++) if (walkable(l.tiles[i])) expect(seen[i], `tile ${i % l.w},${Math.floor(i / l.w)}`).toBe(1);
     for (const p of l.pickupSpawns) expect(findPath(l, l.playerSpawn.x, l.playerSpawn.y, p.x, p.y, 8000).length).toBeGreaterThan(0);
   });
-  it('has chokepoints (doorways) and at least one long sightline of 25+ u', () => {
+  it('has chokepoints (doorways) and no straight open lane longer than the widest room (CF-F: 15 u)', () => {
     expect(Array.from(l.tiles).filter((t) => t === 4).length).toBeGreaterThanOrEqual(10);
-    expect(sightClear(l, 1.5, 8.5, 42.5, 8.5)).toBe(true);
+    // Before CF rows 8 and 12 were open across the full 42 u; now pillars break them.
+    expect(sightClear(l, 1.5, 8.5, 42.5, 8.5)).toBe(false);
+    const open = (x: number, y: number) => l.tiles[y * l.w + x] !== 1;
+    let longest = 0;
+    for (let y = 0; y < l.h; y++) for (let x = 0, run = 0; x <= l.w; x++) { run = x < l.w && open(x, y) ? run + 1 : 0; longest = Math.max(longest, run); }
+    for (let x = 0; x < l.w; x++) for (let y = 0, run = 0; y <= l.h; y++) { run = y < l.h && open(x, y) ? run + 1 : 0; longest = Math.max(longest, run); }
+    expect(longest).toBeLessThanOrEqual(15);
   });
   it('every bot spawn is reachable from the player spawn', () => {
     for (const b of BOT_SPAWNS) {

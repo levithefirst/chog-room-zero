@@ -205,7 +205,9 @@ describe('measured duel bands', () => {
     [3, 6].reduce((s, d) => s + share(hero, a, hero, b, d, n, ability), 0) / 2;
   it('Common beats a fresh free player about 7 in 10 (Benja, Tabsu): real, beatable; a 1:1 dominates (over 0.95)', () => {
     for (const hero of ['benja', 'tabsu']) {
-      const c = mean(hero, powerFor('common'), BASE_POWER);
+      // 40 seeds, not 12 (CF): with the steady rule both strafing duellists spread more, and 12 seeds put the same
+      // matchup anywhere from 0.58 to 0.65 (measured 0.646 at 40). The band is unchanged.
+      const c = mean(hero, powerFor('common'), BASE_POWER, 40);
       expect(c, hero).toBeGreaterThanOrEqual(0.6);
       expect(c, hero).toBeLessThanOrEqual(0.85);
       expect(mean(hero, powerFor('legendary'), BASE_POWER), hero).toBeGreaterThanOrEqual(0.95);

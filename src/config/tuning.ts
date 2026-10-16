@@ -33,13 +33,28 @@ export const TUNING = {
     radius: 0.35,
     // Distance per footstep sound: about 2.6 steps/s at a run.
     stepDistance: 1.6,
+    // CF-A (LAB.turn): the body (gun and lamp) turns toward the aim at this rate. 720 deg/s: a 180 flick takes 0.25 s,
+    // anything under 12 deg lands in one step, so tracking feels direct and only a big turn costs time. PROPOSAL:
+    // lab values 450 / 720 / 1080 for the owner's playtest.
+    turnRateDegPerSec: 720,
+    // CF steady rule: below this speed (u/s) for steadySeconds you are STEADY (tight gun, focused lamp, silent feet).
+    steadySpeed: 0.9,
+    steadySeconds: 0.2,
   },
 
   combat: {
     // Knockback on hit, 1.0 u/s: a readable nudge, not a shove.
     knockback: 1.0,
-    // Extra spread at full run, degrees. Rewards stopping to shoot.
+    // Extra spread at full run, degrees, before CF (LAB.steady off). With CF each weapon has its own moveSpreadDeg.
     moveSpreadDeg: 2.5,
+    // CF-B: when you slow down, spread eases to its new value over ~3x this (s): the reticle visibly closes as you
+    // settle (0.06 s: 95% in 0.18 s). Speeding up widens it at once.
+    settleSeconds: 0.06,
+    // CF-A: while the body lags the aim by more than turnFreeDeg, up to turnSpreadDeg is added (full at turnFullDeg):
+    // flick-and-fire works, but loose.
+    turnFreeDeg: 8,
+    turnFullDeg: 40,
+    turnSpreadDeg: 4,
     // Armour soaks this share of each hit (before armour-pen) until the armour pool is empty.
     armorSoak: 0.6,
     // Lean rule: a shooter within this distance of a half-cover box shoots over it (box ignored).
@@ -106,6 +121,12 @@ export const TUNING = {
     rayStepDeg: 1.5,
     // Soft edge: a second, wider cone at lower brightness.
     softEdgeDeg: 10,
+    // CF-E gait lamp: steady narrows the cone by focusCone and reaches focusRange further; a run widens it by the
+    // same share and shortens it by runRange. Eases between them at focusRate per second (~0.25 s).
+    focusCone: 0.15,
+    focusRange: 0.2,
+    runRange: 0.15,
+    focusRate: 4,
   },
 
   sound: {
@@ -118,9 +139,20 @@ export const TUNING = {
     reload: 4,
     pickup: 5,
     ability: 6,
-    // A wall in between shrinks the radius to this share: muffled, not silenced.
-    wallFactor: 0.6,
+    // A wall in between shrinks the radius to this share: muffled, not silenced. CF-D: 0.6 -> 0.8 (tests/cf-lab.test.ts
+    // D: contacts heard or spotted before they are seen 40% -> 70%; at 0.6 the CF map's pillars left it at 47%). The same
+    // rule for bots, so they hear you through a wall sooner too.
+    wallFactor: 0.8,
     markerLife: 1.4,
+    // CF-D: a heard sound with no line of sight (through a wall) gives a DIRECTION only: a tick on a ring around you.
+    dirTickLife: 1.1,
+    // CF-C: your own noise ring expands to its true radius over this long, then is gone.
+    ownNoiseSeconds: 0.32,
+    // CF-D: after a hostile leaves every view, its outline stays at the last seen spot this long (LAST KNOWN).
+    ghostSeconds: 1.6,
+    // CF-E: a teammate's sighting is a SPOTTED mark refreshed this often (s), fading over spottedLife.
+    spottedRefresh: 0.5,
+    spottedLife: 1.2,
   },
 
   // Grenades (owner 2026-10-14, docs/design/roster-grenades.md). Every player carries them; capacity is by tier
@@ -175,7 +207,16 @@ export const TUNING = {
     coverSeconds: 1.6,
     // Go for a health pickup within this distance when hurt.
     healthSeekRange: 14,
+    // Before CF bots crept on patrol (3 u steps, almost never heard). CF-D: they walk their rounds at patrolSpeed
+    // (steps heard ~6 u), pause patrolPause..+patrolPauseJitter s at each point, stop to listen listenSeconds when
+    // they hear something, then creep (quiet) toward it.
     patrolQuiet: true,
+    patrolSpeed: 0.8,
+    patrolPause: 1.2,
+    patrolPauseJitter: 1.6,
+    listenSeconds: 0.55,
+    // ...and creeps only the last creepWithin u to a noise it is checking (walks the rest, audibly).
+    creepWithin: 4,
     // RC-1 difficulty (evidence: tests/rc-victory.test.ts, docs/design/bots.md). Bots carry the same weapons and
     // health as the heroes, so 1v5 at parity was ~unwinnable (scripted player won 9/80 runs, ADE never reached
     // victory). Bots now deal 60% damage, aim 12 deg settling over 2 s, and react in 0.40-0.65 s.
@@ -246,7 +287,13 @@ export const TUNING = {
     lookahead: 1.5,
     // Map bake resolution in px per u. 32: sharp on phones, 1.3 MB texture.
     bakePpu: 32,
-    hitFlash: 0.06,
+    // Out-of-light map (render/bake.ts): ambient RGB plus this share of the lit structure. Before CF 0.5 over
+    // (14, 20, 26): the whole layout read in the dark. CF-E: 0.2 over (7, 10, 13): walls and doors still outline, floor
+    // detail needs your light.
+    dimStructure: 0.2,
+    dimAmbient: [7, 10, 13],
+    // CF feedback: 0.09 s (was 0.06, under 4 frames) so a hit body flash survives a dropped frame.
+    hitFlash: 0.09,
     muzzleFlash: 0.05,
     shakePx: 3,
     shakeSeconds: 0.12,

@@ -20,7 +20,8 @@ import { px, type BrandToken } from '../config/brand';
 import { ONE_OF_ONE } from '../config/power';
 import { outsideCircle, zoneAt, type Circle } from '../sim/zone';
 import { matchSeconds } from '../sim/world';
-import { clampMarker, edgeAnchor, enemyDrawMode } from './visibility';
+import { clampMarker, edgeAnchor, enemyDrawMode, teamSighting } from './visibility';
+import { LAB } from '../config/lab';
 
 const P = TUNING.palette;
 const R = TUNING.render;
@@ -65,12 +66,19 @@ function arc(g: Graphics, x: number, y: number, r: number, a0: number, a1: numbe
   return g;
 }
 
+/** What a heard sound was (CF-D): each kind has its own mark, so it reads with the sound off. */
+export type MarkKind = 'step' | 'shot' | 'reload' | 'impact' | 'ability' | 'grenade' | 'death' | 'other';
+
 export interface Marker {
   x: number;
   y: number;
   age: number;
   life: number;
   big: boolean;
+  /** CF-D mark shape; absent = the plain ring (LAB.enemySound off). */
+  kind?: MarkKind;
+  /** Steps: the walker's heading, so the footprints point where it went. */
+  ang?: number;
 }
 
 export interface Spark {
@@ -101,6 +109,10 @@ export interface Fx {
   collects: { x: number; y: number; age: number; color: number }[];
   /** 1:1 signature moments (burst, howl): a ring of the effect's real radius (RING_SECONDS). */
   rings: { x: number; y: number; age: number; r: number; color: number }[];
+  /** CF-C your own noise: a ring that runs out to the radius it is really heard at, then is gone. */
+  noise: { x: number; y: number; r: number; age: number }[];
+  /** CF-D a sound heard through a wall: a direction tick around you, no position. */
+  dirTicks: { ang: number; age: number; big: boolean }[];
 }
 
 export const RING_SECONDS = 0.45;
@@ -110,7 +122,7 @@ export const COLLECT_SECONDS = 0.5;
 
 export function createFx(): Fx {
   return {
-    markers: [], impacts: [], coverFlashes: [], hitMarks: [], shake: 0, corpses: [], damageArcs: [], pings: [], threats: [], collects: [], rings: [],
+    markers: [], impacts: [], coverFlashes: [], hitMarks: [], shake: 0, corpses: [], damageArcs: [], pings: [], threats: [], collects: [], rings: [], noise: [], dirTicks: [],
     sparks: Array.from({ length: R.maxSparks }, () => ({ x: 0, y: 0, vx: 0, vy: 0, age: 1, hostile: false })),
   };
 }
@@ -196,6 +208,15 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
   let visBots = 0, flashBots = 0;
   let exploreTimer = 0;
   const pickupLabels: Text[] = [];
+  // CF-D/E information memory, per actor id: how it was drawn last frame, its last seen pose (afterimage), and the
+  // SPOTTED mark a teammate's sighting leaves (refreshed every TUNING.sound.spottedRefresh s, not live).
+  let lastMode: (string | null)[] = [];
+  const ghosts = new Map<number, { x: number; y: number; facing: number; age: number }>();
+  const spotted = new Map<number, { x: number; y: number; age: number }>();
+  // Pickups as you last saw them (CF-E): out of your light you remember, you do not watch the respawn.
+  let pickupSeen: boolean[] = [];
+  const barGhost = new Map<number, { hp: number; hold: number }>();
+  let frameDt = 0;
 
   function drawFog() {
     fogG.clear();
@@ -255,7 +276,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
   /** A 1:1's own colour (src/config/power.ts ONE_OF_ONE), else the given default. */
   const sigColor = (a: Actor, d: number) => (a.power.signature && a.power.metadataId ? ONE_OF_ONE[a.power.metadataId]?.color ?? d : d);
 
-  function drawBody(g: Graphics, a: Actor, hostile: boolean, marking: number | null, alert: boolean) {
+  function drawBody(g: Graphics, a: Actor, hostile: boolean, marking: number | null, alert: boolean, heard = false) {
     // RC-8: the CHOG-inspired operator (src/ui/chogShape.ts) at its true sim size: valleys and spike tips straddle the
     // 0.35 u hitbox, so a bullet that touches the drawn body hits and one that misses it misses.
     const r0 = TUNING.movement.radius * R.actorScale;
@@ -322,6 +343,9 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
     if (hostile && alert && a.alive) {
       // Telegraph: it has seen something and is about to commit.
       g.poly([a.x - 0.13, a.y - r - 0.75, a.x + 0.13, a.y - r - 0.75, a.x, a.y - r - 0.42]).fill(P.signal);
+    } else if (hostile && heard && a.alive) {
+      // CF-D: it heard something and is checking: a hollow mark (did it hear YOU? it is listening this way).
+      g.poly([a.x - 0.13, a.y - r - 0.75, a.x + 0.13, a.y - r - 0.75, a.x, a.y - r - 0.42]).stroke({ width: 0.05, color: P.signal });
     }
     const cos = Math.cos(a.facing), sin = Math.sin(a.facing);
     if (!a.alive && a.deadFor > R.deathAnimSeconds * 0.5) {
@@ -355,10 +379,52 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
     }
   }
 
+  /** A heard sound (CF-D): one shape per kind, so a step, a shot and a reload read apart with the sound off. */
+  function drawMark(m: Marker) {
+    const t = m.age / m.life, al = 0.8 * (1 - t), g = marks, c = P.signal;
+    switch (m.kind) {
+      case 'step': {
+        // Two footprints along the walker's heading.
+        const a = m.ang ?? 0, cx = Math.cos(a), sy = Math.sin(a);
+        for (const side of [-1, 1]) {
+          const fx0 = m.x + -sy * side * 0.13 + cx * side * 0.12, fy0 = m.y + cx * side * 0.13 + sy * side * 0.12;
+          g.ellipse(fx0, fy0, 0.1, 0.1).fill({ color: c, alpha: al * 0.9 });
+        }
+        return;
+      }
+      case 'shot': {
+        const r0 = 0.3 + t * 0.6, r1 = r0 + 0.45;
+        for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; g.moveTo(m.x + Math.cos(a) * r0, m.y + Math.sin(a) * r0).lineTo(m.x + Math.cos(a) * r1, m.y + Math.sin(a) * r1); }
+        g.stroke({ width: 0.07, color: c, alpha: al });
+        return;
+      }
+      case 'reload':
+        for (const k of [-1, 1]) circle(g, m.x + k * 0.16, m.y, 0.07, 8).fill({ color: c, alpha: al });
+        arc(g, m.x, m.y, 0.35, Math.PI * 1.1, Math.PI * 1.9, 8).stroke({ width: 0.04, color: c, alpha: al * 0.7 });
+        return;
+      case 'impact':
+        g.moveTo(m.x - 0.12, m.y - 0.12).lineTo(m.x + 0.12, m.y + 0.12).moveTo(m.x + 0.12, m.y - 0.12).lineTo(m.x - 0.12, m.y + 0.12).stroke({ width: 0.05, color: c, alpha: al });
+        return;
+      case 'grenade':
+        circle(g, m.x, m.y, 0.22 + t * 0.3, 14).stroke({ width: 0.05, color: P.ammo, alpha: al });
+        circle(g, m.x, m.y, 0.07, 8).fill({ color: P.ammo, alpha: al });
+        return;
+      default: {
+        const rad = (m.big ? 0.9 : 0.45) + t * (m.big ? 1.2 : 0.6);
+        circle(g, m.x, m.y, rad).stroke({ width: 0.06, color: c, alpha: 0.75 * (1 - t) });
+      }
+    }
+  }
+
   // Compact overhead bar for a visible actor: 34x4 px HP, 34x2 px armour (at ppu ~35).
   function drawBar(a: Actor, hostile: boolean) {
     const W = 0.96, H = 0.11, x = a.x - W / 2, y = a.y - TUNING.movement.radius * R.actorScale - 0.42;
     bars.rect(x - 0.03, y - 0.03, W + 0.06, H + 0.1).fill({ color: KEYLINE, alpha: 0.75 });
+    // CF damage ghost: what the last hits took stays pale for a moment, then drains.
+    let gh = barGhost.get(a.id);
+    if (!gh || a.hp >= gh.hp) { gh = { hp: a.hp, hold: 0.35 }; barGhost.set(a.id, gh); }
+    else if ((gh.hold -= frameDt) <= 0) gh.hp = Math.max(a.hp, gh.hp - a.maxHp * 2 * frameDt);
+    if (gh.hp > a.hp && !a.downed) bars.rect(x, y, W * Math.min(1, Math.max(0, gh.hp / a.maxHp)), H).fill({ color: P.signal, alpha: 0.85 });
     bars.rect(x, y, W * Math.min(1, Math.max(0, a.hp / a.maxHp)), H).fill(a.downed ? P.signal : hostile ? P.hostile : P.team);
     // Overheal (a health pickup taken at full health): a cream extension past the bar's end, draining back.
     if (a.hp > a.maxHp && !a.downed) bars.rect(x + W, y, W * Math.min(0.25, (a.hp - a.maxHp) / a.maxHp), H).fill(P.signal);
@@ -416,6 +482,15 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       lbl.visible = pl.visible;
       lbl.position.set(p.x, p.y + (pl.y - sy) / ppu);
       const col = p.kind === 'health' ? P.heal : p.kind === 'armor' ? P.armor : P.ammo;
+      const lit = !LAB.dark || pointInPolygon(p.x, p.y, poly);
+      if (lit) pickupSeen[i] = p.active;
+      if (!lit && pickupSeen[i] !== false) {
+        // Remembered, not watched: drawn as you last saw it, without the glow or the respawn clock.
+        props.roundRect(p.x - 0.3, p.y - 0.3, 0.6, 0.6, 0.1).fill({ color: px('bgPanel'), alpha: 0.55 }).stroke({ width: 0.04, color: col, alpha: 0.45 });
+        lbl.alpha = 0.45;
+        return;
+      }
+      if (!lit) { circle(props, p.x, p.y, 0.32).stroke({ width: 0.04, color: col, alpha: 0.3 }); lbl.alpha = 0.35; return; }
       if (!p.active) {
         circle(props, p.x, p.y, 0.32).stroke({ width: 0.04, color: col, alpha: 0.35 });
         const t = 1 - p.respawnLeft / TUNING.pickups[p.kind].respawn;
@@ -479,7 +554,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
     },
     reset(w) {
       // Bake once per distinct map (every restart builds a new Level object for the same tiles).
-      const key = `${w.level.w}x${w.level.h}:${w.level.tiles.join('')}`;
+      const key = `${w.level.w}x${w.level.h}:${w.level.tiles.join('')}:${LAB.dark ? 1 : 0}`;
       if (!baked || key !== bakedKey) {
         const old = baked;
         baked = bakeMap(app.renderer, w.level);
@@ -494,6 +569,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
         } else light.setTexture(baked.lit, w.level.w, w.level.h);
       }
       level = w.level;
+      lastMode = []; ghosts.clear(); spotted.clear(); barGhost.clear(); pickupSeen = w.pickups.map(() => true);
       explored = new Uint8Array(level.w * level.h);
       exploredDirty = true;
       const p = player(w);
@@ -521,6 +597,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
     flashBots: () => flashBots,
     offscreenMarks: () => offscreenMarks,
     draw(w, fx, input, dt, opts) {
+      frameDt = dt;
       const p = player(w);
       const sw = app.screen.width, sh = app.screen.height;
       const portrait = sh > sw;
@@ -569,10 +646,21 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
 
       // Heard markers: rings, never a body. Corpses stay as decals.
       marks.clear();
-      for (const m of fx.markers) {
-        const t = m.age / m.life;
-        const rad = (m.big ? 0.9 : 0.45) + t * (m.big ? 1.2 : 0.6);
-        circle(marks, m.x, m.y, rad).stroke({ width: 0.06, color: P.signal, alpha: 0.75 * (1 - t) });
+      for (const m of fx.markers) drawMark(m);
+      // CF-C: your own noise runs out to where it is really heard, then is gone (dashed: a sound, not a wall).
+      for (const n of fx.noise) {
+        const t = Math.min(1, n.age / TUNING.sound.ownNoiseSeconds), r = 0.45 + (n.r - 0.45) * (1 - (1 - t) * (1 - t));
+        const dashes = Math.max(10, Math.round(n.r * 5));
+        for (let i = 0; i < dashes; i += 1) {
+          const a0 = (i / dashes) * Math.PI * 2;
+          arc(marks, n.x, n.y, r, a0, a0 + (Math.PI / dashes) * 0.9, 3);
+        }
+        marks.stroke({ width: 0.045, color: P.signal, alpha: 0.38 * (1 - t) });
+      }
+      // CF-D: heard through a wall: which way, not where. A tick on a ring just outside your body.
+      for (const d of fx.dirTicks) {
+        const t = d.age / TUNING.sound.dirTickLife, R0 = 1.15;
+        arc(marks, p.x, p.y, R0, d.ang - (d.big ? 0.32 : 0.2), d.ang + (d.big ? 0.32 : 0.2), 8).stroke({ width: d.big ? 0.11 : 0.07, color: P.signal, alpha: 0.85 * (1 - t) });
       }
       for (const c of fx.corpses) {
         marks.ellipse(c.x, c.y, 0.42, 0.3).fill({ color: c.hostile ? P.hostileDark : P.teamDark, alpha: 0.55 });
@@ -617,9 +705,20 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
             pinged: rev.includes(a),
           });
           // Team vision: a hostile one of your standing teammates sees (AI teammates in the default game, real ones
-          // online) is drawn for you too. Nobody sees through walls: it is their cone, with their line of sight.
-          if (mode === null && a.alive && mates.some((m) => canSee(level, m.x, m.y, m.facing, m.view, a.x, a.y))) mode = 'body';
+          // online). Nobody sees through walls: it is their cone, with their line of sight. Before CF it was drawn as a
+          // live body; CF-E makes it a SPOTTED mark that updates twice a second: your teammate saw something, you did not.
+          const mateSees = mode === null && a.alive && mates.some((m) => canSee(level, m.x, m.y, m.facing, m.view, a.x, a.y));
+          if (mateSees && teamSighting() === 'body') mode = 'body';
+          const prev = lastMode[a.id] ?? null;
+          lastMode[a.id] = mode;
+          if (mode !== null) ghosts.delete(a.id);
+          else if (LAB.enemySound && a.alive && (prev === 'body' || prev === 'flash')) ghosts.set(a.id, { x: a.x, y: a.y, facing: a.facing, age: 0 });
+          if (mateSees && teamSighting() === 'spotted') {
+            const sp = spotted.get(a.id);
+            if (!sp || sp.age >= TUNING.sound.spottedRefresh) spotted.set(a.id, { x: a.x, y: a.y, age: 0 });
+          }
           if (mode === null) continue;
+          spotted.delete(a.id);
           if (a.alive) shownHostiles.push(a);
           if (mode === 'ping') {
             // Ping reveal: an outline only, so it reads as information, not presence.
@@ -635,19 +734,37 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
           }
           if (a.alive) visBots++;
           const br = w.brains.get(a.id) as Brain | undefined;
-          drawBody(actors, a, true, null, br?.state === 'alert');
+          drawBody(actors, a, true, null, br?.state === 'alert', br?.state === 'investigate' || (br?.listen ?? 0) > 0);
           if (a.alive) drawBar(a, true);
         }
+      }
+      // LAST KNOWN (CF-D): where a hostile was when it left every view, fading. SPOTTED (CF-E): a teammate's sighting.
+      for (const [id, g] of ghosts) {
+        g.age += dt;
+        const t = g.age / TUNING.sound.ghostSeconds;
+        if (t >= 1 || !w.actors[id]?.alive) { ghosts.delete(id); continue; }
+        const parts = partsOf(w.actors[id].hero.id), r0 = TUNING.movement.radius * R.actorScale;
+        actors.poly(place(parts.body, g.x, g.y, g.facing, r0)).stroke({ width: 0.05, color: P.hostile, alpha: 0.6 * (1 - t) });
+        actors.moveTo(g.x, g.y).lineTo(g.x + Math.cos(g.facing) * 0.7, g.y + Math.sin(g.facing) * 0.7).stroke({ width: 0.04, color: P.hostile, alpha: 0.5 * (1 - t) });
+      }
+      for (const [id, sp] of spotted) {
+        sp.age += dt;
+        const t = sp.age / TUNING.sound.spottedLife;
+        if (t >= 1 || !w.actors[id]?.alive) { spotted.delete(id); continue; }
+        const z = 0.38;
+        actors.poly([sp.x, sp.y - z, sp.x + z, sp.y, sp.x, sp.y + z, sp.x - z, sp.y]).stroke({ width: 0.07, color: P.hostile, alpha: 0.9 * (1 - t) });
+        circle(actors, sp.x, sp.y, 0.07, 8).fill({ color: P.hostile, alpha: 0.9 * (1 - t) });
       }
       drawBody(actors, p, false, opts.marking, false);
       if (p.alive) drawBar(p, false);
       if (opts.debug) drawDebug(w);
       else if (debugG.children.length || debugTexts.length) { debugG.clear(); for (const t of debugTexts) t.visible = false; }
-      if (opts.showSticks && input.right.active && p.alive) {
+      // Firing arc on touch (CF-B): always drawn faintly in play so you see it close when you stop, brighter while aiming.
+      if (opts.showSticks && p.alive && (input.right.active || LAB.steady)) {
         const sp = p.lastSpread * DEG, L = Math.min(p.weapon.falloffEnd, 6);
         actors.moveTo(p.x, p.y).lineTo(p.x + Math.cos(p.facing - sp) * L, p.y + Math.sin(p.facing - sp) * L)
           .moveTo(p.x, p.y).lineTo(p.x + Math.cos(p.facing + sp) * L, p.y + Math.sin(p.facing + sp) * L)
-          .stroke({ width: 0.03, color: P.team, alpha: 0.35 });
+          .stroke({ width: 0.03, color: P.team, alpha: input.right.active ? 0.4 : 0.18 });
       }
 
       // Effects inside the light only.
@@ -691,6 +808,16 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
         circle(fxG, c.x, c.y, 0.45 + t * 0.9, 32).stroke({ width: 0.1 * (1 - t) + 0.02, color: c.color, alpha: 0.9 * (1 - t) });
       }
 
+      // CF grenade aim: where it will come to rest (walls bounce it short), with its true blast ring.
+      const np = p.alive && opts.playing && p.grenades > 0 ? input.nadePreview(r.toScreen(p.x, p.y).x, r.toScreen(p.x, p.y).y, ppu) : null;
+      if (np) {
+        const lx = p.x + Math.cos(np.ang) * np.dist, ly = p.y + Math.sin(np.ang) * np.dist, GR = TUNING.grenade.radius;
+        fxG.moveTo(p.x + Math.cos(np.ang) * 0.6, p.y + Math.sin(np.ang) * 0.6).lineTo(lx, ly).stroke({ width: 0.04, color: P.ammo, alpha: 0.6 });
+        for (let i = 0; i < 28; i++) { const a0 = (i / 28) * Math.PI * 2; arc(fxG, lx, ly, GR, a0, a0 + Math.PI / 28, 3); }
+        fxG.stroke({ width: 0.06, color: P.ammo, alpha: 0.85 });
+        circle(fxG, lx, ly, 0.16, 12).fill({ color: P.ammo, alpha: 0.9 });
+      }
+
       recapG.clear();
       if (opts.recap && w.playerKill?.cause === 'zone') {
         // Taken by the danger zone: a red ring where the player fell, nothing pointing at a shooter.
@@ -714,6 +841,11 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
           .moveTo(mx, my - gap - 7).lineTo(mx, my - gap).moveTo(mx, my + gap).lineTo(mx, my + gap + 7)
           .stroke({ width: 2, color: P.team, alpha: 0.9 });
         screen.circle(mx, my, 1.2).fill(P.team);
+        // CF-A: while the body is still turning, a tick shows where the gun points now (it catches up in a moment).
+        if (LAB.turn && p.aimLag > 4 * DEG) {
+          const gx = ps.x + Math.cos(p.facing) * d, gy = ps.y + Math.sin(p.facing) * d;
+          screen.circle(gx, gy, 4).stroke({ width: 1.5, color: P.signal, alpha: 0.8 });
+        }
       }
       // Damage direction: a red arc around the player toward where the shot came from.
       for (const da of fx.damageArcs) {

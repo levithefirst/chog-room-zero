@@ -3,7 +3,7 @@
 // Positional: pan by direction, volume by distance within the event's radius, muffled through walls.
 import type { SoundType } from '../sim/world';
 
-export type CueType = SoundType | 'hurt' | 'ui' | 'blocked';
+export type CueType = SoundType | 'hurt' | 'ui' | 'blocked' | 'confirm' | 'kill' | 'ready';
 
 export interface Audio {
   unlock(): void;
@@ -238,6 +238,21 @@ export function createAudio(): Audio {
         case 'ui':
           burst(0, 0.02, 'bandpass', 1800, 3, 0.4);
           len = 0.05;
+          break;
+        case 'confirm': // CF: your bullet landed (heard at any range, in your ear): a short dry tick
+          burst(0, 0.018, 'bandpass', 2900, 7, 0.55);
+          thump(0, 0.04, 900, 600, 0.18);
+          len = 0.06;
+          break;
+        case 'kill': // CF: you took them out: a two-step drop, lower and longer than the tick
+          thump(0, 0.09, 700, 420, 0.5);
+          thump(0.09, 0.18, 420, 160, 0.55);
+          burst(0, 0.03, 'bandpass', 2200, 5, 0.4);
+          len = 0.3;
+          break;
+        case 'ready': // CF: your ability is back: one soft rising note
+          thump(0, 0.14, 520, 780, 0.22);
+          len = 0.16;
           break;
         case 'step': // run: brighter heel strike
           burst(0, 0.05, 'bandpass', 900, 1.2, 0.35);
