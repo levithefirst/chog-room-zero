@@ -1,12 +1,12 @@
 # Chog: Room Zero - shared state
 
 Source of truth for every agent. Rules: `docs/RULES.md`. Edit only in a handoff commit. Keep under 8,000 characters; move old rows to `docs/HANDOFFS.md`.
-Last verified: 2026-10-16 by claude (CF deployed to production, H26).
+Last verified: 2026-10-16 by claude (SB superiority build on branch claude/sb-superiority, H27, not deployed).
 
 ## Snapshot (EVIDENCE)
 - Repo `levithefirst/chog-room-zero` (private). Default/base branch `setup/skill-system` (LOCKED, owner 2026-10-11: no `main`). Never merge without the owner.
-- Open PRs stacked #1 to #9, then PR #10 = ccr-e7fadb8f-qtochk. CF merged into ccr-e7fadb8f-qtochk and live (H26). The sim is shared with the server: client and server always ship from the same commit (Render `/stats` names its commit).
-- Vercel project `chog-room-zero` (protection off). Production `chogroomzero.xyz` -> `dpl_2zr1LtzY5Z5qSceoANeFC2wmfWnM` (970c948, H26). Rollback: `dpl_EA71LQQByJRTvXiEAuifqHcjDJnt` (986b2a6, pre-CF; Render must go back with it). Sign-in env vars and `DATABASE_URL` (Neon) set by the owner. No `NFT_COMBAT` set: combat power is on by default (owner 2026-10-14). Game server: Render Free `https://room-zero-game.onrender.com` (redeploys on every push to ccr-e7fadb8f-qtochk); `ALLOWED_ORIGINS` = production domains + that branch's preview. Test hooks are not in production builds.
+- Open PRs stacked #1 to #9, then PR #10 = ccr-e7fadb8f-qtochk. CF live from ccr-e7fadb8f-qtochk (H26). Client and server always ship from one commit (Render `/stats` names it).
+- Vercel project `chog-room-zero` (protection off). Production `chogroomzero.xyz` -> `dpl_FWzVhStts9DXEgW31SVkqUKArUup` (159b421, H26). Rollback: `dpl_EA71LQQByJRTvXiEAuifqHcjDJnt` (986b2a6, pre-CF; Render must go back with it). Sign-in env vars and `DATABASE_URL` (Neon) set by the owner. No `NFT_COMBAT` set: combat power is on by default (owner 2026-10-14). Game server: Render Free `https://room-zero-game.onrender.com` (redeploys on every push to ccr-e7fadb8f-qtochk); `ALLOWED_ORIGINS` = production domains + that branch's preview. Test hooks are not in production builds.
 - Chog Genesis (NFT-R1, EVIDENCE): Monad 143, contract `0xc96d31F8626c6D03Fae5dCD3d61e3FB9F4a73763` (ChogMint, Sourcify exact match), ERC-721, supply 1,969, catalogue in `data/chog-genesis/`; token id is NOT the displayed number. Live check 2026-10-14 (`/api/game/chain`): chain 143, `metadataId(1)` = 1462, ownerOf/tokensOfOwner agree.
 - Chogathon 2026 (`docs/SUBMISSION.md`); judges gate on "the Chog NFT must be essential". Deadline and start date: UNKNOWN.
 
@@ -33,7 +33,7 @@ Last verified: 2026-10-16 by claude (CF deployed to production, H26).
 - Class numbers, upgrades, rewards, revive timings, the ten signatures (`docs/design/power.md`). Hub, medals, tips. Deps: @neondatabase/serverless 1.1.0, dev @electric-sql/pglite 0.5.8, @noble/*.
 - NFT-R1 layers (`docs/research/chog-genesis/IDENTITY-AND-MAPPING.md`). PROVISIONAL CHOG palette (`docs/BRAND.md`), zone tuning, operator art.
 - All tuning numbers (roster, weapons, grenades), lean rules, art direction, the map, fonts.
-- CF (H25): turn 720 deg/s, per-weapon run spread, wall muffle 0.8, dark 0.2, gait lamp, SPOTTED teammate marks (owner said "test whether"), the pillar map, Toad armour 55, Ray cone 52, LMG run 3.5. Lab switches A-F (`?lab`) for the owner's A/B.
+- SB (H27): TUNING intel/comms/match/net, sawn-off 9x9 at 5.5 deg. CF (H25): turn 720 deg/s, per-weapon run spread, wall muffle 0.8, dark 0.2, gait lamp, SPOTTED teammate marks (owner said "test whether"), the pillar map, Toad armour 55, Ray cone 52, LMG run 3.5. Lab switches A-F (`?lab`) for the owner's A/B.
 
 ## UNKNOWN (never guess)
 - Chog Genesis art and name rights; `baseURI`, totalSupply read from chain; metadata hash check (`docs/research/chog-genesis/`).
@@ -41,25 +41,25 @@ Last verified: 2026-10-16 by claude (CF deployed to production, H26).
 - Whether a real holder can sign in and play 5v5 (fake-chain holder passes locally).
 
 ## Implemented (EVIDENCE)
-- CF (H25, live H26; H26 also fixed settlement, which had never worked in production): steady rule, turn cap, own-noise ring, typed heard marks, direction ticks, afterimages, SPOTTED, dark map, pillar map, feedback (confirm/kill/ready cues, bar ghosts, grenade aim preview), audible bots, ally roles; live-room hub, Enter with CHOG (eligibility then SIWE), loading checklist. `docs/ROOM_ZERO_CORE_FEEL_AUDIT.md`.
-- GR (H24): free roster, grenades, department AI. QA (H23), MI (H22) and earlier: `docs/HANDOFFS.md`.
+- SB (H27, branch only): contact intel model (one decaying belief per hostile), AI teammate call-outs + covering, sawn-off no one-shot (Bill 33 -> 8/40), death insight, online own-movement prediction (protocol ack/as, optional), release on page hide, rating-band matchmaking, audio priority, ?perf + telemetry. `docs/ROOM_ZERO_SUPERIORITY.md`.
+- CF (H25, live H26), GR (H24), QA (H23), MI (H22), earlier: `docs/HANDOFFS.md`.
 
 ## Automated tests (EVIDENCE, Node 22.22)
-Production smoke H26 (970c948, from a Vercel Sandbox): 31/31. CF (H25): `npx vitest run` 603/603 (604 at H26) (60 files), `tsc` clean. Browser (headless Chromium, emulated, local stack): cf-chog 18/18, qa-journey 38/38, qa-errors 7/7, master-ui 8/8, qa-screens clean, rc8-online 1v1+3v3 PASS, cf-visual 48 frames.
+SB (H27): vitest 653/653 (68 files), tsc clean. Production smoke H26: 31/31. Browser (headless Chromium, emulated, local stack, H27 = H25): cf-chog 18/18, qa-journey 38/38, qa-errors 7/7, master-ui 8/8, qa-screens clean, rc8-online 1v1+3v3 PASS, cf-visual 48 frames.
 
 ## Not performed (needs the owner)
-- CF: any human play of the steady rule, turn cap, dark and sound (lab A/B), CF balance (Bill 33/40 solo), a real wallet through Enter with CHOG.
+- CF/SB: any human play (lab A/B, contact marks, call-outs, prediction on a real mobile network), a real wallet through Enter with CHOG.
 - Pixel 7 / iPhone 13, real-GPU FPS, audio by ear, hosted 5v5 with a holder and reconnect, a real holder, art rights in writing, the demo video.
 
 ## Gates
-Core Feel Gate: BLOCKED on owner playtests (class numbers and now CF). G10: automated part PASS; playtest part not run.
+Core Feel Gate: BLOCKED on owner playtests (class numbers, CF, SB). G10: automated part PASS; playtest part not run.
 
 ## Current task
 | Id | Owner | Branch | Files | Done when | Status |
 |---|---|---|---|---|---|
+| SB | claude | claude/sb-superiority | see H27 | Owner 2026-10-16 SUPERIORITY BUILD | built + tested, NOT deployed; owner: playtest, NFT power vs LAW 9, deploy client+server together |
 | CF | claude | claude/cf-core-feel | see H25 | Owner 2026-10-16 CORE FEEL + GAME UX | in production (H26); owner playtest (lab A/B) |
-| GR | claude | ccr-e7fadb8f-qtochk | see H24 | Owner 2026-10-14 ROSTER + GRENADES | in production |
 | RC-8 | claude | ccr-e7fadb8f-qtochk, PR #10 | see H16 | Owner RC-8 mandate | PR #10 not merged (stacked on #9; owner decides) |
 
 ## Handoffs
-Latest: H26 (2026-10-16, claude -> owner; CF deployed, settlement fixed). History: `docs/HANDOFFS.md`.
+Latest: H27 (2026-10-16, claude -> owner; SB superiority build, not deployed). History: `docs/HANDOFFS.md`.
