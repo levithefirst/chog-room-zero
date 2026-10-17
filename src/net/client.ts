@@ -169,10 +169,38 @@ export class OnlineSession {
     this.pendingQueue = null;
     this.send({ t: 'leave' });
     if (this.state === 'queued') this.state = 'idle';
+    // Out of a match (the server frees this player at once): back in the lobby with nothing of the match left, so the
+    // game does not walk back into it and the next joinQueue queues straight away.
+    else if (this.state === 'match') { this.state = 'idle'; this.dropMatch(); }
+    // Dropped and trying to come back: stop trying, and forget the token so the next connection is a fresh player
+    // instead of a resume (the server counts the operator as gone after its grace period).
+    else if (this.state === 'reconnecting') {
+      this.close();
+      this.message = '';
+      this.dropMatch();
+      this.token = null;
+      try { this.store?.removeItem('chog-room-zero:net-token'); } catch { /* storage blocked */ }
+    }
     // Cancel while still reaching the server (or waiting for a sleeping one to wake): stop trying, back to idle.
     else if (this.state === 'connecting' || this.state === 'error') { this.close(); this.message = ''; }
     this.queue = null;
   }
+
+  /** Forget the current match (left, cancelled): no view world, no roster, no prediction. */
+  private dropMatch(): void {
+    this.match = null;
+    this.world = null;
+    this.over = null;
+    this.snaps = [];
+    this.pendingEvents = [];
+    this.spotted = [];
+    this.predictor.reset();
+    this.startsAt = 0;
+  }
+
+  /** Seconds until the match starts (the server's countdown), 0 once it has. */
+  startsIn(now = performance.now()): number { return this.match ? Math.max(0, (this.startsAt - now) / 1000) : 0; }
+  private startsAt = 0;
 
   /** Controls, throttled to 30 Hz; taps (fire, reload, ability) are sent at once so none is lost. */
   sendInput(inp: ActorInput, now: number): void {
@@ -208,7 +236,10 @@ export class OnlineSession {
     switch (m.t) {
       case 'welcome':
         this.token = m.token;
-        if (!m.resumed) this.profile = m.profile ?? null;
+        // A resumed welcome carries the profile too (a reloaded tab has none yet); an older server sends none then.
+        if (m.profile || !m.resumed) this.profile = m.profile ?? null;
+        // The server starts the ack over on a resume: inputs from before the drop are never replayed.
+        if (m.resumed) this.predictor.reset();
         try { this.store?.setItem('chog-room-zero:net-token', m.token); } catch { /* storage blocked */ }
         this.wakeUntil = 0;
         if (this.state === 'reconnecting' && !m.resumed) { this.state = 'error'; this.message = 'The match ended while you were away.'; return; }
@@ -235,6 +266,7 @@ export class OnlineSession {
         this.queue = null;
         if (!this.match || this.match.room !== m.room) this.buildWorld(m);
         this.match = m;
+        this.startsAt = performance.now() + m.startsIn * 1000;
         return;
       case 'snap':
         this.onSnap(m);
@@ -250,7 +282,9 @@ export class OnlineSession {
       case 'error':
         this.message = m.message;
         if (m.code === 'rate' || m.code === 'idle') this.state = 'error';
-        if (m.code === 'holders-only' || m.code.startsWith('party-')) { if (this.state === 'queued' || this.state === 'connecting') this.state = 'idle'; this.queue = null; }
+        if (m.code === 'holders-only' || m.code === 'token-in-use' || m.code.startsWith('party-')) { if (this.state === 'queued' || this.state === 'connecting') this.state = 'idle'; this.queue = null; }
+        // Voided before the start (a side left in the countdown): back to the lobby, the message says why.
+        if (m.code === 'match-cancelled' && (this.state === 'match' || this.state === 'reconnecting')) { this.state = 'idle'; this.dropMatch(); }
         return;
     }
   }
@@ -336,7 +370,8 @@ export class OnlineSession {
         if (s) copy(act, s);
         // You (SB): predicted from your own inputs by the server's movement rule, so the operator answers the stick at once.
         // Before the first acknowledged snapshot (or with an older server) the newest server state, nudged forward.
-        this.predictor.advance(w.level, Math.min(0.1, (now - (this.lastFrameAt || now)) / 1000));
+        // Held still until the server's countdown ends (it applies no step before then).
+        this.predictor.advance(w.level, now < this.startsAt ? 0 : Math.min(0.1, (now - (this.lastFrameAt || now)) / 1000));
         const d = s?.alive ? this.predictor.drawn() : null;
         if (d) { act.x = d.x; act.y = d.y; act.vx = d.vx; act.vy = d.vy; }
         else if (s) { const dt = Math.min(0.1, (now - newest.at) / 1000); if (s.alive) { act.x += s.vx * dt; act.y += s.vy * dt; } }

@@ -82,7 +82,8 @@ describe('RC-7 wallet sign-in (SIWE)', () => {
     expect(c.status).toBe(200);
     const { message } = (await c.json()) as { message: string };
     expect(message).toMatch(new RegExp(`^${HOST} wants you to sign in with your Ethereum account:\\n${w.address}\\n`));
-    expect(message).toMatch(/Chain ID: 10143\nNonce: \S+\nIssued At: \S+\nExpiration Time: \S+$/);
+    // The wallet reported 10143; the message always names Monad mainnet (143).
+    expect(message).toMatch(/Chain ID: 143\nNonce: \S+\nIssued At: \S+\nExpiration Time: \S+$/);
     const ch = cookieOf(c, 'chog_wallet_challenge');
     expect(c.headers.getSetCookie()[0]).toMatch(/HttpOnly; Secure; SameSite=Strict/);
     // Before verify there is no session.

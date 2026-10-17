@@ -7,6 +7,9 @@ import { keccak_256 } from '@noble/hashes/sha3.js';
 export const CHAIN_ID = 143;
 export const CONTRACT = '0xc96d31F8626c6D03Fae5dCD3d61e3FB9F4a73763';
 export const MAX_SUPPLY = 1969;
+/** metadataId reads per JSON-RPC batch, and the most tokens of one wallet read at all (10 batches). */
+const READ_BATCH = 50;
+export const MAX_HOLDINGS = 500;
 export const RPCS = ['https://rpc.monad.xyz', 'https://rpc1.monad.xyz', 'https://rpc2.monad.xyz', 'https://rpc3.monad.xyz', 'https://rpc-mainnet.monadinfra.com'];
 
 const enc = new TextEncoder();
@@ -91,16 +94,19 @@ export async function readOwnership(address: string, f: Fetch = fetch, rpcs = RP
         { method: 'eth_call', params: [{ to: CONTRACT, data: encodeAddressCall('tokensOfOwner(address)', address) }, 'latest'] },
       ], f, timeoutMs);
       if (parseInt(chain, 16) !== CHAIN_ID) { last = 'wrong chain'; continue; }
-      const ids = decodeUintArray(owned);
-      if (!ids.length) return { ok: true, address, holdings: [], rpc, block };
-      const metas = await batch(rpc, ids.slice(0, 50).map((id) => ({
-        method: 'eth_call', params: [{ to: CONTRACT, data: encodeUintCall('metadataId(uint256)', id) }, block],
-      })), f, timeoutMs);
-      const holdings = ids.slice(0, 50).map((tokenId, i) => {
-        const metadataId = decodeUint(metas[i]);
-        if (metadataId < 1 || metadataId > MAX_SUPPLY) throw new Error('metadata id out of range');
-        return { tokenId, metadataId };
-      });
+      const ids = decodeUintArray(owned).slice(0, MAX_HOLDINGS);
+      const holdings: Holding[] = [];
+      for (let at = 0; at < ids.length; at += READ_BATCH) {
+        const part = ids.slice(at, at + READ_BATCH);
+        const metas = await batch(rpc, part.map((id) => ({
+          method: 'eth_call', params: [{ to: CONTRACT, data: encodeUintCall('metadataId(uint256)', id) }, block],
+        })), f, timeoutMs);
+        part.forEach((tokenId, i) => {
+          const metadataId = decodeUint(metas[i]);
+          if (metadataId < 1 || metadataId > MAX_SUPPLY) throw new Error('metadata id out of range');
+          holdings.push({ tokenId, metadataId });
+        });
+      }
       return { ok: true, address, holdings, rpc, block };
     } catch (e) {
       last = e instanceof Error ? e.message : 'rpc failed';

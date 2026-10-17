@@ -267,7 +267,7 @@ async function start() {
   function menuWorldNow(): World {
     if (!menuWorld || menuHero !== heroId) {
       menuIntel = createIntel();
-      menuWorld = createWorld({ seed: 7, hero: heroId, zone: false, bots: [{ name: 'Rounds', hero: 'tonashiro', patrol: [[14, 8]], flanker: false }] });
+      menuWorld = createWorld({ seed: 7, hero: heroId, zone: false, bots: [{ name: 'Rounds', hero: 'tonashiro', patrol: [[20, 5]], flanker: false }] });
       const p = menuWorld.actors[0];
       p.x = MENU_SPOT.x; p.y = MENU_SPOT.y; p.facing = Math.PI / 2; p.hp = p.maxHp = 1e9;
       menuWorld.pickups.length = 0; // the hub shows the operator and the room, not a health crate beside it
@@ -675,6 +675,7 @@ async function start() {
       case 'demo-online': if (identity.tokenId && tierOfMetadataId(Number(identity.tokenId))) setChoice({ demo: Number(identity.tokenId) }); break;
       case 'demo-online-off': setChoice(null); break;
       case 'online-cancel': net?.leave(); break;
+      case 'settle-retry': if (lastReward.matchId && !lastReward.pending) { settleOnline(lastReward.matchId, false); render(); } return;
       case 'online-again': online = false; go('menu'); titleView = 'main'; if (!net?.follower) joinOnline(onlineMode); break;
       case 'upgrades-from-results': online = false; go('menu'); titleView = 'upgrades'; break;
       case 'squad-create': if (NET_URL) { net ??= newSession(); net.partyOp('create'); } break;
@@ -1038,11 +1039,13 @@ async function start() {
   }
 
   // ---- Online (RC-8) ----
-  function joinOnline(mode: Mode) {
+  /** Queue online. `invite`: the private room code, only from the invite link's own auto-join (never sticks to later
+   * queues in this tab, which would make them private and unrewarded). */
+  function joinOnline(mode: Mode, invite = '') {
     if (!NET_URL) return;
     onlineMode = mode;
     net ??= newSession();
-    const code = ((document.getElementById('roomcode') as HTMLInputElement | null)?.value ?? ONLINE_CODE).toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const code = invite.toUpperCase().replace(/[^A-Z0-9]/g, '');
     net.joinQueue(mode, code.length >= 4 ? code.slice(0, 8) : undefined);
     render();
   }
@@ -1070,7 +1073,17 @@ async function start() {
     $('pips').innerHTML = world.actors.filter((a) => a.team !== me.team).map(() => '<i></i>').join('');
     lastHud = '';
     const others = (net?.match?.roster ?? []).filter((r) => r.team !== me.team && r.tier !== 'free');
-    showHint(`Online ${esc(onlineMode)}: ${MODE_SIZE[onlineMode] / 2} a side, real players. Your side is ringed green.${others.length ? ` Facing: ${others.map((r) => `${esc(r.name)} (${r.tier === 'legendary' ? `1:1, ${esc(r.ability.name)}` : esc(r.tier)})`).join(', ')}.` : ''}`, 6);
+    onlineIntro = `Online ${esc(onlineMode)}: ${MODE_SIZE[onlineMode] / 2} a side, real players. Your side is ringed green.${others.length ? ` Facing: ${others.map((r) => `${esc(r.name)} (${r.tier === 'legendary' ? `1:1, ${esc(r.ability.name)}` : esc(r.tier)})`).join(', ')}.` : ''}`;
+    countShown = 0;
+    showHint(onlineIntro, 6);
+  }
+  // The server's countdown before the first step, shown over the intro hint (nothing moves until it ends).
+  let onlineIntro = '', countShown = 0;
+  function showCountdown() {
+    const k = Math.ceil(net?.startsIn() ?? 0);
+    if (k > 0 && k !== countShown) showHint(`<b>Starts in ${k}</b> · ${onlineIntro}`, 6);
+    else if (k === 0 && countShown > 0) showHint(`<b>Go</b> · ${onlineIntro}`, 4);
+    countShown = k;
   }
 
   function showOnlineResults() {
@@ -1086,21 +1099,39 @@ async function start() {
     if (o.settle && o.matchId && lastReward.matchId !== o.matchId) {
       const before = acct.profile ? { xp: acct.profile.xp, shards: acct.profile.shards, rating: acct.profile.rating } : null;
       lastReward = { pending: true, reward: null, note: '', matchId: o.matchId, before };
-      void account.settle(o.matchId).then(async (r) => {
-        lastReward = { ...lastReward, pending: false, reward: r?.mine ?? null, note: r?.error === 'progression_offline' ? 'Saved progression is offline right now.' : r?.mine ? '' : 'Result not saved to your account.' };
-        if (r?.mine && !lastReward.before) lastReward.before = { xp: 0, shards: 0, rating: r.mine.ratingBefore };
-        await refreshAccount();
-        if (phase === 'results' && online) render();
-      });
+      settleOnline(o.matchId, true);
     }
     const me = rows.find((x) => x.you);
     const myClass = me && me.metadataId && me.tier === 'legendary' && ONE_OF_ONE[me.metadataId] ? `${ONE_OF_ONE[me.metadataId].name} · 1:1` : `${TIER_DEFS[me?.tier ?? 'free'].label} class`;
     show(onlineResultsHtml({
       mode: o.mode, won: o.winner === null ? null : o.winner === o.team, reason: o.reason, team: o.team, rows, demo: !!net?.match?.demo, signedIn: acct.signedIn, settle: o.settle,
       prog: { before: lastReward.before, reward: lastReward.reward, pending: lastReward.pending, note: lastReward.note, upgradesReady: upgradesReady(acct), upgrades: acct.profile?.upgrades ?? null,
-        preview: me ? rewardBreakdown({ won: o.winner !== null && o.winner === o.team, kills: me.kills, damage: me.damageDealt, seconds: 60, leftEarly: false, capped: false, demo: !!net?.match?.demo }, REWARDS) : null },
+        preview: me ? rewardBreakdown({ won: o.winner !== null && o.winner === o.team, kills: me.kills, damage: me.damageDealt, seconds: Math.round(playTime), leftEarly: false, capped: false, demo: !!net?.match?.demo }, REWARDS) : null },
       myClass, canRequeue: !!NET_URL, follower: !!net?.follower,
     }));
+    // A save that failed for a passing reason can be asked for again from here.
+    if (settleRetry && !lastReward.pending) overlay.querySelector('.card .btns')?.insertAdjacentHTML('afterbegin', '<button class="btn" data-act="settle-retry" id="settleretry">Retry save</button>');
+  }
+
+  // A settle that failed for a passing reason (network, the site or the game server briefly down) is tried once more
+  // by itself after a few seconds, can be retried from the results, and is kept in sessionStorage until it is
+  // settled, so a reload settles it on the next load (the site settles each match once).
+  const PENDING_SETTLE = 'chog-room-zero:pending-settle';
+  let settleRetry = false;
+  function settleOnline(matchId: string, auto: boolean) {
+    try { sessionStorage.setItem(PENDING_SETTLE, matchId); } catch { /* storage blocked */ }
+    settleRetry = false;
+    lastReward = { ...lastReward, pending: true, note: '' };
+    void account.settle(matchId).then(async (r) => {
+      if (lastReward.matchId !== matchId) return;
+      settleRetry = account.settleRetryable(r);
+      if (!settleRetry) { try { sessionStorage.removeItem(PENDING_SETTLE); } catch { /* storage blocked */ } }
+      lastReward = { ...lastReward, pending: false, reward: r?.mine ?? null, note: r?.error === 'progression_offline' ? 'Saved progression is offline right now.' : r?.mine ? '' : 'Result not saved to your account.' };
+      if (r?.mine && !lastReward.before) lastReward.before = { xp: 0, shards: 0, rating: r.mine.ratingBefore };
+      if (settleRetry && auto) setTimeout(() => { if (lastReward.matchId === matchId && settleRetry) { settleOnline(matchId, false); if (phase === 'results' && online) render(); } }, 4000);
+      await refreshAccount();
+      if (phase === 'results' && online) render();
+    });
   }
 
   // Watches the session from the frame loop: refreshes the Online screen, enters a found match, ends a finished one.
@@ -1117,9 +1148,11 @@ async function start() {
       netKey = key;
       if (phase === 'title' && titleView === 'main') render();
     }
-    // A match found from the hub, or a squad leader re-queued while this player looked at the results: deploy.
-    if (net.state === 'match' && !online && net.world && (phase === 'title' || phase === 'results')) {
-      if (phase === 'results') go('menu');
+    // A match found from the hub, or a squad leader re-queued while this player looked at any results screen (online
+    // or practice): deploy. A new match is a new view world, so the match whose results are showing never re-enters.
+    if (net.state === 'match' && net.world && ((phase === 'title' && !online) || (phase === 'results' && net.world !== world))) {
+      // A system transition: the summary's fresh-press gate (go) is for the player's own taps, not for this.
+      if (phase === 'results') phase = nextPhase(phase, 'menu');
       online = true;
       onlineMode = net.match?.mode ?? onlineMode;
       go('start');
@@ -1128,6 +1161,15 @@ async function start() {
     if (online && net.over && (phase === 'play' || phase === 'pause')) {
       if (phase === 'pause') go('resume');
       go('won');
+    }
+    // Out of the match with no result: it was cancelled before the start, or the connection could not come back. Back
+    // to the hub, where the session's message says what happened (never a frozen match screen).
+    if (online && !net.over && (net.state === 'idle' || net.state === 'error' || net.state === 'offline') && (phase === 'play' || phase === 'pause')) {
+      online = false;
+      if (phase === 'play') go('pause');
+      go('quit');
+      titleView = 'main';
+      render();
     }
   }
 
@@ -1204,8 +1246,16 @@ async function start() {
     setMode(ONLINE_AUTO);
     const n = Number(identity.tokenId);
     if (QS.get('demo') === '1' && identity.kind === 'bound' && tierOfMetadataId(n)) acct.choice = { demo: n };
-    joinOnline(ONLINE_AUTO);
+    joinOnline(ONLINE_AUTO, ONLINE_CODE);
+    // The link has done its job: a reload or a later queue must not join it (or its private code) again.
+    try { const u = new URL(location.href); u.searchParams.delete('online'); u.searchParams.delete('code'); history.replaceState(history.state, '', u); } catch { /* no history */ }
   }
+  // A result that was not saved before a reload (network, site or game server down) is settled now; the site settles
+  // each match once, so asking again never pays twice.
+  try {
+    const pend = sessionStorage.getItem(PENDING_SETTLE);
+    if (pend && acct.signedIn) void account.settle(pend).then(async (r) => { if (!account.settleRetryable(r)) sessionStorage.removeItem(PENDING_SETTLE); if (r?.mine) await refreshAccount(); });
+  } catch { /* storage blocked */ }
   // Squad invite link: ?squad=CODE joins that squad from the hub.
   const SQUAD_AUTO = (QS.get('squad') ?? '').toUpperCase();
   if (NET_URL && /^[2-9A-HJ-NP-Z]{5}$/.test(SQUAD_AUTO)) { net ??= newSession(); net.partyOp('join', SQUAD_AUTO); }
@@ -1547,6 +1597,7 @@ async function start() {
       const inp = onlineDriver ? onlineDriver(world) : input.read(ps.x, ps.y, renderer.toScreen(p.x + 1, p.y).x - ps.x);
       net.sendInput(p.alive ? inp : { ...inp, firing: false, moveX: 0, moveY: 0 }, performance.now());
       net.update(p.alive ? inp.aim : null);
+      showCountdown();
       for (const ev of net.takeEvents()) { world.sounds = ev.sounds; world.hits = ev.hits; afterStep(); }
       playTime += dt;
       if (!p.alive && !deathWhy.length && fight.hits.length) { deathWhy = explainDeath(); if (deathWhy.length) showHint(esc(deathWhy[0].text), 5); }
@@ -1594,7 +1645,8 @@ async function start() {
       if (phase === 'title' && titleView !== 'main') { if (titleView === 'howto') closeHowto(); else titleView = 'main'; render(); }
       else if (phase === 'title' && playMode === 'solo') hubPlay();
       else if (phase === 'select') go('pick');
-      else if (phase === 'results') go('restart');
+      // Online results have no restart (it would re-enter the finished match): Continue and Again are their buttons.
+      else if (phase === 'results' && !online) go('restart');
     }
 
     for (const m of fx.markers) m.age += dt;

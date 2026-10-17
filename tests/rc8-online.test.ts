@@ -145,15 +145,16 @@ describe('RC-8 the server decides the match', () => {
     const { a, run, w } = duel();
     run(3.2);
     expect(a.c.last('snap')!.actors.map((x) => x.id)).toEqual([0]);
-    // Put B in A's light (A faces east along row 8).
-    w.actors[1].x = w.actors[0].x + 4; w.actors[1].y = w.actors[0].y;
+    // Put B in A's light (A faces east across its spawn hall, open floor to x 7 on row 20).
+    w.actors[1].x = w.actors[0].x + 3; w.actors[1].y = w.actors[0].y;
     run(0.1);
     expect(a.c.last('snap')!.actors.map((x) => x.id).sort()).toEqual([0, 1]);
   });
   it('a kill and the win are decided by the sim from controls; the loser gets a server result', () => {
     const { a, b, run, w } = duel();
     run(3.1);
-    w.actors[1].x = w.actors[0].x + 4; w.actors[1].y = w.actors[0].y; w.actors[1].hp = 1;
+    // 3 u east of A, inside A's spawn hall (the hall is open floor to x 7 on row 20; x 8 is its wall).
+    w.actors[1].x = w.actors[0].x + 3; w.actors[1].y = w.actors[0].y; w.actors[1].hp = 1;
     // A holds fire aimed at B. B sends a forged "damage" field, which is ignored.
     b.say({ ...input(), damage: 999 });
     run(1.5, () => a.say(input({ aim: 0, fire: true })));
@@ -227,7 +228,8 @@ describe('RC-8 connections: rate limit, timeouts, reconnect, leaving', () => {
     expect(c.last('snap')).toBeDefined();
   });
   it('a player who does not come back within the grace period is out, and the other side wins', () => {
-    const s = setup({ idleTimeoutSec: 999, reconnectGraceSec: 3 });
+    // The grace runs out after the countdown (a side gone before the start voids the match instead: net-hardening).
+    const s = setup({ idleTimeoutSec: 999, reconnectGraceSec: 3, countdownSec: 1 });
     const a = s.join('A'), b = s.join('B');
     a.say({ t: 'queue', mode: '1v1' }); b.say({ t: 'queue', mode: '1v1' });
     s.lobby.disconnect(a.id);

@@ -22,15 +22,15 @@ const DEG = Math.PI / 180;
 
 describe('Room Zero map', () => {
   const l = parseLevel(ROOM_ZERO);
-  it('is 44x26, closed, with spawns, pickups and patrol points on walkable floor', () => {
-    expect(l.w).toBe(44);
-    expect(l.h).toBe(26);
+  it('is 68x42 (FS venue), closed, with spawns, pickups and patrol points on walkable floor', () => {
+    expect(l.w).toBe(68);
+    expect(l.h).toBe(42);
     for (let x = 0; x < l.w; x++) expect(tileAt(l, x + 0.5, 0.5)).not.toBe(FLOOR);
     expect(tileAt(l, l.playerSpawn.x, l.playerSpawn.y)).toBe(FLOOR);
     for (const b of BOT_SPAWNS) for (const [x, y] of b.patrol) expect(walkable(tileAt(l, x + 0.5, y + 0.5)), `${b.name} ${x},${y}`).toBe(true);
     // Pickups are laid out by zone (tests/pickup-layout.test.ts covers the rules); the map itself has no fixed ones.
     const pk = createWorld().pickups;
-    for (const [k, n] of [['health', 4], ['armor', 4], ['ammo', 4], ['grenade', 3]] as const) expect(pk.filter((p) => p.kind === k).length).toBe(n);
+    for (const [k, n] of [['health', 8], ['armor', 6], ['ammo', 6], ['grenade', 6]] as const) expect(pk.filter((p) => p.kind === k).length).toBe(n);
   });
   it('every walkable tile and every pickup is reachable from the player spawn', () => {
     const seen = new Uint8Array(l.w * l.h);
@@ -43,15 +43,15 @@ describe('Room Zero map', () => {
     for (let i = 0; i < l.tiles.length; i++) if (walkable(l.tiles[i])) expect(seen[i], `tile ${i % l.w},${Math.floor(i / l.w)}`).toBe(1);
     for (const p of createWorld().pickups) expect(findPath(l, l.playerSpawn.x, l.playerSpawn.y, p.x, p.y, 8000).length).toBeGreaterThan(0);
   });
-  it('has chokepoints (doorways) and no straight open lane longer than the widest room (CF-F: 15 u)', () => {
-    expect(Array.from(l.tiles).filter((t) => t === 4).length).toBeGreaterThanOrEqual(10);
-    // Before CF rows 8 and 12 were open across the full 42 u; now pillars break them.
-    expect(sightClear(l, 1.5, 8.5, 42.5, 8.5)).toBe(false);
+  it('has chokepoints (doorways) and no straight open lane longer than 28 u on the 68 u venue (FS; CF-F was 15 on 44)', () => {
+    expect(Array.from(l.tiles).filter((t) => t === 4).length).toBeGreaterThanOrEqual(24);
+    // No lane runs the full width: the corridors and the atrium are broken by pillars (tests/venue.test.ts).
+    for (const y of [10, 11, 20, 21, 30, 31]) expect(sightClear(l, 1.5, y + 0.5, 66.5, y + 0.5)).toBe(false);
     const open = (x: number, y: number) => l.tiles[y * l.w + x] !== 1;
     let longest = 0;
     for (let y = 0; y < l.h; y++) for (let x = 0, run = 0; x <= l.w; x++) { run = x < l.w && open(x, y) ? run + 1 : 0; longest = Math.max(longest, run); }
     for (let x = 0; x < l.w; x++) for (let y = 0, run = 0; y <= l.h; y++) { run = y < l.h && open(x, y) ? run + 1 : 0; longest = Math.max(longest, run); }
-    expect(longest).toBeLessThanOrEqual(15);
+    expect(longest).toBeLessThanOrEqual(28);
   });
   it('every bot spawn is reachable from the player spawn', () => {
     for (const b of BOT_SPAWNS) {

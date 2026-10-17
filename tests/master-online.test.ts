@@ -104,6 +104,7 @@ describe('power from the ticket, visible to both sides, and the match record', (
     const kettle = HEROES.find((h) => h.id === 'benja')!;
     expect(room.world.actors[0].maxHp).toBe(Math.round(kettle.maxHp * 1.75));
     expect(room.world.actors[1].maxHp).toBe(Math.round(kettle.maxHp * 1.09));
+    run(3.1); // past the countdown: a leave before the start voids the match (no record)
     b.say({ t: 'leave' });
     run(0.1);
     const over = a.c.last('over')!;

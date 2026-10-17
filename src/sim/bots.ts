@@ -8,7 +8,7 @@ import { angleDiff } from './geom';
 import { findPath, shotClear, sightClear, tileAt, walkable } from './level';
 import { canSee, muzzleFlashSeen } from './vision';
 import { safeSpot, zoneAt, zoneGoal } from './zone';
-import { hears, player, rand, revealed, viewOf, type Actor, type ActorInput, type CommsEvent, type CommsKind, type SoundType, type World } from './world';
+import { hears, player, rand, revealed, viewOf, wants, type Actor, type ActorInput, type CommsEvent, type CommsKind, type SoundType, type World } from './world';
 import { LAB } from '../config/lab';
 
 const DEG = Math.PI / 180;
@@ -73,10 +73,28 @@ export interface Brain {
   watch: { x: number; y: number; until: number } | null;
   /** SB death insight: the signal that started its current hunt (how it found its target), or null. */
   foundBy: PerceptionSource | null;
+  /** Owner 2026-10-17: the hostile squad's current job between fights (TUNING.bots.squad), or null. */
+  task: SquadTask | null;
+}
+
+export type SquadTaskKind = 'hunt' | 'resupply' | 'search' | 'hold' | 'regroup' | 'patrol';
+/** x, y: where it goes; rx, ry: for a hunt, the spot the squadmate saw (a flanker's x, y is its way round). */
+export interface SquadTask { kind: SquadTaskKind; x: number; y: number; rx: number; ry: number; until: number; point: number; pickup: number; arrived: number }
+
+/** What one hostile team knows together: when each tactical point was last checked, and squadmates' sightings. */
+interface Squad { checked: number[]; reports: { x: number; y: number; at: number; by: number }[] }
+const squads = new WeakMap<World, Map<string, Squad>>();
+function squadOf(w: World, team: string): Squad {
+  let m = squads.get(w);
+  if (!m) { m = new Map(); squads.set(w, m); }
+  let s = m.get(team);
+  if (!s) { s = { checked: w.squadPoints.map(() => -1e9), reports: [] }; m.set(team, s); }
+  return s;
 }
 
 /** callout (SB): a teammate's call-out, itself backed by that teammate's own signal. */
-export type PerceptionSource = 'seen' | 'flash' | 'heard' | 'shot' | 'sonar' | 'callout' | 'memory';
+/** radio (FS): a hostile squadmate saw you there; the squad knows that spot and when, never more. */
+export type PerceptionSource = 'seen' | 'flash' | 'heard' | 'shot' | 'sonar' | 'callout' | 'radio' | 'memory';
 
 /** One acquisition: a bot updated its belief about the player from a signal. Logged for the omniscience test. */
 export interface PerceptionEvent {
@@ -105,6 +123,7 @@ export function createBrain(spawn: BotSpawn): Brain {
     source: null, suspicion: 0, reaction: TUNING.perception.reactionMax, pathAt: -1e9, zoneRun: false,
     nadeAt: 0, anchorLeft: 0, strafe: 1, pause: TUNING.bots.patrolPause, listen: 0,
     heardType: null, heardFrom: -1, seenId: -1, seenAt: new Map(), pendingContact: -1, track: null, rest: {}, watch: null, foundBy: null,
+    task: null,
   };
 }
 
@@ -375,6 +394,12 @@ function think(w: World, a: Actor, br: Brain, dt: number): void {
     if (br.seenFor === 0 && br.state !== 'engage') br.reaction = P.reactionMin + rand(w) * (P.reactionMax - P.reactionMin);
     br.seenFor += dt;
     learn(w, a, br, 'seen', p.x, p.y, 1, p);
+    // The hostile squad radio: a sighting goes to the squad (the spot it saw, when). Nothing it did not see.
+    if (a.team === 'bot' && w.squadAI) {
+      const sq = squadOf(w, a.team), now = w.tick * TUNING.simStepSeconds;
+      sq.reports = sq.reports.filter((r) => now - r.at <= TUNING.bots.squad.reportSeconds && r.by !== a.id);
+      sq.reports.push({ x: p.x, y: p.y, at: now, by: a.id });
+    }
   } else {
     br.seenFor = Math.max(0, br.seenFor - dt * 2);
     if (br.source === 'seen') br.source = 'memory';
@@ -396,7 +421,9 @@ function think(w: World, a: Actor, br: Brain, dt: number): void {
     br.heardType = s.type;
     br.heardFrom = s.sourceId;
   }
-  if (br.heardAt && !br.sawPlayer && !flashed) learn(w, a, br, 'heard', br.heardAt.x, br.heardAt.y, 0.6);
+  // A flash (exact) beats a heard guess the same step: the weaker one is dropped, never acted on or called out.
+  if (flashed) br.heardAt = null;
+  if (br.heardAt && !br.sawPlayer) learn(w, a, br, 'heard', br.heardAt.x, br.heardAt.y, 0.6);
   if (br.suspicion === 0 && !br.sawPlayer && br.lastKnown && (br.state === 'patrol')) {
     br.lastKnown = null;
     br.source = null;
@@ -563,6 +590,7 @@ function think(w: World, a: Actor, br: Brain, dt: number): void {
         out.quiet = !far;
         break;
       }
+      if (a.team === 'bot' && w.squadAI) { squadPatrol(w, a, br, dt); break; }
       const target = br.patrol[br.patrolIndex];
       setGoal(w, a, br, target.x, target.y);
       if (follow(w, a, br, dt)) {
@@ -708,6 +736,134 @@ function think(w: World, a: Actor, br: Brain, dt: number): void {
       break;
     }
   }
+}
+
+/**
+ * The hostile squad between fights (owner 2026-10-17: "enemy teams must be active"): information -> decision ->
+ * movement -> reassessment. Every job comes from what the squad legitimately knows (its own sightings, which points
+ * it has checked, the map and its pickups, its own health), never from where you are. It walks (its steps are heard
+ * ~6 u).
+ */
+function squadPatrol(w: World, a: Actor, br: Brain, dt: number): void {
+  const B = TUNING.bots, S = B.squad, now = w.tick * TUNING.simStepSeconds;
+  const sq = squadOf(w, a.team);
+  // Mark the points this bot is standing at as checked by the squad.
+  w.squadPoints.forEach((pt, i) => { if (Math.hypot(pt.x - a.x, pt.y - a.y) <= S.visitRadius && sightClear(w.level, a.x, a.y, pt.x, pt.y)) sq.checked[i] = now; });
+  const t = br.task;
+  const done = !t || now >= t.until
+    || (t.kind === 'resupply' && (!w.pickups[t.pickup]?.active || !wants(a, w.pickups[t.pickup].kind)))
+    || (t.kind !== 'hunt' && freshReport(w, a, sq, now) !== null);
+  if (done) { br.task = squadTask(w, a, br, sq, now); br.goal = null; }
+  const task = br.task!;
+  if (task.kind === 'patrol') {
+    const target = br.patrol[br.patrolIndex];
+    task.x = target.x; task.y = target.y;
+  }
+  setGoal(w, a, br, task.x, task.y);
+  if (follow(w, a, br, dt)) {
+    if (!task.arrived) { task.arrived = now; br.lookBase = a.facing; br.timer = 0; }
+    br.timer += dt;
+    if (task.kind === 'hunt') {
+      // At the spot a squadmate saw: it is gone or close by. Search from here (an honest guess, logged).
+      learn(w, a, br, 'radio', task.rx, task.ry, 0.5);
+      br.state = 'search';
+      br.lastKnown = { x: task.rx, y: task.ry };
+      br.timer = 0;
+      br.goal = null;
+      br.task = null;
+      return;
+    }
+    if (task.kind === 'hold') {
+      // Watch the way in: toward the middle of the map, sweeping.
+      const mid = Math.atan2(w.level.h / 2 - a.y, w.level.w / 2 - a.x);
+      out.aim = mid + Math.sin(br.timer * 1.1) * 0.9;
+      if (now - task.arrived > S.holdSeconds) task.until = now;
+    } else if (task.kind === 'search') {
+      out.aim = br.lookBase + Math.sin(br.timer * 2.2) * 1.4;
+      if (now - task.arrived > B.investigateLookSeconds) task.until = now;
+    } else if (task.kind === 'patrol') {
+      out.aim = br.lookBase + Math.sin(br.timer * 1.5) * 0.6;
+      if (br.timer > br.pause) {
+        br.timer = 0;
+        br.patrolIndex = (br.patrolIndex + 1) % br.patrol.length;
+        br.goal = null;
+        br.pause = B.patrolPause + rand(w) * B.patrolPauseJitter;
+        task.arrived = 0;
+      }
+    } else task.until = now;
+  } else {
+    br.lookBase = out.aim;
+    // It walks every job, never creeps: its steps are heard ~6 u off, so the squad coming is information you can
+    // earn. (Creeping the last metres of a hunt cut contacts announced before sight from 0.6+ to 0.50, tests/sb-lab.)
+    out.quiet = false;
+    if (LAB.enemySound) { out.moveX *= B.patrolSpeed; out.moveY *= B.patrolSpeed; }
+  }
+}
+
+/** The freshest squadmate sighting this bot should answer (it is among the nearest responders), or null. */
+function freshReport(w: World, a: Actor, sq: Squad, now: number): { x: number; y: number } | null {
+  const S = TUNING.bots.squad;
+  // A call takes a moment to land (radioDelay), and only a few squadmates leave their jobs for calls at once.
+  const r = sq.reports.filter((x) => x.by !== a.id && now - x.at >= S.radioDelay && now - x.at <= S.reportSeconds).sort((p, q) => q.at - p.at)[0];
+  if (!r) return null;
+  const hunting = w.actors.filter((b) => b.alive && b.team === a.team && b.id !== a.id && w.brains.get(b.id)?.task?.kind === 'hunt').length;
+  if (hunting >= S.maxHunters) return null;
+  // Only the nearest free squadmates answer; the rest keep their jobs (no one-call stampede).
+  const free = w.actors.filter((b) => b.alive && !b.downed && b.team === a.team && b.id !== r.by && w.brains.get(b.id)?.state === 'patrol');
+  const rank = free.sort((p, q) => Math.hypot(p.x - r.x, p.y - r.y) - Math.hypot(q.x - r.x, q.y - r.y)).indexOf(a);
+  return rank >= 0 && rank < S.huntResponders ? r : null;
+}
+
+function squadTask(w: World, a: Actor, br: Brain, sq: Squad, now: number): SquadTask {
+  const B = TUNING.bots, S = B.squad;
+  const task = (kind: SquadTaskKind, x: number, y: number, point = -1, pickup = -1, hold: number = S.decideSeconds): SquadTask =>
+    ({ kind, x, y, rx: x, ry: y, until: now + hold, point, pickup, arrived: 0 });
+  // 1. A squadmate saw something: go there (flankers come round the side).
+  const r = freshReport(w, a, sq, now);
+  if (r) {
+    const g = br.flanker ? pickFlank(w, a, r) : r;
+    // What it now knows: the spot the squadmate saw (logged, so the omniscience test can trace it), nothing more.
+    learn(w, a, br, 'radio', r.x, r.y, 0);
+    return { ...task('hunt', g.x, g.y, -1, -1, S.reportSeconds + 6), rx: r.x, ry: r.y };
+  }
+  // 2. It needs something and one is up nearby: go and take it.
+  let best = -1, bd: number = S.resupplyRange;
+  w.pickups.forEach((k, i) => {
+    if (!k.active) return;
+    const need = k.kind === 'health' ? a.hp < a.maxHp * S.needHpShare
+      : k.kind === 'armor' ? a.maxArmor > 0 && a.armor < a.maxArmor * S.needArmorShare
+      : k.kind === 'ammo' ? a.reserve < a.weapon.magazine : wants(a, k.kind);
+    const d = Math.hypot(k.x - a.x, k.y - a.y);
+    if (need && d < bd) { bd = d; best = i; }
+  });
+  if (best >= 0) return task('resupply', w.pickups[best].x, w.pickups[best].y, -1, best);
+  // 3. Otherwise a job by weight: search the stalest point, hold one, regroup, or walk its beat.
+  const mates = w.actors.filter((b) => b.alive && b.team === a.team && b.id !== a.id);
+  const nearest = mates.reduce((m, b) => Math.min(m, Math.hypot(b.x - a.x, b.y - a.y)), Infinity);
+  const W8 = S.weights;
+  const opts: [SquadTaskKind, number][] = [['search', W8.search], ['hold', W8.hold], ['patrol', W8.patrol], ['regroup', nearest > S.regroupDistance ? W8.regroup * 3 : 0]];
+  const total = opts.reduce((s, [, v]) => s + v, 0);
+  let roll = rand(w) * total, kind: SquadTaskKind = 'patrol';
+  for (const [k, v] of opts) { if ((roll -= v) < 0) { kind = k; break; } }
+  const pts = w.squadPoints;
+  if (!pts.length || kind === 'patrol') return task('patrol', br.patrol[br.patrolIndex].x, br.patrol[br.patrolIndex].y);
+  if (kind === 'regroup') {
+    const m = mates.sort((p, q) => Math.hypot(p.x - a.x, p.y - a.y) - Math.hypot(q.x - a.x, q.y - a.y))[0];
+    return m ? task('regroup', m.x, m.y) : task('patrol', br.patrol[br.patrolIndex].x, br.patrol[br.patrolIndex].y);
+  }
+  // Claimed by a squadmate already: skip it (two bots do not search the same room).
+  const claimed = new Set(mates.map((b) => w.brains.get(b.id)?.task?.point ?? -1));
+  let pick = -1, score = -Infinity;
+  pts.forEach((pt, i) => {
+    if (claimed.has(i) || Math.hypot(pt.x - a.x, pt.y - a.y) < S.visitRadius) return;
+    const stale = Math.min(60, now - sq.checked[i]);
+    const d = Math.hypot(pt.x - a.x, pt.y - a.y);
+    // Search: the longest unchecked, not too far; hold: a near point, a little randomness so it is not a clockwork.
+    const s = kind === 'search' ? stale - d * 0.5 + rand(w) * 6 : -d + rand(w) * 8;
+    if (s > score) { score = s; pick = i; }
+  });
+  if (pick < 0) return task('patrol', br.patrol[br.patrolIndex].x, br.patrol[br.patrolIndex].y);
+  return task(kind, pts[pick].x, pts[pick].y, pick);
 }
 
 /**

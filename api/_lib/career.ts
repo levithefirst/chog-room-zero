@@ -6,9 +6,12 @@
 // hard bounds, rate limited and stored once per run id. Owner 2026-10-17: practice pays XP and shards so a loss still
 // moves you forward, at a smaller, capped rate (PRACTICE_REWARDS): a run is paid only with a start ticket signed here
 // (account, run id, start time) and only when at least the claimed play time has passed since that start; one payment
-// per run id (ledger unique key); at most PRACTICE_REWARDS.dailyCap paid runs per rolling 24 h. A forged run is worth
-// no more than an honest one. Practice never changes rating and never touches the leaderboard; it feeds the practice
-// career and medals, awarded here from the stored runs.
+// per run id (ledger unique key); at most PRACTICE_REWARDS.dailyCap paid runs and PRACTICE_SHARDS_PER_DAY shards per
+// rolling 24 h. One practice run is open per account: each start replaces the account's open run id (accounts.practice_rid),
+// so starting many runs in parallel and posting them later pays only the last. A run must also be plausible for its
+// length (PRACTICE_WIN_MIN_SECONDS, PRACTICE_SECONDS_PER_KILL). A forged run is worth no more than an honest one.
+// Practice never changes rating and never touches the leaderboard; it feeds the practice career and medals, awarded
+// here from the stored VERIFIED runs only (an unticketed or implausible run is stored, pays nothing, counts for nothing).
 import type { Db, Tx } from './db.js';
 import { b64url, sign, unsign } from './auth.js';
 import { PRACTICE_REWARDS, rewardBreakdown, type RewardLine, type NoReward } from '../../src/config/progression.js';
@@ -27,6 +30,15 @@ export const PRACTICE_PER_MINUTE = 6;
 export const PRACTICE_TICKET_SECONDS = 30 * 60;
 /** Slack between the browser's play clock and the site's wall clock (seconds). */
 const CLOCK_SLACK = 3;
+/** Practice shards paid per account per rolling 24 h (25 max-value wins would be 600). */
+export const PRACTICE_SHARDS_PER_DAY = 300;
+/**
+ * A practice win shorter than this is not paid. Measured 2026-10-17 (autopilot, 168 runs, 7 heroes, seeds 1-12, with and
+ * without AI teammates, zone on): the fastest of 42 wins took 35.2 s.
+ */
+export const PRACTICE_WIN_MIN_SECONDS = 30;
+/** Seconds of play per kill claimed, at least (same measurement: the fewest seconds per kill in a win was 8.8). */
+export const PRACTICE_SECONDS_PER_KILL = 6;
 
 // ---- practice tickets ----
 interface PracticeTicket { k: 'practice'; acc: string; rid: string; t0: number; exp: number }
@@ -38,9 +50,13 @@ export async function practiceSecret(authSecret: string): Promise<string> {
   return b64url(new Uint8Array(await crypto.subtle.sign('HMAC', key, enc.encode('room-zero practice ticket v1'))));
 }
 
-/** Issued when a signed-in run starts: the run id the result must carry, and when it started (site clock). */
-export async function startPractice(acc: string, secret: string, now = Date.now()): Promise<{ ticket: string; runId: string }> {
+/**
+ * Issued when a signed-in run starts: the run id the result must carry, and when it started (site clock). The run id
+ * becomes the account's one open practice run, replacing any earlier one (only the latest start can be paid).
+ */
+export async function startPractice(db: Tx, acc: string, secret: string, now = Date.now()): Promise<{ ticket: string; runId: string }> {
   const rid = b64url(crypto.getRandomValues(new Uint8Array(12)));
+  await db.query(`UPDATE room_zero.accounts SET practice_rid = $2 WHERE id = $1`, [acc, rid]);
   const t: PracticeTicket = { k: 'practice', acc, rid, t0: now, exp: Math.floor(now / 1000) + PRACTICE_TICKET_SECONDS };
   return { ticket: await sign(t, secret), runId: rid };
 }
@@ -53,10 +69,17 @@ async function ticketStart(raw: unknown, acc: string, runId: string, secret: str
 }
 
 // ---- callsign and preferences ----
-export async function setCallsign(db: Db, acc: string, raw: unknown): Promise<{ ok: true; callsign: string } | { ok: false; error: string }> {
+/** Callsigns are unique across accounts, ignoring case (unique index accounts_callsign_unique, migration 5). */
+export async function setCallsign(db: Db, acc: string, raw: unknown): Promise<{ ok: true; callsign: string } | { ok: false; error: string; code?: 'callsign_taken' }> {
   const v = validateNickname(typeof raw === 'string' ? raw.slice(0, 40) : '');
   if (!v.ok) return { ok: false, error: v.error };
-  await db.query(`UPDATE room_zero.accounts SET callsign = $2, display_name = $2 WHERE id = $1`, [acc, v.value]);
+  try {
+    await db.query(`UPDATE room_zero.accounts SET callsign = $2, display_name = $2 WHERE id = $1`, [acc, v.value]);
+  } catch (e) {
+    // The client shows `error` as written; `code` is for callers that branch on it.
+    if ((e as { code?: string }).code === '23505') return { ok: false, error: 'That callsign is taken. Try another.', code: 'callsign_taken' };
+    throw e;
+  }
   return { ok: true, callsign: v.value };
 }
 
@@ -84,13 +107,13 @@ export async function medalsOf(q: Tx, acc: string): Promise<Record<string, strin
 // ---- practice career ----
 const emptyBest = (): Best => ({ bestWinSeconds: null, mostKills: 0, runs: 0, wins: 0, kills: 0, bullets: 0, hits: 0, damageDealt: 0, damageTaken: 0, seconds: 0, pickups: 0, abilities: 0 });
 
-/** Practice records (the same shape the medals and player card read), aggregated from the stored runs. */
+/** Practice records (the same shape the medals and player card read), aggregated from the stored verified runs. */
 export async function practiceRecords(q: Tx, acc: string): Promise<Records> {
   const rows = await q.query<Record<string, string | number | null>>(
     `SELECT hero, count(*) AS runs, count(*) FILTER (WHERE won) AS wins, min(seconds) FILTER (WHERE won) AS best, max(kills) AS most,
        sum(kills) AS kills, sum(bullets) AS bullets, sum(hits) AS hits, sum(damage_dealt) AS dealt, sum(damage_taken) AS taken,
        sum(seconds) AS seconds, sum(pickups) AS pickups, sum(abilities) AS abilities
-     FROM room_zero.practice_runs WHERE account_id = $1 GROUP BY hero`, [acc]);
+     FROM room_zero.practice_runs WHERE account_id = $1 AND verified GROUP BY hero`, [acc]);
   const rec: Records = { overall: emptyBest(), heroes: {} };
   for (const r of rows) {
     const b: Best = {
@@ -129,6 +152,11 @@ export function validPractice(b: Record<string, unknown>): (RunFacts & { runId: 
   return { runId, hero, won: b.won, ...n };
 }
 
+/** Long enough for what it claims: kills take time, and a win takes at least PRACTICE_WIN_MIN_SECONDS. */
+export function plausiblePractice(r: { won: boolean; seconds: number; kills: number }): boolean {
+  return r.seconds >= PRACTICE_SECONDS_PER_KILL * r.kills && (!r.won || r.seconds >= PRACTICE_WIN_MIN_SECONDS);
+}
+
 export interface PracticeReward { xp: number; shards: number; lines: RewardLine[]; none: NoReward }
 
 export interface PracticeResult {
@@ -143,27 +171,36 @@ export interface PracticeResult {
 
 /**
  * Store one practice run (once per run id), pay it (ticketed, capped), then award every medal the stored career now
- * meets. Without `secret` (older callers, tests of the career alone) the run is stored and never paid.
+ * meets. Without `secret` the run is stored unverified: never paid, never in the career or medals.
  */
 export async function recordPractice(db: Db, acc: string, raw: Record<string, unknown>, opts: { secret?: string; now?: number } = {}): Promise<PracticeResult | { ok: false; reason: 'invalid' | 'rate' }> {
   const run = validPractice(raw);
   if (!run) return { ok: false, reason: 'invalid' };
   const now = opts.now ?? Date.now();
   const t0 = opts.secret ? await ticketStart(raw.ticket, acc, run.runId, opts.secret, now) : null;
-  // Wall time since the start ticket must cover the claimed play time (pauses only make it longer).
-  const verified = t0 !== null && now - t0 >= (run.seconds - CLOCK_SLACK) * 1000;
+  // Wall time since the start ticket must cover the claimed play time (pauses only make it longer), and the claim must
+  // be plausible for its length.
+  const timed = t0 !== null && now - t0 >= (run.seconds - CLOCK_SLACK) * 1000 && plausiblePractice(run);
   return db.tx(async (tx) => {
-    await tx.query(`SELECT 1 FROM room_zero.accounts WHERE id = $1 FOR UPDATE`, [acc]);
+    const a = await tx.query<{ practice_rid: string | null }>(`SELECT practice_rid FROM room_zero.accounts WHERE id = $1 FOR UPDATE`, [acc]);
+    // Only the account's open run (its latest start) can be verified.
+    const verified = timed && a[0]?.practice_rid === run.runId;
     const recent = await tx.query<{ n: string }>(`SELECT count(*) AS n FROM room_zero.practice_runs WHERE account_id = $1 AND created_at > now() - interval '1 minute'`, [acc]);
     const before = await practiceRecords(tx, acc);
     const prev = before.heroes[run.hero] ?? emptyBest();
     if (Number(recent[0].n) >= PRACTICE_PER_MINUTE) return { ok: false, reason: 'rate' } as const;
-    const paid = await tx.query<{ n: string }>(`SELECT count(*) AS n FROM room_zero.practice_runs WHERE account_id = $1 AND xp > 0 AND created_at > now() - interval '24 hours'`, [acc]);
-    const r = rewardBreakdown({ won: run.won, kills: run.kills, damage: run.damageDealt, seconds: run.seconds, leftEarly: false,
-      capped: Number(paid[0].n) >= PRACTICE_REWARDS.dailyCap, demo: raw.demo === true, unverified: !verified }, PRACTICE_REWARDS);
-    const ins = await tx.query(`INSERT INTO room_zero.practice_runs (account_id, run_id, hero, won, seconds, kills, bullets, hits, damage_dealt, damage_taken, pickups, abilities, hp_left, xp, shards)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) ON CONFLICT DO NOTHING RETURNING run_id`,
-      [acc, run.runId, run.hero, run.won, run.seconds, run.kills, run.bullets, run.hits, run.damageDealt, run.damageTaken, run.pickups, run.abilities, run.hpLeft, r.xp, r.shards]);
+    const paid = await tx.query<{ n: string; s: string }>(`SELECT count(*) AS n, coalesce(sum(shards), 0) AS s FROM room_zero.practice_runs
+      WHERE account_id = $1 AND xp > 0 AND created_at > now() - interval '24 hours'`, [acc]);
+    const facts = { won: run.won, kills: run.kills, damage: run.damageDealt, seconds: run.seconds, leftEarly: false, demo: raw.demo === true, unverified: !verified };
+    let r = rewardBreakdown({ ...facts, capped: Number(paid[0].n) >= PRACTICE_REWARDS.dailyCap }, PRACTICE_REWARDS);
+    if (r.shards && Number(paid[0].s) + r.shards > PRACTICE_SHARDS_PER_DAY) r = rewardBreakdown({ ...facts, capped: true }, PRACTICE_REWARDS);
+    const ins = await tx.query(`INSERT INTO room_zero.practice_runs (account_id, run_id, hero, won, seconds, kills, bullets, hits, damage_dealt, damage_taken, pickups, abilities, hp_left, xp, shards, verified)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) ON CONFLICT DO NOTHING RETURNING run_id`,
+      [acc, run.runId, run.hero, run.won, run.seconds, run.kills, run.bullets, run.hits, run.damageDealt, run.damageTaken, run.pickups, run.abilities, run.hpLeft, r.xp, r.shards, verified]);
+    // The open run is spent once it is stored verified.
+    if (ins.length && verified) await tx.query(`UPDATE room_zero.accounts SET practice_rid = NULL WHERE id = $1`, [acc]);
+    // Career, medals and bests move only for a newly stored verified run.
+    const counts = !!ins.length && verified;
     let reward: PracticeReward = { xp: r.xp, shards: r.shards, lines: r.lines, none: r.none };
     if (ins.length && (r.xp || r.shards)) {
       // The ledger's unique key (account, kind, reason, ref) is the second lock against paying a run twice.
@@ -178,7 +215,7 @@ export async function recordPractice(db: Db, acc: string, raw: Record<string, un
     const records = await practiceRecords(tx, acc);
     const have = await medalsOf(tx, acc);
     const earned: string[] = [];
-    if (ins.length) {
+    if (counts) {
       for (const m of MEDALS) {
         if (have[m.id] || m.progress(records, run) < m.goal) continue;
         await tx.query(`INSERT INTO room_zero.medals (account_id, medal_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [acc, m.id]);
@@ -186,8 +223,8 @@ export async function recordPractice(db: Db, acc: string, raw: Record<string, un
       }
     }
     const newBest = {
-      time: !!ins.length && run.won && (prev.bestWinSeconds === null || run.seconds < prev.bestWinSeconds),
-      kills: !!ins.length && run.kills > prev.mostKills,
+      time: counts && run.won && (prev.bestWinSeconds === null || run.seconds < prev.bestWinSeconds),
+      kills: counts && run.kills > prev.mostKills,
     };
     return { ok: true, already: !ins.length, reward, earned, newBest, records, medals: await medalsOf(tx, acc) } as const;
   });

@@ -109,11 +109,12 @@ describe('online settlement applies the rule from the server record', () => {
     const old = await settleMatch(db, rec({ id: '0123456789abcdef', players: [pl(x, 'alpha'), pl(y, 'bravo', { left: true })] }));
     expect(old.ok && old.players.find((p) => p.acc === y)!.shards).toBe(0);
   });
-  it('private rooms: history only, no XP, shards, rating or wins (no win trading between friends)', async () => {
+  it('private rooms: history only, no XP, shards, rating, wins or matches count (no win trading between friends)', async () => {
     const [a, b] = [await acct('pa'), await acct('pb')];
     const r = await settleMatch(db, rec({ private: true, players: [pl(a, 'alpha', { kills: 5, damage: 900 }), pl(b, 'bravo')] }));
     expect(r.ok && r.rewarded).toBe(false);
-    expect(await profileOf(db, a)).toMatchObject({ xp: 0, shards: 0, rating: 1000, wins: 0, matches: 1 });
+    expect(await profileOf(db, a)).toMatchObject({ xp: 0, shards: 0, rating: 1000, wins: 0, matches: 0 });
+    expect(await db.query(`SELECT account_id FROM room_zero.match_players WHERE account_id = $1`, [a])).toHaveLength(1);
     expect(r.ok && r.players[0].none).toBe('private');
   });
   it('one account in two seats is paid once', async () => {
@@ -238,7 +239,7 @@ describe('the game server record', () => {
   });
   it('a private code match is flagged private', async () => {
     const { lobby, a, b, run } = await room('FRIEND1');
-    run(1);
+    run(4); // past the countdown: a leave before the start voids the match (no record)
     b.say({ t: 'leave' });
     run(0.1);
     expect(lobby.result(a.c.last('over')!.matchId!)!.private).toBe(true);

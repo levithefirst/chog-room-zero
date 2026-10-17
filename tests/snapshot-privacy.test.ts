@@ -28,9 +28,9 @@ describe('teammate sightings never arrive as live hostile positions', () => {
     tick(1);
     const [me, mate] = [w.actors[0], w.actors[1]];
     const foe = w.actors.find((a) => a.team !== me.team)!;
-    // An open stretch of the concourse (row 12): the mate faces the foe, you face away from it.
-    me.x = 20.5; me.y = 12.5; me.facing = Math.PI; mate.x = 16.5; mate.y = 12.5; mate.facing = 0;
-    foe.x = 23.5; foe.y = 12.5;
+    // An open stretch of the north corridor (row 10, x 16-24): the mate faces the foe, you face away from it.
+    me.x = 20.5; me.y = 10.5; me.facing = Math.PI; mate.x = 16.5; mate.y = 10.5; mate.facing = 0;
+    foe.x = 23.5; foe.y = 10.5;
     for (const a of w.actors) if (a !== me && a !== mate && a !== foe) { a.x = 3; a.y = 2; }
     expect(canSee(w.level, me.x, me.y, me.facing, me.view, foe.x, foe.y)).toBe(false);
     expect(canSee(w.level, mate.x, mate.y, mate.facing, mate.view, foe.x, foe.y)).toBe(true);
@@ -57,6 +57,13 @@ describe('teammate sightings never arrive as live hostile positions', () => {
   it('a full 3v3 match: every hostile sent exact is one that player sees, saw flash, or Pings; every spot is near the truth', () => {
     const { lobby, room, w } = match3v3();
     const ids = room.members.map((m) => m.id);
+    // Start both sides facing each other across the central atrium (the spawns are 60 u apart on Room Zero), so the
+    // wandering players keep meeting: alpha at x 26-27, bravo mirrored at x 40-41.
+    [[26.5, 19.5], [26.5, 22.5], [27.5, 21.5]].forEach(([x, y], i) => {
+      const al = w.actors.filter((a) => a.team === 'alpha')[i], br = w.actors.filter((a) => a.team === 'bravo')[i];
+      Object.assign(al, { x, y, facing: 0 });
+      Object.assign(br, { x: 67 - x, y, facing: Math.PI });
+    });
     let t2 = 0, exactSent = 0, spots = 0;
     for (let step = 0; step < 60 * 40 && w.outcome === 'playing'; step++) {
       // Everyone wanders and fires in a slow sweep (deterministic).
@@ -94,9 +101,9 @@ describe('heard hostiles arrive as the hearing estimate, not their spot', () => 
     const me = w.actors[0];
     const foe = w.actors.find((a) => a.team !== me.team)!;
     for (const a of w.actors) if (a !== me && a !== foe) { a.x = 3; a.y = 2; }
-    // Foe in the next room (a wall between), running: you hear its steps but cannot see it.
+    // Foe in the north corridor below the gallery (a wall between), running: you hear its steps but cannot see it.
     me.x = 15.5; me.y = 4.5; me.facing = Math.PI;
-    foe.x = 15.5; foe.y = 9.5;
+    foe.x = 14.5; foe.y = 10.5;
     w.sounds = [{ type: 'step', x: foe.x, y: foe.y, radius: 9, sourceId: foe.id, team: foe.team, tick: w.tick }];
     const s = lobby.snapshot(room, room.members[0]);
     const snd = s.sounds.find((x) => x.source === foe.id)!;

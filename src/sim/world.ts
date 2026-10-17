@@ -1,12 +1,12 @@
 // The match simulation. Deterministic: fixed step, seeded random, no wall-clock time, no rendering.
 import { TUNING } from '../config/tuning';
-import { BOT_SPAWNS, BOT_SPAWNS_RC8, PICKUP_ZONES, ROOM_ZERO, ROOM_ZERO_RC8, VERSUS_SPAWNS, ZONE_CENTRES, type BotSpawn } from '../config/map';
+import { BOT_SPAWNS, BOT_SPAWNS_RC8, PICKUP_ZONES, ROOM_ZERO, ROOM_ZERO_RC8, TACTICAL_POINTS, VERSUS_SPAWNS, ZONE_CENTRES, type BotSpawn } from '../config/map';
 import { layoutPickups, respawnSpot, walkField, zoneSpots, type Field, type PickupZone, type Spot } from './pickups';
 import { heroById, type AbilityDef, type HeroDef } from '../config/heroes';
 import { BASE_POWER, type Power } from '../config/power';
 import { WEAPONS, damageAt, type WeaponDef } from '../config/weapons';
 import { angleDiff, cornerAssistDir, resolveCircle, segmentCircleT, type Box } from './geom';
-import { blockedByCover, bulletBlockT, markDynamic, parseLevel, shotClear, sightClear, walkable, type Level } from './level';
+import { WALL, blockedByCover, bulletBlockT, markDynamic, parseLevel, shotClear, sightClear, tileAt, walkable, type Level } from './level';
 import { stepVelocity, type Vec2 } from './sim';
 import { NO_SIDEGRADE, type Sidegrade } from './operators';
 import type { ViewShape } from './vision';
@@ -153,6 +153,8 @@ export interface Bullet {
   owner: number;
   weapon: WeaponDef;
   alive: boolean;
+  /** The shooter's damage bonus when it fired (Rush, Red Rush): a bullet keeps it in flight. Absent: 1. */
+  mul?: number;
 }
 
 export type SoundType =
@@ -275,6 +277,10 @@ export interface World {
   brains: Map<number, Brain>;
   /** Ids of bots currently allowed to shoot at the player (cap: TUNING.perception.attackTokens). */
   attackTokens: number[];
+  /** Owner 2026-10-17 ("enemy teams must be active"): the hostile squad plans its own moves (src/sim/bots.ts squad
+   * layer) between these tactical points. On for the real game; off when a test passes its own bots. */
+  squadAI: boolean;
+  squadPoints: { x: number; y: number }[];
   /** When enabled (createWorld({ log: true })), every time a bot learns a player position, with its signal. */
   perceptionLog: PerceptionEvent[] | null;
   outcome: 'playing' | 'dead' | 'won';
@@ -350,6 +356,8 @@ export interface WorldOptions {
   friendlyFire?: boolean;
   /** Pickup zones to lay out (default: Room Zero's when the map is Room Zero; none for a given test map). */
   pickupZones?: PickupZone[];
+  /** The hostile squad's own planning (default: on unless the test gives its own bots). */
+  squadAI?: boolean;
 }
 
 export function createWorld(opts: WorldOptions = {}): World {
@@ -365,7 +373,7 @@ export function createWorld(opts: WorldOptions = {}): World {
     return {
       tick: 0, rng: seed, level, actors, bullets: [], grenades: [], nadeSeq: 0, sounds: [], prevSounds: [], comms: [], prevComms: [], commsAt: -1e9, hits: [],
       ...initPickups(level, seed, opts), barriers: [],
-      brains, attackTokens: [], perceptionLog: null, outcome: 'playing', playerKill: null,
+      brains, attackTokens: [], squadAI: false, squadPoints: [], perceptionLog: null, outcome: 'playing', playerKill: null,
       mode: 'versus', winner: null, friendlyFire: !!opts.friendlyFire,
       zone: opts.zone === false ? null : planZone(level, seed, ZONE_CENTRES, TUNING.zone, spawns),
     };
@@ -392,9 +400,23 @@ export function createWorld(opts: WorldOptions = {}): World {
     tick: 0, rng: seed, level, actors, bullets: [], grenades: [], nadeSeq: 0, sounds: [], prevSounds: [], comms: [], prevComms: [], commsAt: -1e9, hits: [],
     ...initPickups(level, seed, opts), barriers: [],
     brains, attackTokens: [], perceptionLog: opts.log ? [] : null, outcome: 'playing', playerKill: null,
+    // The lab's 'before' (LAB.pacing off: the RC-8 map and bots) keeps the RC-8 patrols, so it stays a fixed baseline.
+    squadAI: opts.squadAI ?? (opts.bots === undefined && LAB.pacing),
+    squadPoints: opts.map === undefined && LAB.pacing ? TACTICAL_POINTS : derivePoints(level),
     mode: 'solo', winner: null, friendlyFire: !!opts.friendlyFire,
     zone: opts.zone ? planZone(level, seed, ZONE_CENTRES) : null,
   };
+}
+
+/** Tactical points for a map without hand-placed ones: open floor on a 7-tile grid (rooms and junctions). */
+function derivePoints(level: Level): { x: number; y: number }[] {
+  const pts: { x: number; y: number }[] = [];
+  for (let y = 3; y < level.h - 1; y += 7) for (let x = 3; x < level.w - 1; x += 7) {
+    let open = 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (walkable(level.tiles[(y + dy) * level.w + x + dx])) open++;
+    if (open === 9) pts.push({ x: x + 0.5, y: y + 0.5 });
+  }
+  return pts;
 }
 
 /**
@@ -410,9 +432,12 @@ function initPickups(level: Level, seed: number, opts: WorldOptions): Pick<World
   const spawns: Spot[] = opts.versus ? [...VERSUS_SPAWNS.alpha, ...VERSUS_SPAWNS.bravo]
     : [level.playerSpawn, ...(opts.bots ?? (LAB.pacing ? BOT_SPAWNS : BOT_SPAWNS_RC8)).map((b) => ({ x: b.patrol[0][0] + 0.5, y: b.patrol[0][1] + 0.5 }))];
   const fields = { alpha: walkField(level, VERSUS_SPAWNS.alpha), bravo: walkField(level, VERSUS_SPAWNS.bravo) };
-  const spots = zoneSpots(level, zones, spawns, fields);
-  const at = layoutPickups(spots, zones.map((z) => z.kind), seed, fields.alpha, fields.bravo);
-  const zoned: Pickup[] = zones.map((z, i) => ({ kind: z.kind, x: at[i].x, y: at[i].y, active: true, respawnLeft: 0, zone: i, moves: 0 }));
+  // A zone with no tile left on this map (a foreign map) is skipped, never a crash.
+  const all = zoneSpots(level, zones, spawns, fields);
+  const keep = zones.map((_, i) => i).filter((i) => all[i].length > 0);
+  const spots = keep.map((i) => all[i]);
+  const at = layoutPickups(spots, keep.map((i) => zones[i].kind), seed, fields.alpha, fields.bravo);
+  const zoned: Pickup[] = keep.map((zi, i) => ({ kind: zones[zi].kind, x: at[i].x, y: at[i].y, active: true, respawnLeft: 0, zone: i, moves: 0 }));
   return { pickups: [...fixed, ...zoned], pickupSpots: spots, pickupSeed: seed, pickupRev: 0, pickupFields: fields };
 }
 
@@ -478,6 +503,9 @@ function startReload(w: World, a: Actor): void {
 function useAbility(w: World, a: Actor, inp: ActorInput): void {
   const A = TUNING.abilities;
   const ab = a.ability;
+  const slab = ab.kind === 'barrier' ? slabBox(w, a) : null;
+  // A slab that does not fit (facing a wall, or across someone) is not placed and costs nothing.
+  if (ab.kind === 'barrier' && !slab) return;
   a.abilityCd = ab.cooldown;
   switch (ab.kind) {
     case 'dash': {
@@ -495,19 +523,13 @@ function useAbility(w: World, a: Actor, inp: ActorInput): void {
       emitAbility(w, 'sonar', a.x, a.y, Math.max(A.sonarSound, ab.radius ?? 0), a);
       break;
     case 'barrier': {
-      const cx = a.x + Math.cos(a.facing) * 1.1, cy = a.y + Math.sin(a.facing) * 1.1;
-      // Axis-aligned slab across the facing direction.
-      const horizontal = Math.abs(Math.sin(a.facing)) > Math.abs(Math.cos(a.facing));
-      const hl = (ab.length ?? A.barrierLength) / 2, hd = A.barrierDepth / 2;
-      const box: Box = horizontal
-        ? { x0: cx - hl, y0: cy - hd, x1: cx + hl, y1: cy + hd }
-        : { x0: cx - hd, y0: cy - hl, x1: cx + hd, y1: cy + hl };
+      const box = slab!;
       w.barriers.push({ box, left: ab.seconds ?? A.barrierSeconds, owner: a.id });
       w.level.coverBoxes.push(box);
       w.level.solidBoxes.push(box);
       markDynamic(w.level, box, 1);
       invalidatePaths(w);
-      emitAbility(w, 'barrier', cx, cy, TUNING.sound.ability, a);
+      emitAbility(w, 'barrier', (box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2, TUNING.sound.ability, a);
       break;
     }
     case 'mend': {
@@ -541,6 +563,42 @@ function useAbility(w: World, a: Actor, inp: ActorInput): void {
   }
 }
 
+/**
+ * Where a's slab would stand: an axis-aligned box across its facing, 1.1 u ahead, its ends cut short at the first wall
+ * (it never pokes into the next room). null when it cannot stand: the spot is behind a wall, it would be too short,
+ * or it would cross a living actor (pushed out, someone could end up inside a wall).
+ */
+function slabBox(w: World, a: Actor): Box | null {
+  const A = TUNING.abilities;
+  const cx = a.x + Math.cos(a.facing) * 1.1, cy = a.y + Math.sin(a.facing) * 1.1;
+  if (tileAt(w.level, cx, cy) === WALL || !sightClear(w.level, a.x, a.y, cx, cy)) return null;
+  const horizontal = Math.abs(Math.sin(a.facing)) > Math.abs(Math.cos(a.facing));
+  const full = (a.ability.length ?? A.barrierLength) / 2, hd = A.barrierDepth / 2;
+  // Walk out from the centre along the slab until a wall (both faces of its depth must be clear).
+  const reach = (dir: number) => {
+    let r = 0;
+    while (r < full) {
+      const n = Math.min(full, r + 0.05);
+      const ok = [-hd, hd].every((o) => horizontal ? tileAt(w.level, cx + dir * n, cy + o) !== WALL : tileAt(w.level, cx + o, cy + dir * n) !== WALL);
+      if (!ok) break;
+      r = n;
+    }
+    return r;
+  };
+  const lo = reach(-1), hi = reach(1);
+  if (lo + hi < Math.min(1, full)) return null;
+  const box: Box = horizontal
+    ? { x0: cx - lo, y0: cy - hd, x1: cx + hi, y1: cy + hd }
+    : { x0: cx - hd, y0: cy - lo, x1: cx + hd, y1: cy + hi };
+  const r = TUNING.movement.radius;
+  for (const t of w.actors) {
+    if (!t.alive) continue;
+    const nx = Math.max(box.x0, Math.min(box.x1, t.x)), ny = Math.max(box.y0, Math.min(box.y1, t.y));
+    if (Math.hypot(t.x - nx, t.y - ny) < r) return null;
+  }
+  return box;
+}
+
 /** Living hostiles within r of a with a clear line (walls block signature effects the same way they block bullets). */
 function hostilesInSight(w: World, a: Actor, r: number): Actor[] {
   return w.actors.filter((t) => t.alive && !t.downed && t.team !== a.team && Math.hypot(t.x - a.x, t.y - a.y) <= r && sightClear(w.level, a.x, a.y, t.x, t.y));
@@ -552,12 +610,12 @@ function detonate(w: World, a: Actor): void {
     if (t.shieldLeft > 0) continue;
     const raw = (ab.amount ?? 0) * a.power.damageMul;
     const m = mitigate(t.armor, raw, ab.armorPen ?? 0);
+    a.damageDealt += lost(t, m);
     t.armor -= m.armor;
     t.hp -= m.hp;
     t.hitFlash = TUNING.render.hitFlash;
     t.lastHitTick = w.tick;
     t.lastHitFrom = { x: a.x, y: a.y };
-    a.damageDealt += raw;
     t.damageTaken += m.hp + m.armor;
     const r = t.hp <= 0 ? drop(w, t, { cause: 'shot', killerId: a.id, weapon: ab.name, fromX: a.x, fromY: a.y, toX: t.x, toY: t.y, tick: w.tick }) : null;
     w.hits.push({ target: t.id, by: a.id, x: t.x, y: t.y, fromX: a.x, fromY: a.y, hpDamage: m.hp, armorDamage: m.armor, killed: r === 'out', downed: r === 'downed' });
@@ -728,7 +786,7 @@ function fireRound(w: World, a: Actor): void {
     const base = W.pellets > 1 ? -spread + (2 * spread * i) / (W.pellets - 1) : 0;
     const jitter = (rand(w) * 2 - 1) * (W.pellets > 1 ? spread / W.pellets : spread);
     const ang = a.facing + base + jitter;
-    w.bullets.push({ x: a.x, y: a.y, dx: Math.cos(ang), dy: Math.sin(ang), ox: a.x, oy: a.y, life: W.bulletLife, owner: a.id, weapon: W, alive: true });
+    w.bullets.push({ x: a.x, y: a.y, dx: Math.cos(ang), dy: Math.sin(ang), ox: a.x, oy: a.y, life: W.bulletLife, owner: a.id, weapon: W, alive: true, mul: a.frenzyLeft > 0 ? a.ability.amount ?? 1 : 1 });
   }
   a.ammo--;
   a.bullets += W.pellets;
@@ -779,12 +837,27 @@ function stepGrenades(w: World, dt: number): void {
         if (sp > 2) emit(w, 'bounce', g.x, g.y, G.bounceSound, w.actors[g.owner]);
       }
     }
+    // Come to rest on top of a crate or slab: it rolls off to the nearest face (it never sits inside cover, where the
+    // cover would stop shielding anyone from it).
+    if (Math.hypot(g.vx, g.vy) < 0.05) restOutside(w.level, g);
     g.fuse -= dt;
     if (g.fuse <= 0) explode(w, g);
   }
   let j = 0;
   for (const g of w.grenades) if (g.alive) w.grenades[j++] = g;
   w.grenades.length = j;
+}
+
+function restOutside(l: Level, g: Grenade): void {
+  for (const b of l.coverBoxes) {
+    if (g.x <= b.x0 || g.x >= b.x1 || g.y <= b.y0 || g.y >= b.y1) continue;
+    const out = [[b.x0 - 0.05, g.y], [b.x1 + 0.05, g.y], [g.x, b.y0 - 0.05], [g.x, b.y1 + 0.05]]
+      .filter(([x, y]) => tileAt(l, x, y) !== WALL)
+      .sort((p, q) => Math.hypot(p[0] - g.x, p[1] - g.y) - Math.hypot(q[0] - g.x, q[1] - g.y));
+    if (out.length) { g.x = out[0][0]; g.y = out[0][1]; }
+    g.vx = g.vy = 0;
+    return;
+  }
 }
 
 /**
@@ -803,12 +876,12 @@ function explode(w: World, g: Grenade): void {
     const cover = shotClear(w.level, g.x, g.y, t.x, t.y, false, 0) ? 1 : G.coverMul;
     const raw = t.shieldLeft > 0 ? 0 : (G.damage + (G.edgeDamage - G.damage) * (d / G.radius)) * cover * (by.ai ? TUNING.bots.damageMul : 1);
     const m = mitigate(t.armor, raw, G.armorPen);
+    if (t.team !== by.team) by.damageDealt += lost(t, m);
     t.armor -= m.armor;
     t.hp -= m.hp;
     t.hitFlash = TUNING.render.hitFlash;
     t.lastHitTick = w.tick;
     t.lastHitFrom = { x: g.x, y: g.y };
-    if (t.team !== by.team) by.damageDealt += raw;
     t.damageTaken += m.hp + m.armor;
     const r = t.hp <= 0 ? drop(w, t, { cause: 'shot', killerId: by.id, weapon: 'Grenade', fromX: g.x, fromY: g.y, toX: t.x, toY: t.y, tick: w.tick }) : null;
     w.hits.push({ target: t.id, by: by.id, x: t.x, y: t.y, fromX: g.x, fromY: g.y, hpDamage: m.hp, armorDamage: m.armor, killed: r === 'out', downed: r === 'downed', grenade: true });
@@ -867,24 +940,38 @@ function stepBullets(w: World, dt: number): void {
 }
 
 function damage(w: World, t: Actor, by: Actor, b: Bullet, hx: number, hy: number): void {
-  // Gold Shell: the bullet stops on the shell and does nothing (the hit spark still shows where it landed).
-  const raw = t.shieldLeft > 0 ? 0
-    : damageAt(b.weapon, Math.hypot(hx - b.ox, hy - b.oy)) * (by.ai ? TUNING.bots.damageMul : 1) * by.power.damageMul * (by.frenzyLeft > 0 ? by.ability.amount ?? 1 : 1);
+  // Downed this very step by an earlier pellet of the same blast: the rest are spent (a blast downs, it never also
+  // empties the downed pool in the same trigger pull).
+  if (t.downed && t.downInfo?.tick === w.tick) return;
+  // Gold Shell: the bullet stops on the shell and does nothing (the hit spark still shows where it landed): no push,
+  // no counted hit, no reset of a revive.
+  if (t.shieldLeft > 0) {
+    w.hits.push({ target: t.id, by: by.id, x: hx, y: hy, fromX: b.ox, fromY: b.oy, hpDamage: 0, armorDamage: 0, killed: false, downed: false });
+    emit(w, 'hit', hx, hy, TUNING.sound.impact, by);
+    return;
+  }
+  const raw = damageAt(b.weapon, Math.hypot(hx - b.ox, hy - b.oy)) * (by.ai ? TUNING.bots.damageMul : 1) * by.power.damageMul * (b.mul ?? 1);
   const m = mitigate(t.armor, raw, b.weapon.armorPen);
+  // Damage dealt counts opponents only and only what they lost (it pays shards: friendly fire and overkill never farm them).
+  if (t.team !== by.team) by.damageDealt += lost(t, m);
   t.armor -= m.armor;
   t.hp -= m.hp;
   t.hitFlash = TUNING.render.hitFlash;
   t.lastHitTick = w.tick;
   t.lastHitFrom = { x: b.ox, y: b.oy };
-  t.vx += b.dx * TUNING.combat.knockback;
-  t.vy += b.dy * TUNING.combat.knockback;
+  // One blast pushes like one bullet: the nudge is shared between its pellets.
+  t.vx += (b.dx * TUNING.combat.knockback) / b.weapon.pellets;
+  t.vy += (b.dy * TUNING.combat.knockback) / b.weapon.pellets;
   by.hits++;
-  // Damage dealt counts opponents only (it pays shards: friendly fire must never farm them).
-  if (t.team !== by.team) by.damageDealt += raw;
   t.damageTaken += m.hp + m.armor;
   const r = t.hp <= 0 ? drop(w, t, { cause: 'shot', killerId: by.id, weapon: b.weapon.name, fromX: b.ox, fromY: b.oy, toX: t.x, toY: t.y, tick: w.tick }) : null;
   w.hits.push({ target: t.id, by: by.id, x: hx, y: hy, fromX: b.ox, fromY: b.oy, hpDamage: m.hp, armorDamage: m.armor, killed: r === 'out', downed: r === 'downed' });
   emit(w, 'hit', hx, hy, TUNING.sound.impact, by);
+}
+
+/** What a hit really took from t: armour plus health down to 0, nothing from a downed pool (no overkill). */
+function lost(t: Actor, m: { hp: number; armor: number }): number {
+  return t.downed ? 0 : m.armor + Math.min(Math.max(0, t.hp), m.hp);
 }
 
 /** Standing (alive and not downed): can fight, rescue, and keep its team in the match. */
@@ -907,11 +994,14 @@ function drop(w: World, t: Actor, info: KillInfo): 'downed' | 'out' {
     t.burstLeft = 0;
     t.shieldLeft = t.frenzyLeft = 0;
     t.volley = 0;
+    t.dashLeft = 0;
     t.vx = t.vy = 0;
     emit(w, 'downed', t.x, t.y, TUNING.sound.death, t);
     return 'downed';
   }
-  const credit = t.downInfo ?? info;
+  // The kill goes to the hostile who downed them; downed by yourself or a teammate, to whoever finished you.
+  const first = t.downInfo, firstBy = first && first.killerId >= 0 ? w.actors[first.killerId] : null;
+  const credit = first && firstBy && firstBy.team !== t.team ? first : info;
   const killer = credit.killerId >= 0 ? w.actors[credit.killerId] : null;
   if (killer && killer.team !== t.team) killer.kills++;
   down(w, t, credit);
@@ -946,7 +1036,7 @@ function stepZone(w: World, dt: number): void {
     a.hp -= d;
     a.damageTaken += d;
     a.zoneTick = w.tick;
-    if (a.hp <= 0) down(w, a, { cause: 'zone', killerId: -1, weapon: 'Danger zone', fromX: a.x, fromY: a.y, toX: a.x, toY: a.y, tick: w.tick });
+    if (a.hp <= 0) (a.downed ? drop : down)(w, a, { cause: 'zone', killerId: -1, weapon: 'Danger zone', fromX: a.x, fromY: a.y, toX: a.x, toY: a.y, tick: w.tick });
   }
 }
 
@@ -960,8 +1050,9 @@ export function wants(a: Actor, kind: PickupKind): boolean {
   if (kind === 'health') return a.hp <= hpCeiling(a) - TUNING.pickups.minGain;
   if (kind === 'armor') return a.armor <= armorCeiling(a) - TUNING.pickups.minGain;
   if (kind === 'grenade') return a.grenades < a.maxGrenades;
-  return a.reserve < a.weapon.reserve + a.weapon.magazine * 2;
+  return a.reserve < ammoCeiling(a);
 }
+export const ammoCeiling = (a: Actor) => a.weapon.reserve + a.weapon.magazine * 2;
 
 /**
  * A pickup the actor is standing on but does not take because it is at the hard ceiling (RC-8). Collection itself needs
@@ -990,16 +1081,20 @@ function stepPickups(w: World, dt: number): void {
       p.active = true;
       continue;
     }
-    for (const a of w.actors) {
-      if (!a.alive || Math.hypot(a.x - p.x, a.y - p.y) > P.radius || !wants(a, p.kind)) continue;
+    // Contested: the nearest one that wants it takes it (never the lower actor id).
+    let a: Actor | null = null;
+    for (const o of w.actors) {
+      if (!o.alive || Math.hypot(o.x - p.x, o.y - p.y) > P.radius || !wants(o, p.kind)) continue;
+      if (!a || Math.hypot(o.x - p.x, o.y - p.y) < Math.hypot(a.x - p.x, a.y - p.y)) a = o;
+    }
+    if (a) {
       if (p.kind === 'health') a.hp = Math.min(hpCeiling(a), a.hp + P.health.amount);
       else if (p.kind === 'armor') a.armor = Math.min(armorCeiling(a), a.armor + P.armor.amount);
       else if (p.kind === 'grenade') a.grenades = Math.min(a.maxGrenades, a.grenades + P.grenade.amount);
-      else a.reserve += a.weapon.magazine * P.ammo.mags;
+      else a.reserve = Math.min(ammoCeiling(a), a.reserve + a.weapon.magazine * P.ammo.mags);
       p.active = false;
       p.respawnLeft = P[p.kind].respawn;
       emit(w, 'pickup', p.x, p.y, TUNING.sound.pickup, a);
-      break;
     }
   }
   // After pickups (so a pickup sees the true value): overheal and over-armour drain back to the normal maximum.
@@ -1019,7 +1114,9 @@ function stepRevive(w: World, dt: number): void {
   const R = TUNING.revive;
   for (const t of w.actors) {
     if (!t.alive || !t.downed) continue;
-    const helper = w.actors.find((m) => m !== t && m.team === t.team && standing(m) && !m.firedLast && Math.hypot(m.x - t.x, m.y - t.y) <= R.range);
+    // Any helper in range who was not hit this step keeps the revive going (not just the first in actor order).
+    const helpers = w.actors.filter((m) => m !== t && m.team === t.team && standing(m) && !m.firedLast && Math.hypot(m.x - t.x, m.y - t.y) <= R.range);
+    const helper = helpers.find((m) => m.lastHitTick !== w.tick) ?? helpers[0];
     const hitNow = t.lastHitTick === w.tick || (helper && helper.lastHitTick === w.tick);
     if (helper && !hitNow) {
       t.reviveProgress += dt;

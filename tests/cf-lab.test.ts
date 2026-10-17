@@ -268,11 +268,14 @@ describe('F: contact is earned', () => {
     }
     return +best.toFixed(1);
   };
-  it('no open lane over 15 u (was 42), the nearest patrol is 20+ u of walking from the spawn (was 14.7)', () => {
+  // FS (owner 2026-10-17, "much bigger" venue with "open sightlines" and "varied ranges"): the CF cap of 15 u was
+  // for the 44 u wide map. The 68 u venue caps every lane at 28 u (no full-width lane; tests/venue.test.ts also
+  // requires real long lanes, close quarters and cover density). The patrol distance bar is unchanged.
+  it('no open lane over 28 u on the 68 u venue (RC-8: 42 on 44 u), the nearest patrol is 20+ u of walking from the spawn (was 14.7)', () => {
     const lane = { before: lanes(ROOM_ZERO_RC8), after: lanes(ROOM_ZERO) };
     const near = { before: nearestPatrol(ROOM_ZERO_RC8, BOT_SPAWNS_RC8), after: nearestPatrol(ROOM_ZERO, BOT_SPAWNS) };
-    record('F', 'longest open lane (u) / walk to the nearest patrol (u)', `${lane.before} / ${near.before}`, `${lane.after} / ${near.after}`, 'lane <= 15; nearest patrol >= 20 u');
-    expect(lane.after).toBeLessThanOrEqual(15);
+    record('F', 'longest open lane (u) / walk to the nearest patrol (u)', `${lane.before} / ${near.before}`, `${lane.after} / ${near.after}`, 'lane <= 28 on 68 u; nearest patrol >= 20 u');
+    expect(lane.after).toBeLessThanOrEqual(28);
     expect(near.after).toBeGreaterThanOrEqual(20);
     expect(lane.before).toBe(42);
   });

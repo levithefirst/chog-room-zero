@@ -48,6 +48,9 @@ export interface BoardRow { rank: number; name: string; kills: number; matches: 
 export const leaderboard = () => api<{ progression: boolean; rows: BoardRow[]; me: BoardRow | null }>('leaderboard');
 export const buyUpgrade = (id: string) => api<{ ok: boolean; rank?: number; shards?: number; reason?: string }>('upgrade', { id });
 export const settle = (matchId: string) => api<{ ok: boolean; already?: boolean; reason?: string; error?: string; mine?: Reward | null }>('settle', { matchId });
+/** Whether a settle answer is worth asking again (no answer, the database or the game server briefly down); an
+ * unknown or bad match, or a settled one, never is. */
+export const settleRetryable = (r: { ok?: boolean; error?: string } | null): boolean => !r || r.error === 'progression_offline' || r.error === 'game_server';
 
 /** A ticket for the game server: the chosen held token (verified by the site), or a demo token number. */
 export async function fetchTicket(choice: { tokenId?: number; demo?: number }, name: string): Promise<{ ticket: string; profile: TicketProfile; warning?: string | null } | null> {

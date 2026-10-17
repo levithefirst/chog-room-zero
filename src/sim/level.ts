@@ -167,29 +167,52 @@ export function shotClear(l: Level, ax: number, ay: number, bx: number, by: numb
   return t < 0 || t >= 1;
 }
 
-/** A* over walkable tiles, 8-way without cutting corners. Returns tile-centre waypoints, excluding the start. */
-export function findPath(l: Level, sx: number, sy: number, gx: number, gy: number, maxNodes = 2000): { x: number; y: number }[] {
-  const w = l.w;
+/**
+ * A* over walkable tiles, 8-way without cutting corners. Returns tile-centre waypoints, excluding the start; [] when
+ * the goal is blocked or out of reach. A binary heap keeps it fast on the big venue (a whole-map path is ~2,000
+ * expansions); by default it may expand every tile.
+ */
+export function findPath(l: Level, sx: number, sy: number, gx: number, gy: number, maxNodes = l.w * l.h): { x: number; y: number }[] {
+  const w = l.w, n = w * l.h;
   const start = Math.floor(sy) * w + Math.floor(sx);
   const goal = Math.floor(gy) * w + Math.floor(gx);
+  if (start < 0 || start >= n || goal < 0 || goal >= n) return [];
   const walk = (i: number) => walkable(l.tiles[i]) && l.dyn[i] === 0;
   if (!walk(goal)) return [];
-  const g = new Float32Array(w * l.h).fill(Infinity);
-  const from = new Int32Array(w * l.h).fill(-1);
-  const closed = new Uint8Array(w * l.h);
-  const open: number[] = [start];
-  const f = new Float32Array(w * l.h).fill(Infinity);
+  const g = new Float32Array(n).fill(Infinity);
+  const from = new Int32Array(n).fill(-1);
+  const closed = new Uint8Array(n);
   const hx = goal % w, hy = Math.floor(goal / w);
-  const heur = (i: number) => Math.hypot((i % w) - hx, Math.floor(i / w) - hy);
+  // Octile distance: exact for 8-way moves, so the path is optimal.
+  const heur = (i: number) => { const dx = Math.abs((i % w) - hx), dy = Math.abs(Math.floor(i / w) - hy); return Math.max(dx, dy) + (Math.SQRT2 - 1) * Math.min(dx, dy); };
+  // Min-heap of (f, node).
+  const hf: number[] = [], hn: number[] = [];
+  const push = (f: number, i: number) => {
+    let k = hf.length; hf.push(f); hn.push(i);
+    while (k > 0) { const p = (k - 1) >> 1; if (hf[p] <= f) break; hf[k] = hf[p]; hn[k] = hn[p]; k = p; }
+    hf[k] = f; hn[k] = i;
+  };
+  const pop = (): number => {
+    const top = hn[0], lf = hf.pop()!, ln = hn.pop()!;
+    if (hf.length) {
+      let k = 0;
+      for (;;) {
+        const a = 2 * k + 1, b = a + 1;
+        let m = k, mf = lf;
+        if (a < hf.length && hf[a] < mf) { m = a; mf = hf[a]; }
+        if (b < hf.length && hf[b] < mf) { m = b; mf = hf[b]; }
+        if (m === k) break;
+        hf[k] = hf[m]; hn[k] = hn[m]; k = m;
+      }
+      hf[k] = lf; hn[k] = ln;
+    }
+    return top;
+  };
   g[start] = 0;
-  f[start] = heur(start);
+  push(heur(start), start);
   let expanded = 0;
-  while (open.length && expanded < maxNodes) {
-    let bi = 0;
-    for (let i = 1; i < open.length; i++) if (f[open[i]] < f[open[bi]]) bi = i;
-    const cur = open[bi];
-    open[bi] = open[open.length - 1];
-    open.pop();
+  while (hf.length && expanded < maxNodes) {
+    const cur = pop();
     if (cur === goal) break;
     if (closed[cur]) continue;
     closed[cur] = 1;
@@ -201,14 +224,13 @@ export function findPath(l: Level, sx: number, sy: number, gx: number, gy: numbe
         const nx = cx + dx, ny = cy + dy;
         if (nx < 0 || ny < 0 || nx >= w || ny >= l.h) continue;
         const ni = ny * w + nx;
-        if (!walk(ni)) continue;
+        if (closed[ni] || !walk(ni)) continue;
         if (dx && dy && (!walk(cy * w + nx) || !walk(ny * w + cx))) continue;
         const ng = g[cur] + (dx && dy ? Math.SQRT2 : 1);
         if (ng < g[ni]) {
           g[ni] = ng;
-          f[ni] = ng + heur(ni);
           from[ni] = cur;
-          open.push(ni);
+          push(ng + heur(ni), ni);
         }
       }
     }

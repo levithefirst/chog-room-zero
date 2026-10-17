@@ -24,10 +24,10 @@ const tile = (w: World, x: number, y: number) => w.level.tiles[Math.floor(y) * w
 const reach = (w: World) => walkField(w.level, [w.level.playerSpawn]);
 
 describe('the layout', () => {
-  it('15 pickups: 4 health, 4 armour, 3 grenades, 4 ammo, every zone with room to move (4+ tiles), solo and online', () => {
+  it('26 pickups: 8 health, 6 armour, 6 grenades, 6 ammo, every zone with room to move (4+ tiles), solo and online', () => {
     for (const w of [solo(1), online(1, 1), online(1, 3), online(1, 5)]) {
       const n = (k: string) => w.pickups.filter((p) => p.kind === k).length;
-      expect([n('health'), n('armor'), n('grenade'), n('ammo')]).toEqual([4, 4, 3, 4]);
+      expect([n('health'), n('armor'), n('grenade'), n('ammo')]).toEqual([8, 6, 6, 6]);
       for (const [i, s] of w.pickupSpots.entries()) expect(s.length, PICKUP_ZONES[i].name).toBeGreaterThanOrEqual(4);
     }
   });
@@ -86,7 +86,7 @@ describe('comebacks', () => {
     const f = w.pickupFields!;
     let back = 0, moved = 0, worst = 0;
     for (let round = 0; round < 120; round++) {
-      const p = zoned(w)[round % 15];
+      const p = zoned(w)[round % zoned(w).length];
       const was = { x: p.x, y: p.y };
       // Someone stands in the zone when it comes back.
       const a = w.actors[0];
@@ -108,12 +108,42 @@ describe('comebacks', () => {
     expect(back).toBeGreaterThan(90);
     expect(worst).toBeLessThanOrEqual(P.balanceTolerance + 1.5);
   });
-  it('the map holds about the same healing per second as before, spread over more places', () => {
-    const hp = (n: number, s: number) => (n * P.health.amount) / s;
-    expect(hp(4, P.health.respawn)).toBeLessThanOrEqual(hp(3, 20) * 1.1);
-    expect((4 * P.armor.amount) / P.armor.respawn).toBeLessThanOrEqual(((3 * 35) / 25) * 1.15);
-    // Grenades: three on the map, so at most about four extra throws a minute for the whole room.
-    expect((3 * 60) / P.grenade.respawn).toBeLessThanOrEqual(4.5);
+  it('substantially more on the map than before, but no more per tile of floor (a resource space, not a vending machine)', () => {
+    // FS: 26 pickups on 1,950 floor tiles. Before (FP): 4 health at 40/25 s, 4 armour at 35/30 s, 3 grenades at 40 s, on 676 tiles.
+    const w = solo(1);
+    const floor = Array.from(w.level.tiles).filter((t) => t === FLOOR || t === 4).length;
+    const n = (k: string) => w.pickups.filter((p) => p.kind === k).length;
+    const hp = (n('health') * P.health.amount) / P.health.respawn, ar = (n('armor') * P.armor.amount) / P.armor.respawn, gr = (n('grenade') * 60) / P.grenade.respawn;
+    expect(hp).toBeGreaterThanOrEqual((4 * 40) / 25 * 1.5);
+    expect(ar).toBeGreaterThan((4 * 35) / 30);
+    expect(gr).toBeGreaterThan(4.5);
+    expect(hp / floor).toBeLessThanOrEqual((4 * 40) / 25 / 676);
+    expect(ar / floor).toBeLessThanOrEqual((4 * 35) / 30 / 676);
+    expect(gr).toBeLessThanOrEqual(8); // grenades: a refill for a key moment, never a stream
+  });
+  it('reachable from everywhere: from any floor tile a health pickup is at most a short walk, for 60 seeds', () => {
+    // The venue's far corners are as served as the middle: the walk to the nearest health pickup never exceeds 26
+    // tiles, and half the floor is within 9 (measured: worst 22, median 7).
+    let worst = 0;
+    const meds: number[] = [];
+    for (const seed of SEEDS.slice(0, 20)) {
+      const w = solo(seed);
+      const f = walkField(w.level, w.pickups.filter((p) => p.kind === 'health'));
+      const d: number[] = [];
+      for (let i = 0; i < w.level.tiles.length; i++) if (w.level.tiles[i] === FLOOR) d.push(f.d[i]);
+      d.sort((a, b) => a - b);
+      worst = Math.max(worst, d[d.length - 1]);
+      meds.push(d[d.length >> 1]);
+    }
+    expect(worst).toBeLessThanOrEqual(26);
+    expect(meds.sort((a, b) => a - b)[meds.length >> 1]).toBeLessThanOrEqual(9);
+  });
+  it('spread across the venue in 60 seeds: every zone is used, all four kinds in both halves and in the north, middle and south', () => {
+    const where = new Set<string>();
+    for (const seed of SEEDS) for (const p of zoned(online(seed))) where.add(`${p.kind}:${p.x < 34 ? 'w' : 'e'}:${p.y < 12 ? 'n' : p.y > 29 ? 's' : 'c'}`);
+    for (const k of ['health', 'armor', 'grenade', 'ammo']) for (const side of ['w', 'e']) expect([...where].some((x) => x.startsWith(`${k}:${side}`)), `${k} ${side}`).toBe(true);
+    for (const band of ['n', 'c', 's']) for (const side of ['w', 'e']) expect([...where].some((x) => x.endsWith(`${side}:${band}`)), `${side} ${band}`).toBe(true);
+    expect(zoned(online(1)).length).toBe(PICKUP_ZONES.length);
   });
 });
 

@@ -4,10 +4,11 @@
 // The server owns the match: it steps the same deterministic sim as solo play (src/sim/world.ts) with each player's
 // latest controls. Clients never send positions, hits, damage or results, only controls.
 import { randomBytes } from 'node:crypto';
-import { createWorld, down, IDLE_INPUT, matchSeconds, revealed, standing, stepWorld, type Actor, type ActorInput, type Team, type World } from '../src/sim/world';
+import { createWorld, down, IDLE_INPUT, matchSeconds, revealed, standing, stepWorld, type Actor, type ActorInput, type HitEvent, type SoundEvent, type Team, type World } from '../src/sim/world';
 import { canSee, muzzleFlashSeen } from '../src/sim/vision';
 import { hears } from '../src/sim/world';
-import { hearReport, locatesSource, noise3 } from '../src/sim/intel';
+import { hearReport, locatesSource, noise3, type Salt } from '../src/sim/intel';
+import { sightClear } from '../src/sim/level';
 import { heroIdOf } from '../src/config/heroes';
 import { VERSUS_SPAWNS } from '../src/config/map';
 import { TUNING } from '../src/config/tuning';
@@ -103,6 +104,14 @@ interface Room {
   left: boolean[];
   /** Left while still standing (a quit forfeits the match's rewards; leaving after being knocked out does not). */
   quit: boolean[];
+  /** Whether each member was still standing when its connection dropped (what counts as a quit if it never returns). */
+  dropStanding: boolean[];
+  /** Secret key for every noise this room sends (spots, hearing estimates, blurred hits): never leaves the server. */
+  salt: Salt;
+  /** Sounds and hits of every step since the last snapshot (stepWorld clears its own each step; snapshots go out
+   * every snapEvery steps). Drained by each snapshot round, so they hold at most snapEvery steps of events. */
+  sounds: SoundEvent[];
+  hits: HitEvent[];
   over: boolean;
   demo: boolean;
   /** Started from a private room code: settled for history, never rewarded or rated. */
@@ -110,6 +119,8 @@ interface Room {
 }
 
 const STEP = TUNING.simStepSeconds;
+/** A fresh secret noise key: 128 random bits as four 32-bit words. */
+const saltWords = (): Salt => { const b = randomBytes(16); return [0, 4, 8, 12].map((o) => b.readInt32LE(o)); };
 const PARTY_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 
 export class Lobby {
@@ -166,6 +177,8 @@ export class Lobby {
     if (!p) return;
     p.conn = null;
     p.goneAt = this.opts.now();
+    // Whether this drop is a quit is decided now: an operator knocked out while its player is away did not quit.
+    if (p.state === 'playing' && p.room) p.room.dropStanding[p.actorId] = standing(p.room.world.actors[p.actorId]);
     if (p.state === 'queued') this.unqueue(p);
     // In a match the operator stays (idle) for the grace period; tick() removes it if nobody resumes.
     if (p.state !== 'playing') this.forget(p);
@@ -213,6 +226,9 @@ export class Lobby {
   private handle(p: Player, m: ClientMsg): void {
     switch (m.t) {
       case 'hello': {
+        // One hello per connection: a second one (say, a resume sent while queued or playing) would leave this socket
+        // holding two operators.
+        if (p.state !== 'new') { this.err(p, 'hello-again', 'This connection already said hello.'); return; }
         // Resume: a known token whose operator is still in a live match takes it back.
         const old = m.token ? this.byToken.get(m.token) : undefined;
         if (old && old !== p && old.state === 'playing' && old.room && !old.room.over && !old.conn) {
@@ -222,7 +238,15 @@ export class Lobby {
           this.players.set(p.id, old);
           this.players.delete(old.id);
           old.id = p.id;
-          old.conn!.send({ t: 'welcome', v: PROTOCOL, token: old.token, name: old.name, resumed: true });
+          // A reloaded client counts its inputs from 0 again: the ack starts over, and no control or tap from before
+          // the drop is carried into the resumed operator.
+          const r = old.room, i = old.actorId;
+          r.acks[i] = 0;
+          r.ackSteps[i] = 0;
+          r.inputs[i] = { ...IDLE_INPUT, aim: r.world.actors[i].facing };
+          r.fireLatch[i] = false;
+          r.dropStanding[i] = false;
+          old.conn!.send({ t: 'welcome', v: PROTOCOL, token: old.token, name: old.name, resumed: true, profile: this.profileOf(old, null) });
           // A resumed client rebuilds its world from the seed: send where the pickups are now.
           old.pickRev = -1;
           this.sendMatch(old.room, old);
@@ -231,14 +255,17 @@ export class Lobby {
         const nick = validateNickname(m.name);
         p.name = nick.ok ? nick.value : `Guest-${p.token.slice(0, 4).toUpperCase()}`;
         p.hero = heroIdOf(m.hero) ?? 'benja';
-        if (p.state === 'new') { p.state = 'idle'; this.byToken.set(p.token, p); }
-        if (!m.ticket || p.state !== 'idle') { this.welcome(p, null); return; }
+        p.state = 'idle';
+        this.byToken.set(p.token, p);
+        if (!m.ticket) { this.welcome(p, null); return; }
         if (!this.opts.checkTicket) { this.welcome(p, 'This server does not check tickets: playing as a free profile.'); return; }
         // Fail closed: a ticket that cannot be checked in time, or was used before, plays as a free profile.
         const conn = p.conn;
         const timeout = new Promise<null>((r) => setTimeout(() => r(null), 5000));
         void Promise.race([this.opts.checkTicket(m.ticket).catch(() => null), timeout]).then((t) => {
           if (p.conn !== conn) return;
+          // A check that finishes after this player queued or started a match never swaps the ticket mid-match.
+          if (p.state !== 'idle') { this.err(p, 'ticket-late', 'Your ticket was checked too late for this match: playing as a free profile.'); return; }
           let note: string | null = null;
           if (!t) note = 'Your ticket could not be checked: playing as a free profile.';
           else if (this.usedTickets.has(t.tid)) note = 'That ticket was already used: playing as a free profile.';
@@ -270,6 +297,15 @@ export class Lobby {
         // Demo tokens only ever meet other demo tokens, so demo power never touches a real match.
         const demo = group.some((x) => x.ticket?.demo);
         if (demo && !group.every((x) => x.ticket?.demo)) { this.err(p, 'party-mixed-demo', 'Demo and real players cannot queue as one squad.'); return; }
+        // One seat per Chog: a verified token already queued or in a match (another account it was bound to, a second
+        // tab) cannot take a second seat. Demo tokens are labelled and earn nothing, so they are not counted.
+        const tokOf = (x: Player) => (x.ticket?.holder && !x.ticket.demo ? x.ticket.tok : null);
+        const toks = group.map(tokOf).filter((k): k is number => k !== null);
+        const seated = [...this.players.values()].filter((o) => !group.includes(o) && (o.state === 'queued' || o.state === 'playing')).map(tokOf);
+        if (new Set(toks).size < toks.length || toks.some((k) => seated.includes(k))) {
+          this.err(p, 'token-in-use', 'That Chog is already in a queue or a match on another connection. Play it from one place at a time.');
+          return;
+        }
         for (const x of group) if (x.state === 'queued') this.unqueue(x);
         const key = `${m.mode}:${m.code ?? ''}${demo ? '|demo' : ''}`;
         const q = this.queues.get(key) ?? [];
@@ -292,10 +328,15 @@ export class Lobby {
         if (p.state !== 'playing' || !r || r.over) return;
         const inp = toActorInput(m);
         const prev = r.inputs[p.actorId];
-        // Edge-triggered actions survive until a step uses them; a tap of fire fires once.
-        r.inputs[p.actorId] = { ...inp, reload: inp.reload || prev.reload, ability: inp.ability || prev.ability, grenade: !!inp.grenade || !!prev.grenade,
-          throwDist: inp.grenade ? inp.throwDist : prev.throwDist, throwAim: inp.grenade ? inp.throwAim : prev.throwAim };
-        if (inp.firing) r.fireLatch[p.actorId] = true;
+        // Countdown: only what is held now counts (stick, aim, a held trigger). A tap of fire, reload, ability or a
+        // grenade pressed before the start is dropped, so nothing fires on the first step.
+        if (r.steps <= r.startTick) r.inputs[p.actorId] = { ...inp, reload: false, ability: false, grenade: false };
+        else {
+          // Edge-triggered actions survive until a step uses them; a tap of fire fires once.
+          r.inputs[p.actorId] = { ...inp, reload: inp.reload || prev.reload, ability: inp.ability || prev.ability, grenade: !!inp.grenade || !!prev.grenade,
+            throwDist: inp.grenade ? inp.throwDist : prev.throwDist, throwAim: inp.grenade ? inp.throwAim : prev.throwAim };
+          if (inp.firing) r.fireLatch[p.actorId] = true;
+        }
         if (m.seq > r.acks[p.actorId]) { r.acks[p.actorId] = m.seq; r.ackSteps[p.actorId] = 0; }
         return;
       }
@@ -306,10 +347,13 @@ export class Lobby {
   }
 
   // ---- rooms ----
-  private welcome(p: Player, note: string | null): void {
+  private profileOf(p: Player, note: string | null): NetProfile {
     const t = p.ticket;
-    const profile: NetProfile = { verified: !!t, tier: t?.tier ?? 'free', holder: !!t?.holder, demo: !!t?.demo, account: !!t?.acc, metadataId: t?.mid ?? null, note };
-    p.conn?.send({ t: 'welcome', v: PROTOCOL, token: p.token, name: p.name, resumed: false, profile });
+    return { verified: !!t, tier: t?.tier ?? 'free', holder: !!t?.holder, demo: !!t?.demo, account: !!t?.acc, metadataId: t?.mid ?? null, note };
+  }
+
+  private welcome(p: Player, note: string | null): void {
+    p.conn?.send({ t: 'welcome', v: PROTOCOL, token: p.token, name: p.name, resumed: false, profile: this.profileOf(p, note) });
   }
 
   /** SB matchmaking strength: rating (new accounts no higher than the start) plus the power offset of its tier. */
@@ -336,8 +380,16 @@ export class Lobby {
     if (!q) return;
     const half = MODE_SIZE[mode] / 2;
     // Small search (queues hold at most a few groups per key): each group goes to alpha, bravo or waits, oldest first,
-    // so the earliest players are matched whenever any split of the queue fills both teams exactly.
-    const pool = q.slice(0, 12);
+    // so the earliest players are matched whenever any split of the queue fills both teams exactly. The pool takes the
+    // oldest groups of each size up to 12 players' worth per size, so a long head of duos cannot starve the solos
+    // queued behind it (a match never needs more than that of one size).
+    const per = new Map<number, number>();
+    const pool = q.filter((g) => {
+      const n = per.get(g.players.length) ?? 0;
+      if ((n + 1) * g.players.length > 12) return false;
+      per.set(g.players.length, n + 1);
+      return true;
+    });
     const pick: (0 | 1 | 2)[] = [];
     // SB fairness: a split counts only if everyone in it is within the band (widened by the oldest group's wait) and the
     // teams' average strengths are close. Private codes skip it (friends play who they invite).
@@ -400,7 +452,8 @@ export class Lobby {
     const world = createWorld({ seed: this.opts.seed(), versus, zone: true, friendlyFire: this.opts.friendlyFire });
     const room: Room = {
       id, mode, world, members, inputs: members.map(() => ({ ...IDLE_INPUT })), acks: members.map(() => 0), ackSteps: members.map(() => 0), fireLatch: members.map(() => false),
-      startTick: Math.round(this.opts.countdownSec / STEP), steps: 0, lastShot: members.map(() => -1e9), left: members.map(() => false), quit: members.map(() => false), over: false,
+      startTick: Math.round(this.opts.countdownSec / STEP), steps: 0, lastShot: members.map(() => -1e9), left: members.map(() => false), quit: members.map(() => false),
+      dropStanding: members.map(() => false), salt: saltWords(), sounds: [], hits: [], over: false,
       demo: members.some((p) => p.ticket?.demo), private: priv,
     };
     members.forEach((p, i) => {
@@ -452,6 +505,8 @@ export class Lobby {
         return out;
       });
       for (const s of w.sounds) if (s.type === 'shot') room.lastShot[s.sourceId] = w.tick;
+      room.sounds.push(...w.sounds);
+      room.hits.push(...w.hits);
     }
     if (w.outcome === 'playing' && matchSeconds(w) >= this.opts.matchLimitSec) {
       // Time limit: more health standing wins; equal is a draw.
@@ -461,7 +516,11 @@ export class Lobby {
       this.finish(room, 'time');
       return;
     }
-    if (room.steps % this.opts.snapEvery === 0 || w.outcome !== 'playing') room.members.forEach((p, i) => { if (p.conn && !room.left[i]) p.conn.send(this.snapshot(room, p)); });
+    if (room.steps % this.opts.snapEvery === 0 || w.outcome !== 'playing') {
+      room.members.forEach((p, i) => { if (p.conn && !room.left[i]) p.conn.send(this.snapshot(room, p, room.sounds, room.hits)); });
+      room.sounds = [];
+      room.hits = [];
+    }
     if (w.outcome !== 'playing') this.finish(room, 'eliminated');
   }
 
@@ -471,9 +530,10 @@ export class Lobby {
    * or YOUR Ping shows. A hostile only a teammate sees (or a teammate's Ping or seen flash shows) is a SPOTTED report:
    * a spot within spottedRadius of where it was, refreshed every spottedRefresh s, never the live body. Heard hostile
    * sounds arrive as the hearing estimate the game draws (src/sim/intel.ts hearReport), not their exact spot. Bullets,
-   * grenades and hits follow the same line.
+   * grenades and hits follow the same line. `sounds` and `hits`: the events to report (the room's buffer since the last
+   * snapshot; tests pass the last step's).
    */
-  snapshot(room: Room, p: Player): Extract<ServerMsg, { t: 'snap' }> {
+  snapshot(room: Room, p: Player, sounds: readonly SoundEvent[] = room.world.sounds, hits: readonly HitEvent[] = room.world.hits): Extract<ServerMsg, { t: 'snap' }> {
     const w = room.world;
     const me = w.actors[p.actorId];
     const mates = w.actors.filter((a) => a.team === me.team && a.alive && a !== me);
@@ -485,16 +545,20 @@ export class Lobby {
     const spottedByMate = (e: Actor) => mates.some((m) => canSee(w.level, m.x, m.y, m.facing, m.view, e.x, e.y) || flashed(e, m) || revealed(w, m).includes(e));
     const shown = new Set(w.actors.filter(exact).map((a) => a.id));
     const visible = (e: Actor) => shown.has(e.id);
-    // Spotted reports: a fresh one when the last has run out, else the same (stale) spot.
+    // Spotted reports: a fresh one when the last has run out, else the same (stale) spot. The offset is keyed with the
+    // room's secret salt, so knowing the tick and the ids does not let a client subtract it.
     const S = TUNING.intel, refresh = Math.round(TUNING.sound.spottedRefresh / STEP);
+    const blur = (x: number, y: number, id: number, k: number) => {
+      const a = noise3(w.tick, id, p.actorId * 7 + k, room.salt) * Math.PI, d = (0.5 + 0.5 * Math.abs(noise3(w.tick, id, p.actorId * 7 + k + 1, room.salt))) * S.spottedRadius;
+      const q = (v: number) => Math.round(v * 4) / 4;
+      return { x: q(x + Math.cos(a) * d), y: q(y + Math.sin(a) * d) };
+    };
     const sp: { id: number; x: number; y: number }[] = [];
     for (const e of w.actors) {
       if (shown.has(e.id) || !spottedByMate(e)) { p.spot.delete(e.id); continue; }
       let r = p.spot.get(e.id);
       if (!r || w.tick >= r.until) {
-        const a = noise3(w.tick, e.id, p.actorId * 7 + 1) * Math.PI, d = (0.5 + 0.5 * Math.abs(noise3(w.tick, e.id, p.actorId * 7 + 2))) * S.spottedRadius;
-        const q = (v: number) => Math.round(v * 4) / 4;
-        r = { x: q(e.x + Math.cos(a) * d), y: q(e.y + Math.sin(a) * d), until: w.tick + refresh };
+        r = { ...blur(e.x, e.y, e.id, 1), until: w.tick + refresh };
         p.spot.set(e.id, r);
       }
       sp.push({ id: e.id, x: r.x, y: r.y });
@@ -509,33 +573,40 @@ export class Lobby {
       downed: a.downed, reviveProgress: r3(a.reviveProgress), nades: a.grenades, maxNades: a.maxGrenades, focus: r3(a.focus),
       ...(a.slowLeft > 0 ? { slowMul: r3(a.slowMul) } : {}),
     }));
-    // Grenades: your team's always; a hostile one when you can see it or it is close to you (you hear it land and see
-    // the ring), so you can read the danger you are in.
-    const grenades: NetGrenade[] = w.grenades.filter((g) => g.team === me.team || iSee(g.x, g.y) || Math.hypot(me.x - g.x, me.y - g.y) <= TUNING.grenade.radius + 1.5)
+    // Grenades: your team's always; a hostile one when you can see it or it is close to you on a clear line (you hear
+    // it land and see the ring), so you can read the danger you are in. Never one behind a wall.
+    const near = (x: number, y: number, r: number) => Math.hypot(me.x - x, me.y - y) <= r && sightClear(w.level, me.x, me.y, x, y);
+    const grenades: NetGrenade[] = w.grenades.filter((g) => g.team === me.team || iSee(g.x, g.y) || near(g.x, g.y, TUNING.grenade.radius + 1.5))
       .map((g) => ({ id: g.id, x: r3(g.x), y: r3(g.y), vx: r3(g.vx), vy: r3(g.vy), fuse: r3(g.fuse), owner: g.owner }));
-    // Bullets: your team's, and a hostile one you can see in flight or that passes close to you.
-    const bullets: NetBullet[] = w.bullets.filter((b) => w.actors[b.owner].team === me.team || iSee(b.x, b.y) || Math.hypot(me.x - b.x, me.y - b.y) <= 2.5)
-      .map((b) => ({ x: r3(b.x), y: r3(b.y), dx: r3(b.dx), dy: r3(b.dy), ox: r3(b.ox), oy: r3(b.oy), owner: b.owner, weapon: b.weapon.id }));
+    // Bullets: your team's, and a hostile one you can see in flight or that passes close to you on a clear line. Where
+    // it was fired from only when you are shown the shooter (else the tracer starts where the bullet is).
+    const bullets: NetBullet[] = w.bullets.filter((b) => w.actors[b.owner].team === me.team || iSee(b.x, b.y) || near(b.x, b.y, 2.5)).map((b) => {
+      const o = w.actors[b.owner].team === me.team || visible(w.actors[b.owner]) ? { ox: r3(b.ox), oy: r3(b.oy) } : { ox: r3(b.x), oy: r3(b.y) };
+      return { x: r3(b.x), y: r3(b.y), dx: r3(b.dx), dy: r3(b.dy), ...o, owner: b.owner, weapon: b.weapon.id };
+    });
     // Sounds you hear. A hostile's sound that says where its maker is, from a maker you are not shown exactly, is sent
     // as what hearing it tells you (a spot off by a share of the distance, or through a wall a bearing and a distance
     // band), flagged so the client does not blur it twice.
-    const sounds: NetSound[] = w.sounds.filter((s) => s.sourceId === me.id || hears(w.level, me.x, me.y, s)).map((s) => {
+    const heard: NetSound[] = sounds.filter((s) => s.sourceId === me.id || hears(w.level, me.x, me.y, s)).map((s) => {
       const base = { type: s.type, radius: s.radius, source: s.sourceId, team: s.team, weapon: s.weapon, blocked: s.blocked, sig: s.sig };
       if (s.team === me.team || s.sourceId === me.id || visible(w.actors[s.sourceId]) || !locatesSource(s.type)) return { ...base, x: r3(s.x), y: r3(s.y) };
-      const est = hearReport(w, me, s);
+      const est = hearReport(w, me, s, room.salt);
       return est ? { ...base, x: r3(est.x), y: r3(est.y), est: est.state === 'directional' ? 'wall' as const : 'clear' as const } : { ...base, x: r3(s.x), y: r3(s.y) };
     });
     // Hits: on you or by you in full; a hostile's hit on a teammate, or any knock-out (the feed), without where it came
-    // from unless you are shown the shooter.
-    const hits: NetHit[] = w.hits.filter((h) => h.target === me.id || h.by === me.id || w.actors[h.target].team === me.team || h.killed || h.downed).map((h) => {
+    // from unless you are shown the shooter. A knock-out of a hostile you are not shown (not by you) is placed like a
+    // spotted report, never at the body.
+    const netHits: NetHit[] = hits.filter((h) => h.target === me.id || h.by === me.id || w.actors[h.target].team === me.team || h.killed || h.downed).map((h) => {
       const open = h.target === me.id || h.by === me.id || visible(w.actors[h.by]);
-      return { target: h.target, by: h.by, x: r3(h.x), y: r3(h.y), fromX: r3(open ? h.fromX : h.x), fromY: r3(open ? h.fromY : h.y), killed: h.killed, downed: h.downed, grenade: h.grenade };
+      const t = w.actors[h.target];
+      const at = t.team !== me.team && h.by !== me.id && !visible(t) ? blur(h.x, h.y, h.target, 3) : { x: r3(h.x), y: r3(h.y) };
+      return { target: h.target, by: h.by, ...at, fromX: open ? r3(h.fromX) : at.x, fromY: open ? r3(h.fromY) : at.y, killed: h.killed, downed: h.downed, grenade: h.grenade };
     });
     // Where every pickup is, whenever the layout changed since this player's last snapshot (and once at the start).
     const pk = p.pickRev !== w.pickupRev ? w.pickups.flatMap((k) => [k.x, k.y]) : undefined;
     p.pickRev = w.pickupRev;
     return {
-      t: 'snap', tick: w.tick, actors, bullets, grenades, pickups: w.pickups.map((k) => k.active), ...(pk ? { pk } : {}), ...(sp.length ? { sp } : {}), sounds, hits,
+      t: 'snap', tick: w.tick, actors, bullets, grenades, pickups: w.pickups.map((k) => k.active), ...(pk ? { pk } : {}), ...(sp.length ? { sp } : {}), sounds: heard, hits: netHits,
       barriers: w.barriers.map((b) => ({ ...b.box, left: r3(b.left) })), ack: room.acks[p.actorId], as: room.ackSteps[p.actorId],
     };
   }
@@ -544,7 +615,8 @@ export class Lobby {
     const i = room.members.indexOf(p);
     room.left[i] = true;
     const a = room.world.actors[i];
-    room.quit[i] = standing(a);
+    // Gone for good after a drop: a quit only if it was standing when the connection went (not knocked out since).
+    room.quit[i] = p.conn ? standing(a) : room.dropStanding[i];
     if (a.alive) down(room.world, a, { cause, killerId: -1, weapon: 'Left the match', fromX: a.x, fromY: a.y, toX: a.x, toY: a.y, tick: room.world.tick });
     if (p.conn === null) this.forget(p);
     // The outcome is decided on the next step (stepWorld), so a leaver's team loses through the normal rule.
@@ -558,8 +630,12 @@ export class Lobby {
 
   private finish(room: Room, reason: 'eliminated' | 'time'): void {
     if (room.over) return;
+    // Over before a single step (a side left during the countdown): nobody played, so nobody wins and nothing is kept.
+    if (room.steps <= room.startTick) { this.cancel(room); return; }
     room.over = true;
     const w = room.world;
+    // Still away (in the grace period) at the end: counted as gone, a quit if it was standing when it dropped.
+    const away = room.members.map((p, i) => !room.left[i] && !p.conn);
     const results: PlayerResult[] = w.actors.map((a) => ({
       id: a.id, name: a.name, hero: a.hero.id, team: a.team, kills: a.kills, damageDealt: Math.round(a.damageDealt), damageTaken: Math.round(a.damageTaken),
       hits: a.hits, bullets: a.bullets, alive: a.alive, cause: a.death?.cause ?? null,
@@ -569,7 +645,7 @@ export class Lobby {
       id: room.id, mode: room.mode, demo: room.demo, private: room.private, winner: w.winner, reason, seconds: Math.round(matchSeconds(w)), endedAt: Math.floor(Date.now() / 1000),
       players: w.actors.map((a) => {
         const t = room.members[a.id].ticket;
-        return { acc: t?.acc ?? null, team: a.team, tier: a.power.tier, tok: t?.holder ? t.tok : null, mid: t?.holder ? t.mid : null, own: t?.holder ? t.own : null, kills: a.kills, damage: Math.round(a.damageDealt), left: room.left[a.id], quit: room.quit[a.id], name: a.name, hero: a.hero.id, survived: a.alive };
+        return { acc: t?.acc ?? null, team: a.team, tier: a.power.tier, tok: t?.holder ? t.tok : null, mid: t?.holder ? t.mid : null, own: t?.holder ? t.own : null, kills: a.kills, damage: Math.round(a.damageDealt), left: room.left[a.id] || away[a.id], quit: away[a.id] ? room.dropStanding[a.id] : room.quit[a.id], name: a.name, hero: a.hero.id, survived: a.alive };
       }),
     };
     this.results.set(room.id, { at: this.opts.now(), record });
@@ -584,6 +660,21 @@ export class Lobby {
     });
     this.rooms.delete(room.id);
     // Squads stay together: everyone back in the lobby sees the squad ready for the next match.
+    for (const pa of new Set(room.members.map((p) => p.party).filter((x): x is Party => !!x))) this.sendParty(pa);
+  }
+
+  /** A match voided before it started: no result is stored, everyone still in it is told and is back in the lobby. */
+  private cancel(room: Room): void {
+    room.over = true;
+    room.members.forEach((p, i) => {
+      if (room.left[i]) return;
+      this.err(p, 'match-cancelled', 'A player left before the start. Match cancelled: nothing counts. Queue again when ready.');
+      p.state = 'idle';
+      p.room = null;
+      p.actorId = -1;
+      if (!p.conn) this.forget(p);
+    });
+    this.rooms.delete(room.id);
     for (const pa of new Set(room.members.map((p) => p.party).filter((x): x is Party => !!x))) this.sendParty(pa);
   }
 

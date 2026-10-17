@@ -7,6 +7,7 @@
 // Never put a secret in a response or a log. GOOGLE_CLIENT_SECRET and AUTH_SECRET stay server-side.
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { keccak_256 } from '@noble/hashes/sha3.js';
+import { claimNonce, type Db } from './db.js';
 
 declare const process: { env: Record<string, string | undefined> };
 
@@ -105,7 +106,10 @@ export function readCookie(req: Request, name: string): string | undefined {
   const raw = req.headers.get('cookie') ?? '';
   for (const part of raw.split(/;\s*/)) {
     const i = part.indexOf('=');
-    if (i > 0 && part.slice(0, i) === name) return decodeURIComponent(part.slice(i + 1));
+    if (i > 0 && part.slice(0, i) === name) {
+      // A malformed value (bad percent escape) is no cookie, never a 500.
+      try { return decodeURIComponent(part.slice(i + 1)); } catch { return undefined; }
+    }
   }
   return undefined;
 }
@@ -148,19 +152,45 @@ export function sameOrigin(req: Request, e: Env): boolean {
   try { return allowedHosts(e).has(new URL(o).host.toLowerCase()); } catch { return false; }
 }
 
-// ---- sessions ----
-export interface Session { ids: Identity[]; exp: number }
+/**
+ * A small JSON object body, or null (too large, not JSON, not an object). The declared length is checked before the
+ * body is read, so a large upload is refused without buffering it.
+ */
+export async function readJson(req: Request, limit = 4000): Promise<Record<string, unknown> | null> {
+  if (Number(req.headers.get('content-length') ?? 0) > limit) return null;
+  try {
+    const t = await req.text();
+    if (t.length > limit) return null;
+    const v = JSON.parse(t) as unknown;
+    return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+  } catch { return null; }
+}
 
+// ---- sessions ----
+/** `k: 'session'` tags a session token. Sessions issued before the tag have no `k` and are still accepted. */
+export interface Session { k?: 'session'; ids: Identity[]; exp: number }
+
+const isIdentity = (i: unknown): i is Identity => {
+  const x = i as Identity;
+  return !!x && (x.provider === 'google' || x.provider === 'wallet') && typeof x.subject === 'string' && typeof x.label === 'string';
+};
+
+/**
+ * This browser's session, or null. Every token here is signed with AUTH_SECRET (the wallet challenge and the Google
+ * state too), so the payload's shape is checked: only a session (tagged, or an untagged one with an ids list) counts.
+ */
 export async function readSession(req: Request, e: Env): Promise<Session | null> {
   if (!secretOk(e)) return null;
-  return unsign<Session>(readCookie(req, SESSION_COOKIE), e.AUTH_SECRET!);
+  const s = await unsign<Session>(readCookie(req, SESSION_COOKIE), e.AUTH_SECRET!);
+  if (!s || (s.k !== undefined && s.k !== 'session') || !Array.isArray(s.ids) || !s.ids.every(isIdentity)) return null;
+  return s;
 }
 
 /** Adds an identity to this browser's session (never twice), returning the Set-Cookie header. */
 export async function sessionCookieWith(prev: Session | null, id: Identity, e: Env, now = Date.now()): Promise<string> {
   const ids = (prev?.ids ?? []).filter((x) => !(x.provider === id.provider && x.subject === id.subject));
   ids.push(id);
-  const token = await sign({ ids: ids.slice(-4), exp: Math.floor(now / 1000) + SESSION_SECONDS }, e.AUTH_SECRET!);
+  const token = await sign({ k: 'session', ids: ids.slice(-4), exp: Math.floor(now / 1000) + SESSION_SECONDS }, e.AUTH_SECRET!);
   return cookie(SESSION_COOKIE, token, SESSION_SECONDS);
 }
 
@@ -221,3 +251,44 @@ export function parseSiwe(message: string): { domain: string; address: string; u
 }
 
 export interface Challenge { nonce: string; address: string; host: string; message: string; exp: number }
+
+/** Sign-In with Ethereum messages always name Monad mainnet (api/_lib/chain.ts CHAIN_ID), whatever the wallet is on. */
+export const SIWE_CHAIN_ID = 143;
+
+/**
+ * POST /api/auth/wallet/verify {message, signature}: the signed message must be exactly the one this browser was issued
+ * (same nonce, host, address), unexpired, and signed by that address (EIP-191 recovery, server-side). The challenge
+ * cookie is cleared whatever the outcome, and the nonce is recorded in room_zero.used_nonces, so a signature redeems
+ * once even if the cookie was copied. With no database configured the cleared cookie is the only guard (as before).
+ */
+export async function verifyWallet(req: Request, e: Env, openDb: () => Promise<Db | null>): Promise<Response> {
+  if (!secretOk(e)) return json({ error: 'not_configured' }, 503);
+  if (!sameOrigin(req, e)) return json({ error: 'bad_origin' }, 403);
+  const used = clearCookie(CHALLENGE_COOKIE, '/api/auth/wallet');
+  const fail = (error: string, status = 401) => json({ error }, status, { 'set-cookie': used });
+  const ch = await unsign<Challenge>(readCookie(req, CHALLENGE_COOKIE), e.AUTH_SECRET!);
+  if (!ch || typeof ch.message !== 'string' || typeof ch.nonce !== 'string') return fail('no_challenge');
+  const body = await readJson(req);
+  if (!body) return fail('bad_request', 400);
+  const message = String(body.message ?? '');
+  const f = parseSiwe(message);
+  if (message !== ch.message || !f || f.nonce !== ch.nonce || f.address !== ch.address || f.domain !== ch.host || f.domain !== requestHost(req)) return fail('mismatch');
+  if (Date.parse(f.expires) <= Date.now()) return fail('expired');
+  const signer = recoverPersonalSign(message, String(body.signature ?? ''));
+  if (!signer || signer !== ch.address) return fail('bad_signature');
+  let db: Db | null = null;
+  try {
+    db = await openDb();
+    if (db && !(await claimNonce(db, ch.nonce))) return fail('replayed');
+  } catch {
+    return fail('unavailable', 503);
+  } finally {
+    await db?.close().catch(() => undefined);
+  }
+  const prev = await readSession(req, e);
+  const identity = { provider: 'wallet' as const, subject: signer, label: shortAddress(signer) };
+  const h = new Headers({ 'content-type': 'application/json', 'cache-control': 'no-store' });
+  h.append('set-cookie', used);
+  h.append('set-cookie', await sessionCookieWith(prev, identity, e));
+  return new Response(JSON.stringify({ identity }), { status: 200, headers: h });
+}

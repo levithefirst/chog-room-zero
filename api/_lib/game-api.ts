@@ -8,7 +8,8 @@
 //   POST practice-start a signed ticket for one solo run (account, run id, start time)
 //   POST practice      store one solo practice run (bounded, rate limited, once per run id): career, medals, and a
 //                      capped practice reward when its start ticket checks out
-//   GET  tokens        Chog Genesis tokens the signed-in wallet holds, read live from Monad (fails closed)
+//   GET  tokens        Chog Genesis tokens the signed-in account's own wallets hold, read live from Monad (fails closed;
+//                      reads cached 30 s per address in this instance, unchanged reads logged once per 10 minutes)
 //   POST ticket        a 10 minute game ticket for the game server: account, verified holding, power (or a demo token)
 //   POST ticket-check  the game server asks whether a ticket is genuine (no cookie, no origin: the ticket is the proof)
 //   POST upgrade       spend shards on an upgrade rank
@@ -18,7 +19,7 @@
 //   GET  chain         read-only live check of the ownership path on Monad (cached 60 s; no player data)
 import { env as authEnv, json, readSession, sameOrigin, secretOk, type Env, type Identity } from './auth.js';
 import { schemaStatus, type Db } from './db.js';
-import { readOwnership, selfCheck, type Fetch, type Holding, type SelfCheck } from './chain.js';
+import { readOwnership, selfCheck, type Fetch, type Holding, type OwnershipResult, type SelfCheck } from './chain.js';
 import { setNftTier, accountFor, buyUpgrade, callsignOf, standingOf, checkTicket, issueTicket, leaderboard, settleMatch, ticketSecret, tokenHistory, upgradesOf, validRecord, type GameTicket } from './game.js';
 import { accountView, practiceSecret, recordPractice, setCallsign, setPrefs, startPractice } from './career.js';
 import { NO_UPGRADES, ONE_OF_ONE, SIGNATURES, TIER_DEFS, TIERS, chogName, tierOfMetadataId, type Tier } from '../../src/config/power.js';
@@ -34,7 +35,14 @@ export interface Deps {
   db(): Promise<Db | null>;
   fetch: Fetch;
   now(): number;
+  /** Live ownership reads kept for OWNERSHIP_CACHE_MS per address (this function instance only). Absent: no cache. */
+  ownershipCache?: Map<string, { at: number; r: OwnershipResult }>;
 }
+
+/** An address's live holdings are read from Monad at most once per this long per function instance. */
+export const OWNERSHIP_CACHE_MS = 30_000;
+/** An unchanged ownership read is logged to room_zero.ownership_checks at most once per this long per address. */
+export const OWNERSHIP_LOG_MS = 10 * 60_000;
 
 const DEFAULT_GAME_SERVER = 'https://room-zero-game.onrender.com';
 // Owner 2026-10-14 (master integration pass): NFT combat power is ON for verified holders. NFT_COMBAT=0 switches it off.
@@ -44,6 +52,7 @@ const gameServer = (e: GameEnv) => (e.GAME_SERVER_URL || e.VITE_GAME_SERVER_URL 
 
 async function body(req: Request): Promise<Record<string, unknown>> {
   try {
+    if (Number(req.headers.get('content-length') ?? 0) > 2000) return {};
     const t = await req.text();
     if (t.length > 2000) return {};
     const v = JSON.parse(t) as unknown;
@@ -52,6 +61,46 @@ async function body(req: Request): Promise<Record<string, unknown>> {
 }
 
 const wallets = (ids: Identity[]) => ids.filter((i) => i.provider === 'wallet').map((i) => i.subject).slice(0, 2);
+
+/**
+ * The session's wallets that belong to `acc`. A session can carry a wallet that is linked to another account (accountFor
+ * leaves it there), and that wallet's Chogs must never power or show on this account. With no database there is no
+ * account (acc null), and every proven wallet of the session counts, as before.
+ */
+async function walletsOf(db: Db | null, acc: string | null, ids: Identity[]): Promise<Identity[]> {
+  const mine = ids.filter((i) => i.provider === 'wallet');
+  if (!db || !acc || !mine.length) return db ? [] : mine;
+  const rows = await db.query<{ subject: string }>(`SELECT subject FROM room_zero.identities WHERE provider = 'wallet' AND account_id = $1 AND subject = ANY($2)`,
+    [acc, mine.map((i) => i.subject)]);
+  const linked = new Set(rows.map((r) => r.subject));
+  return mine.filter((i) => linked.has(i.subject));
+}
+
+/** A live ownership read, served from the instance cache when it is fresh. Failures are never cached (fail closed). */
+async function ownership(d: Deps, address: string): Promise<OwnershipResult> {
+  const key = address.toLowerCase();
+  const c = d.ownershipCache;
+  const hit = c?.get(key);
+  if (hit && d.now() - hit.at < OWNERSHIP_CACHE_MS) return hit.r;
+  const r = await readOwnership(address, d.fetch);
+  if (c && r.ok) {
+    if (c.size > 500) c.clear();
+    c.set(key, { at: d.now(), r });
+  }
+  return r;
+}
+
+/** Logs an ownership read, unless the last row for this address says the same thing and is under OWNERSHIP_LOG_MS old. */
+async function logOwnership(d: Deps, db: Db, address: string, r: OwnershipResult): Promise<void> {
+  const ids = r.ok ? r.holdings.map((h) => h.tokenId) : [];
+  const last = await db.query<{ token_ids: number[]; ok: boolean; checked_at: Date | string }>(
+    `SELECT token_ids, ok, checked_at FROM room_zero.ownership_checks WHERE address = $1 ORDER BY id DESC LIMIT 1`, [address]);
+  const l = last[0];
+  if (l && l.ok === r.ok && l.token_ids.map(Number).join(',') === ids.join(',') && d.now() - new Date(l.checked_at).getTime() < OWNERSHIP_LOG_MS) return;
+  await db.query(`INSERT INTO room_zero.ownership_checks (address, token_ids, ok, rpc, block) VALUES ($1, $2, $3, $4, $5)`,
+    [address, ids, r.ok, r.ok ? r.rpc : r.reason.slice(0, 80), r.ok ? r.block : null]);
+}
+
 const tierRank = (t: Tier) => TIERS.indexOf(t);
 
 function describe(h: Holding) {
@@ -61,13 +110,12 @@ function describe(h: Holding) {
     signature: sig ? { name: sig.name, text: sig.text, telegraph: sig.telegraph ?? '', counter: sig.counter ?? '' } : null };
 }
 
-/** Live holdings of every wallet in the session. ok:false if any read failed (fail closed: no holder rights). */
+/** Live holdings of the given wallets (walletsOf). ok:false if any read failed (fail closed: no holder rights). */
 async function holdingsOf(d: Deps, db: Db | null, ids: Identity[]): Promise<{ ok: boolean; list: (Holding & { owner: string })[]; reason?: string }> {
   const list: (Holding & { owner: string })[] = [];
   for (const w of wallets(ids)) {
-    const r = await readOwnership(w, d.fetch);
-    if (db) await db.query(`INSERT INTO room_zero.ownership_checks (address, token_ids, ok, rpc, block) VALUES ($1, $2, $3, $4, $5)`,
-      [w, r.ok ? r.holdings.map((h) => h.tokenId) : [], r.ok, r.ok ? r.rpc : r.reason.slice(0, 80), r.ok ? r.block : null]).catch(() => undefined);
+    const r = await ownership(d, w);
+    if (db) await logOwnership(d, db, w, r).catch(() => undefined);
     if (!r.ok) return { ok: false, list: [], reason: r.reason };
     for (const h of r.holdings) list.push({ ...h, owner: w });
   }
@@ -108,9 +156,9 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
         const s = await readSession(req, e);
         if (!s?.ids.length) return json({ error: 'sign_in' }, 401);
         const acc = (await accountFor(db, s.ids))!;
-        if (action === 'practice-start') return json({ ok: true, ...(await startPractice(acc, await practiceSecret(e.AUTH_SECRET!), d.now())) });
+        if (action === 'practice-start') return json({ ok: true, ...(await startPractice(db, acc, await practiceSecret(e.AUTH_SECRET!), d.now())) });
         const b = await body(req);
-        if (action === 'callsign') { const r = await setCallsign(db, acc, b.name); return json(r, r.ok ? 200 : 400); }
+        if (action === 'callsign') { const r = await setCallsign(db, acc, b.name); return json(r, r.ok ? 200 : r.code === 'callsign_taken' ? 409 : 400); }
         if (action === 'prefs') { const r = await setPrefs(db, acc, b); return json(r, r.ok ? 200 : 400); }
         const r = await recordPractice(db, acc, b, { secret: await practiceSecret(e.AUTH_SECRET!), now: d.now() });
         return json(r, r.ok ? 200 : r.reason === 'rate' ? 429 : 400);
@@ -119,7 +167,10 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
       case 'GET tokens': {
         const s = await readSession(req, e);
         if (!s || !wallets(s.ids).length) return json({ wallet: false, tokens: [] });
-        const h = await holdingsOf(d, db, s.ids);
+        const acc = db ? await accountFor(db, s.ids) : null;
+        const own = await walletsOf(db, acc, s.ids);
+        if (!own.length) return json({ wallet: false, tokens: [] });
+        const h = await holdingsOf(d, db, own);
         if (!h.ok) return json({ wallet: true, ok: false, error: 'chain_unavailable', tokens: [] }, 503);
         const tokens = [];
         for (const x of h.list.sort((a, b) => tierRank(tierOfMetadataId(b.metadataId)!) - tierRank(tierOfMetadataId(a.metadataId)!) || a.tokenId - b.tokenId)) {
@@ -137,7 +188,7 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
         const b = await body(req);
         const address = typeof b.address === 'string' ? b.address : '';
         if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return json({ error: 'bad_address' }, 400);
-        const r = await readOwnership(address, d.fetch);
+        const r = await ownership(d, address);
         if (!r.ok) return json({ ok: false, error: 'chain_unavailable' }, 503);
         const best = r.holdings.map((h) => tierOfMetadataId(h.metadataId)!).sort((x, y) => tierRank(y) - tierRank(x))[0] ?? null;
         return json({ ok: true, count: r.holdings.length, best: best ? TIER_DEFS[best].label : null });
@@ -167,8 +218,11 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
         const standing = db && acc ? await standingOf(db, acc) : null;
         let holding: (Holding & { owner: string }) | null = null;
         let chain: string | null = null;
-        if (wallets(ids).length) {
-          const h = await holdingsOf(d, db, ids);
+        // Only wallets linked to the ticket's own account: a wallet in this session that belongs to another account
+        // never lends its Chog to this one.
+        const linked = await walletsOf(db, acc, ids);
+        if (linked.length) {
+          const h = await holdingsOf(d, db, linked);
           if (!h.ok) chain = 'chain_unavailable';
           const want = Number(b.tokenId);
           holding = h.list.find((x) => x.tokenId === want)
@@ -256,9 +310,12 @@ function publicTicket(t: GameTicket) {
     signature: t.mid && t.tokTier === 'legendary' ? SIGNATURES[t.mid]?.name ?? null : null, oneOfOne: t.mid ? ONE_OF_ONE[t.mid]?.name ?? null : null };
 }
 
+const ownershipCache = new Map<string, { at: number; r: OwnershipResult }>();
+
 export const defaultDeps = async (): Promise<Deps> => ({
   env: authEnv() as GameEnv,
   db: async () => (await import('./db.js')).openDb(),
   fetch: (u, i) => fetch(u, i),
   now: () => Date.now(),
+  ownershipCache,
 });

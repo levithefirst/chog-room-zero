@@ -83,6 +83,7 @@ export function deathInsights(r: FightRecord, f: DeathFacts): Insight[] {
     add('blindside', `They hit you ${from} before you had any read on them.`);
     if (f.foundBy === 'heard') add('heardyou', first.gait === 'run' ? 'They heard you first: running steps carry 8 m. Creep near corners.' : 'They heard you first. Moving makes noise; standing still makes none.');
     else if (f.foundBy === 'flash') add('flashyou', 'Your muzzle flash gave you away. Every shot shows you to anyone with a clear line.');
+    else if (f.foundBy === 'radio') add('radioed', 'One of them saw you and called it in; the next came to that spot. After a fight, move.');
     else if (f.foundBy === 'sonar') add('pinged', 'Their Ping found you through the walls. When you hear it ring, move.');
   }
   const shooters = new Set(fight.filter((h) => f.now - h.t <= 3).map((h) => h.by));

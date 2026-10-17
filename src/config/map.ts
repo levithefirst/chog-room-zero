@@ -1,70 +1,97 @@
-// Room Zero: one handcrafted floor of a service basement. 1 tile = 1 u. 44 x 26.
+// Room Zero: one handcrafted floor of a service basement. 1 tile = 1 u. 68 x 42 (owner 2026-10-17: "venues need to be
+// much bigger, while remaining tactically dense"; the CF venue was 44 x 26, a third of the floor).
 // '#' wall (blocks movement, bullets, sight). 'c' crate and 'b' barrier: half cover (block movement;
 // block bullets unless the shooter leans over them, see RULE in docs/design/benchmark.md; never block sight).
-// 'd' doorway (floor with a frame). '.' floor. 'P' player spawn. 'B' bot spawn (order = BOT_SPAWNS).
+// 'd' doorway (floor with a frame). '.' floor. 'P' player spawn (solo).
 // 'h' health, 'a' armour, 'm' ammo, 'g' grenade: fixed pickup spawns (test maps and the RC-8 lab map). Room Zero itself
 // places its pickups by zone (PICKUP_ZONES below, src/sim/pickups.ts).
-// Intent: north offices, a central concourse (before CF a long east-west sightline on rows 8 and 12), three
-// southern rooms with doors as chokepoints, and a loading dock along the south wall as the flank route.
-// CF-F (owner 2026-10-16, docs/ROOM_ZERO_CORE_FEEL_AUDIT.md): the RC-8 layout had six straight open runs of 42 u (the
-// full width, through aligned doors) and crates that never block sight, so cover never hid anyone. 32 one-tile pillars
-// ('#': block movement, bullets and sight) break every lane to 15 u or less (the widest room), turn crate pairs into
-// half-and-full cover, and give doors something to listen around. Fully connected, every zone centre open, both team
-// spawn sets reachable (tests/cf-map.test.ts). LOS between floor tiles within 20 u: 22% before, 14% after.
+// Layout, mirrored about the middle (x -> 67 - x) so neither online side has a better map: a spawn hall at each end
+// (x 1-7), offices in the north corners and storage in the south corners, two side rooms per half, a north
+// gallery and a south loading dock spanning the middle, a 2-wide corridor along each of them, a north-south flank
+// corridor on each side of the central atrium (the contested middle: pillars, crate lines, the longest sightline,
+// 28 u). Routes: the gallery (north), the corridors (fast and narrow), the side rooms and flank corridors, the
+// atrium (short and exposed) and the dock (south, long, zigzag cover). Wall pillars cap every other straight sight
+// lane at 28 u or less (tests/venue.test.ts); 1,950 floor tiles, all reachable.
 export const ROOM_ZERO = [
-  '############################################',
-  '#.........#..........#.........#...........#',
-  '#..P......#..........#.........#.....B.....#',
-  '#.........d...#......d...c#c...d...#.......#',
-  '#.cc......#....bb....#.........#...bb......#',
-  '#.........#..........#.........#...........#',
-  '####d######..........#####d#####...........#',
-  '#.........######d#####.........######d######',
-  '#............#......#...........#..........#',
-  '#...#.....#....c#.......c#.........#c..B...#',
-  '#..bb.....d....#....#####.........#...#....#',
-  '#.........#....cc.......#c.........c#......#',
-  '#.............#.............#....#.........#',
-  '####d#####d#########.......########d########',
-  '#..........#.......#..cc...#...............#',
-  '#..........#...cc..d...#...d...c#c.#.......#',
-  '#..........#.......#.......#.........B.....#',
-  '#..cc......#.......#####d###...............#',
-  '#.....#....d.....#...........#.........bb..#',
-  '#......bb..#.......#...........#...........#',
-  '#..........#...B...#...........#...........#',
-  '#..........#.......#......#....d.......#...#',
-  '#####.d#####.......#############...........#',
-  '#..........#........B.#...........#........#',
-  '#....c#.........b#..........c#.............#',
-  '############################################',
+  '####################################################################',
+  '#.....#.....##........c..#................#..c........##.....#.....#',
+  '#.....#.....#..c.......#......c......c......#.......c..#.....#.....#',
+  '#..P..d..c..d.....#.............####.............#.....d..c..d.....#',
+  '#.....#..c..d........c......#...####...#......c........d..c..#.....#',
+  '#.....#.....#.....#.............####.............#.....#.....#.....#',
+  '#.cc........#..........#..c..............c..#..........#........cc.#',
+  '#...........##.....c.....#.....c....c.....#.....c.....##...........#',
+  '#...........####..##########.##########.##########..####...........#',
+  '##..######d#####..##########.##########.##########..#####d######..##',
+  '##..#####......c.........#....c......c....#.........c......#####..##',
+  '##..#####.......#.......c........##........c.......#.......#####..##',
+  '##..#########d######..####..###..##..###..####..######d#########..##',
+  '#.......#..........#..#......c........c......#..#..........#.......#',
+  '#.......#..........#..#.......c......c.......#..#..........#.......#',
+  '#.......d..cc......#.....#.c....b..b....c.#.....#......cc..d.......#',
+  '#.......d.....#....d.......#............#.......d....#.....d.......#',
+  '#..#.c..#.......c..#..#.........####.........#..#..c.......#..c.#..#',
+  '#....c..#.......c#.#..#......#..####..#......#..#.#c.......#..c....#',
+  '#.......#..........#..#......................#..#..........#.......#',
+  '#..b....############c...c......c....c......c...c############....b..#',
+  '#.#b....############....c......c....c......c....############....b#.#',
+  '#.....#.#..........#..#......................#..#..........#.#.....#',
+  '#....c..#.......c#.#.c#......#..####..#......#c.#.#c.......#..c....#',
+  '#....c..#.......c..#..#.........####.........#..#..c.......#..c....#',
+  '#.......d.....#....d..#....#............#....#..d....#.....d.......#',
+  '#.......d..cc......#.....#.c....b..b....c.#.....#......cc..d.......#',
+  '#.......#..........#..........c......c..........#..........#.......#',
+  '#.......#..........#..#......c........c......#..#..........#.......#',
+  '#####..######d######..####..###..##..###..####..######d######..#####',
+  '#####..##.......#.......c........##........c.......#.......##..#####',
+  '#####..##......c.........#....c......c....#.........c......##..#####',
+  '#####..##d#####..#######..######....######..#######..#####d##..#####',
+  '#...........###..#######..######....######..#######..###...........#',
+  '#...........##....#.........#..........#.........#....##...........#',
+  '#.cc........#.....#.......c.#..........#.c.......#.....#........cc.#',
+  '#.....#.....#.....#.c.......#....cc....#.......c.#.....#.....#.....#',
+  '#.....#..c..d.....#....#....................#....#.....d..c..#.....#',
+  '#.....d..c..d..cc......#......cc....cc......#......cc..d..c..d.....#',
+  '#.....#.....#........c.#....................#.c........#.....#.....#',
+  '#.....#.....##.........#......c......c......#.........##.....#.....#',
+  '####################################################################',
 ];
 
 /**
- * Pickup zones (owner 2026-10-17): 15 pickups, each in its own zone, placed and moved by src/sim/pickups.ts.
- * By walking distance the map splits at x = 21 (the doors and pillars make it lopsided by eye), so west and east zones
- * come in pairs mirrored about it (x -> 42 - x) and the pickups in a pair are drawn from tiles the same walk from
- * their own side's spawns; a 'mid' zone keeps only tiles about as far from both sides (the contested ones).
- * Health sits between the spawns and the middle (worth a detour, never in a spawn), armour in the four corner rooms,
- * grenades in the south stores and the middle of the dock (fewest, slowest back), ammo in the halls and dock ends.
- * Tile rectangles, inclusive.
+ * Pickup zones (owner 2026-10-17: "substantially more ... throughout the venue"): 26 pickups, each in its own zone,
+ * placed and moved by src/sim/pickups.ts. West and east zones of a kind pair up in list order and draw from tiles the
+ * same walk from their own side's spawns; a 'mid' zone keeps only tiles about as far from both (the contested ones).
+ * Health between the spawns and the middle, armour in the corner storage and side rooms and the middle of the gallery
+ * and dock, grenades in the flank corridors, the dock and the middle of both corridors, ammo along the corridors and
+ * in the atrium and dock. Tile rectangles, inclusive.
  */
 export const PICKUP_ZONES: { kind: 'health' | 'armor' | 'ammo' | 'grenade'; x0: number; y0: number; x1: number; y1: number; name: string; side: 'west' | 'east' | 'mid' }[] = [
-  { kind: 'health', x0: 12, y0: 1, x1: 19, y1: 6, name: 'north offices west', side: 'west' },
-  { kind: 'health', x0: 23, y0: 1, x1: 30, y1: 7, name: 'north offices east', side: 'east' },
-  { kind: 'health', x0: 17, y0: 8, x1: 25, y1: 12, name: 'concourse', side: 'mid' },
-  { kind: 'health', x0: 17, y0: 14, x1: 25, y1: 21, name: 'south hall', side: 'mid' },
-  { kind: 'armor', x0: 1, y0: 1, x1: 9, y1: 5, name: 'north-west office', side: 'west' },
-  { kind: 'armor', x0: 33, y0: 1, x1: 42, y1: 6, name: 'north-east office', side: 'east' },
-  { kind: 'armor', x0: 1, y0: 14, x1: 10, y1: 21, name: 'south-west room', side: 'west' },
-  { kind: 'armor', x0: 32, y0: 14, x1: 42, y1: 21, name: 'south-east room', side: 'east' },
-  { kind: 'grenade', x0: 12, y0: 14, x1: 18, y1: 21, name: 'south-west store', side: 'west' },
-  { kind: 'grenade', x0: 24, y0: 14, x1: 31, y1: 21, name: 'south-east store', side: 'east' },
-  { kind: 'grenade', x0: 16, y0: 23, x1: 26, y1: 24, name: 'dock middle', side: 'mid' },
-  { kind: 'ammo', x0: 1, y0: 7, x1: 12, y1: 12, name: 'west hall', side: 'west' },
-  { kind: 'ammo', x0: 30, y0: 7, x1: 42, y1: 12, name: 'east hall', side: 'east' },
-  { kind: 'ammo', x0: 1, y0: 23, x1: 15, y1: 24, name: 'dock west', side: 'west' },
-  { kind: 'ammo', x0: 27, y0: 23, x1: 42, y1: 24, name: 'dock east', side: 'east' },
+  { kind: 'health', x0: 1, y0: 1, x1: 11, y1: 8, name: 'north-west offices', side: 'west' },
+  { kind: 'health', x0: 56, y0: 1, x1: 66, y1: 8, name: 'north-east offices', side: 'east' },
+  { kind: 'health', x0: 13, y0: 1, x1: 24, y1: 7, name: 'gallery west', side: 'west' },
+  { kind: 'health', x0: 43, y0: 1, x1: 54, y1: 7, name: 'gallery east', side: 'east' },
+  { kind: 'health', x0: 9, y0: 22, x1: 18, y1: 28, name: 'west side room south', side: 'west' },
+  { kind: 'health', x0: 49, y0: 22, x1: 58, y1: 28, name: 'east side room south', side: 'east' },
+  { kind: 'health', x0: 23, y0: 13, x1: 44, y1: 19, name: 'atrium north', side: 'mid' },
+  { kind: 'health', x0: 23, y0: 22, x1: 44, y1: 28, name: 'atrium south', side: 'mid' },
+  { kind: 'armor', x0: 1, y0: 33, x1: 11, y1: 40, name: 'south-west storage', side: 'west' },
+  { kind: 'armor', x0: 56, y0: 33, x1: 66, y1: 40, name: 'south-east storage', side: 'east' },
+  { kind: 'armor', x0: 9, y0: 13, x1: 18, y1: 19, name: 'west side room north', side: 'west' },
+  { kind: 'armor', x0: 49, y0: 13, x1: 58, y1: 19, name: 'east side room north', side: 'east' },
+  { kind: 'armor', x0: 26, y0: 1, x1: 41, y1: 7, name: 'gallery middle', side: 'mid' },
+  { kind: 'armor', x0: 24, y0: 34, x1: 43, y1: 40, name: 'dock middle', side: 'mid' },
+  { kind: 'grenade', x0: 20, y0: 10, x1: 21, y1: 31, name: 'west flank corridor', side: 'west' },
+  { kind: 'grenade', x0: 46, y0: 10, x1: 47, y1: 31, name: 'east flank corridor', side: 'east' },
+  { kind: 'grenade', x0: 13, y0: 34, x1: 23, y1: 40, name: 'dock west', side: 'west' },
+  { kind: 'grenade', x0: 44, y0: 34, x1: 54, y1: 40, name: 'dock east', side: 'east' },
+  { kind: 'grenade', x0: 26, y0: 10, x1: 41, y1: 11, name: 'north corridor middle', side: 'mid' },
+  { kind: 'grenade', x0: 26, y0: 30, x1: 41, y1: 31, name: 'south corridor middle', side: 'mid' },
+  { kind: 'ammo', x0: 9, y0: 10, x1: 19, y1: 11, name: 'north corridor west', side: 'west' },
+  { kind: 'ammo', x0: 48, y0: 10, x1: 58, y1: 11, name: 'north corridor east', side: 'east' },
+  { kind: 'ammo', x0: 9, y0: 30, x1: 19, y1: 31, name: 'south corridor west', side: 'west' },
+  { kind: 'ammo', x0: 48, y0: 30, x1: 58, y1: 31, name: 'south corridor east', side: 'east' },
+  { kind: 'ammo', x0: 28, y0: 19, x1: 39, y1: 22, name: 'atrium centre', side: 'mid' },
+  { kind: 'ammo', x0: 13, y0: 34, x1: 54, y1: 40, name: 'dock', side: 'mid' },
 ];
 
 /** The RC-8 layout (LAB.pacing off), kept so the lab can measure the old map against the new one. */
@@ -101,15 +128,16 @@ export type Material = 'tile' | 'concrete' | 'metal' | 'dock';
 
 // Floor material zones, painted in order (later wins). Anything not covered is concrete.
 export const ZONES: { x0: number; y0: number; x1: number; y1: number; mat: Material }[] = [
-  { x0: 1, y0: 1, x1: 10, y1: 6, mat: 'tile' },
-  { x0: 22, y0: 1, x1: 31, y1: 7, mat: 'tile' },
-  { x0: 32, y0: 1, x1: 43, y1: 7, mat: 'metal' },
-  { x0: 1, y0: 14, x1: 11, y1: 22, mat: 'tile' },
-  { x0: 12, y0: 14, x1: 19, y1: 22, mat: 'metal' },
-  { x0: 20, y0: 14, x1: 27, y1: 17, mat: 'tile' },
-  { x0: 32, y0: 14, x1: 43, y1: 22, mat: 'metal' },
-  { x0: 1, y0: 23, x1: 43, y1: 25, mat: 'dock' },
-];
+  { x0: 1, y0: 1, x1: 11, y1: 8, mat: 'tile' },
+  { x0: 56, y0: 1, x1: 66, y1: 8, mat: 'tile' },
+  { x0: 13, y0: 1, x1: 54, y1: 7, mat: 'tile' },
+  { x0: 9, y0: 13, x1: 18, y1: 28, mat: 'metal' },
+  { x0: 49, y0: 13, x1: 58, y1: 28, mat: 'metal' },
+  { x0: 23, y0: 13, x1: 44, y1: 28, mat: 'metal' },
+  { x0: 1, y0: 33, x1: 11, y1: 40, mat: 'metal' },
+  { x0: 56, y0: 33, x1: 66, y1: 40, mat: 'metal' },
+  { x0: 13, y0: 34, x1: 54, y1: 40, mat: 'dock' },
+]
 
 export interface BotSpawn {
   name: string;
@@ -128,22 +156,39 @@ export const BOT_SPAWNS_RC8: BotSpawn[] = [
   { name: 'Hatch', hero: 'tabsu', patrol: [[15, 20], [17, 16], [13, 15]], flanker: true },
 ];
 
-// CF-F pacing: Cellar no longer patrols the room under the spawn (14.7 u walk from P, the first contact in every
-// default match at 4-5 s). It works the loading dock (31.6 u), the flank route; the nearest patrol is now Hatch at 25 u,
-// about 11 s at a creep: time to move, listen and choose a door before anyone is met.
-export const BOT_SPAWNS: BotSpawn[] = BOT_SPAWNS_RC8.map((b) => b.name === 'Cellar' ? { ...b, patrol: [[20, 23], [30, 24], [12, 23]] } : b);
+// The hostile squad in solo, on the big venue: spawns in the east half and the middle, far from yours (the nearest
+// is about 37 u away, some 15 s of careful walking), each with a beat across two or three rooms. Patrol is only
+// their resting job: src/sim/bots.ts gives every bot reasons to move on its own (hunt what it knows, search where
+// something was, rotate between areas, take pickups it needs, regroup).
+export const BOT_SPAWNS: BotSpawn[] = [
+  { name: 'Stair', hero: 'ray', patrol: [[59, 4], [63, 7], [50, 4], [54, 10]], flanker: false },
+  { name: 'Pump', hero: 'tonashiro', patrol: [[54, 16], [46, 14], [39, 16], [52, 18]], flanker: false },
+  { name: 'Cellar', hero: 'tabsu', patrol: [[40, 38], [26, 39], [30, 30], [47, 38]], flanker: true },
+  { name: 'Boiler', hero: 'benja', patrol: [[41, 21], [36, 27], [54, 25], [44, 16]], flanker: false },
+  { name: 'Hatch', hero: 'tabsu', patrol: [[60, 37], [52, 30], [46, 37], [62, 34]], flanker: true },
+];
 
-// Danger zone (RC-8): where the last circle may settle. CF moved [13, 3] (a pillar now stands 1 u from it) to [28, 9],
-// in the same list slot so every seed keeps its circle, one is drawn per match. Each is open floor with 1.5 u clear
-// all round (checked by src/sim/zone.ts openSpot and tests/rc8-zone.test.ts): north rooms, the concourse, the south
-// rooms. Online, only the ones about equally far from both team spawns are used.
+/**
+ * Tactical points for the hostile squad (src/sim/bots.ts): rooms, junctions and control spots it searches, holds and
+ * rotates between. Mirrored, plus the middle line. Each is open floor (tests/venue.test.ts).
+ */
+export const TACTICAL_POINTS: { x: number; y: number }[] = [
+  ...[[5, 5], [17, 4], [13, 10], [13, 17], [13, 25], [20, 13], [21, 28], [4, 20], [4, 37], [19, 38], [13, 31], [27, 20], [26, 14], [26, 27]]
+    .flatMap(([x, y]) => [{ x: x + 0.5, y: y + 0.5 }, { x: 67 - x + 0.5, y: y + 0.5 }]),
+  ...[[33, 6], [33, 38], [30, 11], [30, 30], [34, 21]].map(([x, y]) => ({ x: x + 0.5, y: y + 0.5 })),
+];
+
+// Danger zone: where the last circle may settle. Open floor with 1.5 u clear all round (src/sim/zone.ts openSpot):
+// the middle of the atrium and of the dock (equally far from both online sides, so online uses only these), and
+// mirrored pairs in the atrium, the gallery and the dock for solo.
 export const ZONE_CENTRES: { x: number; y: number }[] = [
-  [7, 3], [28, 9], [19, 3], [39, 3], [7, 10], [12, 10], [29, 10], [31, 10], [15, 19], [24, 19], [35, 18], [36, 21],
-].map(([x, y]) => ({ x: x + 0.5, y: y + 0.5 }));
+  { x: 34, y: 21 }, { x: 34, y: 38.5 },
+  ...[[27, 20], [26, 18], [25, 4], [16, 4], [26, 38], [15, 35]].flatMap(([x, y]) => [{ x: x + 0.5, y: y + 0.5 }, { x: 67 - x + 0.5, y: y + 0.5 }]),
+];
 
-// Online spawns (RC-8): team alpha on the west side, bravo mirrored on the east, five each, in join order. 1v1 uses
-// the first of each. Checked walkable and mirrored in tests/rc8-online.test.ts.
+// Online spawns: team alpha in the west spawn hall, bravo in the east one (mirrored), five each, in join order. 1v1
+// uses the first of each. Checked walkable and mirrored in tests/rc8-online.test.ts and tests/venue.test.ts.
 export const VERSUS_SPAWNS: Record<'alpha' | 'bravo', { x: number; y: number }[]> = {
-  alpha: [[2, 8], [2, 12], [4, 15], [3, 20], [5, 23]].map(([x, y]) => ({ x: x + 0.5, y: y + 0.5 })),
-  bravo: [[41, 8], [41, 12], [39, 16], [41, 20], [38, 23]].map(([x, y]) => ({ x: x + 0.5, y: y + 0.5 })),
+  alpha: [[4, 20], [2, 15], [2, 26], [6, 14], [6, 27]].map(([x, y]) => ({ x: x + 0.5, y: y + 0.5 })),
+  bravo: [[4, 20], [2, 15], [2, 26], [6, 14], [6, 27]].map(([x, y]) => ({ x: 67 - x + 0.5, y: y + 0.5 })),
 };

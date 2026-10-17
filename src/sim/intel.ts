@@ -82,9 +82,20 @@ export const locatesSource = (t: SoundType) => LOCATES.has(t);
 /** Strength order: a report only replaces a belief of equal or lower rank, unless it is more precise or the old one is weak. */
 const RANK: Record<ContactState, number> = { lost: 0, suspected: 1, directional: 2, heard: 3, last_known: 4, partial: 5, visible: 6 };
 
-/** Deterministic noise in [-1, 1] from three integers (same scenario, same guess; no Math.random in the sim). */
-export function noise3(a: number, b: number, c: number): number {
+/** A secret key for noise3 (4 random 32-bit words): the online server keeps one per room, so a client that knows the
+ * tick, the actor and the formula still cannot work out the offset and subtract it. */
+export type Salt = readonly number[];
+
+/** Deterministic noise in [-1, 1] from three integers (same scenario, same guess; no Math.random in the sim). Without a
+ * salt (solo, the lab, the client) it is the plain public hash; with one, each key word is mixed in by a full round. */
+export function noise3(a: number, b: number, c: number, salt?: Salt): number {
   let h = Math.imul(a | 0, 0x9e3779b1) ^ Math.imul(b | 0, 0x85ebca77) ^ Math.imul(c | 0, 0xc2b2ae3d);
+  for (const k of salt ?? []) {
+    h ^= k;
+    h = Math.imul(h ^ (h >>> 16), 0x7feb352d);
+    h = Math.imul(h ^ (h >>> 15), 0x846ca68b);
+    h ^= h >>> 16;
+  }
   h = Math.imul(h ^ (h >>> 16), 0x7feb352d);
   h = Math.imul(h ^ (h >>> 15), 0x846ca68b);
   h ^= h >>> 16;
@@ -125,8 +136,9 @@ export function report(intel: Intel, id: number, r: { state: ContactState; sourc
   return true;
 }
 
-/** What hearing this sound tells observer `me` about its maker (null: nothing, or not about a position). */
-export function hearReport(w: World, me: { x: number; y: number }, s: SoundEvent): Parameters<typeof report>[2] | null {
+/** What hearing this sound tells observer `me` about its maker (null: nothing, or not about a position). The online
+ * server passes its room salt, so the estimate it sends cannot be undone from the public formula. */
+export function hearReport(w: World, me: { x: number; y: number }, s: SoundEvent, salt?: Salt): Parameters<typeof report>[2] | null {
   if (!locatesSource(s.type)) return null;
   const I = TUNING.intel;
   const dx = s.x - me.x, dy = s.y - me.y, d = Math.hypot(dx, dy);
@@ -137,12 +149,12 @@ export function hearReport(w: World, me: { x: number; y: number }, s: SoundEvent
   if (s.est ? s.est === 'clear' : sightClear(w.level, me.x, me.y, s.x, s.y)) {
     // A clear line: a spot, off by a share of the distance (shots sharp, creep steps vague).
     const err = d * I.hearShare * (I.hearMul[s.type] ?? I.hearMul.other);
-    const x = s.x + n * noise3(s.tick, s.sourceId, 1) * err, y = s.y + n * noise3(s.tick, s.sourceId, 2) * err;
+    const x = s.x + n * noise3(s.tick, s.sourceId, 1, salt) * err, y = s.y + n * noise3(s.tick, s.sourceId, 2, salt) * err;
     return { state: 'heard', source: 'sound', kind, x, y, r: Math.max(0.45, err * 1.4), conf: conf0 };
   }
   // Through a wall: which way and about how far, never the spot.
-  const bearing = Math.atan2(dy, dx) + n * noise3(s.tick, s.sourceId, 3) * I.dirErrDeg * Math.PI / 180;
-  const dist = d * (1 + n * noise3(s.tick, s.sourceId, 4) * I.dirDistShare);
+  const bearing = Math.atan2(dy, dx) + n * noise3(s.tick, s.sourceId, 3, salt) * I.dirErrDeg * Math.PI / 180;
+  const dist = d * (1 + n * noise3(s.tick, s.sourceId, 4, salt) * I.dirDistShare);
   return { state: 'directional', source: 'sound', kind, x: me.x + Math.cos(bearing) * dist, y: me.y + Math.sin(bearing) * dist,
     r: Math.max(1.5, d * 0.35), conf: conf0 * I.dirConfMul, bearing, ox: me.x, oy: me.y };
 }

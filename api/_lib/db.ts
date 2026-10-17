@@ -159,7 +159,41 @@ export const MIGRATIONS: { version: number; name: string; sql: string }[] = [
       ALTER TABLE room_zero.practice_runs ADD COLUMN IF NOT EXISTS shards integer NOT NULL DEFAULT 0
     `,
   },
+  {
+    version: 5,
+    name: 'hardening: open practice run, verified practice runs, used wallet nonces, ownership check index, unique callsigns',
+    // Runs stored before v5 keep counting for career and medals (verified defaults to true for them); new runs set it.
+    // Callsigns: before the unique index, a later account holding a callsign an earlier one already has (any case) is
+    // renamed to "<first 11>-<4 of its id>", and if that still collides, to "Player-<id>" (longer than any typed
+    // callsign, so it is unique). The original stays in display_name. Nothing is deleted.
+    sql: `
+      ALTER TABLE room_zero.accounts ADD COLUMN IF NOT EXISTS practice_rid text;
+      ALTER TABLE room_zero.practice_runs ADD COLUMN IF NOT EXISTS verified boolean NOT NULL DEFAULT true;
+      CREATE TABLE IF NOT EXISTS room_zero.used_nonces (
+        nonce text PRIMARY KEY,
+        at timestamptz NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS ownership_checks_address ON room_zero.ownership_checks(address, id);
+      UPDATE room_zero.accounts a SET callsign = left(a.callsign, 11) || '-' || left(a.id, 4)
+        WHERE a.callsign IS NOT NULL AND EXISTS (SELECT 1 FROM room_zero.accounts b WHERE b.callsign IS NOT NULL AND lower(b.callsign) = lower(a.callsign)
+          AND (b.created_at, b.id) < (a.created_at, a.id));
+      UPDATE room_zero.accounts a SET callsign = 'Player-' || a.id
+        WHERE a.callsign IS NOT NULL AND EXISTS (SELECT 1 FROM room_zero.accounts b WHERE b.callsign IS NOT NULL AND lower(b.callsign) = lower(a.callsign)
+          AND (b.created_at, b.id) < (a.created_at, a.id));
+      CREATE UNIQUE INDEX IF NOT EXISTS accounts_callsign_unique ON room_zero.accounts (lower(callsign)) WHERE callsign IS NOT NULL
+    `,
+  },
 ];
+
+/**
+ * Marks a SIWE nonce as used. True the first time, false for a replay. Rows older than 10 minutes (twice the challenge
+ * lifetime, api/_lib/auth.ts CHALLENGE_SECONDS) are pruned here: their challenge has expired, so they cannot be redeemed.
+ */
+export async function claimNonce(db: Db, nonce: string): Promise<boolean> {
+  await db.query(`DELETE FROM room_zero.used_nonces WHERE at < now() - interval '10 minutes'`);
+  const r = await db.query(`INSERT INTO room_zero.used_nonces (nonce) VALUES ($1) ON CONFLICT DO NOTHING RETURNING nonce`, [nonce]);
+  return r.length === 1;
+}
 
 /** Applies every migration not yet recorded. Safe to call on every cold start: concurrent callers wait on the lock. */
 export async function migrate(db: Db): Promise<number[]> {

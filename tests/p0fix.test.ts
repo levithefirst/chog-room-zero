@@ -81,7 +81,8 @@ describe('CHOG-VIS-001 enemy visibility', () => {
     // Before the fix only the in-cone share (~30%) was ever drawn.
     expect(inCone / hits).toBeLessThan(0.6);
     expect(drawable / hits).toBeGreaterThan(0.97);
-  });
+  // FS: the 68 x 42 venue (26 zoned pickups, 5 bots on a bigger floor) takes ~6 s for 12 minutes of sim.
+  }, 60000);
 });
 
 describe('CHOG-HUD-001 markers stay in the map', () => {

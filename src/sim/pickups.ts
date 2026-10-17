@@ -114,17 +114,22 @@ export function imbalance(kinds: PickupKind[], at: Spot[], alpha: Field, bravo: 
 export function layoutPickups(spots: Spot[][], kinds: PickupKind[], seed: number, alpha: Field, bravo: Field): Spot[] {
   const P = TUNING.pickups;
   let best: Spot[] = [], bestScore = Infinity;
+  const byRoom = spots.map((_, z) => z).sort((a, b) => spots[a].length - spots[b].length || a - b);
   for (let t = 0; t < P.layoutTries; t++) {
-    const placed: Spot[] = [];
+    const placed: Spot[] = new Array(spots.length);
     let clustered = 0;
-    spots.forEach((cands, z) => {
-      const list = ordered(cands, seed, z, -1 - t);
-      const s = list.find((c) => placed.every((p) => Math.hypot(p.x - c.x, p.y - c.y) >= P.minSeparation));
+    // The zones with the fewest tiles go first (a corridor middle has 4), so a big zone that overlaps them (the dock)
+    // never takes the only room they had.
+    for (const z of byRoom) {
+      const list = ordered(spots[z], seed, z, -1 - t);
+      const s = list.find((c) => placed.every((p) => !p || Math.hypot(p.x - c.x, p.y - c.y) >= P.minSeparation));
       if (!s) clustered++;
-      placed.push(s ?? list[0]);
-    });
-    const score = imbalance(kinds, placed, alpha, bravo) + clustered * 1000;
-    if (score < bestScore) { best = placed; bestScore = score; }
+      placed[z] = s ?? list[0];
+    }
+    // A foreign map (lab, tests) may leave a side's walk field unreachable: score it as very uneven, never NaN.
+    const raw = imbalance(kinds, placed, alpha, bravo);
+    const score = (Number.isFinite(raw) ? raw : 1e6) + clustered * 1000;
+    if (!best.length || score < bestScore) { best = placed; bestScore = score; }
     if (score <= P.balanceTolerance) break;
   }
   return best;

@@ -186,7 +186,7 @@ describe('leaderboard and health endpoints', () => {
     const mine = await call('GET', 'leaderboard', { cookie: await cookieFor([{ provider: 'google', subject: 'a', label: 'a' }]) });
     expect(mine.j.me).toMatchObject({ name: 'Alpha', rank: 2, you: true });
     const h = await call('GET', 'health');
-    expect(h.j.migrations.map((m: { version: number }) => m.version)).toEqual([1, 2, 3, 4]);
+    expect(h.j.migrations.map((m: { version: number }) => m.version)).toEqual([1, 2, 3, 4, 5]);
     expect(h.j.tables).toContain('match_players');
     db = null;
     expect((await call('GET', 'health')).j).toEqual({ db: false });

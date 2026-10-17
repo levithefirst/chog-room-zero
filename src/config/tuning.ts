@@ -62,18 +62,21 @@ export const TUNING = {
   },
 
   pickups: {
-    // Owner 2026-10-17: more pickups (15 in four kinds, src/config/map.ts PICKUP_ZONES), each slower to come back, so
-    // the map holds about the same healing per minute as before (4 x 40 / 25 s = 6.4 hp/s map-wide, was 3 x 40 / 20 s
-    // = 6) spread over more places: more reasons to move, not more health. Damage still decides fights.
-    // Health +40, back after 25 s: worth a detour, not a camping spot.
-    health: { amount: 40, respawn: 25 },
-    // Armour +35, back after 30 s (4 x 35 / 30 s = 4.7 armour/s map-wide, was 4.2).
-    armor: { amount: 35, respawn: 30 },
-    // Ammo: one magazine's worth x2 into reserve, back after 20 s.
+    // Owner 2026-10-17 (FS): "substantially more Health, Armour, Grenade, Ammo ... throughout the venue". 26 pickups
+    // (src/config/map.ts PICKUP_ZONES: 8 health, 6 armour, 6 grenades, 6 ammo) on a floor 2.9x the CF map's. More in
+    // total and within reach of more places, a little less per tile of floor than before (a tactical resource
+    // space, not a vending machine). Map-wide: health 8 x 40 / 30 s = 10.7 hp/s (FP 6.4 on 676 tiles; per tile 0.0055,
+    // was 0.0095), armour 6 x 35 / 35 s = 6.0/s (was 4.7), grenades 6 / 50 s = 7.2 throws a minute for the whole room
+    // (was 4.5). tests/pickup-layout.test.ts holds both sides of that.
+    // Health +40, back after 30 s: worth a detour, not a camping spot.
+    health: { amount: 40, respawn: 30 },
+    // Armour +35, back after 35 s.
+    armor: { amount: 35, respawn: 35 },
+    // Ammo: one magazine's worth x2 into reserve (never over the carry ceiling), back after 20 s.
     ammo: { mags: 2, respawn: 20 },
-    // Grenade +1, never above the carrier's capacity (3 free, more by verified tier), back after 40 s: three on the
-    // map, so at most about 4 extra throws a minute for the whole room. A refill for a key moment, never a stream.
-    grenade: { amount: 1, respawn: 40 },
+    // Grenade +1, never above the carrier's capacity (3 free, more by verified tier), back after 50 s. A refill for a
+    // key moment, never a stream.
+    grenade: { amount: 1, respawn: 50 },
     // Placement (src/sim/pickups.ts): at least this far from every spawn on the map, from every other pickup, and
     // from anyone standing when it comes back. Each comeback moves it to another tile of its zone.
     spawnClear: 5,
@@ -82,7 +85,7 @@ export const TUNING = {
     // Even for both online sides: per kind, the average walk from the west spawns and from the east spawns to its
     // pickups (and to the nearest one) may differ by at most this many tiles; the layout tries this many seeded orders.
     balanceTolerance: 3,
-    layoutTries: 24,
+    layoutTries: 48,
     // Collect on touch, no button, no second step: 0.7 u from the centre = the body (0.35 u) meeting the pickup
     // crate (0.3 u half-width) with 0.05 u to spare. RC-8 draws the body at its true 0.35 u (it was drawn 1.45x), so
     // the pickup is taken on the same step the drawn body touches the drawn pickup (tests/rc8-pickups.test.ts).
@@ -245,7 +248,8 @@ export const TUNING = {
     // tests/sb-comms.test.ts): gap 1.4 with 7 s rests made 13.5 calls a minute, a stream; 2.2 s and longer rests on
     // the noisy kinds bring it under 10 while still calling a third of what the player then sees. The 15 zoned
     // pickups (owner 2026-10-17) move the squad and the bots around more: 2.2 s made 10.5 a minute, 2.5 s makes 8.5.
-    gap: 2.5,
+    // FS (68 x 42 venue, an active hostile squad that walks audibly): 2.5 s made 10.5 a minute again; 2.8 s brings it back.
+    gap: 2.8,
     // Seconds before the same teammate makes the same kind of call again.
     rest: { contact: 4, behind: 4, lost: 8, steps: 10, shots: 10, reloading: 12, hurt: 10 } as Record<string, number>,
     // A heard call (footsteps, shots) is skipped when the player stands this close to the caller: they heard it too.
@@ -330,6 +334,26 @@ export const TUNING = {
     patrolQuiet: true,
     patrolSpeed: 0.8,
     patrolPause: 1.2,
+    // Owner 2026-10-17: the hostile squad must act like a team of opponents, not wait for the zone. Between fights
+    // each bot picks a job and re-decides when it is done or after decideSeconds (src/sim/bots.ts squadTask):
+    // hunt (go where a squadmate SAW you, at most huntResponders bots, within reportSeconds of the sighting),
+    // resupply (a pickup it needs within resupplyRange), search (the tactical point its squad checked longest ago),
+    // hold (watch a control point for holdSeconds), regroup (back toward the squad when far from everyone), patrol
+    // (its beat). Weights pick between search, hold, regroup and patrol; the nearest-first tie-break is seeded.
+    squad: {
+      reportSeconds: 10,
+      radioDelay: 2,
+      huntResponders: 1,
+      maxHunters: 1,
+      decideSeconds: 14,
+      holdSeconds: 5,
+      visitRadius: 4,
+      regroupDistance: 26,
+      resupplyRange: 30,
+      needHpShare: 0.7,
+      needArmorShare: 0.5,
+      weights: { search: 4, hold: 1.5, regroup: 1, patrol: 1 },
+    },
     patrolPauseJitter: 1.6,
     listenSeconds: 0.55,
     // ...and creeps only the last creepWithin u to a noise it is checking (walks the rest, audibly).
@@ -368,10 +392,13 @@ export const TUNING = {
   // (bots leave patrol for the zone during the hunt); 45 s kept every hero near its no-zone rate (docs/design/zone.md). Damage outside escalates so lingering gets worse, never
   // instant: 4/s gives ~25 s to get back in at full health, the final 20/s about 5 s.
   zone: {
-    safeSeconds: 45,
+    // The big venue (68 x 42, owner 2026-10-17): 50 s of open play, then a first circle of 20 u (it holds the atrium
+    // and both flank corridors), 9 u, 3.5 u. From the far corner of a spawn hall to the first circle is ~30 u, about
+    // 7 s running: the warning (8 s) is enough if you move when it shows. The whole room still ends in ~105 s.
+    safeSeconds: 50,
     stages: [
-      { warn: 8, shrink: 15, radius: 14, dps: 4 },
-      { warn: 6, shrink: 10, radius: 7, dps: 8 },
+      { warn: 8, shrink: 15, radius: 20, dps: 4 },
+      { warn: 6, shrink: 10, radius: 9, dps: 8 },
       { warn: 5, shrink: 8, radius: 3.5, dps: 14 },
     ],
     finalDps: 20,
