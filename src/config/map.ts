@@ -2,7 +2,8 @@
 // '#' wall (blocks movement, bullets, sight). 'c' crate and 'b' barrier: half cover (block movement;
 // block bullets unless the shooter leans over them, see RULE in docs/design/benchmark.md; never block sight).
 // 'd' doorway (floor with a frame). '.' floor. 'P' player spawn. 'B' bot spawn (order = BOT_SPAWNS).
-// 'h' health, 'a' armour, 'm' ammo pickup spawns.
+// 'h' health, 'a' armour, 'm' ammo, 'g' grenade: fixed pickup spawns (test maps and the RC-8 lab map). Room Zero itself
+// places its pickups by zone (PICKUP_ZONES below, src/sim/pickups.ts).
 // Intent: north offices, a central concourse (before CF a long east-west sightline on rows 8 and 12), three
 // southern rooms with doors as chokepoints, and a loading dock along the south wall as the flank route.
 // CF-F (owner 2026-10-16, docs/ROOM_ZERO_CORE_FEEL_AUDIT.md): the RC-8 layout had six straight open runs of 42 u (the
@@ -13,30 +14,57 @@
 export const ROOM_ZERO = [
   '############################################',
   '#.........#..........#.........#...........#',
-  '#..P......#....h.....#.........#.....B.....#',
+  '#..P......#..........#.........#.....B.....#',
   '#.........d...#......d...c#c...d...#.......#',
   '#.cc......#....bb....#.........#...bb......#',
   '#.........#..........#.........#...........#',
   '####d######..........#####d#####...........#',
   '#.........######d#####.........######d######',
-  '#..a.........#......#......m....#..........#',
+  '#............#......#...........#..........#',
   '#...#.....#....c#.......c#.........#c..B...#',
   '#..bb.....d....#....#####.........#...#....#',
   '#.........#....cc.......#c.........c#......#',
-  '#.............#............h#....#.....a...#',
+  '#.............#.............#....#.........#',
   '####d#####d#########.......########d########',
   '#..........#.......#..cc...#...............#',
   '#..........#...cc..d...#...d...c#c.#.......#',
   '#..........#.......#.......#.........B.....#',
   '#..cc......#.......#####d###...............#',
-  '#.....#....d...m.#...........#.........bb..#',
+  '#.....#....d.....#...........#.........bb..#',
   '#......bb..#.......#...........#...........#',
-  '#..........#...B...#....h......#...........#',
-  '#..........#.......#......#....d.....a.#...#',
+  '#..........#...B...#...........#...........#',
+  '#..........#.......#......#....d.......#...#',
   '#####.d#####.......#############...........#',
   '#..........#........B.#...........#........#',
-  '#....c#.........b#..........c#..........m..#',
+  '#....c#.........b#..........c#.............#',
   '############################################',
+];
+
+/**
+ * Pickup zones (owner 2026-10-17): 15 pickups, each in its own zone, placed and moved by src/sim/pickups.ts.
+ * By walking distance the map splits at x = 21 (the doors and pillars make it lopsided by eye), so west and east zones
+ * come in pairs mirrored about it (x -> 42 - x) and the pickups in a pair are drawn from tiles the same walk from
+ * their own side's spawns; a 'mid' zone keeps only tiles about as far from both sides (the contested ones).
+ * Health sits between the spawns and the middle (worth a detour, never in a spawn), armour in the four corner rooms,
+ * grenades in the south stores and the middle of the dock (fewest, slowest back), ammo in the halls and dock ends.
+ * Tile rectangles, inclusive.
+ */
+export const PICKUP_ZONES: { kind: 'health' | 'armor' | 'ammo' | 'grenade'; x0: number; y0: number; x1: number; y1: number; name: string; side: 'west' | 'east' | 'mid' }[] = [
+  { kind: 'health', x0: 12, y0: 1, x1: 19, y1: 6, name: 'north offices west', side: 'west' },
+  { kind: 'health', x0: 23, y0: 1, x1: 30, y1: 7, name: 'north offices east', side: 'east' },
+  { kind: 'health', x0: 17, y0: 8, x1: 25, y1: 12, name: 'concourse', side: 'mid' },
+  { kind: 'health', x0: 17, y0: 14, x1: 25, y1: 21, name: 'south hall', side: 'mid' },
+  { kind: 'armor', x0: 1, y0: 1, x1: 9, y1: 5, name: 'north-west office', side: 'west' },
+  { kind: 'armor', x0: 33, y0: 1, x1: 42, y1: 6, name: 'north-east office', side: 'east' },
+  { kind: 'armor', x0: 1, y0: 14, x1: 10, y1: 21, name: 'south-west room', side: 'west' },
+  { kind: 'armor', x0: 32, y0: 14, x1: 42, y1: 21, name: 'south-east room', side: 'east' },
+  { kind: 'grenade', x0: 12, y0: 14, x1: 18, y1: 21, name: 'south-west store', side: 'west' },
+  { kind: 'grenade', x0: 24, y0: 14, x1: 31, y1: 21, name: 'south-east store', side: 'east' },
+  { kind: 'grenade', x0: 16, y0: 23, x1: 26, y1: 24, name: 'dock middle', side: 'mid' },
+  { kind: 'ammo', x0: 1, y0: 7, x1: 12, y1: 12, name: 'west hall', side: 'west' },
+  { kind: 'ammo', x0: 30, y0: 7, x1: 42, y1: 12, name: 'east hall', side: 'east' },
+  { kind: 'ammo', x0: 1, y0: 23, x1: 15, y1: 24, name: 'dock west', side: 'west' },
+  { kind: 'ammo', x0: 27, y0: 23, x1: 42, y1: 24, name: 'dock east', side: 'east' },
 ];
 
 /** The RC-8 layout (LAB.pacing off), kept so the lab can measure the old map against the new one. */

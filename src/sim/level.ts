@@ -20,7 +20,7 @@ export interface Level {
   playerSpawn: { x: number; y: number };
   // Floor tiles next to a wall or cover piece: candidate spots for bots to hold or hide.
   coverSpots: { x: number; y: number }[];
-  pickupSpawns: { kind: 'health' | 'armor' | 'ammo'; x: number; y: number }[];
+  pickupSpawns: { kind: 'health' | 'armor' | 'ammo' | 'grenade'; x: number; y: number }[];
 }
 
 export const FLOOR = 0;
@@ -93,7 +93,7 @@ export function parseLevel(rows: readonly string[]): Level {
       const ch = rows[y][x];
       tiles[y * w + x] = ch === '#' ? WALL : ch === 'c' ? COVER : ch === 'b' ? BARRIER : ch === 'd' ? DOOR : FLOOR;
       if (ch === 'P') playerSpawn = { x: x + 0.5, y: y + 0.5 };
-      if (ch === 'h' || ch === 'a' || ch === 'm') pickupSpawns.push({ kind: ch === 'h' ? 'health' : ch === 'a' ? 'armor' : 'ammo', x: x + 0.5, y: y + 0.5 });
+      if (ch === 'h' || ch === 'a' || ch === 'm' || ch === 'g') pickupSpawns.push({ kind: ch === 'h' ? 'health' : ch === 'a' ? 'armor' : ch === 'g' ? 'grenade' : 'ammo', x: x + 0.5, y: y + 0.5 });
     }
   }
   const wallBoxes = mergeRuns(tiles, w, h, WALL);

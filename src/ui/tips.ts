@@ -6,7 +6,7 @@ import type { AbilityKind } from '../config/heroes';
 import type { PickupKind } from '../sim/world';
 import { TUNING } from '../config/tuning';
 
-export type TipId = 'pickup-health' | 'pickup-armor' | 'pickup-ammo' | 'reload' | 'hurt' | 'cover' | 'ability' | 'callout' | 'lastknown';
+export type TipId = 'pickup-health' | 'pickup-armor' | 'pickup-ammo' | 'pickup-grenade' | 'reload' | 'hurt' | 'cover' | 'ability' | 'callout' | 'lastknown';
 
 export interface TipState {
   /** Seconds since the run started. */
@@ -59,6 +59,7 @@ export function tipText(id: TipId, touch: boolean, ability: { kind: AbilityKind;
     case 'pickup-health': return `<b>Health</b> pack: walk over it to heal ${P.health.amount}.`;
     case 'pickup-armor': return `<b>Armour</b> soaks damage before health. Walk over it for +${P.armor.amount}.`;
     case 'pickup-ammo': return `<b>Ammo</b>: walk over it for ${P.ammo.mags} spare magazines.`;
+    case 'pickup-grenade': return `<b>Grenade</b>: walk over it for +${P.grenade.amount}, up to what you can carry.`;
     case 'reload': return `Magazine low. Reload with ${touch ? 'the <b>Reload</b> button' : '<b>R</b>'} before the next fight.`;
     case 'hurt': return 'Hit! The <b>red arc</b> points at the shooter. Break line of sight behind a wall.';
     case 'cover': return 'Crates and slabs <b>stop bullets</b>. Shoot over them from right behind.';

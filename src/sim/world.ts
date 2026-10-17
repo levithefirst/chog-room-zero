@@ -1,6 +1,7 @@
 // The match simulation. Deterministic: fixed step, seeded random, no wall-clock time, no rendering.
 import { TUNING } from '../config/tuning';
-import { BOT_SPAWNS, BOT_SPAWNS_RC8, ROOM_ZERO, ROOM_ZERO_RC8, ZONE_CENTRES, type BotSpawn } from '../config/map';
+import { BOT_SPAWNS, BOT_SPAWNS_RC8, PICKUP_ZONES, ROOM_ZERO, ROOM_ZERO_RC8, VERSUS_SPAWNS, ZONE_CENTRES, type BotSpawn } from '../config/map';
+import { layoutPickups, respawnSpot, walkField, zoneSpots, type Field, type PickupZone, type Spot } from './pickups';
 import { heroById, type AbilityDef, type HeroDef } from '../config/heroes';
 import { BASE_POWER, type Power } from '../config/power';
 import { WEAPONS, damageAt, type WeaponDef } from '../config/weapons';
@@ -224,7 +225,7 @@ export interface CommsEvent {
   tick: number;
 }
 
-export type PickupKind = 'health' | 'armor' | 'ammo';
+export type PickupKind = 'health' | 'armor' | 'ammo' | 'grenade';
 
 export interface Pickup {
   kind: PickupKind;
@@ -232,6 +233,9 @@ export interface Pickup {
   y: number;
   active: boolean;
   respawnLeft: number;
+  /** Its zone in w.pickupSpots (-1: a fixed spawn from the map characters), and how many times it has moved. */
+  zone: number;
+  moves: number;
 }
 
 export interface Barrier {
@@ -258,6 +262,12 @@ export interface World {
   commsAt: number;
   hits: HitEvent[];
   pickups: Pickup[];
+  /** Open tiles of each pickup zone (src/sim/pickups.ts), the layout seed, and a counter that rises when one moves. */
+  pickupSpots: Spot[][];
+  pickupSeed: number;
+  pickupRev: number;
+  /** Walking distance from the west and east online spawns (pickups stay even for both sides), or null. */
+  pickupFields: { alpha: Field; bravo: Field } | null;
   barriers: Barrier[];
   brains: Map<number, Brain>;
   /** Ids of bots currently allowed to shoot at the player (cap: TUNING.perception.attackTokens). */
@@ -335,6 +345,8 @@ export interface WorldOptions {
   /** Solo: AI teammates on the player's side (the default game: you + 2). Off by default so rule tests stay isolated. */
   allies?: { name: string; hero: string }[];
   friendlyFire?: boolean;
+  /** Pickup zones to lay out (default: Room Zero's when the map is Room Zero; none for a given test map). */
+  pickupZones?: PickupZone[];
 }
 
 export function createWorld(opts: WorldOptions = {}): World {
@@ -349,7 +361,7 @@ export function createWorld(opts: WorldOptions = {}): World {
     });
     return {
       tick: 0, rng: seed, level, actors, bullets: [], grenades: [], nadeSeq: 0, sounds: [], prevSounds: [], comms: [], prevComms: [], commsAt: -1e9, hits: [],
-      pickups: level.pickupSpawns.map((p) => ({ ...p, active: true, respawnLeft: 0 })), barriers: [],
+      ...initPickups(level, seed, opts), barriers: [],
       brains, attackTokens: [], perceptionLog: null, outcome: 'playing', playerKill: null,
       mode: 'versus', winner: null, friendlyFire: !!opts.friendlyFire,
       zone: opts.zone === false ? null : planZone(level, seed, ZONE_CENTRES, TUNING.zone, spawns),
@@ -375,11 +387,30 @@ export function createWorld(opts: WorldOptions = {}): World {
   });
   return {
     tick: 0, rng: seed, level, actors, bullets: [], grenades: [], nadeSeq: 0, sounds: [], prevSounds: [], comms: [], prevComms: [], commsAt: -1e9, hits: [],
-    pickups: level.pickupSpawns.map((p) => ({ ...p, active: true, respawnLeft: 0 })), barriers: [],
+    ...initPickups(level, seed, opts), barriers: [],
     brains, attackTokens: [], perceptionLog: opts.log ? [] : null, outcome: 'playing', playerKill: null,
     mode: 'solo', winner: null, friendlyFire: !!opts.friendlyFire,
     zone: opts.zone ? planZone(level, seed, ZONE_CENTRES) : null,
   };
+}
+
+/**
+ * Pickups: the map's fixed ones (test and lab maps), plus Room Zero's zoned ones laid out from the seed. Spawn points
+ * come from the map and the mode (never from the actors of this match), so the server and a client building the
+ * same online match get the same layout.
+ */
+function initPickups(level: Level, seed: number, opts: WorldOptions): Pick<World, 'pickups' | 'pickupSpots' | 'pickupSeed' | 'pickupRev' | 'pickupFields'> {
+  const fixed: Pickup[] = level.pickupSpawns.map((p) => ({ ...p, active: true, respawnLeft: 0, zone: -1, moves: 0 }));
+  const zones: PickupZone[] = opts.pickupZones ?? (opts.map === undefined && LAB.pacing ? PICKUP_ZONES : []);
+  if (!zones.length) return { pickups: fixed, pickupSpots: [], pickupSeed: seed, pickupRev: 0, pickupFields: null };
+  // Online: both sides' spawns. Solo: yours (your teammates start beside you) and every bot's.
+  const spawns: Spot[] = opts.versus ? [...VERSUS_SPAWNS.alpha, ...VERSUS_SPAWNS.bravo]
+    : [level.playerSpawn, ...(opts.bots ?? (LAB.pacing ? BOT_SPAWNS : BOT_SPAWNS_RC8)).map((b) => ({ x: b.patrol[0][0] + 0.5, y: b.patrol[0][1] + 0.5 }))];
+  const fields = { alpha: walkField(level, VERSUS_SPAWNS.alpha), bravo: walkField(level, VERSUS_SPAWNS.bravo) };
+  const spots = zoneSpots(level, zones, spawns, fields);
+  const at = layoutPickups(spots, zones.map((z) => z.kind), seed, fields.alpha, fields.bravo);
+  const zoned: Pickup[] = zones.map((z, i) => ({ kind: z.kind, x: at[i].x, y: at[i].y, active: true, respawnLeft: 0, zone: i, moves: 0 }));
+  return { pickups: [...fixed, ...zoned], pickupSpots: spots, pickupSeed: seed, pickupRev: 0, pickupFields: fields };
 }
 
 export function player(w: World): Actor {
@@ -925,6 +956,7 @@ export function wants(a: Actor, kind: PickupKind): boolean {
   if (a.downed) return false;
   if (kind === 'health') return a.hp <= hpCeiling(a) - TUNING.pickups.minGain;
   if (kind === 'armor') return a.armor <= armorCeiling(a) - TUNING.pickups.minGain;
+  if (kind === 'grenade') return a.grenades < a.maxGrenades;
   return a.reserve < a.weapon.reserve + a.weapon.magazine * 2;
 }
 
@@ -943,13 +975,23 @@ function stepPickups(w: World, dt: number): void {
   for (const p of w.pickups) {
     if (!p.active) {
       p.respawnLeft -= dt;
-      if (p.respawnLeft <= 0) p.active = true;
+      if (p.respawnLeft > 0) continue;
+      if (p.zone >= 0) {
+        // Back on another tile of its zone, clear of the other pickups and of anyone standing; if every tile is
+        // blocked right now it tries again in a second.
+        const s = respawnSpot(w.pickupSpots[p.zone], w.pickupSeed, p.zone, p.moves + 1, p, w.pickups.filter((q) => q !== p), p.kind, w.actors.filter((a) => a.alive), w.pickupFields!.alpha, w.pickupFields!.bravo);
+        if (!s) { p.respawnLeft = 1; continue; }
+        p.moves++;
+        if (s.x !== p.x || s.y !== p.y) { p.x = s.x; p.y = s.y; w.pickupRev++; }
+      }
+      p.active = true;
       continue;
     }
     for (const a of w.actors) {
       if (!a.alive || Math.hypot(a.x - p.x, a.y - p.y) > P.radius || !wants(a, p.kind)) continue;
       if (p.kind === 'health') a.hp = Math.min(hpCeiling(a), a.hp + P.health.amount);
       else if (p.kind === 'armor') a.armor = Math.min(armorCeiling(a), a.armor + P.armor.amount);
+      else if (p.kind === 'grenade') a.grenades = Math.min(a.maxGrenades, a.grenades + P.grenade.amount);
       else a.reserve += a.weapon.magazine * P.ammo.mags;
       p.active = false;
       p.respawnLeft = P[p.kind].respawn;

@@ -1298,17 +1298,17 @@ async function start() {
 
   // A pickup the player just took: what it gave, in its colour, at the player (pages 6-9 of the reference: a named
   // pickup with a ring), instead of a generic "Picked up".
-  const PICKUP_LABEL: Record<PickupKind, string> = { health: 'HEALTH', armor: 'ARMOUR', ammo: 'AMMO' };
+  const PICKUP_LABEL: Record<PickupKind, string> = { health: 'HEALTH', armor: 'ARMOUR', ammo: 'AMMO', grenade: 'GRENADE' };
   function collected(x: number, y: number) {
     const pk = world.pickups.find((q) => q.x === x && q.y === y);
     const p = player(world);
     runPickups++;
     if (!pk) { toast('Picked up'); return; }
     const P = TUNING.pickups;
-    const amount = pk.kind === 'health' ? `+${P.health.amount} ` : pk.kind === 'armor' ? `+${P.armor.amount} ` : `+${P.ammo.mags * p.weapon.magazine} `;
+    const amount = pk.kind === 'health' ? `+${P.health.amount} ` : pk.kind === 'armor' ? `+${P.armor.amount} ` : pk.kind === 'grenade' ? `+${P.grenade.amount} ` : `+${P.ammo.mags * p.weapon.magazine} `;
     toast(`${amount}${PICKUP_LABEL[pk.kind]}`);
     const pal = TUNING.palette;
-    fx.collects.push({ x: p.x, y: p.y, age: 0, color: pk.kind === 'health' ? pal.heal : pk.kind === 'armor' ? pal.armor : pal.ammo });
+    fx.collects.push({ x: p.x, y: p.y, age: 0, color: pk.kind === 'health' ? pal.heal : pk.kind === 'armor' ? pal.armor : pk.kind === 'grenade' ? pal.grenade : pal.ammo });
   }
 
   // Standing on a pickup you cannot use (full): say so once per contact, so it never reads as "needs another step".

@@ -285,6 +285,8 @@ export class OnlineSession {
       hits: m.hits.map((h) => ({ target: v(h.target), by: v(h.by), x: h.x, y: h.y, fromX: h.fromX, fromY: h.fromY, hpDamage: 0, armorDamage: 0, killed: h.killed, downed: h.downed, grenade: h.grenade })),
     });
     m.pickups.forEach((on, i) => { if (w.pickups[i]) w.pickups[i].active = on; });
+    // The server's word on where each pickup is (they move when they come back).
+    if (m.pk) w.pickups.forEach((k, i) => { if (m.pk!.length > i * 2 + 1) { k.x = m.pk![i * 2]; k.y = m.pk![i * 2 + 1]; } });
     w.barriers = m.barriers.map((b) => ({ box: { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 }, left: b.left, owner: -1 }));
     // The view level's solid boxes carry the slabs too, so your predicted walk stops at one like the server's does.
     const solid = w.level.solidBoxes;

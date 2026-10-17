@@ -28,9 +28,9 @@ describe('Room Zero map', () => {
     for (let x = 0; x < l.w; x++) expect(tileAt(l, x + 0.5, 0.5)).not.toBe(FLOOR);
     expect(tileAt(l, l.playerSpawn.x, l.playerSpawn.y)).toBe(FLOOR);
     for (const b of BOT_SPAWNS) for (const [x, y] of b.patrol) expect(walkable(tileAt(l, x + 0.5, y + 0.5)), `${b.name} ${x},${y}`).toBe(true);
-    expect(l.pickupSpawns.filter((p) => p.kind === 'health').length).toBeGreaterThanOrEqual(3);
-    expect(l.pickupSpawns.filter((p) => p.kind === 'armor').length).toBeGreaterThanOrEqual(2);
-    expect(l.pickupSpawns.filter((p) => p.kind === 'ammo').length).toBeGreaterThanOrEqual(2);
+    // Pickups are laid out by zone (tests/pickup-layout.test.ts covers the rules); the map itself has no fixed ones.
+    const pk = createWorld().pickups;
+    for (const [k, n] of [['health', 4], ['armor', 4], ['ammo', 4], ['grenade', 3]] as const) expect(pk.filter((p) => p.kind === k).length).toBe(n);
   });
   it('every walkable tile and every pickup is reachable from the player spawn', () => {
     const seen = new Uint8Array(l.w * l.h);
@@ -41,7 +41,7 @@ describe('Room Zero map', () => {
       for (const n of [i + 1, i - 1, i + l.w, i - l.w]) if (!seen[n] && walkable(l.tiles[n])) { seen[n] = 1; q.push(n); }
     }
     for (let i = 0; i < l.tiles.length; i++) if (walkable(l.tiles[i])) expect(seen[i], `tile ${i % l.w},${Math.floor(i / l.w)}`).toBe(1);
-    for (const p of l.pickupSpawns) expect(findPath(l, l.playerSpawn.x, l.playerSpawn.y, p.x, p.y, 8000).length).toBeGreaterThan(0);
+    for (const p of createWorld().pickups) expect(findPath(l, l.playerSpawn.x, l.playerSpawn.y, p.x, p.y, 8000).length).toBeGreaterThan(0);
   });
   it('has chokepoints (doorways) and no straight open lane longer than the widest room (CF-F: 15 u)', () => {
     expect(Array.from(l.tiles).filter((t) => t === 4).length).toBeGreaterThanOrEqual(10);

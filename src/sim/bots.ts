@@ -443,8 +443,9 @@ function think(w: World, a: Actor, br: Brain, dt: number): void {
     br.timer = 0;
   }
 
-  // Hurt and not under fire right now: go for the nearest health pickup if one is up.
-  if (hurt && !br.sawPlayer && br.state !== 'heal' && br.state !== 'alert') {
+  // Hurt, not under fire and not hit for healCalmSeconds: go for the nearest health pickup if one is up. (Owner
+  // 2026-10-17: health must not make damage meaningless. A bot no longer breaks off mid-fight to reset at a pickup.)
+  if (hurt && !br.sawPlayer && br.state !== 'heal' && br.state !== 'alert' && w.tick - a.lastHitTick > B.healCalmSeconds / TUNING.simStepSeconds) {
     const hp = nearestHealth(w, a);
     if (hp) {
       br.state = 'heal';

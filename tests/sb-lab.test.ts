@@ -26,8 +26,11 @@ describe('SB information model in the default game', () => {
     for (const k of ['last_known', 'heard']) {
       expect(info.honest[k], k).toBeGreaterThan(0.6);
     }
-    // A direction through a wall is the vaguest rung: its estimate is the furthest off.
-    expect(info.error.directional).toBeGreaterThan(info.error.heard);
+    // A direction through a wall is the vaguest reading: when it is made, its estimate is the furthest off a heard
+    // spot's. (Measured when the reading is made: over a belief's whole life the error also grows with how far the
+    // hostile walks on, which says how much it moves, not how precise the rung is. Lifetime errors on the 15-pickup
+    // map, 48 seeds: heard 1.7, direction 1.3; fresh: heard 0.54, direction 1.10. Before: 1.1 / 1.3 and 0.44 / 1.06.)
+    expect(info.fresh.directional).toBeGreaterThan(info.fresh.heard * 1.5);
   });
   it('writes the numbers (SB_OUT)', async () => {
     const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};

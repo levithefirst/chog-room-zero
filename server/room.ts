@@ -71,6 +71,8 @@ interface Player {
   ticket: GameTicket | null;
   /** The squad this player is in (stays together between matches), or null. */
   party: Party | null;
+  /** The pickup layout revision last sent (pickups move when they come back; -1: send it with the next snapshot). */
+  pickRev: number;
 }
 
 /** A squad: up to 5 players who queue together and always play on the same team. The leader queues for everyone. */
@@ -131,7 +133,7 @@ export class Lobby {
     const now = this.opts.now();
     this.players.set(id, {
       id, conn, token: randomBytes(16).toString('hex'), name: '', hero: 'benja', state: 'new', queueKey: null, queuedAt: 0,
-      room: null, actorId: -1, lastMsgAt: now, goneAt: 0, bucket: this.opts.rateBurst, bucketAt: now, dropped: 0, ticket: null, party: null,
+      room: null, actorId: -1, lastMsgAt: now, goneAt: 0, bucket: this.opts.rateBurst, bucketAt: now, dropped: 0, ticket: null, party: null, pickRev: -1,
     });
     return id;
   }
@@ -217,6 +219,8 @@ export class Lobby {
           this.players.delete(old.id);
           old.id = p.id;
           old.conn!.send({ t: 'welcome', v: PROTOCOL, token: old.token, name: old.name, resumed: true });
+          // A resumed client rebuilds its world from the seed: send where the pickups are now.
+          old.pickRev = -1;
           this.sendMatch(old.room, old);
           return;
         }
@@ -399,6 +403,7 @@ export class Lobby {
       p.queueKey = null;
       p.room = room;
       p.actorId = i;
+      p.pickRev = -1;
       room.inputs[i].aim = versus[i].facing;
     });
     this.rooms.set(id, room);
@@ -485,8 +490,11 @@ export class Lobby {
       .map((s) => ({ type: s.type, x: r3(s.x), y: r3(s.y), radius: s.radius, source: s.sourceId, team: s.team, weapon: s.weapon, blocked: s.blocked, sig: s.sig }));
     const hits: NetHit[] = w.hits.filter((h) => w.actors[h.target].team === me.team || w.actors[h.by].team === me.team)
       .map((h) => ({ target: h.target, by: h.by, x: r3(h.x), y: r3(h.y), fromX: r3(h.fromX), fromY: r3(h.fromY), killed: h.killed, downed: h.downed, grenade: h.grenade }));
+    // Where every pickup is, whenever the layout changed since this player's last snapshot (and once at the start).
+    const pk = p.pickRev !== w.pickupRev ? w.pickups.flatMap((k) => [k.x, k.y]) : undefined;
+    p.pickRev = w.pickupRev;
     return {
-      t: 'snap', tick: w.tick, actors, bullets, grenades, pickups: w.pickups.map((k) => k.active), sounds, hits,
+      t: 'snap', tick: w.tick, actors, bullets, grenades, pickups: w.pickups.map((k) => k.active), ...(pk ? { pk } : {}), sounds, hits,
       barriers: w.barriers.map((b) => ({ ...b.box, left: r3(b.left) })), ack: room.acks[p.actorId], as: room.ackSteps[p.actorId],
     };
   }

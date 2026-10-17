@@ -72,7 +72,7 @@ export type ServerMsg =
   | { t: 'match'; room: string; mode: Mode; you: number; team: Team; seed: number; friendlyFire: boolean; roster: RosterEntry[]; startsIn: number; demo?: boolean; zone: { x: number; y: number; r: number }[] }
   /** ack/as (SB): the newest input seq the server had from you when it took this snapshot, and how many sim steps it has
    * applied it so far (your movement prediction replays the rest). Optional: an older server sends neither. */
-  | { t: 'snap'; tick: number; actors: NetActor[]; bullets: NetBullet[]; grenades?: NetGrenade[]; pickups: boolean[]; sounds: NetSound[]; hits: NetHit[]; barriers: { x0: number; y0: number; x1: number; y1: number; left: number }[]; ack?: number; as?: number }
+  | { t: 'snap'; tick: number; actors: NetActor[]; bullets: NetBullet[]; grenades?: NetGrenade[]; pickups: boolean[]; pk?: number[]; sounds: NetSound[]; hits: NetHit[]; barriers: { x0: number; y0: number; x1: number; y1: number; left: number }[]; ack?: number; as?: number }
   | { t: 'over'; winner: Team | null; reason: 'eliminated' | 'time'; results: PlayerResult[]; matchId?: string; settle?: boolean }
   | { t: 'pong'; at: number; tick: number }
   | { t: 'party'; code: string | null; members: PartyMember[] }

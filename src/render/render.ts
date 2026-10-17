@@ -217,7 +217,9 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
   // SB call-out lines above AI teammates, pooled (one per caller on screen at a time).
   const commsTexts: Text[] = [];
   // Pickups as you last saw them (CF-E): out of your light you remember, you do not watch the respawn.
-  let pickupSeen: boolean[] = [];
+  // Where you last saw each pickup and whether it was there (pickups move when they come back: a remembered one stays
+  // where you saw it until you look at that spot again).
+  let pickupSeen: ({ x: number; y: number; active: boolean } | null)[] = [];
   const barGhost = new Map<number, { hp: number; hold: number }>();
   let frameDt = 0;
 
@@ -570,24 +572,27 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
     const me = player(w);
     w.pickups.forEach((p, i) => {
       const lbl = pickupLabels[i];
-      const known = explored[Math.floor(p.y) * level.w + Math.floor(p.x)];
-      lbl.visible = !!known;
-      if (!known) return;
+      const inView = (x: number, y: number) => !!explored[Math.floor(y) * level.w + Math.floor(x)] && (!LAB.dark || pointInPolygon(x, y, poly));
+      const col = p.kind === 'health' ? P.heal : p.kind === 'armor' ? P.armor : p.kind === 'grenade' ? P.grenade : P.ammo;
+      const lit = inView(p.x, p.y);
+      let m = pickupSeen[i];
+      if (lit) m = pickupSeen[i] = { x: p.x, y: p.y, active: p.active };
+      // You look at the spot where you saw it, and it has moved: forgotten.
+      else if (m && (m.x !== p.x || m.y !== p.y) && inView(m.x, m.y)) m = pickupSeen[i] = null;
+      const at = lit ? p : m;
+      if (!at) { lbl.visible = false; return; }
       // Keep the label out from under HUD panels: below by default, above if blocked, hidden if both are.
-      const sx = world.position.x + p.x * ppu, sy = world.position.y + p.y * ppu;
+      const sx = world.position.x + at.x * ppu, sy = world.position.y + at.y * ppu;
       const pl = placeLabel(sx, sy, lbl.width * ppu, lbl.height * ppu, 0.38 * ppu, hud);
       lbl.visible = pl.visible;
-      lbl.position.set(p.x, p.y + (pl.y - sy) / ppu);
-      const col = p.kind === 'health' ? P.heal : p.kind === 'armor' ? P.armor : P.ammo;
-      const lit = !LAB.dark || pointInPolygon(p.x, p.y, poly);
-      if (lit) pickupSeen[i] = p.active;
-      if (!lit && pickupSeen[i] !== false) {
+      lbl.position.set(at.x, at.y + (pl.y - sy) / ppu);
+      if (!lit && m!.active) {
         // Remembered, not watched: drawn as you last saw it, without the glow or the respawn clock.
-        props.roundRect(p.x - 0.3, p.y - 0.3, 0.6, 0.6, 0.1).fill({ color: px('bgPanel'), alpha: 0.55 }).stroke({ width: 0.04, color: col, alpha: 0.45 });
+        props.roundRect(m!.x - 0.3, m!.y - 0.3, 0.6, 0.6, 0.1).fill({ color: px('bgPanel'), alpha: 0.55 }).stroke({ width: 0.04, color: col, alpha: 0.45 });
         lbl.alpha = 0.45;
         return;
       }
-      if (!lit) { circle(props, p.x, p.y, 0.32).stroke({ width: 0.04, color: col, alpha: 0.3 }); lbl.alpha = 0.35; return; }
+      if (!lit) { circle(props, m!.x, m!.y, 0.32).stroke({ width: 0.04, color: col, alpha: 0.3 }); lbl.alpha = 0.35; return; }
       if (!p.active) {
         circle(props, p.x, p.y, 0.32).stroke({ width: 0.04, color: col, alpha: 0.35 });
         const t = 1 - p.respawnLeft / TUNING.pickups[p.kind].respawn;
@@ -607,6 +612,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       props.roundRect(p.x - 0.3, p.y - 0.3 + bob, 0.6, 0.6, 0.1).fill(px('bgPanel')).stroke({ width: 0.05, color: col });
       if (p.kind === 'health') props.rect(p.x - 0.18, p.y - 0.06 + bob, 0.36, 0.12).rect(p.x - 0.06, p.y - 0.18 + bob, 0.12, 0.36).fill(col);
       else if (p.kind === 'armor') props.poly([p.x - 0.17, p.y - 0.17 + bob, p.x + 0.17, p.y - 0.17 + bob, p.x + 0.17, p.y + 0.02 + bob, p.x, p.y + 0.2 + bob, p.x - 0.17, p.y + 0.02 + bob]).fill(col);
+      else if (p.kind === 'grenade') { circle(props, p.x, p.y + 0.03 + bob, 0.15).fill(col); props.rect(p.x - 0.05, p.y - 0.2 + bob, 0.1, 0.09).rect(p.x + 0.02, p.y - 0.2 + bob, 0.14, 0.04).fill(col); }
       else for (let k = 0; k < 3; k++) props.rect(p.x - 0.17 + k * 0.13, p.y - 0.16 + bob, 0.08, 0.32).fill(col);
     });
     // Deployed slabs.
@@ -666,7 +672,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
         } else light.setTexture(baked.lit, w.level.w, w.level.h);
       }
       level = w.level;
-      barGhost.clear(); pickupSeen = w.pickups.map(() => true);
+      barGhost.clear(); pickupSeen = w.pickups.map(() => null);
       explored = new Uint8Array(level.w * level.h);
       exploredDirty = true;
       const p = player(w);
@@ -683,8 +689,8 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
           labels.addChild(t);
           pickupLabels.push(t);
         }
-        t.text = pk.kind === 'health' ? 'HEALTH' : pk.kind === 'armor' ? 'ARMOUR' : 'AMMO';
-        t.tint = pk.kind === 'health' ? P.heal : pk.kind === 'armor' ? P.armor : P.ammo;
+        t.text = pk.kind === 'health' ? 'HEALTH' : pk.kind === 'armor' ? 'ARMOUR' : pk.kind === 'grenade' ? 'GRENADE' : 'AMMO';
+        t.tint = pk.kind === 'health' ? P.heal : pk.kind === 'armor' ? P.armor : pk.kind === 'grenade' ? P.grenade : P.ammo;
         t.position.set(pk.x, pk.y + 0.38);
       });
       for (let i = w.pickups.length; i < pickupLabels.length; i++) pickupLabels[i].visible = false;

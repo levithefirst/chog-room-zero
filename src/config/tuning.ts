@@ -62,12 +62,27 @@ export const TUNING = {
   },
 
   pickups: {
-    // Health +40, back after 20 s: worth a detour, not a camping spot.
-    health: { amount: 40, respawn: 20 },
-    // Armour +35, back after 25 s.
-    armor: { amount: 35, respawn: 25 },
-    // Ammo: one magazine's worth x2 into reserve, back after 15 s.
-    ammo: { mags: 2, respawn: 15 },
+    // Owner 2026-10-17: more pickups (15 in four kinds, src/config/map.ts PICKUP_ZONES), each slower to come back, so
+    // the map holds about the same healing per minute as before (4 x 40 / 25 s = 6.4 hp/s map-wide, was 3 x 40 / 20 s
+    // = 6) spread over more places: more reasons to move, not more health. Damage still decides fights.
+    // Health +40, back after 25 s: worth a detour, not a camping spot.
+    health: { amount: 40, respawn: 25 },
+    // Armour +35, back after 30 s (4 x 35 / 30 s = 4.7 armour/s map-wide, was 4.2).
+    armor: { amount: 35, respawn: 30 },
+    // Ammo: one magazine's worth x2 into reserve, back after 20 s.
+    ammo: { mags: 2, respawn: 20 },
+    // Grenade +1, never above the carrier's capacity (3 free, more by verified tier), back after 40 s: three on the
+    // map, so at most about 4 extra throws a minute for the whole room. A refill for a key moment, never a stream.
+    grenade: { amount: 1, respawn: 40 },
+    // Placement (src/sim/pickups.ts): at least this far from every spawn on the map, from every other pickup, and
+    // from anyone standing when it comes back. Each comeback moves it to another tile of its zone.
+    spawnClear: 5,
+    minSeparation: 5,
+    nearActor: 3,
+    // Even for both online sides: per kind, the average walk from the west spawns and from the east spawns to its
+    // pickups (and to the nearest one) may differ by at most this many tiles; the layout tries this many seeded orders.
+    balanceTolerance: 3,
+    layoutTries: 24,
     // Collect on touch, no button, no second step: 0.7 u from the centre = the body (0.35 u) meeting the pickup
     // crate (0.3 u half-width) with 0.05 u to spare. RC-8 draws the body at its true 0.35 u (it was drawn 1.45x), so
     // the pickup is taken on the same step the drawn body touches the drawn pickup (tests/rc8-pickups.test.ts).
@@ -222,8 +237,9 @@ export const TUNING = {
   comms: {
     // Seconds between any two call-outs from the squad (one voice at a time). Measured (16 default matches,
     // tests/sb-comms.test.ts): gap 1.4 with 7 s rests made 13.5 calls a minute, a stream; 2.2 s and longer rests on
-    // the noisy kinds bring it under 10 while still calling a third of what the player then sees.
-    gap: 2.2,
+    // the noisy kinds bring it under 10 while still calling a third of what the player then sees. The 15 zoned
+    // pickups (owner 2026-10-17) move the squad and the bots around more: 2.2 s made 10.5 a minute, 2.5 s makes 8.5.
+    gap: 2.5,
     // Seconds before the same teammate makes the same kind of call again.
     rest: { contact: 4, behind: 4, lost: 8, steps: 10, shots: 10, reloading: 12, hurt: 10 } as Record<string, number>,
     // A heard call (footsteps, shots) is skipped when the player stands this close to the caller: they heard it too.
@@ -296,6 +312,12 @@ export const TUNING = {
     coverSeconds: 1.6,
     // Go for a health pickup within this distance when hurt.
     healthSeekRange: 14,
+    // ...but only after this long without being hit (owner 2026-10-17: more health on the map must not erase the
+    // damage you deal; a bot no longer breaks off mid-fight to reset). Solo 1v5 autopilot wins in 160 seeds,
+    // Ray / Tabsu / Toad: old 9-pickup map 6 / 3 / 10; 15 zoned pickups without this rule 3 / 6 / 12; 2 s 5 / 13 / 4;
+    // 4 s 7 / 11 / 11. 3, 4 and 6 s each left one 16-seed information or call-out statistic just past its bar
+    // (tests/sb-lab, sb-comms); 2 s passes them all. PROPOSAL: the owner's playtest decides.
+    healCalmSeconds: 2,
     // Before CF bots crept on patrol (3 u steps, almost never heard). CF-D: they walk their rounds at patrolSpeed
     // (steps heard ~6 u), pause patrolPause..+patrolPauseJitter s at each point, stop to listen listenSeconds when
     // they hear something, then creep (quiet) toward it.
@@ -413,6 +435,8 @@ export const TUNING = {
     heal: px('health'),
     armor: px('armor'),
     ammo: px('ammo'),
+    // Grenade pickup: pink with a round shell icon (no other pickup uses pink or a circle).
+    grenade: px('pink'),
     // Soft glow under a pickup you would take (brand guide: pickup glows soft purple).
     pickup: px('pickup'),
     zone: px('dangerZone'),
