@@ -55,7 +55,8 @@ export interface NetProfile { verified: boolean; tier: Tier; holder: boolean; de
 /** A live grenade as a client may see it (own team's always; others when the team can see it or it is close). */
 export interface NetGrenade { id: number; x: number; y: number; vx: number; vy: number; fuse: number; owner: number }
 export interface NetBullet { x: number; y: number; dx: number; dy: number; ox: number; oy: number; owner: number; weapon: string }
-export interface NetSound { type: string; x: number; y: number; radius: number; source: number; team: Team; weapon?: string; blocked?: boolean; sig?: number }
+/** est: the server sent a hearing estimate, not the source's spot ('clear' line or through a 'wall'). */
+export interface NetSound { type: string; x: number; y: number; radius: number; source: number; team: Team; weapon?: string; blocked?: boolean; sig?: number; est?: 'clear' | 'wall' }
 export interface NetHit { target: number; by: number; x: number; y: number; fromX: number; fromY: number; killed: boolean; downed?: boolean; grenade?: boolean }
 
 /** One squad member as every member sees it. */
@@ -72,7 +73,7 @@ export type ServerMsg =
   | { t: 'match'; room: string; mode: Mode; you: number; team: Team; seed: number; friendlyFire: boolean; roster: RosterEntry[]; startsIn: number; demo?: boolean; zone: { x: number; y: number; r: number }[] }
   /** ack/as (SB): the newest input seq the server had from you when it took this snapshot, and how many sim steps it has
    * applied it so far (your movement prediction replays the rest). Optional: an older server sends neither. */
-  | { t: 'snap'; tick: number; actors: NetActor[]; bullets: NetBullet[]; grenades?: NetGrenade[]; pickups: boolean[]; pk?: number[]; sounds: NetSound[]; hits: NetHit[]; barriers: { x0: number; y0: number; x1: number; y1: number; left: number }[]; ack?: number; as?: number }
+  | { t: 'snap'; tick: number; actors: NetActor[]; bullets: NetBullet[]; grenades?: NetGrenade[]; pickups: boolean[]; pk?: number[]; sp?: { id: number; x: number; y: number }[]; sounds: NetSound[]; hits: NetHit[]; barriers: { x0: number; y0: number; x1: number; y1: number; left: number }[]; ack?: number; as?: number }
   | { t: 'over'; winner: Team | null; reason: 'eliminated' | 'time'; results: PlayerResult[]; matchId?: string; settle?: boolean }
   | { t: 'pong'; at: number; tick: number }
   | { t: 'party'; code: string | null; members: PartyMember[] }

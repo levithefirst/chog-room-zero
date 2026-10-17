@@ -255,6 +255,9 @@ export class OnlineSession {
     }
   }
 
+  /** Teammates' sightings from the newest snapshot (view actor ids). */
+  spotted: { id: number; x: number; y: number }[] = [];
+
   private buildWorld(m: Extract<ServerMsg, { t: 'match' }>): void {
     // You first, then your team, then the other team.
     const order = [...m.roster].sort((a, b) => (a.id === m.you ? -1 : b.id === m.you ? 1 : (a.team === m.team ? 0 : 1) - (b.team === m.team ? 0 : 1) || a.id - b.id));
@@ -268,6 +271,7 @@ export class OnlineSession {
     order.forEach((r, i) => { const act = this.world!.actors[i]; if (r.ability) act.ability = { ...act.ability, ...r.ability, ...(r.metadataId && r.tier === 'legendary' ? signatureFor(r.metadataId) : {}), cooldown: r.ability.cooldown }; });
     this.world.zone = m.zone.length ? { plan: m.zone as Circle[], cfg: TUNING.zone } : null;
     this.snaps = [];
+    this.spotted = [];
     this.predictor.reset();
     this.barrierBoxes = [];
     this.over = null;
@@ -281,10 +285,12 @@ export class OnlineSession {
     if (this.snaps.length > 12) this.snaps.shift();
     const v = (id: number) => this.toView.get(id) ?? 0;
     this.pendingEvents.push({
-      sounds: m.sounds.map((s) => ({ type: s.type as SoundType, x: s.x, y: s.y, radius: s.radius, sourceId: v(s.source), team: s.team, tick: m.tick, weapon: s.weapon, blocked: s.blocked, sig: s.sig })),
+      sounds: m.sounds.map((s) => ({ type: s.type as SoundType, x: s.x, y: s.y, radius: s.radius, sourceId: v(s.source), team: s.team, tick: m.tick, weapon: s.weapon, blocked: s.blocked, sig: s.sig, ...(s.est ? { est: s.est } : {}) })),
       hits: m.hits.map((h) => ({ target: v(h.target), by: v(h.by), x: h.x, y: h.y, fromX: h.fromX, fromY: h.fromY, hpDamage: 0, armorDamage: 0, killed: h.killed, downed: h.downed, grenade: h.grenade })),
     });
     m.pickups.forEach((on, i) => { if (w.pickups[i]) w.pickups[i].active = on; });
+    // Hostiles only a teammate sees: spots the server placed near them (fed to the contact intel, never drawn as bodies).
+    this.spotted = (m.sp ?? []).map((s) => ({ id: v(s.id), x: s.x, y: s.y }));
     // The server's word on where each pickup is (they move when they come back).
     if (m.pk) w.pickups.forEach((k, i) => { if (m.pk!.length > i * 2 + 1) { k.x = m.pk![i * 2]; k.y = m.pk![i * 2 + 1]; } });
     w.barriers = m.barriers.map((b) => ({ box: { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 }, left: b.left, owner: -1 }));

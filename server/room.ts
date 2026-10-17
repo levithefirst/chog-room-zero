@@ -7,6 +7,7 @@ import { randomBytes } from 'node:crypto';
 import { createWorld, down, IDLE_INPUT, matchSeconds, revealed, standing, stepWorld, type Actor, type ActorInput, type Team, type World } from '../src/sim/world';
 import { canSee, muzzleFlashSeen } from '../src/sim/vision';
 import { hears } from '../src/sim/world';
+import { hearReport, locatesSource, noise3 } from '../src/sim/intel';
 import { heroIdOf } from '../src/config/heroes';
 import { VERSUS_SPAWNS } from '../src/config/map';
 import { TUNING } from '../src/config/tuning';
@@ -73,6 +74,9 @@ interface Player {
   party: Party | null;
   /** The pickup layout revision last sent (pickups move when they come back; -1: send it with the next snapshot). */
   pickRev: number;
+  /** Spotted reports this player was last sent, per hostile actor id: where (already off the true spot) and until
+   * which tick it stands before a fresh one. */
+  spot: Map<number, { x: number; y: number; until: number }>;
 }
 
 /** A squad: up to 5 players who queue together and always play on the same team. The leader queues for everyone. */
@@ -133,7 +137,7 @@ export class Lobby {
     const now = this.opts.now();
     this.players.set(id, {
       id, conn, token: randomBytes(16).toString('hex'), name: '', hero: 'benja', state: 'new', queueKey: null, queuedAt: 0,
-      room: null, actorId: -1, lastMsgAt: now, goneAt: 0, bucket: this.opts.rateBurst, bucketAt: now, dropped: 0, ticket: null, party: null, pickRev: -1,
+      room: null, actorId: -1, lastMsgAt: now, goneAt: 0, bucket: this.opts.rateBurst, bucketAt: now, dropped: 0, ticket: null, party: null, pickRev: -1, spot: new Map(),
     });
     return id;
   }
@@ -404,6 +408,7 @@ export class Lobby {
       p.room = room;
       p.actorId = i;
       p.pickRev = -1;
+      p.spot = new Map();
       room.inputs[i].aim = versus[i].facing;
     });
     this.rooms.set(id, room);
@@ -459,17 +464,40 @@ export class Lobby {
     if (w.outcome !== 'playing') this.finish(room, 'eliminated');
   }
 
-  /** What one player is allowed to know: own team always; enemies only when a teammate can see them, their muzzle
-   * flash was seen in the last 0.7 s, a teammate's Ping shows them, or they are down. Bullets likewise. */
+  /**
+   * What one player is allowed to know (owner 2026-10-17: the server never sends exact hostile positions the player
+   * did not earn). Exact: your own team, the dead, and hostiles YOU see, whose muzzle flash YOU saw in the last 0.7 s,
+   * or YOUR Ping shows. A hostile only a teammate sees (or a teammate's Ping or seen flash shows) is a SPOTTED report:
+   * a spot within spottedRadius of where it was, refreshed every spottedRefresh s, never the live body. Heard hostile
+   * sounds arrive as the hearing estimate the game draws (src/sim/intel.ts hearReport), not their exact spot. Bullets,
+   * grenades and hits follow the same line.
+   */
   snapshot(room: Room, p: Player): Extract<ServerMsg, { t: 'snap' }> {
     const w = room.world;
     const me = w.actors[p.actorId];
-    const mates = w.actors.filter((a) => a.team === me.team && a.alive);
+    const mates = w.actors.filter((a) => a.team === me.team && a.alive && a !== me);
     const flashTicks = TUNING.perception.flashSeconds / STEP;
-    const seenBy = (x: number, y: number) => mates.some((m) => canSee(w.level, m.x, m.y, m.facing, m.view, x, y));
-    const visible = (e: Actor) => e.team === me.team || !e.alive || seenBy(e.x, e.y)
-      || (w.tick - room.lastShot[e.id] <= flashTicks && mates.some((m) => muzzleFlashSeen(w.level, m.x, m.y, e.x, e.y)))
-      || mates.some((m) => revealed(w, m).includes(e));
+    const iSee = (x: number, y: number) => me.alive && canSee(w.level, me.x, me.y, me.facing, me.view, x, y);
+    const mineRevealed = me.alive ? revealed(w, me) : [];
+    const flashed = (e: Actor, m: Actor) => w.tick - room.lastShot[e.id] <= flashTicks && muzzleFlashSeen(w.level, m.x, m.y, e.x, e.y);
+    const exact = (e: Actor) => e.team === me.team || !e.alive || iSee(e.x, e.y) || (me.alive && flashed(e, me)) || mineRevealed.includes(e);
+    const spottedByMate = (e: Actor) => mates.some((m) => canSee(w.level, m.x, m.y, m.facing, m.view, e.x, e.y) || flashed(e, m) || revealed(w, m).includes(e));
+    const shown = new Set(w.actors.filter(exact).map((a) => a.id));
+    const visible = (e: Actor) => shown.has(e.id);
+    // Spotted reports: a fresh one when the last has run out, else the same (stale) spot.
+    const S = TUNING.intel, refresh = Math.round(TUNING.sound.spottedRefresh / STEP);
+    const sp: { id: number; x: number; y: number }[] = [];
+    for (const e of w.actors) {
+      if (shown.has(e.id) || !spottedByMate(e)) { p.spot.delete(e.id); continue; }
+      let r = p.spot.get(e.id);
+      if (!r || w.tick >= r.until) {
+        const a = noise3(w.tick, e.id, p.actorId * 7 + 1) * Math.PI, d = (0.5 + 0.5 * Math.abs(noise3(w.tick, e.id, p.actorId * 7 + 2))) * S.spottedRadius;
+        const q = (v: number) => Math.round(v * 4) / 4;
+        r = { x: q(e.x + Math.cos(a) * d), y: q(e.y + Math.sin(a) * d), until: w.tick + refresh };
+        p.spot.set(e.id, r);
+      }
+      sp.push({ id: e.id, x: r.x, y: r.y });
+    }
     const r3 = (v: number) => Math.round(v * 1000) / 1000;
     const actors: NetActor[] = w.actors.filter(visible).map((a) => ({
       id: a.id, name: a.name, hero: a.hero.id, team: a.team, x: r3(a.x), y: r3(a.y), vx: r3(a.vx), vy: r3(a.vy), facing: r3(a.facing),
@@ -480,21 +508,33 @@ export class Lobby {
       downed: a.downed, reviveProgress: r3(a.reviveProgress), nades: a.grenades, maxNades: a.maxGrenades, focus: r3(a.focus),
       ...(a.slowLeft > 0 ? { slowMul: r3(a.slowMul) } : {}),
     }));
-    // Grenades: your team's always; a hostile one when your team can see it or it is close to one of you (you hear it
-    // land and see the ring), so every client can read the danger it is in.
-    const grenades: NetGrenade[] = w.grenades.filter((g) => g.team === me.team || seenBy(g.x, g.y) || mates.some((m) => Math.hypot(m.x - g.x, m.y - g.y) <= TUNING.grenade.radius + 1.5))
+    // Grenades: your team's always; a hostile one when you can see it or it is close to you (you hear it land and see
+    // the ring), so you can read the danger you are in.
+    const grenades: NetGrenade[] = w.grenades.filter((g) => g.team === me.team || iSee(g.x, g.y) || Math.hypot(me.x - g.x, me.y - g.y) <= TUNING.grenade.radius + 1.5)
       .map((g) => ({ id: g.id, x: r3(g.x), y: r3(g.y), vx: r3(g.vx), vy: r3(g.vy), fuse: r3(g.fuse), owner: g.owner }));
-    const bullets: NetBullet[] = w.bullets.filter((b) => w.actors[b.owner].team === me.team || seenBy(b.x, b.y))
+    // Bullets: your team's, and a hostile one you can see in flight or that passes close to you.
+    const bullets: NetBullet[] = w.bullets.filter((b) => w.actors[b.owner].team === me.team || iSee(b.x, b.y) || Math.hypot(me.x - b.x, me.y - b.y) <= 2.5)
       .map((b) => ({ x: r3(b.x), y: r3(b.y), dx: r3(b.dx), dy: r3(b.dy), ox: r3(b.ox), oy: r3(b.oy), owner: b.owner, weapon: b.weapon.id }));
-    const sounds: NetSound[] = w.sounds.filter((s) => s.sourceId === me.id || hears(w.level, me.x, me.y, s))
-      .map((s) => ({ type: s.type, x: r3(s.x), y: r3(s.y), radius: s.radius, source: s.sourceId, team: s.team, weapon: s.weapon, blocked: s.blocked, sig: s.sig }));
-    const hits: NetHit[] = w.hits.filter((h) => w.actors[h.target].team === me.team || w.actors[h.by].team === me.team)
-      .map((h) => ({ target: h.target, by: h.by, x: r3(h.x), y: r3(h.y), fromX: r3(h.fromX), fromY: r3(h.fromY), killed: h.killed, downed: h.downed, grenade: h.grenade }));
+    // Sounds you hear. A hostile's sound that says where its maker is, from a maker you are not shown exactly, is sent
+    // as what hearing it tells you (a spot off by a share of the distance, or through a wall a bearing and a distance
+    // band), flagged so the client does not blur it twice.
+    const sounds: NetSound[] = w.sounds.filter((s) => s.sourceId === me.id || hears(w.level, me.x, me.y, s)).map((s) => {
+      const base = { type: s.type, radius: s.radius, source: s.sourceId, team: s.team, weapon: s.weapon, blocked: s.blocked, sig: s.sig };
+      if (s.team === me.team || s.sourceId === me.id || visible(w.actors[s.sourceId]) || !locatesSource(s.type)) return { ...base, x: r3(s.x), y: r3(s.y) };
+      const est = hearReport(w, me, s);
+      return est ? { ...base, x: r3(est.x), y: r3(est.y), est: est.state === 'directional' ? 'wall' as const : 'clear' as const } : { ...base, x: r3(s.x), y: r3(s.y) };
+    });
+    // Hits: on you or by you in full; a hostile's hit on a teammate, or any knock-out (the feed), without where it came
+    // from unless you are shown the shooter.
+    const hits: NetHit[] = w.hits.filter((h) => h.target === me.id || h.by === me.id || w.actors[h.target].team === me.team || h.killed || h.downed).map((h) => {
+      const open = h.target === me.id || h.by === me.id || visible(w.actors[h.by]);
+      return { target: h.target, by: h.by, x: r3(h.x), y: r3(h.y), fromX: r3(open ? h.fromX : h.x), fromY: r3(open ? h.fromY : h.y), killed: h.killed, downed: h.downed, grenade: h.grenade };
+    });
     // Where every pickup is, whenever the layout changed since this player's last snapshot (and once at the start).
     const pk = p.pickRev !== w.pickupRev ? w.pickups.flatMap((k) => [k.x, k.y]) : undefined;
     p.pickRev = w.pickupRev;
     return {
-      t: 'snap', tick: w.tick, actors, bullets, grenades, pickups: w.pickups.map((k) => k.active), ...(pk ? { pk } : {}), sounds, hits,
+      t: 'snap', tick: w.tick, actors, bullets, grenades, pickups: w.pickups.map((k) => k.active), ...(pk ? { pk } : {}), ...(sp.length ? { sp } : {}), sounds, hits,
       barriers: w.barriers.map((b) => ({ ...b.box, left: r3(b.left) })), ack: room.acks[p.actorId], as: room.ackSteps[p.actorId],
     };
   }

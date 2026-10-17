@@ -174,6 +174,9 @@ export interface SoundEvent {
   blocked?: boolean;
   // A 1:1 signature use: the token's metadata id, so audio and the telegraph ring use that Chog's own cue.
   sig?: number;
+  // Online: the server sent what hearing it tells this player (a 'clear' line spot, or through a 'wall' a bearing
+  // and distance band), not the source's spot. The client uses it as is (no second blur).
+  est?: 'clear' | 'wall';
 }
 
 export interface HitEvent {

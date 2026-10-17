@@ -132,15 +132,17 @@ export function hearReport(w: World, me: { x: number; y: number }, s: SoundEvent
   const dx = s.x - me.x, dy = s.y - me.y, d = Math.hypot(dx, dy);
   const conf0 = I.conf[s.type] ?? I.conf[markKind(s.type)] ?? I.conf.other;
   const kind = markKind(s.type);
-  if (sightClear(w.level, me.x, me.y, s.x, s.y)) {
+  // An online estimate from the server is already blurred: used as it came (n = 0), with the circle it deserves.
+  const n = s.est ? 0 : 1;
+  if (s.est ? s.est === 'clear' : sightClear(w.level, me.x, me.y, s.x, s.y)) {
     // A clear line: a spot, off by a share of the distance (shots sharp, creep steps vague).
     const err = d * I.hearShare * (I.hearMul[s.type] ?? I.hearMul.other);
-    const x = s.x + noise3(s.tick, s.sourceId, 1) * err, y = s.y + noise3(s.tick, s.sourceId, 2) * err;
+    const x = s.x + n * noise3(s.tick, s.sourceId, 1) * err, y = s.y + n * noise3(s.tick, s.sourceId, 2) * err;
     return { state: 'heard', source: 'sound', kind, x, y, r: Math.max(0.45, err * 1.4), conf: conf0 };
   }
   // Through a wall: which way and about how far, never the spot.
-  const bearing = Math.atan2(dy, dx) + noise3(s.tick, s.sourceId, 3) * I.dirErrDeg * Math.PI / 180;
-  const dist = d * (1 + noise3(s.tick, s.sourceId, 4) * I.dirDistShare);
+  const bearing = Math.atan2(dy, dx) + n * noise3(s.tick, s.sourceId, 3) * I.dirErrDeg * Math.PI / 180;
+  const dist = d * (1 + n * noise3(s.tick, s.sourceId, 4) * I.dirDistShare);
   return { state: 'directional', source: 'sound', kind, x: me.x + Math.cos(bearing) * dist, y: me.y + Math.sin(bearing) * dist,
     r: Math.max(1.5, d * 0.35), conf: conf0 * I.dirConfMul, bearing, ox: me.x, oy: me.y };
 }
@@ -150,7 +152,8 @@ export function hearReport(w: World, me: { x: number; y: number }, s: SoundEvent
  * PARTIAL report, re-placed every TUNING.sound.spottedRefresh s), what it hears in `sounds`, then decay. Online
  * clients pass the snapshot's sounds with dt 0, then sight and decay per frame.
  */
-export function senseFor(w: World, me: Actor, intel: Intel, dt: number, sounds: readonly SoundEvent[] = w.sounds, comms: readonly CommsEvent[] = w.comms): void {
+export function senseFor(w: World, me: Actor, intel: Intel, dt: number, sounds: readonly SoundEvent[] = w.sounds, comms: readonly CommsEvent[] = w.comms,
+  spotted: readonly { id: number; x: number; y: number }[] = []): void {
   const I = TUNING.intel;
   intel.now += dt;
   const now = intel.now;
@@ -184,8 +187,14 @@ export function senseFor(w: World, me: Actor, intel: Intel, dt: number, sounds: 
       seenNow.add(a.id);
     }
   }
+  // Online: what the server says your teammates see (a spot near where they saw it, never the live body).
+  for (const sp of spotted) {
+    if (seenNow.has(sp.id) || !w.actors[sp.id]?.alive) continue;
+    report(intel, sp.id, { state: 'partial', source: 'teammate', kind: 'other', x: sp.x, y: sp.y, r: I.spottedRadius, conf: I.conf.teammate });
+    seenNow.add(sp.id);
+  }
   for (const s of sounds) {
-    if (s.team === me.team || s.sourceId === me.id || seenNow.has(s.sourceId) || !hears(w.level, me.x, me.y, s)) continue;
+    if (s.team === me.team || s.sourceId === me.id || seenNow.has(s.sourceId) || (!s.est && !hears(w.level, me.x, me.y, s))) continue;
     const src = w.actors[s.sourceId];
     if (!src?.alive) continue;
     const r = hearReport(w, me, s);

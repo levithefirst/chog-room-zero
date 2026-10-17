@@ -1387,10 +1387,11 @@ async function start() {
       if (s.type === 'revive' && s.team === p.team) tele.revives++;
       // CF-C: your own noise, drawn out to the radius it is really heard at (steps by speed, reload, abilities).
       if (own && LAB.ownNoise && p.alive && OWN_NOISE.has(s.type)) fx.noise.push({ x: s.x, y: s.y, r: s.radius, age: 0 });
-      const heard = own || hears(world.level, p.x, p.y, s);
+      // Online the server already decided you hear it (an estimate arrives where hearing puts it, not where it was).
+      const heard = own || !!s.est || hears(world.level, p.x, p.y, s);
       if (!heard) continue;
       if (s.type === 'impact' && s.blocked) debugStats.blockedCues++;
-      audio.play(s.type === 'impact' && s.blocked ? 'blocked' : s.type, dx, dy, s.radius, !own && !sightClear(world.level, p.x, p.y, s.x, s.y), own, s.weapon, s.sig);
+      audio.play(s.type === 'impact' && s.blocked ? 'blocked' : s.type, dx, dy, s.radius, !own && (s.est ? s.est === 'wall' : !sightClear(world.level, p.x, p.y, s.x, s.y)), own, s.weapon, s.sig);
       if (s.type === 'impact') {
         fx.impacts.push({ x: s.x, y: s.y, age: 0, blocked: s.blocked });
         spark(s.x, s.y, s.blocked ? 7 : 3, false);
@@ -1601,7 +1602,7 @@ async function start() {
     fx.noise = fx.noise.filter((n) => n.age < TUNING.sound.ownNoiseSeconds);
     // Online: sight and decay every frame (snapshot sounds were folded in by afterStep).
     if (online && net && simRuns(phase)) {
-      senseFor(world, player(world), matchIntel, dt, []);
+      senseFor(world, player(world), matchIntel, dt, [], [], net?.spotted ?? []);
       if (player(world).alive) stepTelemetry(tele, gaitOf(player(world)), matchIntel, dt);
     }
     for (const m of fx.impacts) m.age += dt;
