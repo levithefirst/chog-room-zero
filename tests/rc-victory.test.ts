@@ -4,8 +4,8 @@
 //
 // FS (2026-10-17, docs/ROOM_ZERO_FINAL_SUPERIORITY.md section 8): RC-1 was written when solo was you alone against
 // five. The game the owner ships is you + 2 AI teammates against five (LOCKED 17, 2026-10-14), so the per-hero bar
-// now runs in that game and is far higher than before (12 of 40 for every hero; measured 17 to 37). Solo against
-// five with no teammates stays as a whole-roster bar: measured 37 of 280 against the active hostile squad
+// now runs in that game and is far higher than before (12 of 40 for every hero; measured 18 to 34). Solo against
+// five with no teammates stays as a whole-roster bar: measured 39 of 280 against the active hostile squad
 // (61 of 280 against the old patrol-only bots), bar 21 (7.5%), and every hero must win it at least once in 80.
 // The flankers (Tabsu, Bill) win 1 to 2 of 40 alone, as they did against the old bots (5 and 2): the autopilot stands
 // still to shoot, which wastes their speed. The owner's playtest decides whether they need a roster change.
