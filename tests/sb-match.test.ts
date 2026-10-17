@@ -51,9 +51,26 @@ describe('like meets like', () => {
     expect(smurf.matched() && fresh.matched()).toBe(true);
     expect(main.matched()).toBe(false);
   });
-  it("a holder's power counts: a legendary 1000 is matched as 1120", () => {
-    expect(Lobby.strength({ ticket: { rating: 1000, played: 40, tier: 'legendary' } as GameTicket })).toBe(1120);
+  it("a holder's power counts at its measured duel worth: a 1:1 at 1000 is matched as 1600", () => {
+    expect(Lobby.strength({ ticket: { rating: 1000, played: 40, tier: 'legendary' } as GameTicket })).toBe(1000 + TUNING.match.tierStrength.legendary);
+    expect(TUNING.match.tierStrength.legendary).toBe(600);
     expect(Lobby.strength({ ticket: null })).toBe(1000);
+  });
+  it('a fresh free player does not meet a 1:1 at once; a free player with a higher rating or another holder does', async () => {
+    const { join, wait } = setup();
+    const one = await join('One', 1000, 50, 'legendary'), fresh = await join('Fresh', 1000);
+    one.queue(); fresh.queue();
+    expect(one.matched() || fresh.matched()).toBe(false);
+    const epic = await join('Epic', 1100, 50, 'epic');
+    epic.queue();
+    // A 1:1 at 1600 and an Epic at 1500 are within the band: they meet; the fresh player waits for an even match.
+    expect(one.matched() && epic.matched()).toBe(true);
+    expect(fresh.matched()).toBe(false);
+    // Alone, a 1:1 and a fresh player still meet once the bar has dropped (a small queue is never stuck).
+    const two = await join('Two', 1000, 50, 'legendary');
+    two.queue();
+    wait((600 - TUNING.match.band) / TUNING.match.widenPerSec + 1);
+    expect(two.matched() && fresh.matched()).toBe(true);
   });
   it('3v3: the two sides are balanced, not the strong half against the weak half', async () => {
     const { join, lobby } = setup();

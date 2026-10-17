@@ -317,7 +317,8 @@ export class Lobby {
     const t = p.ticket;
     const rated = t?.rating ?? RATING.start;
     const r = (t?.played ?? 0) < TUNING.match.newMatches ? Math.min(rated, RATING.start) : rated;
-    return r + (RATING.tierOffset[t?.tier ?? 'free'] ?? 0);
+    // Power counts at what it is measured to be worth in a duel (TUNING.match.tierStrength), not the rating offset.
+    return r + (TUNING.match.tierStrength[t?.tier ?? 'free'] ?? 0);
   }
 
   /** Power a player's ticket entitles them to. No ticket: base power. */

@@ -183,6 +183,12 @@ export const TUNING = {
     // Accounts with fewer saved online matches than this count as new (rated no higher than the start rating), so a
     // first match is never against someone's main account.
     newMatches: 5,
+    // Owner 2026-10-17 fairness pass: what a Chog tier is worth when matching, in rating points, from its measured
+    // straight-duel share against a fresh free player (perfect-aim mirror duels, Benja / Tabsu / Toad, 3 / 6 / 9 u,
+    // 32 duels each: Common 0.66, Uncommon 0.78, Rare 0.86, Epic 0.91, 1:1 0.98), as Elo: 400 log10(p / (1 - p)).
+    // The 1:1 value is held at 600 so a queue with a 1:1 in it still fills after the band widens (about 23 s).
+    // Before this, matching used the rating offsets (30 to 120), so a fresh free player could meet a 1:1 at once.
+    tierStrength: { free: 0, common: 115, uncommon: 220, rare: 315, epic: 400, legendary: 600 } as Record<string, number>,
   },
 
   // SB online own-movement prediction (src/net/predict.ts).
