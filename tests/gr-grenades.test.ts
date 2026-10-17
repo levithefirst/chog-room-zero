@@ -223,7 +223,8 @@ describe('server authority', () => {
       return { c, say: (m: object) => lobby.message(id, JSON.stringify(m)) };
     };
     const a = await join('Holder', 'l.t'), b = await join('Free', 'f.t');
-    a.say({ t: 'queue', mode: '1v1' }); b.say({ t: 'queue', mode: '1v1' });
+    // A private code: a 1:1 and a fresh free player are far apart in matchmaking strength (tests/sb-match.test.ts).
+    a.say({ t: 'queue', mode: '1v1', code: 'NADES' }); b.say({ t: 'queue', mode: '1v1', code: 'NADES' });
     const room = [...lobby.rooms.values()][0];
     const run = (s: number) => { for (let i = 0; i < Math.round(s * 60); i++) { now += 1 / 60; lobby.tick(); } };
     run(5);

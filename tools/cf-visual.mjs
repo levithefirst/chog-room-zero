@@ -32,6 +32,8 @@ async function wallet(b) {
 const SIZES = [
   { name: 'phone-portrait', w: 390, h: 844, mobile: true, touch: true },
   { name: 'phone-landscape', w: 844, h: 390, mobile: true, touch: true },
+  { name: 'phone-large-portrait', w: 430, h: 932, mobile: true, touch: true },
+  { name: 'phone-large-landscape', w: 932, h: 430, mobile: true, touch: true },
   { name: 'tablet', w: 1024, h: 768, mobile: true, touch: true },
   { name: '1366x768', w: 1366, h: 768 },
   { name: '1440x900', w: 1440, h: 900 },
@@ -57,6 +59,9 @@ for (const d of SIZES) {
   await b.ev(`(() => { const w = __chog.world; const p = w.actors[0]; const k = w.actors.find((a) => a.team === 'bot' && a.alive); for (const a of w.actors) if (a.team === 'player') { a.hp = 0; a.alive = false; } w.outcome = 'dead'; w.playerKill = { cause: 'shot', killerId: k.id, weapon: k.weapon.name, fromX: k.x, fromY: k.y, toX: p.x, toY: p.y, tick: w.tick }; })()`);
   await b.until(`__chog.phase === 'recap'`, 5000); await sleep(300); await b.shot('07-death');
   await b.until(`__chog.phase === 'results'`, 8000); await sleep(900); await b.shot('08-results');
+  // Owner 2026-10-17: the reward lines and the way into Upgrades (the holder is signed in through the wallet).
+  await b.until(`!!document.getElementById('rewards')`, 15000); await sleep(600); await b.shot('08b-results-rewards');
+  if (await b.ev(`!!document.getElementById('toupgrades')`)) { await b.click('#toupgrades'); await b.until(`__chog.view() === 'upgrades'`, 8000); await sleep(500); await b.shot('09-upgrades'); }
   report.push({ size: d.name, errors: b.errors.slice(0, 3) });
   await b.close();
 }
