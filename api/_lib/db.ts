@@ -151,6 +151,14 @@ export const MIGRATIONS: { version: number; name: string; sql: string }[] = [
       CREATE INDEX IF NOT EXISTS matches_settled ON room_zero.matches(settled_at)
     `,
   },
+  {
+    version: 4,
+    name: 'practice rewards: xp and shards paid per stored practice run',
+    sql: `
+      ALTER TABLE room_zero.practice_runs ADD COLUMN IF NOT EXISTS xp integer NOT NULL DEFAULT 0;
+      ALTER TABLE room_zero.practice_runs ADD COLUMN IF NOT EXISTS shards integer NOT NULL DEFAULT 0
+    `,
+  },
 ];
 
 /** Applies every migration not yet recorded. Safe to call on every cold start: concurrent callers wait on the lock. */

@@ -574,6 +574,16 @@
       .practice-results .practice-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; text-align: center; margin: 8px auto; max-width: 640px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
       table.kv.ops th { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); font-weight: 500; text-align: right; padding: 2px 6px; }
       .icon-btn.fav { font-size: 18px; color: var(--dim); } .icon-btn.fav.on { color: var(--signal); border-color: var(--signal); }
+      .rewards { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; margin: 8px auto; max-width: 460px; text-align: left; }
+      .rewards.none { text-align: center; }
+      .rw-lines { list-style: none; margin: 0; padding: 0; } .rw-lines li { display: grid; grid-template-columns: 1fr 64px 64px; gap: 6px; align-items: baseline; padding: 2px 0; font-size: 13px; }
+      .rw-lines li b { text-align: right; color: var(--chog-cream); } .rw-lines li small { text-align: right; color: var(--dim); }
+      .rw-lines li.head { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); } .rw-lines li.head b { color: var(--dim); font-weight: 400; }
+      .rw-lines li.total { border-top: 1px solid var(--line); margin-top: 2px; padding-top: 4px; font-weight: 700; } .rw-lines li.total b { font-size: 20px; color: var(--signal); } .rw-lines li.total small { color: var(--ink); }
+      .rw-foot { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end; margin-top: 6px; } .rw-foot .rw b { font-size: 18px; }
+      .rw-use { margin: 4px 0 0; font-size: 12px; color: var(--dim); } .rw-use b.good { color: var(--health); }
+      body.compact .rewards { padding: 3px 8px; margin: 4px auto; } body.compact .rw-lines li { font-size: 11px; padding: 0; } body.compact .rw-lines li.total b { font-size: 15px; }
+      body.compact .rw-foot .xpbar.big { height: 8px; } body.compact .rw-use { font-size: 11px; margin: 2px 0 0; }
       .practice-results #savedwhere { text-align: center; margin: 4px auto; } .practice-results .rw b { font-size: 24px; }
       .practice-results .earned { max-width: 420px; margin: 6px auto; text-align: left; }
       body.compact .practice-results .rw b { font-size: 18px; } body.compact .practice-results .practice-grid { padding: 4px 6px; }

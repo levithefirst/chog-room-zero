@@ -84,8 +84,10 @@ describe('settlement', () => {
     expect(r2.ok && r2.already).toBe(true);
     const pa = (await profileOf(db, a))!, pb = (await profileOf(db, b))!;
     expect(pa.xp).toBe(REWARDS.xpPlay + REWARDS.xpWin + 2 * REWARDS.xpPerKill);
-    expect(pa.shards).toBe(REWARDS.shardsPlay + REWARDS.shardsWin);
+    // 2 kills and 100 damage (2 damage shards) on top of playing and winning; the loser keeps its kill and damage.
+    expect(pa.shards).toBe(REWARDS.shardsPlay + REWARDS.shardsWin + 2 * REWARDS.shardsPerKill + 100 / REWARDS.damagePerShard);
     expect(pb.xp).toBe(REWARDS.xpPlay + REWARDS.xpPerKill);
+    expect(pb.shards).toBe(REWARDS.shardsPlay + REWARDS.shardsPerKill + 100 / REWARDS.damagePerShard);
     expect(pa.rating).toBe(1012);
     expect(pb.rating).toBe(988);
     expect(pa.wins).toBe(1);
@@ -110,7 +112,7 @@ describe('settlement', () => {
     for (let i = 0; i < REWARDS.dailyCap + 2; i++) await settleMatch(db, rec({ id: `f${String(i).padStart(7, '0')}`, players: [pl(a, 'alpha'), pl(b, 'bravo')] }));
     const p = (await profileOf(db, a))!;
     expect(p.matches).toBe(REWARDS.dailyCap + 2);
-    expect(p.shards).toBe(REWARDS.dailyCap * (REWARDS.shardsPlay + REWARDS.shardsWin));
+    expect(p.shards).toBe(REWARDS.dailyCap * (REWARDS.shardsPlay + REWARDS.shardsWin + REWARDS.shardsPerKill + 100 / REWARDS.damagePerShard));
   });
   it('rating is power-adjusted: a 1:1 beating a free player gains less than a free player beating a 1:1', async () => {
     const a = (await accountFor(db, [g('p1')]))!, b = (await accountFor(db, [g('p2')]))!;

@@ -95,8 +95,12 @@ interface Room {
   lastShot: number[];
   /** Members who left (or never came back): out of the match, no longer sent anything, free to queue again. */
   left: boolean[];
+  /** Left while still standing (a quit forfeits the match's rewards; leaving after being knocked out does not). */
+  quit: boolean[];
   over: boolean;
   demo: boolean;
+  /** Started from a private room code: settled for history, never rewarded or rated. */
+  private: boolean;
 }
 
 const STEP = TUNING.simStepSeconds;
@@ -366,7 +370,7 @@ export class Lobby {
       const used = new Set([...alpha, ...bravo]);
       const rest = q.filter((g) => !used.has(g));
       if (rest.length) this.queues.set(key, rest); else this.queues.delete(key);
-      this.startRoom(mode, alpha.flatMap((g) => g.players), bravo.flatMap((g) => g.players));
+      this.startRoom(mode, alpha.flatMap((g) => g.players), bravo.flatMap((g) => g.players), !!code);
       if (rest.length) this.tryMatch(key, mode, code);
       return;
     }
@@ -374,7 +378,7 @@ export class Lobby {
     for (const g of q) for (const o of g.players) o.conn?.send({ t: 'queued', mode, have, need: MODE_SIZE[mode], code });
   }
 
-  private startRoom(mode: Mode, alphaTeam: Player[], bravoTeam: Player[]): void {
+  private startRoom(mode: Mode, alphaTeam: Player[], bravoTeam: Player[], priv = false): void {
     const id = randomBytes(8).toString('hex');
     // Squads stay on one side; spawns west (alpha) and east (bravo).
     const members = [...alphaTeam, ...bravoTeam];
@@ -387,8 +391,8 @@ export class Lobby {
     const world = createWorld({ seed: this.opts.seed(), versus, zone: true, friendlyFire: this.opts.friendlyFire });
     const room: Room = {
       id, mode, world, members, inputs: members.map(() => ({ ...IDLE_INPUT })), acks: members.map(() => 0), ackSteps: members.map(() => 0), fireLatch: members.map(() => false),
-      startTick: Math.round(this.opts.countdownSec / STEP), steps: 0, lastShot: members.map(() => -1e9), left: members.map(() => false), over: false,
-      demo: members.some((p) => p.ticket?.demo),
+      startTick: Math.round(this.opts.countdownSec / STEP), steps: 0, lastShot: members.map(() => -1e9), left: members.map(() => false), quit: members.map(() => false), over: false,
+      demo: members.some((p) => p.ticket?.demo), private: priv,
     };
     members.forEach((p, i) => {
       p.state = 'playing';
@@ -491,6 +495,7 @@ export class Lobby {
     const i = room.members.indexOf(p);
     room.left[i] = true;
     const a = room.world.actors[i];
+    room.quit[i] = standing(a);
     if (a.alive) down(room.world, a, { cause, killerId: -1, weapon: 'Left the match', fromX: a.x, fromY: a.y, toX: a.x, toY: a.y, tick: room.world.tick });
     if (p.conn === null) this.forget(p);
     // The outcome is decided on the next step (stepWorld), so a leaver's team loses through the normal rule.
@@ -512,10 +517,10 @@ export class Lobby {
     }));
     // Kept for the site's settlement (GET /results/:id). Only accounts from checked tickets appear; demo is flagged.
     const record: MatchRecord = {
-      id: room.id, mode: room.mode, demo: room.demo, winner: w.winner, reason, seconds: Math.round(matchSeconds(w)), endedAt: Math.floor(Date.now() / 1000),
+      id: room.id, mode: room.mode, demo: room.demo, private: room.private, winner: w.winner, reason, seconds: Math.round(matchSeconds(w)), endedAt: Math.floor(Date.now() / 1000),
       players: w.actors.map((a) => {
         const t = room.members[a.id].ticket;
-        return { acc: t?.acc ?? null, team: a.team, tier: a.power.tier, tok: t?.holder ? t.tok : null, mid: t?.holder ? t.mid : null, own: t?.holder ? t.own : null, kills: a.kills, damage: Math.round(a.damageDealt), left: room.left[a.id], name: a.name, hero: a.hero.id, survived: a.alive };
+        return { acc: t?.acc ?? null, team: a.team, tier: a.power.tier, tok: t?.holder ? t.tok : null, mid: t?.holder ? t.mid : null, own: t?.holder ? t.own : null, kills: a.kills, damage: Math.round(a.damageDealt), left: room.left[a.id], quit: room.quit[a.id], name: a.name, hero: a.hero.id, survived: a.alive };
       }),
     };
     this.results.set(room.id, { at: this.opts.now(), record });

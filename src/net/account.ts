@@ -3,6 +3,7 @@
 // server answered. Each call fails soft: on any error the game plays on as a free profile.
 import type { Tier, Upgrades } from '../config/power';
 import type { Records } from '../ui/records';
+import type { NoReward, RewardLine } from '../config/progression';
 
 export interface GameConfig { db: boolean; nftCombat: boolean; demo: boolean }
 export interface OnlineCareer { matches: number; wins: number; kills: number; damage: number; survived: number; heroes: Record<string, { matches: number; wins: number; kills: number }> }
@@ -17,7 +18,8 @@ export interface OwnedToken {
   signature: { name: string; text: string; telegraph: string; counter: string } | null; history: { matches: number; wins: number; kills: number } | null;
 }
 export interface TicketProfile { account: boolean; name: string; tier: Tier; tierLabel: string; tokenId: number | null; metadataId: number | null; tokenTier: Tier | null; holder: boolean; demo: boolean; upgrades: Upgrades; signature: string | null; oneOfOne: string | null }
-export interface Reward { xp: number; shards: number; ratingBefore: number; ratingAfter: number }
+export interface Reward { xp: number; shards: number; ratingBefore: number; ratingAfter: number; lines?: RewardLine[]; none?: NoReward }
+export interface PracticeReward { xp: number; shards: number; lines: RewardLine[]; none: NoReward }
 
 async function api<T>(action: string, body?: object): Promise<T | null> {
   try {
@@ -37,8 +39,10 @@ export const gameConfig = () => api<GameConfig>('config');
 export const loadProfile = () => api<{ signedIn: boolean; progression?: boolean; identities?: { provider: 'google' | 'wallet'; label: string }[]; profile?: AccountProfile }>('profile');
 export const setCallsign = (name: string) => api<{ ok: boolean; callsign?: string; error?: string }>('callsign', { name });
 export const setPrefs = (p: { favourite?: string | null; pins?: string[] }) => api<{ ok: boolean; error?: string }>('prefs', p);
-export interface PracticeRun { runId: string; hero: string; won: boolean; seconds: number; kills: number; bullets: number; hits: number; damageDealt: number; damageTaken: number; hpLeft: number; pickups: number; abilities: number }
-export const practice = (r: PracticeRun) => api<{ ok: boolean; reason?: string; already?: boolean; earned?: string[]; newBest?: { time: boolean; kills: boolean }; records?: Records; medals?: Record<string, string> }>('practice', r);
+export interface PracticeRun { runId: string; ticket?: string; demo?: boolean; hero: string; won: boolean; seconds: number; kills: number; bullets: number; hits: number; damageDealt: number; damageTaken: number; hpLeft: number; pickups: number; abilities: number }
+/** A signed start ticket for one run: the run is paid only with it, and only once the claimed time has passed. */
+export const practiceStart = () => api<{ ok: boolean; ticket?: string; runId?: string }>('practice-start', {});
+export const practice = (r: PracticeRun) => api<{ ok: boolean; reason?: string; already?: boolean; reward?: PracticeReward; earned?: string[]; newBest?: { time: boolean; kills: boolean }; records?: Records; medals?: Record<string, string> }>('practice', r);
 export const loadTokens = () => api<{ wallet: boolean; ok?: boolean; error?: string; tokens: OwnedToken[] }>('tokens');
 export interface BoardRow { rank: number; name: string; kills: number; matches: number; wins: number; xp: number; level: number; rating: number; nftTier: Tier | null; you: boolean }
 export const leaderboard = () => api<{ progression: boolean; rows: BoardRow[]; me: BoardRow | null }>('leaderboard');

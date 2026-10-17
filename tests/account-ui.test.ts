@@ -1,5 +1,6 @@
 // Master integration pass: the hub and its screens from plain data (src/ui/hub.ts). Everything the owner listed is on
 // the hub itself, and every number comes from the account, the config or the server.
+import { rewardBreakdown } from '../src/config/progression';
 import { describe, expect, it } from 'vitest';
 import { emptyAcct, tierEffect, type AcctView } from '../src/ui/account';
 import { authHtml, boardScreenHtml, careerHtml, classOf, fiveLockReason, hubHtml, onlineResultsHtml, upgradesHtml, upgradesReady, type AuthSheet, type HubCtx } from '../src/ui/hub';
@@ -128,18 +129,21 @@ describe('sub-screens', () => {
     expect(c).toMatch(/data-fav="benja"/);
     expect(c).toMatch(/Kills<\/td><td class="num">4/);
   });
-  it('online results: XP, shards, rating, level bar, upgrades ready, play again', () => {
+  it('online results: every reward line, totals, rating, level bar, what the shards buy, play again', () => {
+    const b = rewardBreakdown({ won: true, kills: 1, damage: 100, seconds: 60, leftEarly: false, capped: false });
     const html = onlineResultsHtml({
       mode: '1v1', won: true, reason: 'eliminated', team: 'alpha', demo: false, signedIn: true, settle: true, myClass: 'Free class', canRequeue: true, follower: false,
       rows: [{ name: 'Me', hero: 'benja', team: 'alpha', kills: 1, damageDealt: 100, damageTaken: 20, alive: true, cause: null, you: true, tier: 'free', demo: false, metadataId: null }],
-      prog: { before: { xp: 90, shards: 0, rating: 1000 }, reward: { xp: 110, shards: 20, ratingBefore: 1000, ratingAfter: 1012 }, pending: false, note: '', upgradesReady: 2 },
+      prog: { before: { xp: 90, shards: 0, rating: 1000 }, reward: { xp: b.xp, shards: b.shards, ratingBefore: 1000, ratingAfter: 1012, lines: b.lines, none: null }, pending: false, note: '', upgradesReady: 2, upgrades: NO_UPGRADES, preview: null },
     });
     expect(html).toMatch(/Victory/);
-    expect(html).toMatch(/\+110/);
-    expect(html).toMatch(/\+20/);
+    for (const l of ['Match played', 'Victory', '1 kill', '100 damage']) expect(html).toContain(l);
+    expect(html).toContain(`id="rw-shards">+${b.shards}<`);
+    expect(html).toContain(`id="rw-xp">+${b.xp} XP<`);
     expect(html).toMatch(/\+12/);
     expect(html).toMatch(/LEVEL UP/);
-    expect(html).toMatch(/2 upgrades ready/);
+    expect(html).toMatch(/Vitality 1 ready \(10\)/);
+    expect(html).toMatch(/id="toupgrades">Upgrades/);
     expect(html).toMatch(/data-go="menu" id="continuebtn">Continue/);
     expect(html).toMatch(/data-act="online-again"/);
   });

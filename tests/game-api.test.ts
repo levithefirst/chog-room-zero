@@ -143,7 +143,7 @@ describe('settlement pulled from the game server', () => {
       { acc: b, team: 'bravo', tier: 'free', tok: null, mid: null, own: null, kills: 0, damage: 50, left: false }] });
     const cookie = await cookieFor([{ provider: 'google', subject: 'a', label: 'a' }]);
     const s1 = await call('POST', 'settle', { cookie, body: { matchId: '0123456789abcdef' } });
-    expect(s1.j).toMatchObject({ ok: true, already: false, mine: { acc: a, xp: 110, shards: 20 } });
+    expect(s1.j).toMatchObject({ ok: true, already: false, mine: { acc: a, xp: 110, shards: 40 } }); // 10 played + 25 win + 3 kill + 2 for 100 damage
     expect(s1.j.players).toBeUndefined();
     const s2 = await call('POST', 'settle', { cookie, body: { matchId: '0123456789abcdef' } });
     expect(s2.j.already).toBe(true);
@@ -186,7 +186,7 @@ describe('leaderboard and health endpoints', () => {
     const mine = await call('GET', 'leaderboard', { cookie: await cookieFor([{ provider: 'google', subject: 'a', label: 'a' }]) });
     expect(mine.j.me).toMatchObject({ name: 'Alpha', rank: 2, you: true });
     const h = await call('GET', 'health');
-    expect(h.j.migrations.map((m: { version: number }) => m.version)).toEqual([1, 2, 3]);
+    expect(h.j.migrations.map((m: { version: number }) => m.version)).toEqual([1, 2, 3, 4]);
     expect(h.j.tables).toContain('match_players');
     db = null;
     expect((await call('GET', 'health')).j).toEqual({ db: false });

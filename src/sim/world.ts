@@ -845,7 +845,8 @@ function damage(w: World, t: Actor, by: Actor, b: Bullet, hx: number, hy: number
   t.vx += b.dx * TUNING.combat.knockback;
   t.vy += b.dy * TUNING.combat.knockback;
   by.hits++;
-  by.damageDealt += raw;
+  // Damage dealt counts opponents only (it pays shards: friendly fire must never farm them).
+  if (t.team !== by.team) by.damageDealt += raw;
   t.damageTaken += m.hp + m.armor;
   const r = t.hp <= 0 ? drop(w, t, { cause: 'shot', killerId: by.id, weapon: b.weapon.name, fromX: b.ox, fromY: b.oy, toX: t.x, toY: t.y, tick: w.tick }) : null;
   w.hits.push({ target: t.id, by: by.id, x: hx, y: hy, fromX: b.ox, fromY: b.oy, hpDamage: m.hp, armorDamage: m.armor, killed: r === 'out', downed: r === 'downed' });

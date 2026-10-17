@@ -45,6 +45,8 @@ import { commsLine, compass } from './ui/comms';
 import { createFightRecord, deathInsights, gaitOf, offFacing, trimFight, type Insight } from './sim/insight';
 import { rung } from './sim/intel';
 import { createTelemetry, stepTelemetry, summary as teleSummary } from './sim/telemetry';
+import { PRACTICE_REWARDS, REWARDS, rewardBreakdown } from './config/progression';
+import type { RewardView } from './ui/rewards';
 
 // DEMO screen: the first token of each tier in the verified catalogue, plus two 1:1s with different signatures.
 const DEMO_TIER_SAMPLES = ['1', '2', '54', '31', '53', '1373'];
@@ -157,7 +159,9 @@ async function start() {
   const ONBOARD_KEY = 'chog.onboarded';
   type TitleView = 'main' | 'howto' | 'demo' | 'settings' | 'nick' | 'upgrades' | 'ranks' | 'career' | 'medals' | 'auth' | 'chog';
   let titleView: TitleView = (() => { try { return localStorage.getItem(ONBOARD_KEY) === '1' ? 'main' : 'howto'; } catch { return 'main'; } })();
-  let lastRun: { newBest: { time: boolean; kills: boolean }; earned: MedalDef[]; saved: 'account' | 'session' | 'saving' | 'failed' } | null = null;
+  let lastRun: { newBest: { time: boolean; kills: boolean }; earned: MedalDef[]; saved: 'account' | 'session' | 'saving' | 'failed'; reward?: RewardView | null } | null = null;
+  // The signed start ticket of the current signed-in run (the site pays a run only with it).
+  let practiceTicket: { ticket: string; runId: string; run: number } | null = null;
   // Progression belongs to the account (master integration pass): records, medals, callsign, favourite and pins come
   // from the server for a signed-in player. A guest's live in this memory store for the session only. The browser
   // keeps preferences only (settings, tips, onboarding, last operator, last mode, demo pick).
@@ -607,6 +611,7 @@ async function start() {
       newBest: lastRun?.newBest ?? null, earned: lastRun?.earned ?? [],
       demoRow: identity.kind === 'bound' ? ` · <span class="demo">DEMO</span> #${esc(identity.tokenId!)}` : '',
       saved: lastRun?.saved ?? 'session',
+      reward: lastRun?.reward ?? null,
     };
   }
 
@@ -920,6 +925,11 @@ async function start() {
     runIndex++;
     // The default game: you + 2 AI teammates (other operators than yours) against the five hostile bots.
     world = createWorld({ seed: TUNING.seed + runIndex, hero: heroId, sidegrade: identity.sidegrade, zone: true, power: soloPower(), allies: squadmates() });
+    practiceTicket = null;
+    if (signedIn() && !LAB_ON) {
+      const run = runIndex;
+      void account.practiceStart().then((r) => { if (r?.ticket && r.runId && run === runIndex) practiceTicket = { ticket: r.ticket, runId: r.runId, run }; });
+    }
     autopilot = AUTOPLAY_SEED !== null ? createAutopilot(AUTOPLAY_SEED + runIndex) : null;
     suggestPilot = null;
     renderer.reset(world);
@@ -1087,7 +1097,8 @@ async function start() {
     const myClass = me && me.metadataId && me.tier === 'legendary' && ONE_OF_ONE[me.metadataId] ? `${ONE_OF_ONE[me.metadataId].name} · 1:1` : `${TIER_DEFS[me?.tier ?? 'free'].label} class`;
     show(onlineResultsHtml({
       mode: o.mode, won: o.winner === null ? null : o.winner === o.team, reason: o.reason, team: o.team, rows, demo: !!net?.match?.demo, signedIn: acct.signedIn, settle: o.settle,
-      prog: { before: lastReward.before, reward: lastReward.reward, pending: lastReward.pending, note: lastReward.note, upgradesReady: upgradesReady(acct) },
+      prog: { before: lastReward.before, reward: lastReward.reward, pending: lastReward.pending, note: lastReward.note, upgradesReady: upgradesReady(acct), upgrades: acct.profile?.upgrades ?? null,
+        preview: me ? rewardBreakdown({ won: o.winner !== null && o.winner === o.team, kills: me.kills, damage: me.damageDealt, seconds: 60, leftEarly: false, capped: false, demo: !!net?.match?.demo }, REWARDS) : null },
       myClass, canRequeue: !!NET_URL, follower: !!net?.follower,
     }));
   }
@@ -1130,21 +1141,30 @@ async function start() {
     const p = player(world);
     const seconds = Math.round(playTime);
     const facts = { hero: heroId, won, seconds, kills: p.kills, bullets: p.bullets, hits: p.hits, damageDealt: Math.round(p.damageDealt), damageTaken: Math.round(p.damageTaken), pickups: runPickups, abilities: runAbilities, hpLeft: Math.max(0, Math.round(p.hp)) };
+    const demo = p.power.demo;
     if (!signedIn()) {
       const r = recordBest(guestStore, facts);
       guestRecords = r.records;
       const m = awardMedals(guestStore, guestRecords, facts);
       guestMedals = m.unlocked;
-      lastRun = { newBest: r.newBest, earned: m.earned, saved: 'session' };
+      // A guest sees what the run would have paid (nothing is kept: progression lives on an account).
+      const b = rewardBreakdown({ won, kills: p.kills, damage: p.damageDealt, seconds, leftEarly: false, capped: false, demo }, PRACTICE_REWARDS);
+      lastRun = { newBest: r.newBest, earned: m.earned, saved: 'session', reward: { ...b, kept: false, before: null, upgrades: null } };
       return;
     }
     lastRun = { newBest: { time: false, kills: false }, earned: [], saved: 'saving' };
-    const runId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-    void account.practice({ runId, ...facts, seconds: Math.max(1, seconds) }).then((r) => {
+    const t = practiceTicket && practiceTicket.run === runIndex ? practiceTicket : null;
+    practiceTicket = null;
+    const runId = t?.runId ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    const before = acct.profile ? { xp: acct.profile.xp, shards: acct.profile.shards } : null;
+    void account.practice({ runId, ticket: t?.ticket, demo, ...facts, seconds: Math.max(1, seconds) }).then(async (r) => {
       if (r?.ok && acct.profile) {
         if (r.records) acct.profile.practice = r.records;
         if (r.medals) acct.profile.medals = r.medals;
-        lastRun = { newBest: r.newBest ?? { time: false, kills: false }, earned: MEDALS.filter((m) => r.earned?.includes(m.id)), saved: 'account' };
+        const rw = r.reward;
+        lastRun = { newBest: r.newBest ?? { time: false, kills: false }, earned: MEDALS.filter((m) => r.earned?.includes(m.id)), saved: 'account',
+          reward: rw ? { ...rw, kept: true, before, upgrades: acct.profile.upgrades } : null };
+        if (rw && (rw.xp || rw.shards)) await refreshAccount();
       } else lastRun = { newBest: { time: false, kills: false }, earned: [], saved: 'failed' };
       if (phase === 'results' && !online) render();
     });

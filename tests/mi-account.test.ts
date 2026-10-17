@@ -1,6 +1,7 @@
 // Master integration pass (owner 2026-10-14): progression belongs to the account, not the browser. Callsign,
 // favourite, pins, medals, practice career and online career are stored in Neon (PGlite here) and come back the same
-// from any device that signs in to the same account. Practice runs pay nothing and are bounded.
+// from any device that signs in to the same account. Practice runs are bounded; without a start ticket they pay nothing
+// (tests/rewards.test.ts covers the ticketed practice reward).
 import { beforeEach, describe, expect, it } from 'vitest';
 import { handleGame, type Deps } from '../api/_lib/game-api';
 import { SESSION_COOKIE, sign } from '../api/_lib/auth';
@@ -29,7 +30,7 @@ beforeEach(async () => { db = await memoryDb(); await migrate(db); });
 
 describe('migration v3 is additive', () => {
   it('adds the profile columns and tables; nothing drops or deletes', async () => {
-    expect(MIGRATIONS.map((m) => m.version)).toEqual([1, 2, 3]);
+    expect(MIGRATIONS.map((m) => m.version)).toEqual([1, 2, 3, 4]);
     for (const m of MIGRATIONS) expect(m.sql).not.toMatch(/\b(DROP|TRUNCATE|DELETE)\b/i);
     const t = await db.query<{ table_name: string }>(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'room_zero' ORDER BY table_name`);
     expect(t.map((r) => r.table_name)).toEqual(expect.arrayContaining(['medals', 'practice_runs', 'accounts', 'match_players']));
@@ -58,7 +59,7 @@ describe('account-owned profile', () => {
     expect(p.favourite).toBe('ray');
     expect(p.pins).toEqual(['first-blood']); // 'untouched' was not earned (60 damage taken)
   });
-  it('practice runs: stored once per run id, medals awarded on the server, no XP, shards or leaderboard', async () => {
+  it('practice runs: stored once per run id, medals awarded on the server; without a start ticket no XP or shards; never the leaderboard', async () => {
     const c = await cookie([{ provider: 'google', subject: 'g3', label: 'x' }]);
     const r1 = run();
     const a = await call('POST', 'practice', c, r1);
@@ -103,7 +104,8 @@ describe('account-owned profile', () => {
     const browserB = await cookie(ident);
     const a = (await call('GET', 'profile', browserA)).j.profile, b = (await call('GET', 'profile', browserB)).j.profile;
     expect(b).toEqual(a);
-    expect(b).toMatchObject({ callsign: 'Nomad', xp: 110, shards: 20, level: 2, matches: 1, wins: 1 });
+    // Online win with 1 kill and 120 damage: 10 played + 25 win + 3 kill + 2 damage shards (the practice run had no ticket).
+    expect(b).toMatchObject({ callsign: 'Nomad', xp: 110, shards: 40, level: 2, matches: 1, wins: 1 });
     expect(b.online).toMatchObject({ matches: 1, wins: 1, kills: 1, survived: 1, heroes: { benja: { matches: 1, wins: 1, kills: 1 } } });
     expect(Object.keys(b.medals).length).toBeGreaterThan(0);
     const board = (await call('GET', 'leaderboard', browserB)).j;

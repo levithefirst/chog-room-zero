@@ -5,7 +5,8 @@
 // or the config files, never from the browser's own guess.
 import { HEROES, heroById } from '../config/heroes';
 import { WEAPONS } from '../config/weapons';
-import { levelOf } from '../config/progression';
+import { levelOf, type RewardBreakdown } from '../config/progression';
+import { rewardHtml } from './rewards';
 import {
   CAPS, ONE_OF_ONE, TIER_DEFS, UPGRADES, UPGRADE_IDS, powerFor, signatureFor, tierOfMetadataId, type Power, type Tier, type Upgrades,
 } from '../config/power';
@@ -377,6 +378,9 @@ export interface ResultProgress {
   pending: boolean;
   note: string;
   upgradesReady: number;
+  upgrades: Upgrades | null;
+  /** What this match pays by the shared rule, shown to a guest (nothing kept). */
+  preview: RewardBreakdown | null;
 }
 
 export function onlineResultsHtml(r: { mode: string; won: boolean | null; reason: string; team: string; rows: OnlineRow[]; demo: boolean; signedIn: boolean; settle: boolean; prog: ResultProgress; myClass: string; canRequeue: boolean; follower: boolean }): string {
@@ -388,24 +392,20 @@ export function onlineResultsHtml(r: { mode: string; won: boolean | null; reason
   const other = r.team === 'alpha' ? 'bravo' : 'alpha';
   const p = r.prog;
   let rewards: string;
-  if (r.demo) rewards = '<p class="pb"><span class="demo">DEMO</span> no rewards</p>';
-  else if (!r.settle) rewards = `<p class="pb">${r.signedIn ? 'Not saved' : 'Guest · not saved'}</p>`;
+  if (r.demo) rewards = rewardHtml({ lines: [], xp: 0, shards: 0, none: 'demo', kept: false, before: null, upgrades: null });
+  else if (!r.settle) rewards = !r.signedIn && p.preview ? rewardHtml({ ...p.preview, kept: false, before: null, upgrades: null }) : `<p class="pb">${r.signedIn ? 'Not saved' : 'Guest · not saved'}</p>`;
   else if (p.pending) rewards = '<p class="pb" id="saving">Saving…</p>';
   else if (p.reward && p.before) {
-    const lb = levelOf(p.before.xp), la = levelOf(p.before.xp + p.reward.xp);
-    const d = p.reward.ratingAfter - p.reward.ratingBefore;
-    rewards = `<div class="reward-grid" id="rewards">
-<div class="rw"><span>XP</span><b class="num">+${p.reward.xp}</b></div>
-<div class="rw"><span>Shards</span><b class="num">+${p.reward.shards}</b></div>
-<div class="rw"><span>Rating</span><b class="num ${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '+' : ''}${d}</b><small class="num">${p.reward.ratingBefore} → ${p.reward.ratingAfter}</small></div>
-<div class="rw lv"><span>Level ${la.level}${la.level > lb.level ? ' <em class="lvup">LEVEL UP</em>' : ''}</span><div class="xpbar big"><i class="was" style="width:${la.level > lb.level ? 0 : Math.round((lb.into / lb.next) * 100)}%"></i><i class="now" style="width:${Math.round((la.into / la.next) * 100)}%"></i></div><small class="num">${la.into} / ${la.next} XP</small></div>
-</div>${p.reward.xp === 0 ? '<p class="note small">No reward: under 20 s, left early or daily cap</p>' : ''}
-${p.upgradesReady ? `<p class="pb good">${p.upgradesReady} upgrade${p.upgradesReady > 1 ? 's' : ''} ready</p>` : ''}`;
+    const rw = p.reward;
+    // An older site answers totals only: show them as one line.
+    const lines = rw.lines ?? (rw.xp || rw.shards ? [{ id: 'played' as const, label: 'Match', xp: rw.xp, shards: rw.shards }] : []);
+    rewards = rewardHtml({ lines, xp: rw.xp, shards: rw.shards, none: rw.xp || rw.shards ? null : rw.none ?? 'short', kept: true, before: p.before, upgrades: p.upgrades,
+      rating: { before: rw.ratingBefore, after: rw.ratingAfter } });
   } else rewards = `<p class="pb">${esc(p.note || 'Not saved')}</p>`;
   return `<div class="card results online-results"><div class="kicker">${esc(r.mode)} · ${esc(r.myClass)}${why ? ` · ${why}` : ''}</div><h2 class="${r.won === null ? '' : r.won ? 'good' : 'bad'}">${title}</h2>${me ? `<p class="num">${me.kills} K · ${me.damageDealt} DMG</p>` : ''}
 ${rewards}
 <div class="res-grid"><div>${side(r.team, 'Your side')}</div><div>${side(other, 'Enemy')}</div></div>
-<div class="btns"><button class="btn primary" data-go="menu" id="continuebtn">Continue</button>${r.follower ? '' : `<button class="btn" data-act="online-again"${r.canRequeue ? '' : ' disabled'}>Again</button>`}${p.upgradesReady ? '<button class="btn" data-act="upgrades-from-results">Upgrades</button>' : ''}</div></div>`;
+<div class="btns"><button class="btn primary" data-go="menu" id="continuebtn">Continue</button>${r.follower ? '' : `<button class="btn" data-act="online-again"${r.canRequeue ? '' : ' disabled'}>Again</button>`}${r.signedIn ? `<button class="btn${p.upgradesReady ? ' good' : ''}" data-act="upgrades-from-results" id="toupgrades">Upgrades</button>` : ''}</div></div>`;
 }
 
 // ---- Sign in (a sheet over whatever screen asked for it; never routed through Settings) ----

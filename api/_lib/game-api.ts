@@ -5,7 +5,9 @@
 //   GET  profile       the signed-in account: level, XP, shards, rating, upgrades, callsign, medals, career, Chog
 //   POST callsign      set the account's callsign (validated; shown in matches and on the leaderboard)
 //   POST prefs         favourite operator and pinned medals (earned ones only)
-//   POST practice      store one solo practice run (bounded, rate limited, once per run id): career and medals only
+//   POST practice-start a signed ticket for one solo run (account, run id, start time)
+//   POST practice      store one solo practice run (bounded, rate limited, once per run id): career, medals, and a
+//                      capped practice reward when its start ticket checks out
 //   GET  tokens        Chog Genesis tokens the signed-in wallet holds, read live from Monad (fails closed)
 //   POST ticket        a 10 minute game ticket for the game server: account, verified holding, power (or a demo token)
 //   POST ticket-check  the game server asks whether a ticket is genuine (no cookie, no origin: the ticket is the proof)
@@ -18,7 +20,7 @@ import { env as authEnv, json, readSession, sameOrigin, secretOk, type Env, type
 import { schemaStatus, type Db } from './db.js';
 import { readOwnership, selfCheck, type Fetch, type Holding, type SelfCheck } from './chain.js';
 import { setNftTier, accountFor, buyUpgrade, callsignOf, standingOf, checkTicket, issueTicket, leaderboard, settleMatch, ticketSecret, tokenHistory, upgradesOf, validRecord, type GameTicket } from './game.js';
-import { accountView, recordPractice, setCallsign, setPrefs } from './career.js';
+import { accountView, practiceSecret, recordPractice, setCallsign, setPrefs, startPractice } from './career.js';
 import { NO_UPGRADES, ONE_OF_ONE, SIGNATURES, TIER_DEFS, TIERS, chogName, tierOfMetadataId, type Tier } from '../../src/config/power.js';
 
 export interface GameEnv extends Env {
@@ -99,16 +101,18 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
 
       case 'POST callsign':
       case 'POST prefs':
+      case 'POST practice-start':
       case 'POST practice': {
         if (!sameOrigin(req, e)) return json({ error: 'bad_origin' }, 403);
         if (!db) return json({ error: 'progression_offline' }, 503);
         const s = await readSession(req, e);
         if (!s?.ids.length) return json({ error: 'sign_in' }, 401);
         const acc = (await accountFor(db, s.ids))!;
+        if (action === 'practice-start') return json({ ok: true, ...(await startPractice(acc, await practiceSecret(e.AUTH_SECRET!), d.now())) });
         const b = await body(req);
         if (action === 'callsign') { const r = await setCallsign(db, acc, b.name); return json(r, r.ok ? 200 : 400); }
         if (action === 'prefs') { const r = await setPrefs(db, acc, b); return json(r, r.ok ? 200 : 400); }
-        const r = await recordPractice(db, acc, b);
+        const r = await recordPractice(db, acc, b, { secret: await practiceSecret(e.AUTH_SECRET!), now: d.now() });
         return json(r, r.ok ? 200 : r.reason === 'rate' ? 429 : 400);
       }
 

@@ -11,7 +11,7 @@
 import type { Db, Tx } from './db.js';
 import { b64url, sign, unsign, type Identity } from './auth.js';
 import { NO_UPGRADES, UPGRADES, UPGRADE_IDS, clampUpgrades, tierOfMetadataId, type Tier, type UpgradeId, type Upgrades } from '../../src/config/power.js';
-import { RATING, levelOf, matchRewards, ratingDelta, REWARDS } from '../../src/config/progression.js';
+import { RATING, levelOf, rewardBreakdown, ratingDelta, REWARDS, type RewardLine, type NoReward } from '../../src/config/progression.js';
 
 export const TICKET_SECONDS = 10 * 60;
 
@@ -142,7 +142,10 @@ export interface MatchRecord {
   reason: string;
   seconds: number;
   endedAt: number;
-  players: { acc: string | null; team: string; tier: Tier; tok: number | null; mid: number | null; own: string | null; kills: number; damage: number; left: boolean; name?: string; hero?: string; survived?: boolean }[];
+  /** A private room code: friends play who they invite, so nothing is rewarded or rated (no win trading). */
+  private?: boolean;
+  /** left: gone before the end. quit: gone while still standing (absent in older records: left counts as a quit). */
+  players: { acc: string | null; team: string; tier: Tier; tok: number | null; mid: number | null; own: string | null; kills: number; damage: number; left: boolean; quit?: boolean; name?: string; hero?: string; survived?: boolean }[];
 }
 
 /** A callsign as the game server validated it, made safe again for storage and display (length, no control characters). */
@@ -156,27 +159,37 @@ export function validRecord(r: unknown): r is MatchRecord {
   const m = r as MatchRecord;
   return !!m && typeof m.id === 'string' && /^[0-9a-f]{8,32}$/.test(m.id) && typeof m.mode === 'string' && typeof m.demo === 'boolean'
     && (m.winner === null || typeof m.winner === 'string') && Number.isFinite(m.seconds) && Number.isFinite(m.endedAt)
+    && (m.private === undefined || typeof m.private === 'boolean')
     && Array.isArray(m.players) && m.players.length >= 2 && m.players.length <= 10
     && m.players.every((p) => p && (p.acc === null || typeof p.acc === 'string') && typeof p.team === 'string' && Number.isFinite(p.kills) && Number.isFinite(p.damage) && typeof p.left === 'boolean');
 }
 
 export type SettleResult =
-  | { ok: true; already: boolean; rewarded: boolean; players: { acc: string; xp: number; shards: number; ratingBefore: number; ratingAfter: number }[] }
+  | { ok: true; already: boolean; rewarded: boolean; players: SettledPlayer[] }
   | { ok: false; reason: 'demo' | 'no-accounts' | 'invalid' };
+
+export interface SettledPlayer { acc: string; xp: number; shards: number; ratingBefore: number; ratingAfter: number; lines?: RewardLine[]; none?: NoReward }
 
 export async function settleMatch(db: Db, m: MatchRecord): Promise<SettleResult> {
   if (!validRecord(m)) return { ok: false, reason: 'invalid' };
   if (m.demo) return { ok: false, reason: 'demo' };
   const accs = m.players.filter((p) => p.acc);
   if (!accs.length) return { ok: false, reason: 'no-accounts' };
+  const priv = m.private === true;
+  const rewarded = m.seconds >= REWARDS.minSeconds && !priv;
   return db.tx(async (tx) => {
     const ins = await tx.query(`INSERT INTO room_zero.matches (id, mode, winner, reason, seconds, ended_at, rewarded)
       VALUES ($1, $2, $3, $4, $5, to_timestamp($6), $7) ON CONFLICT (id) DO NOTHING RETURNING id`,
-      [m.id, m.mode, m.winner, m.reason, Math.round(m.seconds), m.endedAt, m.seconds >= REWARDS.minSeconds]);
+      [m.id, m.mode, m.winner, m.reason, Math.round(m.seconds), m.endedAt, rewarded]);
     if (!ins.length) {
       const rows = await tx.query<{ account_id: string; xp: number; shards: number; rating_before: number; rating_after: number }>(
         `SELECT account_id, xp, shards, rating_before, rating_after FROM room_zero.match_players WHERE match_id = $1`, [m.id]);
-      return { ok: true, already: true, rewarded: false, players: rows.map((r) => ({ acc: r.account_id, xp: Number(r.xp), shards: Number(r.shards), ratingBefore: Number(r.rating_before), ratingAfter: Number(r.rating_after) })) };
+      // A second settle changes nothing; it answers the stored outcome with the same breakdown (from the record).
+      return { ok: true, already: true, rewarded: false, players: rows.map((r) => {
+        const p = m.players.find((x) => x.acc === r.account_id);
+        const lines = p && Number(r.xp) > 0 ? rewardBreakdown(factsOf(m, p, false)).lines : [];
+        return { acc: r.account_id, xp: Number(r.xp), shards: Number(r.shards), ratingBefore: Number(r.rating_before), ratingAfter: Number(r.rating_after), lines };
+      }) };
     }
     // Ratings of every account in the match (locked), with free-profile defaults for players without an account.
     const ratings = new Map<string, number>();
@@ -188,21 +201,26 @@ export async function settleMatch(db: Db, m: MatchRecord): Promise<SettleResult>
       const side = m.players.filter((p) => p.team === team);
       return side.reduce((s, p) => s + (p.acc && ratings.has(p.acc) ? ratings.get(p.acc)! : RATING.start) + (RATING.tierOffset[p.tier] ?? 0), 0) / Math.max(1, side.length);
     };
-    const out: { acc: string; xp: number; shards: number; ratingBefore: number; ratingAfter: number }[] = [];
+    const out: SettledPlayer[] = [];
+    // One account appears once per match (a second seat for the same account would pay twice).
+    const seen = new Set<string>();
     for (const p of accs) {
       const acc = p.acc!;
-      if (!ratings.has(acc)) continue; // unknown account id: nothing to credit
-      const won = m.winner !== null && p.team === m.winner && !p.left;
-      const score = p.left ? 0 : m.winner === null ? 0.5 : won ? 1 : 0;
+      if (!ratings.has(acc) || seen.has(acc)) continue; // unknown account id, or a duplicate seat: nothing to credit
+      seen.add(acc);
+      const quit = p.quit ?? p.left;
+      const won = m.winner !== null && p.team === m.winner && !quit;
+      const score = quit ? 0 : m.winner === null ? 0.5 : won ? 1 : 0;
       const foes = [...new Set(m.players.map((x) => x.team))].filter((t) => t !== p.team);
-      const delta = foes.length ? ratingDelta(sideRating(p.team), sideRating(foes[0]), score) : 0;
+      // Private rooms are friendly: no rating change either.
+      const delta = foes.length && !priv ? ratingDelta(sideRating(p.team), sideRating(foes[0]), score) : 0;
       const before = ratings.get(acc)!;
       const recent = await tx.query<{ n: string }>(`SELECT count(*) AS n FROM room_zero.match_players mp JOIN room_zero.matches mt ON mt.id = mp.match_id
         WHERE mp.account_id = $1 AND mp.xp > 0 AND mt.settled_at > now() - interval '24 hours'`, [acc]);
-      const r = matchRewards({ won, kills: p.kills, leftEarly: p.left, seconds: m.seconds, capped: Number(recent[0].n) >= REWARDS.dailyCap });
+      const r = rewardBreakdown(factsOf(m, p, Number(recent[0].n) >= REWARDS.dailyCap));
       await tx.query(`UPDATE room_zero.accounts SET xp = xp + $2, shards = shards + $3, rating = rating + $4, matches = matches + 1, wins = wins + $5,
         display_name = coalesce($6, display_name) WHERE id = $1`,
-        [acc, r.xp, r.shards, delta, won ? 1 : 0, cleanName(p.name)]);
+        [acc, r.xp, r.shards, delta, won && !priv ? 1 : 0, cleanName(p.name)]);
       // A verified holding in this match refreshes the account's displayed Chog tier (display only, never ranking).
       if (p.tok && p.mid && tierOfMetadataId(p.mid)) await setNftTier(tx, acc, { tokenId: p.tok, metadataId: p.mid });
       if (r.xp) await tx.query(`INSERT INTO room_zero.ledger (account_id, kind, delta, reason, ref) VALUES ($1, 'xp', $2, 'match', $3) ON CONFLICT DO NOTHING`, [acc, r.xp, m.id]);
@@ -215,10 +233,16 @@ export async function settleMatch(db: Db, m: MatchRecord): Promise<SettleResult>
         await tx.query(`INSERT INTO room_zero.token_history (token_id, match_id, account_id, owner_address, metadata_id, kills, won) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING`,
           [p.tok, m.id, acc, p.own, p.mid, Math.round(p.kills), won]);
       }
-      out.push({ acc, xp: r.xp, shards: r.shards, ratingBefore: before, ratingAfter: before + delta });
+      out.push({ acc, xp: r.xp, shards: r.shards, ratingBefore: before, ratingAfter: before + delta, lines: r.lines, none: r.none });
     }
-    return { ok: true, already: false, rewarded: m.seconds >= REWARDS.minSeconds, players: out };
+    return { ok: true, already: false, rewarded, players: out };
   });
+}
+
+/** The reward facts of one seat, from the server's record only. */
+function factsOf(m: MatchRecord, p: MatchRecord['players'][number], capped: boolean) {
+  const quit = p.quit ?? p.left;
+  return { won: m.winner !== null && p.team === m.winner && !quit, kills: p.kills, damage: p.damage, seconds: m.seconds, leftEarly: quit, capped, private: m.private === true, demo: m.demo };
 }
 
 /**

@@ -11,6 +11,7 @@ import { displayName, NICK_MAX, STICK_PX, type Profile, type Settings } from './
 import { controlsSvg, medalSvg, portraitSvg, RARITY_LABEL } from './art';
 import type { AcctView } from './account';
 import type { NetProfile } from '../net/protocol';
+import { rewardHtml, type RewardView } from './rewards';
 
 export function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -192,6 +193,8 @@ export interface RunReport {
   demoRow: string;
   /** Where the run was saved: account (signed in), session (guest), or still saving. */
   saved: 'account' | 'session' | 'saving' | 'failed';
+  /** What the run paid (signed in), or would have paid (guest). null while saving or when nothing was answered. */
+  reward: RewardView | null;
 }
 
 export function resultsHtml(_c: ScreenCtx, r: RunReport): string {
@@ -204,6 +207,6 @@ export function resultsHtml(_c: ScreenCtx, r: RunReport): string {
   const saved = r.saved === 'account' ? 'Saved to your account' : r.saved === 'saving' ? 'Saving…' : r.saved === 'failed' ? 'Not saved' : 'Guest · not saved';
   return `<div class="card results practice-results"><div class="kicker">Vs bots · ${esc(r.hero.name)}</div><h2 class="${r.won ? 'good' : 'bad'}">${r.won ? 'Room cleared' : 'Run over'}</h2>${r.why}
 <div class="reward-grid practice-grid" id="resultpb">${stat('Time', fmtTime(Math.round(r.time)), !!nb?.time)}${stat('Hostiles', `${r.kills + r.teamKills}/${r.bots}`)}${stat('Your kills', String(r.kills), !!nb?.kills)}${stat('Accuracy', `${acc}%`)}${stat('Dealt', String(Math.round(r.dealt)))}</div>
-${medals}<p class="note small" id="savedwhere">${saved}</p>
-<div class="btns"><button class="btn" data-go="menu" id="continuebtn">Continue</button><button class="btn primary again" data-go="restart">Again</button></div></div>`;
+${r.reward ? rewardHtml(r.reward) : ''}${medals}<p class="note small" id="savedwhere">${saved}</p>
+<div class="btns"><button class="btn" data-go="menu" id="continuebtn">Continue</button>${r.reward?.kept ? `<button class="btn" data-act="upgrades-from-results" id="toupgrades">Upgrades</button>` : ''}<button class="btn primary again" data-go="restart">Again</button></div></div>`;
 }
