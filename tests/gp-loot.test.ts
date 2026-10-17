@@ -72,7 +72,7 @@ describe('a kill drops what the fallen carried', () => {
       }
       expect(taken).toBeLessThanOrEqual(dropped + 1e-6);
     }
-  });
+  }, 60000); // four whole matches: about 3 s alone, longer when the browser suites share the cores
 });
 
 describe('who takes it, and when not', () => {
