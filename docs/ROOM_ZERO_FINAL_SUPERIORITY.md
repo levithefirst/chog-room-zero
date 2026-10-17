@@ -76,7 +76,7 @@ Before this pass the bots walked a fixed beat until they perceived you, and the 
 - **Regroup.** Back toward the squad when far from everyone.
 - **Patrol.** Its beat.
 
-Every job is walked audibly (steps heard about 6 u off). The arrival of the squad is information you can earn.
+No job is ever crept. A near one is walked (steps heard about 6 u off); a hunt or a spot more than 12 u away is jogged (faster, heard about 8 u off). On arrival a hunter stands and sweeps the reported spot audibly instead of creeping a search. The squad coming is information you can earn.
 
 **Mistakes on purpose.** A bot caught walking a job reacts 0.15 s later than one holding an angle: rotating is the risk, holding the reward.
 
@@ -84,10 +84,11 @@ Every job is walked audibly (steps heard about 6 u off). The arrival of the squa
 
 | | Old patrol bots | Active squad |
 |---|---|---|
-| Hidden player found by sight before the zone (24 seeds) | 0 of 24 | 21 of 24, mean 27 s |
-| Bots that reach your half before the zone | 1.0 to 1.9 | 4.3 of 5 |
-| Moving share of time before the zone | 0.63 | 0.66 |
-| Default game (you + 2 AI, autopilot) wins | see section 8 | see section 8 |
+| Hidden player found by sight before the zone (24 seeds) | 0 of 24 | 16 of 24, mean 34 s |
+| Bots that reach your half before the zone (hidden player) | 1.0 | 4.2 of 5 |
+| Bots that reach your half before the zone (autopilot) | 1.3 | 3.8 of 5 |
+| Moving share of time before the zone | 0.64 | 0.64 to 0.66 |
+| Default game (you + 2 AI, autopilot) wins, 24 seeds | 17 | 18 |
 
 **Four bugs found by measuring the new AI:**
 - **Armour at spawn.** Every bot started below "half armour" (the armour cap is at least 50, most heroes carry 15), so the whole squad toured the armour before fighting. Solo 1v5 autopilot wins went 2 -> 14 of 200 when fixed.
@@ -220,7 +221,63 @@ Every job is walked audibly (steps heard about 6 u off). The arrival of the squa
 
 **Results screen.** It now lists every upgrade the shards buy right now, by name and cost ("3 upgrades ready: Vitality 1 (10) · Plating 1 (10) · Focus 1 (30)"), or the cheapest and how far off it is.
 
-## 8. Measurements (fill in)
+## 8. Measurements (final settings, this container)
+
+**Win rates** (autopilot, the same seeds for old and new):
+
+| | Old patrol bots | Active squad |
+|---|---|---|
+| Default game (you + 2 AI), 24 seeds | 17 | 18 |
+| Hidden, never-firing player found by sight before the zone | 0 of 24 | 16 of 24 |
+| First contact (autopilot) | 10.4 s | 9.1 s |
+
+**Per hero, out of 40** (tests/rc-victory.test.ts, VICTORY_OUT):
+
+| | Benja | Toad | Ray | Tabsu | Tonashiro | Yot | Bill |
+|---|---|---|---|---|---|---|---|
+| You + 2 AI | 34 | 33 | 18 | 25 | 25 | 30 | 20 |
+| Alone against five | 14 | 3 | 2 | 1 | 5 | 12 | 2 |
+
+Alone against five totals 39 of 280. The old patrol bots on the same venue gave 61.
+
+**The test autopilot had a bug.** It reloaded whenever no target was in view, even with 59 of 60 rounds loaded. With Toad's 2.5 s LMG reload, Toad spent its fights reloading: 0 of 40 solo wins whatever its stats. Fixed (it tops up below half a magazine); Toad now wins 3 of 40 alone and 33 of 40 with teammates.
+
+**Information** (tests/sb-lab, 16 seeds):
+- contacts announced (heard, spotted or remembered) before they are seen: above 0.6;
+- believed-but-not-seen share of hostile time: above 0.15;
+- live bodies: under 0.15.
+
+**Comms:** under 10 calls a minute (gap 2.8 s, was 2.5).
+
+**Performance** (tests/fs-perf.test.ts):
+
+| | Mean | p99 | Other |
+|---|---|---|---|
+| Sim step, default game | 0.15 to 0.21 ms | 0.7 to 1.8 ms | |
+| A* path | 0.05 ms | | |
+| Server tick, two 3v3 rooms | 0.39 to 0.56 ms | | |
+| Snapshot | 1.8 KB | | per player, 20 a second |
+
+- The sim step stays inside a 16.7 ms frame, idle.
+- Steps over 4 ms do not repeat between runs: 93 on a cold first run (JIT), 1 when warm. They are warm-up and GC, not the code.
+- A phone is slower (not measured: no device).
+
+**Browser** (headless Chromium, emulated, local full stack):
+
+| Suite | Result |
+|---|---|
+| qa-journey | 38/38 |
+| qa-rewards | 13/13 |
+| cf-chog | 18/18 |
+| fs-wallet | 28/28 |
+| master-ui | 8/8 |
+| qa-errors | 7/7 |
+| qa-screens | no layout problems |
+| rc8-online | 1v1 and 3v3 PASS |
+
+cf-visual ran at 11 sizes (320x568, 390x844, 430x932, 844x390, 932x430, 1024x768, 1366x768, 1440x900, 1600x900, 1920x1080, 2560x1080) x 10 screens, with no page errors, and the Enter with CHOG sheet fits every size.
+
+**Unit:** vitest 786/786 (79 files), tsc clean.
 
 ## 9. Not done, limitations, decisions for the owner
 

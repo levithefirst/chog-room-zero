@@ -1,12 +1,12 @@
 # Chog: Room Zero - shared state
 
 Source of truth for every agent. Rules: `docs/RULES.md`. Edit only in a handoff commit. Under 8,000 characters.
-Last verified: 2026-10-17 by claude (FP final pass + SB, live from ccr-e7fadb8f-qtochk, H28).
+Last verified: 2026-10-17 by claude (FS final superiority pass, live from ccr-e7fadb8f-qtochk, H29).
 
 ## Snapshot (EVIDENCE)
 - Repo `levithefirst/chog-room-zero` (private). Default/base branch `setup/skill-system` (LOCKED, owner 2026-10-11: no `main`). Never merge without the owner.
-- Open PRs stacked #1 to #9, then PR #10 = ccr-e7fadb8f-qtochk. SB + FP live from ccr-e7fadb8f-qtochk (H28). Client and server always ship from one commit (Render `/stats` names it).
-- Vercel project `chog-room-zero` (protection off). Production `chogroomzero.xyz`: see the Latest handoff (H28). Rollback: `dpl_FWzVhStts9DXEgW31SVkqUKArUup` (159b421, CF; Render must go back with it; migration v4 is additive and harmless to it). Sign-in env vars and `DATABASE_URL` (Neon) set by the owner; no `NFT_COMBAT` (power on). Game server: Render Free `https://room-zero-game.onrender.com` (redeploys on every push to ccr-e7fadb8f-qtochk); `ALLOWED_ORIGINS` = production + that branch's preview. No test hooks in production.
+- Open PRs stacked #1 to #9, then PR #10 = ccr-e7fadb8f-qtochk. FS (with SB, FP) live from ccr-e7fadb8f-qtochk (H29). Client and server always ship from one commit (Render `/stats` names it).
+- Vercel project `chog-room-zero` (protection off). Production `chogroomzero.xyz`: see the Latest handoff (H29). Rollback: `dpl_89HnmzDpcasvKLoQ94MUxikF4r4z` (95acb6d, FP; Render must go back with it; migration v5 is additive and harmless to it). Sign-in env vars and `DATABASE_URL` (Neon) set by the owner; no `NFT_COMBAT` (power on). Game server: Render Free `https://room-zero-game.onrender.com` (redeploys on every push to ccr-e7fadb8f-qtochk); `ALLOWED_ORIGINS` = production + that branch's preview. No test hooks in production.
 - Chog Genesis (NFT-R1, EVIDENCE): Monad 143, contract `0xc96d31F8626c6D03Fae5dCD3d61e3FB9F4a73763` (ChogMint, Sourcify exact match), ERC-721, supply 1,969, catalogue in `data/chog-genesis/`; token id is NOT the displayed number. Live check 2026-10-17 (`/api/game/chain`): chain 143, `metadataId(1)` = 1462.
 - Chogathon 2026 (`docs/SUBMISSION.md`): "the Chog NFT must be essential". Deadline and start: UNKNOWN.
 
@@ -33,7 +33,7 @@ Last verified: 2026-10-17 by claude (FP final pass + SB, live from ccr-e7fadb8f-
 - Class numbers, upgrades, revive timings, signatures (`docs/design/power.md`). Hub, medals, tips. Deps: @neondatabase/serverless, dev @electric-sql/pglite, @noble/*.
 - NFT-R1 layers (`docs/research/chog-genesis/IDENTITY-AND-MAPPING.md`). PROVISIONAL CHOG palette (`docs/BRAND.md`), zone tuning, operator art.
 - All tuning numbers (roster, weapons, grenades), lean rules, art direction, the map, fonts.
-- FP (H28): reward amounts (REWARDS, PRACTICE_REWARDS), 15 pickup zones and respawns, bot heal delay 2 s, call-out gap 2.5 s, matchmaking tier worth. SB (H27): TUNING intel/comms/match/net, sawn-off 9x9 at 5.5 deg. CF (H25): turn cap, run spread, darkness, gait lamp, SPOTTED marks, pillar map, roster tweaks; lab A-F (`?lab`).
+- FS (H29): venue, 26 pickups and respawns, TUNING.bots.squad, comms gap 2.8 s, practice limits, the solo 1v5 bar per roster. FP: reward amounts, heal delay, tier worth. SB/CF: intel, comms, turn cap, lab (`?lab`).
 
 ## UNKNOWN (never guess)
 - Chog Genesis art and name rights; `baseURI`, totalSupply read from chain; metadata hash check (`docs/research/chog-genesis/`).
@@ -41,15 +41,14 @@ Last verified: 2026-10-17 by claude (FP final pass + SB, live from ccr-e7fadb8f-
 - Whether a real holder can sign in and play 5v5 (fake-chain holder passes locally).
 
 ## Implemented (EVIDENCE)
-- FP (H28, live): Shards for every match (played, win, kills, damage; win beats any loss), ticketed capped practice rewards, results breakdown + Upgrades; 15 seeded zoned pickups incl. grenades, even for both sides, moving on respawn; snapshot privacy (exact hostiles only for what you see); power-aware matchmaking. `docs/ROOM_ZERO_FINAL_PASS.md`.
-- SB (H27, live H28): contact intel, teammate call-outs, sawn-off no one-shot, death insight, online prediction, release on hide, rating-band matching, audio priority, ?perf. `docs/ROOM_ZERO_SUPERIORITY.md`.
-- CF, GR, QA, MI and earlier: `docs/HANDOFFS.md`.
+- FS (H29, live): 68 x 42 mirrored venue; 26 zoned pickups; an active hostile squad from legit info (audited); a wallet chooser with logos, phone links, Monad add/switch, no dead ends; 57 audit fixes (API, netcode, client, sim) with tests. `docs/ROOM_ZERO_FINAL_SUPERIORITY.md`.
+- FP (H28): rewards for every match, ticketed practice, zoned pickups, snapshot privacy, power-aware matching. `docs/ROOM_ZERO_FINAL_PASS.md`. SB (H27): contact intel, call-outs, death insight, prediction. `docs/ROOM_ZERO_SUPERIORITY.md`. CF and earlier: `docs/HANDOFFS.md`.
 
 ## Automated tests (EVIDENCE, Node 22.22)
-FP (H28): vitest 689/689 (71 files), tsc clean. Production smoke 39/39. Browser (headless Chromium, emulated, local stack): qa-journey 38/38, qa-rewards 13/13, cf-chog 18/18, master-ui 8/8, qa-errors 7/7, qa-screens clean, rc8-online 1v1+3v3 PASS, cf-visual 8 sizes x 10 screens, no page errors.
+FS (H29): vitest 786/786 (79 files), tsc clean. Browser (headless Chromium, emulated, local stack): qa-journey 38/38, qa-rewards 13/13, cf-chog 18/18, fs-wallet 28/28, master-ui 8/8, qa-errors 7/7, qa-screens clean, rc8-online 1v1+3v3 PASS, cf-visual 11 sizes (320 to 2560 wide) x 10 screens, no page errors. Production smoke: see H29.
 
 ## Not performed (needs the owner)
-- CF/SB/FP: any human play (lab A/B, contact marks, call-outs, rewards, pickups, prediction on a real network), a real wallet through Enter with CHOG.
+- CF/SB/FP/FS: any human play (the new venue, the active squad, rewards, pickups, prediction on a real network), a real wallet extension or phone wallet app through Enter with CHOG.
 - Pixel 7 / iPhone 13, real-GPU FPS, audio by ear, hosted 5v5 with a real holder, art rights in writing, the demo video.
 
 ## Gates
@@ -58,9 +57,9 @@ Core Feel Gate: BLOCKED on owner playtests (class numbers, CF, SB, FP). G10: aut
 ## Current task
 | Id | Owner | Branch | Files | Done when | Status |
 |---|---|---|---|---|---|
-| FP | claude | claude/sb-superiority | see H28 | Owner 2026-10-17 final test -> deploy | live (H28); owner: playtest rewards + pickups, NFT power vs "not simply stronger" |
-| SB | claude | claude/sb-superiority | see H27 | Owner 2026-10-16 SUPERIORITY BUILD | live (H28); owner playtest |
+| FS | claude | claude/fs-final-superiority | see H29 | Owner 2026-10-17 FINAL SUPERIORITY PASS | live (H29); owner: playtest venue + squad, real wallet, flankers alone |
+| FP, SB | claude | claude/sb-superiority | see H28, H27 | Owner 2026-10-17 / 10-16 | live; owner playtest |
 | RC-8 | claude | ccr-e7fadb8f-qtochk, PR #10 | see H16 | Owner RC-8 mandate | PR #10 not merged (stacked on #9; owner decides) |
 
 ## Handoffs
-Latest: H28 (2026-10-17, claude -> owner; FP + SB live on chogroomzero.xyz). History: `docs/HANDOFFS.md`.
+Latest: H29 (2026-10-17, claude -> owner; FS live on chogroomzero.xyz). History: `docs/HANDOFFS.md`.
