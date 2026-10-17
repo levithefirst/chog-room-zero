@@ -114,7 +114,10 @@ describe('heard hostiles arrive as the hearing estimate, not their spot', () => 
     w.sounds = [{ type: 'step', x: foe.x, y: foe.y, radius: 9, sourceId: foe.id, team: foe.team, tick: w.tick + 1 }];
     const c = lobby.snapshot(room, room.members[0]).sounds.find((x) => x.source === foe.id)!;
     expect(c.est).toBe('clear');
-    expect(Math.hypot(c.x - foe.x, c.y - foe.y)).toBeLessThanOrEqual(4 * TUNING.intel.hearShare * TUNING.intel.hearMul.step + 0.01);
+    // Each axis is off by at most the model's error (intel.ts hearReport), never more; never the exact spot.
+    const err = 4 * TUNING.intel.hearShare * TUNING.intel.hearMul.step;
+    expect(Math.abs(c.x - foe.x)).toBeLessThanOrEqual(err + 0.01);
+    expect(Math.abs(c.y - foe.y)).toBeLessThanOrEqual(err + 0.01);
     // A sound of your own team stays exact.
     const mate = w.actors[1];
     w.sounds = [{ type: 'step', x: 14.5, y: 3.5, radius: 9, sourceId: mate.id, team: mate.team, tick: w.tick }];

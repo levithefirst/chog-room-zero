@@ -391,7 +391,13 @@ function think(w: World, a: Actor, br: Brain, dt: number): void {
   br.heardAt = null;
   br.suspicion = Math.max(0, br.suspicion - dt / P.memorySeconds);
   if (br.sawPlayer) {
-    if (br.seenFor === 0 && br.state !== 'engage') br.reaction = P.reactionMin + rand(w) * (P.reactionMax - P.reactionMin);
+    if (br.seenFor === 0 && br.state !== 'engage') {
+      br.reaction = P.reactionMin + rand(w) * (P.reactionMax - P.reactionMin);
+      // Caught on the move (a squad rotation, a walk to a pickup): it was looking where it walks, so it is a beat late.
+      // A bot holding an angle is not (rotating is the risk; holding the reward).
+      const t = br.task;
+      if (a.team === 'bot' && br.state === 'patrol' && t && t.kind !== 'hold' && !t.arrived) br.reaction += TUNING.bots.squad.walkingReaction;
+    }
     br.seenFor += dt;
     learn(w, a, br, 'seen', p.x, p.y, 1, p);
     // The hostile squad radio: a sighting goes to the squad (the spot it saw, when). Nothing it did not see.
@@ -764,13 +770,14 @@ function squadPatrol(w: World, a: Actor, br: Brain, dt: number): void {
     if (!task.arrived) { task.arrived = now; br.lookBase = a.facing; br.timer = 0; }
     br.timer += dt;
     if (task.kind === 'hunt') {
-      // At the spot a squadmate saw: it is gone or close by. Search from here (an honest guess, logged).
-      learn(w, a, br, 'radio', task.rx, task.ry, 0.5);
-      br.state = 'search';
-      br.lastKnown = { x: task.rx, y: task.ry };
+      // At the spot a squadmate saw: it is gone or close by. It looks round from here as a squad search (it stands
+      // and sweeps, then walks on audibly), not the creeping search of a bot that heard something itself: a hunter
+      // that crept in made more contacts with nothing heard first (tests/sb-lab warned share 0.62 without hunts).
+      task.kind = 'search';
+      task.until = now + B.investigateLookSeconds + 1;
+      task.arrived = now;
+      br.lookBase = a.facing;
       br.timer = 0;
-      br.goal = null;
-      br.task = null;
       return;
     }
     if (task.kind === 'hold') {
@@ -793,10 +800,12 @@ function squadPatrol(w: World, a: Actor, br: Brain, dt: number): void {
     } else task.until = now;
   } else {
     br.lookBase = out.aim;
-    // It walks every job, never creeps: its steps are heard ~6 u off, so the squad coming is information you can
-    // earn. (Creeping the last metres of a hunt cut contacts announced before sight from 0.6+ to 0.50, tests/sb-lab.)
+    // It never creeps a job: walking, its steps are heard ~6 u off; on a long rotation (a hunt, or a spot more than
+    // jogDistance away) it jogs, faster and louder (~8 u). The squad coming is information you can earn. (Creeping the
+    // last metres of a hunt cut contacts announced before sight from 0.6+ to 0.50, tests/sb-lab.)
     out.quiet = false;
-    if (LAB.enemySound) { out.moveX *= B.patrolSpeed; out.moveY *= B.patrolSpeed; }
+    const far = task.kind === 'hunt' || Math.hypot(task.x - a.x, task.y - a.y) > S.jogDistance;
+    if (LAB.enemySound && !far) { out.moveX *= B.patrolSpeed; out.moveY *= B.patrolSpeed; }
   }
 }
 
@@ -831,8 +840,12 @@ function squadTask(w: World, a: Actor, br: Brain, sq: Squad, now: number): Squad
   w.pickups.forEach((k, i) => {
     if (!k.active) return;
     const need = k.kind === 'health' ? a.hp < a.maxHp * S.needHpShare
-      : k.kind === 'armor' ? a.maxArmor > 0 && a.armor < a.maxArmor * S.needArmorShare
-      : k.kind === 'ammo' ? a.reserve < a.weapon.magazine : wants(a, k.kind);
+      // Armour: below a share of what it starts with (its hero's armour), not of the cap every actor shares (50):
+      // a 15-armour hero is not "missing" 35 at spawn, so the squad does not tour the armour before it fights.
+      : k.kind === 'armor' ? a.armor < (a.hero.maxArmor + a.power.armor) * S.needArmorShare
+      : k.kind === 'ammo' ? a.reserve < a.weapon.magazine
+      // Grenades only when out (a squad that tops up every throw turns the map into a grenade rain).
+      : k.kind === 'grenade' ? a.grenades === 0 && wants(a, k.kind) : wants(a, k.kind);
     const d = Math.hypot(k.x - a.x, k.y - a.y);
     if (need && d < bd) { bd = d; best = i; }
   });
@@ -859,7 +872,9 @@ function squadTask(w: World, a: Actor, br: Brain, sq: Squad, now: number): Squad
     const stale = Math.min(60, now - sq.checked[i]);
     const d = Math.hypot(pt.x - a.x, pt.y - a.y);
     // Search: the longest unchecked, not too far; hold: a near point, a little randomness so it is not a clockwork.
-    const s = kind === 'search' ? stale - d * 0.5 + rand(w) * 6 : -d + rand(w) * 8;
+    // Early on it pushes toward the other side's spawn (map knowledge every player has, not where you are).
+    const push = S.pushBonus * Math.max(0, 1 - now / S.pushSeconds) * Math.max(0, 1 - Math.hypot(pt.x - w.level.playerSpawn.x, pt.y - w.level.playerSpawn.y) / w.level.w);
+    const s = kind === 'search' ? stale - d * 0.5 + push + rand(w) * 6 : -d + rand(w) * 8;
     if (s > score) { score = s; pick = i; }
   });
   if (pick < 0) return task('patrol', br.patrol[br.patrolIndex].x, br.patrol[br.patrolIndex].y);

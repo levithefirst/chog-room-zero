@@ -3,6 +3,7 @@
 // for the session only. The hub itself is src/ui/hub.ts. Nothing is sold; no chests.
 // Test hooks kept from earlier builds: data-go/data-act/data-hero/data-demo, #selchip, #resultpb, table.howto,
 // table.stats, the results h2.
+import type { WalletChoice } from './auth';
 import { HEROES, type HeroDef } from '../config/heroes';
 import { WEAPONS } from '../config/weapons';
 import { fmtTime, type Records } from './records';
@@ -22,7 +23,7 @@ export interface AuthView {
   config: { google: boolean; wallet: boolean } | null | false;
   /** Signed-in identities from the server session. */
   session: { provider: 'google' | 'wallet'; subject: string; label: string }[];
-  wallets: { name: string; id: string }[];
+  wallets: WalletChoice[];
   busy: boolean;
   message: string;
 }

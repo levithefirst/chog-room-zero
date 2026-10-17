@@ -26,6 +26,13 @@ export function nextUpgrade(shards: number, up: Upgrades): { name: string; rank:
   return best;
 }
 
+/** Every upgrade whose next rank the shards buy right now (each on its own), cheapest first. */
+export function affordable(shards: number, up: Upgrades): { name: string; rank: number; cost: number }[] {
+  return UPGRADE_IDS.filter((id) => up[id] < UPGRADES[id].ranks && UPGRADES[id].costs[up[id]] <= shards)
+    .map((id) => ({ name: UPGRADES[id].name, rank: up[id] + 1, cost: UPGRADES[id].costs[up[id]] }))
+    .sort((a, b) => a.cost - b.cost);
+}
+
 export interface RewardView {
   lines: RewardLine[];
   xp: number;
@@ -41,6 +48,15 @@ export interface RewardView {
   rating?: { before: number; after: number };
 }
 
+/** What the shards buy now: every rank ready (by name and cost), or the cheapest one and how far off it is. */
+function useLine(have: number, up: Upgrades, nx: ReturnType<typeof nextUpgrade>): string {
+  if (!nx) return 'every upgrade maxed';
+  const ready = affordable(have, up);
+  if (!ready.length) return `${esc(nx.name)} ${nx.rank} costs ${nx.cost}, ${nx.cost - have} to go`;
+  const list = ready.map((r) => `${esc(r.name)} ${r.rank} (${r.cost})`).join(' · ');
+  return `<b class="good">${ready.length === 1 ? `${list} ready` : `${ready.length} upgrades ready: ${list}`}</b>`;
+}
+
 export function rewardHtml(v: RewardView): string {
   if (v.none) return `<div class="rewards none" id="rewards"><p class="pb">${esc(NO_REWARD_TEXT[v.none])}</p></div>`;
   const rows = v.lines.map((l) => `<li><span>${esc(l.label)}</span><b class="num">${l.shards ? `+${l.shards}` : ''}</b><small class="num">${l.xp ? `+${l.xp} XP` : ''}</small></li>`).join('');
@@ -54,7 +70,7 @@ export function rewardHtml(v: RewardView): string {
     const d = v.rating ? v.rating.after - v.rating.before : null;
     foot = `<div class="rw-foot"><div class="rw lv"><span>Level ${la.level}${la.level > lb.level ? ' <em class="lvup">LEVEL UP</em>' : ''}</span><div class="xpbar big"><i class="was" style="width:${la.level > lb.level ? 0 : Math.round((lb.into / lb.next) * 100)}%"></i><i class="now" style="width:${Math.round((la.into / la.next) * 100)}%"></i></div><small class="num">${la.into} / ${la.next} XP</small></div>
 ${d !== null ? `<div class="rw"><span>Rating</span><b class="num ${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '+' : ''}${d}</b><small class="num">${v.rating!.before} → ${v.rating!.after}</small></div>` : ''}</div>
-<p class="rw-use" id="rw-use"><span class="num">${have}</span> shards · ${nx ? (nx.ready ? `<b class="good">${esc(nx.name)} ${nx.rank} ready (${nx.cost})</b>` : `${esc(nx.name)} ${nx.rank} costs ${nx.cost}, ${nx.cost - have} to go`) : 'every upgrade maxed'}</p>`;
+<p class="rw-use" id="rw-use"><span class="num">${have}</span> shards · ${useLine(have, v.upgrades, nx)}</p>`;
   }
   return `<div class="rewards" id="rewards"><ul class="rw-lines"><li class="head"><span></span><b>Shards</b><small>XP</small></li>${rows}${total}</ul>${foot}</div>`;
 }

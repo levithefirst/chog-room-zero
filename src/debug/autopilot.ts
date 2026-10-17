@@ -62,7 +62,9 @@ export function createAutopilot(seed: number, aimErrDeg = 3): Autopilot {
         }
       } else {
         if (hitBy) inp.aim = Math.atan2(hitBy.y - p.y, hitBy.x - p.x);
-        if (p.ammo < p.weapon.magazine && p.reserve > 0) inp.reload = true;
+        // Tops up between fights like a player: below half a magazine, never a near-full drum (an LMG reload is
+        // 2.5 s; reloading 59 of 60 every time a target left the cone kept Toad reloading through its fights).
+        if (p.ammo < p.weapon.magazine * 0.5 && p.reserve > 0) inp.reload = true;
         const near = (o: { x: number; y: number }) => Math.hypot(o.x - p.x, o.y - p.y);
         const nearestBot = live.sort((a, b) => near(a) - near(b))[0];
         // Patch up first: health when below 60%, armour when low and close.

@@ -77,6 +77,11 @@ export interface Input {
 }
 
 /** A key typed into a text field (RC-7 callsign) belongs to the field. */
+/** The key went to a focused button or link (keyboard navigation of a menu). */
+export function onControl(e: Event): boolean {
+  const t = e.target as { closest?: (s: string) => unknown } | null;
+  return !!t?.closest?.('button, a[href], [role="button"]');
+}
 export function typing(e: Event): boolean {
   const t = e.target as { tagName?: string; isContentEditable?: boolean } | null;
   return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || !!t.isContentEditable);
@@ -227,7 +232,9 @@ export function createInput(el: HTMLElement): Input {
     if (MOVE_CODES.has(e.code)) held.add(e.code);
     if (e.code === 'KeyR') reloadQueued = true;
     // R is reload only; it never restarts a run (CHOG-FLOW-001). Enter confirms menus.
-    if ((e.code === 'Enter' || e.code === 'Space') && !e.repeat) action = true; // Space also confirms menus (consumed and dropped during play)
+    // Space also confirms menus (consumed and dropped during play). Not on a focused button or link: there the key
+    // presses that control (the browser clicks it), never the screen's default action behind it.
+    if ((e.code === 'Enter' || e.code === 'Space') && !e.repeat && !onControl(e)) action = true;
     if (e.code === 'Escape' || e.code === 'KeyP') pauseQueued = true;
     if (e.code === 'Space' || e.code === 'KeyQ') {
       e.preventDefault();

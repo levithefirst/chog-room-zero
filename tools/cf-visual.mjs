@@ -30,6 +30,8 @@ async function wallet(b) {
   })();` });
 }
 const SIZES = [
+  // FS (owner 2026-10-17): narrow and normal phones upright, phones turned, tablet, laptop, desktop, ultrawide.
+  { name: 'phone-narrow-portrait', w: 320, h: 568, mobile: true, touch: true },
   { name: 'phone-portrait', w: 390, h: 844, mobile: true, touch: true },
   { name: 'phone-landscape', w: 844, h: 390, mobile: true, touch: true },
   { name: 'phone-large-portrait', w: 430, h: 932, mobile: true, touch: true },
@@ -38,6 +40,8 @@ const SIZES = [
   { name: '1366x768', w: 1366, h: 768 },
   { name: '1440x900', w: 1440, h: 900 },
   { name: '1600x900', w: 1600, h: 900 },
+  { name: '1920x1080', w: 1920, h: 1080 },
+  { name: 'ultrawide-2560x1080', w: 2560, h: 1080 },
 ];
 const report = [];
 for (const d of SIZES) {
@@ -48,6 +52,9 @@ for (const d of SIZES) {
   await b.until(`!!document.getElementById('bootsteps')?.children.length`, 5000); await b.shot('01-loading');
   await b.hub(); await sleep(2200); await b.shot('02-landing');
   await b.click('#chog-cta'); await b.until(`document.getElementById('chogstate')?.dataset.state === 'pick'`, 8000); await sleep(300); await b.shot('03-chog-signin');
+  // The sheet fits (or scrolls inside itself): its buttons stay on screen.
+  const fit = await b.ev(`(() => { const s = document.getElementById('chogsheet').getBoundingClientRect(); return s.top >= -1 && s.bottom <= innerHeight + 1 && s.left >= -1 && s.right <= innerWidth + 1; })()`);
+  if (!fit) b.errors.push('the Enter with CHOG sheet does not fit the screen');
   await b.click('[data-chogwallet]');
   await b.until(`__chog.view() === 'main' && !!__chog.acct().tokens?.length`, 20000); await sleep(1500); await b.shot('04-hub-holder');
   await b.click('[data-go=start]'); await sleep(700); await b.shot('05-roster');

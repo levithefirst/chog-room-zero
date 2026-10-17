@@ -9,10 +9,10 @@ import { createAutopilot } from '../../src/debug/autopilot';
 import type { BotSpawn } from '../../src/config/map';
 import type { Sidegrade } from '../../src/sim/operators';
 
-export interface AutoResult { unseenDmg: number; seenDmg: number; won: boolean; seconds: number; kills: number; shots: number; hits: number; hpLeft: number }
+export interface AutoResult { unseenDmg: number; seenDmg: number; won: boolean; seconds: number; kills: number; shots: number; hits: number; hpLeft: number; hostilesLeft: number }
 
-export function autopilot(hero: string, seed: number, opts: { maxSeconds?: number; sidegrade?: Sidegrade; aimErrDeg?: number; bots?: BotSpawn[]; zone?: boolean } = {}): AutoResult {
-  const w: World = createWorld({ hero, seed, sidegrade: opts.sidegrade, bots: opts.bots, zone: opts.zone ?? true }); // RC-8: the shipping game has the zone
+export function autopilot(hero: string, seed: number, opts: { maxSeconds?: number; sidegrade?: Sidegrade; aimErrDeg?: number; bots?: BotSpawn[]; zone?: boolean; allies?: { name: string; hero: string }[] } = {}): AutoResult {
+  const w: World = createWorld({ hero, seed, sidegrade: opts.sidegrade, bots: opts.bots, zone: opts.zone ?? true, allies: opts.allies }); // RC-8: the shipping game has the zone
   const p = w.actors[0];
   const ap = createAutopilot(seed, opts.aimErrDeg ?? 3);
   let seenDmg = 0, unseenDmg = 0;
@@ -24,5 +24,5 @@ export function autopilot(hero: string, seed: number, opts: { maxSeconds?: numbe
       if (canSee(w.level, p.x, p.y, p.facing, p.view, b.x, b.y)) seenDmg += h.hpDamage + h.armorDamage; else unseenDmg += h.hpDamage + h.armorDamage;
     }
   }
-  return { seenDmg: Math.round(seenDmg), unseenDmg: Math.round(unseenDmg), won: w.outcome === 'won', seconds: Math.round(w.tick / 60), kills: p.kills, shots: p.shots, hits: p.hits, hpLeft: Math.round(p.hp) };
+  return { seenDmg: Math.round(seenDmg), unseenDmg: Math.round(unseenDmg), won: w.outcome === 'won', seconds: Math.round(w.tick / 60), kills: p.kills, shots: p.shots, hits: p.hits, hpLeft: Math.round(p.hp), hostilesLeft: w.actors.filter((a) => a.team === 'bot' && a.alive).length };
 }

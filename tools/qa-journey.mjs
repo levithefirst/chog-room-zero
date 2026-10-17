@@ -86,7 +86,8 @@ try {
   await withWallet(W, { reject: true });
   await fresh(W);
   await W.click('#signin-cta'); await W.click('[data-act=signin-wallet]');
-  const rej = await W.until(`document.getElementById('authmsg')?.innerText || null`, 8000);
+  // The outcome, not the progress line shown while the wallet is asked (a warning once it has answered).
+  const rej = await W.until(`(() => { const m = document.getElementById('authmsg'); return m && m.classList.contains('warn') ? m.innerText : null; })()`, 8000);
   check('wallet: a rejected signature leaves you signed out with a short reason', /Cancelled/i.test(rej ?? '') && !(await W.ev(`__chog.acct().signedIn`)), rej);
   await W.close(); open.splice(open.indexOf(W), 1);
   const H = await B('holder');
@@ -143,12 +144,13 @@ try {
   // A repeated settle request pays nothing more.
   const again = await A.ev(`fetch('/api/game/settle', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ matchId: __chog.net().over.matchId }) }).then((r) => r.json())`);
   const a3 = await acct(A); await A.go('/?debug'); await A.hub(); await A.until(`!!__chog.acct().profile`, 10000); const a4 = await acct(A);
-  check('settlement is idempotent: a second settle changes nothing', again.already === true && a4.xp === a2.xp && a4.shards === a2.shards && a3.matches === 1, JSON.stringify(again));
-  // Continue -> hub with fresh numbers (on the follower too).
+  check('settlement is idempotent: a second settle changes nothing', again.already === true && a4.xp === a2.xp && a4.shards === a2.shards && a3.matches === 1, JSON.stringify({ again: { already: again.already, rewarded: again.rewarded }, a2: [a2.xp, a2.shards, a2.matches], a3: [a3.xp, a3.shards, a3.matches], a4: [a4.xp, a4.shards, a4.matches] }));
+  // Continue -> hub with fresh numbers (on the follower too). Stale would be a fresh level 1 ("0 / 100 XP"); a win of
+  // exactly 100 XP correctly reads "0 / 150" at level 2.
   await Bb.click('#continuebtn'); await Bb.hub();
   const bHub = await Bb.ev(`({ shards: document.getElementById('hubshards').innerText, xp: document.getElementById('hubxp').innerText })`);
   const bAcct = await acct(Bb);
-  check('Continue returns to the hub with the updated account (no stale values)', Number(bHub.shards) === bAcct.shards && bAcct.shards > 0 && bAcct.matches === 1 && !/^0 /.test(bHub.xp), JSON.stringify({ bHub, shards: bAcct.shards, xp: bAcct.xp }));
+  check('Continue returns to the hub with the updated account (no stale values)', Number(bHub.shards) === bAcct.shards && bAcct.shards > 0 && bAcct.matches === 1 && !(bAcct.xp > 0 && /^0 \/ 100 /.test(bHub.xp)), JSON.stringify({ bHub, shards: bAcct.shards, xp: bAcct.xp, matches: bAcct.matches }));
   for (const s of solos) { await s.close(); open.splice(open.indexOf(s), 1); }
   await Bb.close(); open.splice(open.indexOf(Bb), 1);
   // Leaderboard has real rows now.

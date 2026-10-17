@@ -57,7 +57,7 @@ describe('eligibility: CHOG ownership before the signature', () => {
 });
 
 describe('the Enter with CHOG sheet', () => {
-  const sheet = (step: ChogStep, o: Partial<ChogSheet> = {}) => chogHtml({ step, wallets: [{ id: 'io.metamask', name: 'MetaMask' }], wallet: 'MetaMask', ready: true, off: false, ...o }, HOST);
+  const sheet = (step: ChogStep, o: Partial<ChogSheet> = {}) => chogHtml({ step, wallets: [{ id: 'io.metamask', name: 'MetaMask', rdns: 'io.metamask', logo: '<svg></svg>', icon: null }], wallet: 'MetaMask', ready: true, off: false, ...o }, HOST);
   const text = (h: string) => h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
   it('every state names where it is, in plain words', () => {
     expect(text(sheet({ s: 'pick' }))).toMatch(/Your Chog is your operator/);
@@ -67,12 +67,12 @@ describe('the Enter with CHOG sheet', () => {
     expect(text(sheet({ s: 'pick' }, { off: true }))).toMatch(/Sign-in is not available right now/);
     expect(text(sheet({ s: 'connecting', wallet: 'MetaMask' }))).toMatch(/Connecting to MetaMask/);
     expect(text(sheet({ s: 'network', wallet: 'MetaMask' }))).toMatch(/Switch networks to continue\./);
-    expect(text(sheet({ s: 'checking' }))).toMatch(/Looking for your Chog/);
-    expect(text(sheet({ s: 'none' }))).toMatch(/CHOG not found in this wallet\./);
+    expect(text(sheet({ s: 'checking', address: HOLDER }))).toMatch(/Looking for your Chog/);
+    expect(text(sheet({ s: 'none', address: HOLDER }))).toMatch(/CHOG not found in this wallet\./);
     expect(text(sheet({ s: 'signing', count: 2, best: '1:1' }))).toMatch(/2 Chog found · best 1:1.*free and sends nothing/);
     expect(text(sheet({ s: 'verifying' }))).toMatch(/Checking your signature/);
     expect(text(sheet({ s: 'done', name: 'Blaze' }))).toMatch(/CHOG verified\. Blaze/);
-    expect(sheet({ s: 'none' })).toMatch(/data-act="chog-free">Play free/);
+    expect(sheet({ s: 'none', address: HOLDER })).toMatch(/data-act="chog-free">Play free/);
   });
   it('errors are short human sentences with a way on; never RPC, stack or contract words', () => {
     for (const code of Object.keys(CHOG_ERRORS) as ChogError[]) {
@@ -89,7 +89,7 @@ describe('the Enter with CHOG sheet', () => {
   it('the step track moves forward: wallet, chog, signature, room zero', () => {
     const now = (h: string) => /<li class="now">([^<]+)<\/li>/.exec(h)?.[1];
     expect(now(sheet({ s: 'pick' }))).toBe('Wallet');
-    expect(now(sheet({ s: 'checking' }))).toBe('Chog');
+    expect(now(sheet({ s: 'checking', address: HOLDER }))).toBe('Chog');
     expect(now(sheet({ s: 'signing', count: 1, best: null }))).toBe('Signature');
     expect(now(sheet({ s: 'loading' }))).toBe('Room Zero');
   });

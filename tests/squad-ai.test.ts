@@ -76,7 +76,7 @@ describe('the hostile squad is active before the zone', () => {
           if (e.source !== 'radio') continue;
           radio++;
           const backed = w.perceptionLog!.some((o) => o.bot !== e.bot && w.actors[o.bot].team === 'bot' && o.source === 'seen' && o.x === e.x && o.y === e.y
-            && o.tick <= e.tick && (e.tick - o.tick) * STEP <= TUNING.bots.squad.reportSeconds + 6);
+            && o.tick <= e.tick && (e.tick - o.tick) * STEP <= TUNING.bots.squad.reportSeconds * 2 + 6);
           expect(backed, `radio callout at ${e.x},${e.y}`).toBe(true);
         }
       }

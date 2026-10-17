@@ -49,13 +49,18 @@ describe('hub', () => {
     const a = authHtml(base, 'chogroomzero.xyz');
     expect(a).toMatch(/data-act="signin-google"[^>]*>.*Continue with Google/);
     expect(a).toMatch(/data-act="signin-wallet"[^>]*>.*Continue with Wallet/);
-    // No wallet in the browser: the button stays, and the sheet says so with a way to open a wallet app.
+    // No wallet in the browser: the button stays, and the sheet says so with a way on. A computer: get one (install
+    // pages) and look again; a phone: open this page in a wallet app (its own browser has the wallet).
     const none = authHtml({ ...base, pickWallet: true }, 'chogroomzero.xyz');
     expect(none).toMatch(/Continue with Wallet/);
     expect(none).toMatch(/No wallet in this browser/);
-    expect(none).toMatch(/metamask\.app\.link\/dapp\/chogroomzero\.xyz/);
-    // Several wallets: pick one.
-    expect(authHtml({ ...base, pickWallet: true, wallets: [{ id: 'io.metamask', name: 'MetaMask' }, { id: 'io.rabby', name: 'Rabby' }] }, 'h')).toMatch(/data-wallet="io\.rabby"/);
+    expect(none).toMatch(/metamask\.io\/download/);
+    expect(none).toMatch(/data-act="wallet-rescan"/);
+    const phone = authHtml({ ...base, pickWallet: true, mobile: true, pageUrl: 'https://chogroomzero.xyz/?squad=AB12C' }, 'chogroomzero.xyz');
+    expect(phone).toMatch(/metamask\.app\.link\/dapp\/chogroomzero\.xyz\/\?squad=AB12C/);
+    // Several wallets: pick one, each with its mark.
+    const w = (id: string, name: string) => ({ id, name, rdns: id, logo: '<svg></svg>', icon: null });
+    expect(authHtml({ ...base, pickWallet: true, wallets: [w('io.metamask', 'MetaMask'), w('io.rabby', 'Rabby')] }, 'h')).toMatch(/data-wallet="io\.rabby"/);
     // Signed in with Google: the wallet can still be linked to the same account; sign out is there.
     const g = authHtml({ ...base, session: [{ provider: 'google', label: 'a@b' }] }, 'h');
     expect(g).not.toMatch(/signin-google/);
@@ -142,7 +147,8 @@ describe('sub-screens', () => {
     expect(html).toContain(`id="rw-xp">+${b.xp} XP<`);
     expect(html).toMatch(/\+12/);
     expect(html).toMatch(/LEVEL UP/);
-    expect(html).toMatch(/Vitality 1 ready \(10\)/);
+    // 40 shards after the match: every rank they buy now, by name and cost.
+    expect(html).toMatch(/3 upgrades ready: Vitality 1 \(10\) · Plating 1 \(10\) · Focus 1 \(30\)/);
     expect(html).toMatch(/id="toupgrades">Upgrades/);
     expect(html).toMatch(/data-go="menu" id="continuebtn">Continue/);
     expect(html).toMatch(/data-act="online-again"/);

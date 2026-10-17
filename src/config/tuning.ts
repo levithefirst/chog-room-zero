@@ -352,7 +352,14 @@ export const TUNING = {
       resupplyRange: 30,
       needHpShare: 0.7,
       needArmorShare: 0.5,
-      weights: { search: 4, hold: 1.5, regroup: 1, patrol: 1 },
+      weights: { search: 4, hold: 0.75, regroup: 1, patrol: 1 },
+      // Searching leans toward your spawn side for the first pushSeconds (a bonus of up to pushBonus, as if the point
+      // were that many seconds staler), and a bot surprised while walking a job reacts walkingReaction s later.
+      pushBonus: 15,
+      pushSeconds: 45,
+      walkingReaction: 0.15,
+      // A job further than this (u) is jogged to (louder, faster); a near one is walked.
+      jogDistance: 12,
     },
     patrolPauseJitter: 1.6,
     listenSeconds: 0.55,

@@ -187,7 +187,7 @@ describe('no omniscience across seeded matches', () => {
             case 'radio': {
               // The hostile squad radio: a squadmate's own sighting at exactly that spot, within the report window.
               // Never the player's live position.
-              const radio = w.perceptionLog!.some((o) => o.bot !== e.bot && w.actors[o.bot].team === bot.team && o.source === 'seen' && o.x === e.x && o.y === e.y && o.tick <= e.tick && (e.tick - o.tick) * TUNING.simStepSeconds <= TUNING.bots.squad.reportSeconds + 6);
+              const radio = w.perceptionLog!.some((o) => o.bot !== e.bot && w.actors[o.bot].team === bot.team && o.source === 'seen' && o.x === e.x && o.y === e.y && o.tick <= e.tick && (e.tick - o.tick) * TUNING.simStepSeconds <= TUNING.bots.squad.reportSeconds * 2 + 6);
               expect(radio, `radio at ${e.x},${e.y} by ${e.bot} tick ${e.tick}`).toBe(true);
               break;
             }

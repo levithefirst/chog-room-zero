@@ -61,7 +61,7 @@ export const ROOM_ZERO = [
  * Pickup zones (owner 2026-10-17: "substantially more ... throughout the venue"): 26 pickups, each in its own zone,
  * placed and moved by src/sim/pickups.ts. West and east zones of a kind pair up in list order and draw from tiles the
  * same walk from their own side's spawns; a 'mid' zone keeps only tiles about as far from both (the contested ones).
- * Health between the spawns and the middle, armour in the corner storage and side rooms and the middle of the gallery
+ * Health between the spawns and the middle (and either side of the atrium), armour in the corner storage and side rooms and the middle of the gallery
  * and dock, grenades in the flank corridors, the dock and the middle of both corridors, ammo along the corridors and
  * in the atrium and dock. Tile rectangles, inclusive.
  */
@@ -72,8 +72,8 @@ export const PICKUP_ZONES: { kind: 'health' | 'armor' | 'ammo' | 'grenade'; x0: 
   { kind: 'health', x0: 43, y0: 1, x1: 54, y1: 7, name: 'gallery east', side: 'east' },
   { kind: 'health', x0: 9, y0: 22, x1: 18, y1: 28, name: 'west side room south', side: 'west' },
   { kind: 'health', x0: 49, y0: 22, x1: 58, y1: 28, name: 'east side room south', side: 'east' },
-  { kind: 'health', x0: 23, y0: 13, x1: 44, y1: 19, name: 'atrium north', side: 'mid' },
-  { kind: 'health', x0: 23, y0: 22, x1: 44, y1: 28, name: 'atrium south', side: 'mid' },
+  { kind: 'health', x0: 23, y0: 13, x1: 31, y1: 28, name: 'atrium west', side: 'west' },
+  { kind: 'health', x0: 36, y0: 13, x1: 44, y1: 28, name: 'atrium east', side: 'east' },
   { kind: 'armor', x0: 1, y0: 33, x1: 11, y1: 40, name: 'south-west storage', side: 'west' },
   { kind: 'armor', x0: 56, y0: 33, x1: 66, y1: 40, name: 'south-east storage', side: 'east' },
   { kind: 'armor', x0: 9, y0: 13, x1: 18, y1: 19, name: 'west side room north', side: 'west' },

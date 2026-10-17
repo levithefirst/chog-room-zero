@@ -692,7 +692,16 @@
       .chog-track li { flex: 1; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); border-top: 3px solid var(--bg-elevated); padding-top: 4px; }
       .chog-track li.done { color: var(--dim); border-top-color: var(--ally); } .chog-track li.now { color: var(--ink); border-top-color: var(--chog-pink); }
       .chog-lede { margin: 0; color: var(--dim); font-size: 15px; line-height: 1.4; }
-      .chog-wallets { display: grid; gap: 8px; } .chog-wallet { width: 100%; }
+      /* Wallet chooser (FS): one row per wallet, its mark, its name, and whether it is here (Detected) or a link. */
+      .wallet-grid { display: grid; gap: 8px; margin: 4px 0; }
+      .btn.wallet-btn { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; text-align: left; text-decoration: none; padding: 6px 12px; }
+      .wallet-btn .wmark { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border-radius: 7px; background: #fff; overflow: hidden; }
+      .wallet-btn .wmark svg, .wallet-btn .wmark img { width: 24px; height: 24px; } .wallet-btn .wmark .ico { stroke: var(--bg-deep); }
+      .wallet-btn .wname { flex: 1; font-size: 16px; letter-spacing: .04em; } .wallet-btn small { color: var(--dim); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+      a.btn.wallet-btn, a.btn.wallet-btn:visited { color: var(--ink); }
+      .chog-sheet, .auth-sheet { max-height: calc(var(--vh, 1vh) * 96); overflow-y: auto; overscroll-behavior: contain; }
+      body.compact .btn.wallet-btn { min-height: 40px; } body.compact .wallet-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
+      body.compact .chog-sheet { gap: 8px; } body.compact .chog-mark { width: 40px; height: 40px; }
       .chog-busy { display: flex; gap: 12px; align-items: center; min-height: 54px; } .chog-busy p { margin: 0; display: grid; gap: 2px; } .chog-busy small { color: var(--dim); font-size: 14px; }
       .spin { width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--bg-elevated); border-top-color: var(--chog-pink); animation: spin 0.8s linear infinite; flex: none; }
       @keyframes spin { to { transform: rotate(360deg); } }

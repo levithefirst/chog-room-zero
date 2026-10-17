@@ -30,7 +30,7 @@ import { MEDALS, awardMedals, loadMedals, type MedalDef, type Unlocked } from '.
 import { TIPS_KEY, loadShownTips, nextTip, saveShownTips, tipText, type TipId } from './ui/tips';
 import { esc, howtoHtml, medalCard, nickHtml, resultsHtml, selectHtml, settingsHtml, type AuthView } from './ui/screens';
 import { authHtml, chogHtml, boardScreenHtml, careerHtml, classOf, hubHtml, medalsScreenHtml, onlineResultsHtml, upgradesHtml, upgradesReady, type HubCtx, type NetView, type PlayMode } from './ui/hub';
-import { chogConnect, chogEligibility, chogNetwork, chogSign, discoverWallets, fetchAuthConfig, fetchSession, googleSignIn, signOut, walletSignIn, type ChogStep } from './ui/auth';
+import { CHOG_ERRORS, chogConnect, chogEligibility, chogNetwork, chogPickAccount, chogSign, discoverWallets, fetchAuthConfig, fetchSession, googleSignIn, isMobileBrowser, signOut, walletSignIn, watchWallet, MONAD_CHAIN_HEX, type ChogStep } from './ui/auth';
 import { SIDEGRADES } from './sim/operators';
 import { createAutopilot, type Autopilot } from './debug/autopilot';
 import { createOnlineDriver } from './debug/onlineDriver';
@@ -183,6 +183,12 @@ async function start() {
   let chog: ChogStep = { s: 'pick' };
   let chogWallet: { id: string; name: string } | null = null;
   let chogAddr = '';
+  // The flow's generation: a closed sheet, Cancel, Back or a new start moves it on, and a step that answers for an older
+  // one is dropped (a wallet that answers late never signs anyone in behind another screen).
+  let chogRun = 0;
+  /** The window lost focus (blur) and has not got it back. */
+  let focusLost = false;
+  let chogUnwatch: () => void = () => undefined;
   // The sign-in sheet: shown over the screen that asked for it, and closed back to that screen.
   let pickWallet = false;
   let authReturn: TitleView = 'main';
@@ -448,6 +454,8 @@ async function start() {
     // Browser Back from a sub-screen (upgrades, leaderboard, sign-in...) returns to the hub instead of leaving the game:
     // one history entry is added while away from the hub (see the popstate handler).
     if (phase === 'title' && titleView !== 'main' && !(history.state as { rz?: number } | null)?.rz) { try { history.pushState({ rz: 1 }, ''); } catch { /* ignore */ } }
+    // In a match too: the phone's Back (or the browser's) pauses the match instead of leaving the site.
+    if ((phase === 'play' || phase === 'loading') && !(history.state as { rz?: number } | null)?.rz) { try { history.pushState({ rz: 1 }, ''); } catch { /* ignore */ } }
     $('hud').classList.toggle('on', phase === 'play' || phase === 'pause' || phase === 'recap');
     switch (phase) {
       case 'title': return showTitle();
@@ -500,8 +508,8 @@ async function start() {
       case 'ranks': return show(boardScreenHtml(c));
       case 'career': return show(careerHtml(c));
       case 'medals': return show(medalsScreenHtml(c, (m) => medalCard(m, c)));
-      case 'auth': return show(authHtml({ config: auth.config, session: auth.session, wallets: auth.wallets, busy: auth.busy, message: auth.message, pickWallet }, location.host));
-      case 'chog': return show(chogHtml({ step: chog, wallets: auth.wallets, wallet: chogWallet?.name ?? '', ready: auth.config !== null, off: auth.config === false || (!!auth.config && !auth.config.wallet) }, location.host));
+      case 'auth': return show(authHtml({ config: auth.config, session: auth.session, wallets: auth.wallets, busy: auth.busy, message: auth.message, pickWallet, mobile: isMobileBrowser(), pageUrl: walletPageUrl() }, location.host));
+      case 'chog': return show(chogHtml({ step: chog, wallets: auth.wallets, wallet: chogWallet?.name ?? '', ready: auth.config !== null && walletsReady, off: auth.config === false || (!!auth.config && !auth.config.wallet), mobile: isMobileBrowser(), pageUrl: walletPageUrl() }, location.host));
       case 'nick': {
         show(nickHtml(c, nickError, nickSaved));
         const inp = document.getElementById('nickin') as HTMLInputElement | null;
@@ -548,7 +556,8 @@ async function start() {
     // Build the world (and bake the map if needed) after the loading card has painted.
     requestAnimationFrame(() => setTimeout(() => {
       if (online) beginOnlineWorld(); else beginWorld();
-      setTimeout(() => go('loaded'), 350);
+      // A tab hidden or a window left while the deploy card showed starts the match paused, never unattended.
+      setTimeout(() => { go('loaded'); if (phase === 'play' && (document.hidden || focusLost)) go('pause'); }, 350);
     }, 30));
   }
 
@@ -693,22 +702,27 @@ async function start() {
       case 'medals': titleView = 'medals'; break;
       case 'settings': titleView = 'settings'; confirmReset = false; refreshAuth(); break;
       case 'nick': nickReturn = titleView === 'nick' ? nickReturn : titleView; titleView = 'nick'; nickError = ''; nickSaved = false; break;
-      case 'back': titleView = titleView === 'nick' ? nickReturn : titleView === 'auth' ? authReturn : 'main'; confirmReset = false; acct.message = ''; break;
+      case 'back': if (titleView === 'chog') chogStop(); titleView = titleView === 'nick' ? nickReturn : titleView === 'auth' ? authReturn : 'main'; confirmReset = false; acct.message = ''; break;
       case 'signin':
         if (titleView !== 'auth') authReturn = titleView;
-        titleView = 'auth'; pickWallet = false; auth.message = '';
+        titleView = 'auth'; pickWallet = false; auth.message = ''; auth.busy = false;
         void refreshAuth();
         break;
       case 'signin-wallet': void walletButton(); return;
       case 'chog':
         if (titleView !== 'chog' && titleView !== 'auth') authReturn = titleView;
+        chogStop();
         titleView = 'chog'; chog = { s: 'pick' };
         void refreshAuth();
         break;
-      case 'chog-switch': if (chogWallet) void chogAfterConnect(true); return;
+      // One wallet request at a time: a second tap while the wallet is asked is ignored (never two prompts).
+      case 'chog-switch': if (chogWallet && chog.s === 'network') { const t = chogRun; chogShow({ s: 'switching', wallet: chogWallet.name }); void chogAfterConnect(true, t); } return;
       case 'chog-retry': if (chogWallet) void runChog(chogWallet.id); else chog = { s: 'pick' }; break;
-      case 'chog-other': chog = { s: 'pick' }; chogWallet = null; break;
-      case 'chog-free': titleView = authReturn === 'chog' || authReturn === 'auth' ? 'main' : authReturn; chog = { s: 'pick' }; break;
+      case 'chog-account': if (chogWallet && chog.s === 'none') void runChog(chogWallet.id, true); return;
+      case 'chog-cancel': case 'chog-other': chogStop(); chog = { s: 'pick' }; chogWallet = null; break;
+      case 'chog-free': chogStop(); titleView = authReturn === 'chog' || authReturn === 'auth' ? 'main' : authReturn; chog = { s: 'pick' }; break;
+      case 'chog-recheck': acct.tokens = null; void refreshAccount(); break;
+      case 'wallet-rescan': walletsReady = false; render(); void refreshAuth(); return;
       case 'replay':
         shownTips = new Set();
         saveShownTips(localStorage, shownTips);
@@ -754,8 +768,11 @@ async function start() {
     render();
   }
 
-  overlay.addEventListener('pointerdown', (e) => {
-    if (e.pointerType === 'touch') input.mode = 'touch';
+  overlay.addEventListener('pointerdown', (e) => onOverlayPress(e));
+  // A keyboard press of a focused button (Enter or Space: the browser clicks it with detail 0) acts like a tap.
+  overlay.addEventListener('click', (e) => { if (e.detail === 0 && (e.target as HTMLElement).closest('button, [data-act], [data-go]')) onOverlayPress(e); });
+  function onOverlayPress(e: Event) {
+    if ((e as PointerEvent).pointerType === 'touch') input.mode = 'touch';
     if (!overlayInputAllowed(phase, summaryGate)) return;
     const t = e.target as HTMLElement;
     if ((t as HTMLButtonElement).disabled) return;
@@ -813,7 +830,7 @@ async function start() {
       e.stopPropagation(); // a menu press is consumed here and never reaches the game input
       go(b.dataset.go as MatchEvent);
     }
-  });
+  }
 
   overlay.addEventListener('click', (e) => {
     if ((e.target as HTMLElement).closest('[data-fs]')) goLandscape();
@@ -825,26 +842,40 @@ async function start() {
 
   // ---- Sign-in (optional; the game never waits on it) ----
   // Linked sign-ins are the account's (the site links every identity in a session to one account): nothing local.
+  let walletsReady = false;
+  let discovering: Promise<void> | null = null;
+  /** This page as a wallet app should open it (its own browser has the wallet built in): path and query kept, no hash. */
+  const walletPageUrl = () => location.href.split('#')[0];
   async function refreshAuth() {
     const [config, session, wallets] = await Promise.all([fetchAuthConfig(), fetchSession(), discoverWallets()]);
     auth.config = config;
     auth.session = config ? session : [];
     auth.wallets = wallets;
+    walletsReady = true;
     if (phase === 'title' && (titleView === 'settings' || titleView === 'auth' || titleView === 'chog')) render();
   }
   /** Continue with Wallet: one wallet signs straight away; several are listed; none shows how to get one. */
   async function walletButton() {
-    if (!auth.wallets.length) auth.wallets = await discoverWallets();
+    // A second tap while wallets are still being found joins the same search (never two connects).
+    if (auth.busy) return;
+    discovering ??= discoverWallets().then((w) => { auth.wallets = w; walletsReady = true; }).finally(() => { discovering = null; });
+    await discovering;
+    if (auth.busy) return;
     if (auth.wallets.length === 1) { void doWalletSignIn(auth.wallets[0].id); return; }
     pickWallet = true;
     render();
   }
   async function doWalletSignIn(id: string) {
+    if (auth.busy) return;
     auth.busy = true;
-    auth.message = 'Sign the message in your wallet (free, no transaction)';
+    auth.message = 'Approve in your wallet';
     render();
-    try {
-      await walletSignIn(id);
+    const who = await walletSignIn(id, () => { auth.message = 'Sign the message in your wallet (free, no transaction)'; if (phase === 'title') render(); });
+    if (typeof who === 'string') {
+      // The flow's own words, never the wallet's raw error text.
+      auth.message = CHOG_ERRORS[who];
+      auth.busy = false;
+    } else {
       auth.session = await fetchSession();
       auth.message = '';
       // A new identity in the session: reload the account (the same account if one was already signed in) and its Chogs.
@@ -853,13 +884,23 @@ async function start() {
       if (net && net.state !== 'match') { net.close(); net = null; }
       await refreshAccount();
       auth.busy = false;
+      watchSignedWallet(id);
       if (titleView === 'auth') titleView = authReturn;
-    } catch (err) {
-      const code = (err as { code?: number })?.code;
-      auth.message = code === 4001 ? 'Cancelled in your wallet' : err instanceof Error ? err.message : 'Wallet sign-in failed';
-      auth.busy = false;
     }
     if (phase === 'title') render();
+  }
+  /**
+   * After a wallet sign-in: the session stays on the address that signed (the server's truth). If the wallet switches
+   * to another account, say so once, and how to use the new one.
+   */
+  let signedUnwatch: () => void = () => undefined;
+  function watchSignedWallet(id: string) {
+    signedUnwatch();
+    const signed = new Set(acct.identities.filter((i) => i.provider === 'wallet').map((i) => i.label.toLowerCase()));
+    signedUnwatch = watchWallet(id, { accounts: (a) => {
+      const now = a[0]?.toLowerCase();
+      if (now && ![...signed].some((l) => now.startsWith(l.slice(0, 6)) && now.endsWith(l.slice(-4)))) toast('Your wallet switched account. Enter with CHOG to use the new one.');
+    } });
   }
   // ---- Enter with CHOG (CF): connect -> Monad -> CHOG eligibility -> signature -> server session -> your Chog ----
   const chogShow = (st: ChogStep) => {
@@ -868,33 +909,64 @@ async function start() {
     if (__TEST_HOOKS__) document.body.dataset.chogTrail = `${document.body.dataset.chogTrail ?? ''}${document.body.dataset.chogTrail ? ',' : ''}${st.s}`;
     if (phase === 'title' && titleView === 'chog') render();
   };
-  async function runChog(id: string) {
+  /** Ends the running flow (if any): later answers from the wallet are ignored, its events unheard. */
+  function chogStop() { chogRun++; chogUnwatch(); chogUnwatch = () => undefined; }
+  const BUSY_STEPS = new Set<ChogStep['s']>(['connecting', 'switching', 'checking', 'signing', 'verifying', 'loading']);
+  async function runChog(id: string, otherAccount = false) {
+    // One flow at a time: a wallet tapped while another request is open waits for that one to end or be cancelled.
+    if (BUSY_STEPS.has(chog.s)) return;
+    chogStop();
+    const t = chogRun;
     chogWallet = auth.wallets.find((w) => w.id === id) ?? { id, name: 'Wallet' };
     chogShow({ s: 'connecting', wallet: chogWallet.name });
-    const c = await chogConnect(id);
+    const c = otherAccount ? await chogPickAccount(id) : await chogConnect(id);
+    if (t !== chogRun) return;
     if (typeof c === 'string') return chogShow({ s: 'error', code: c });
     chogAddr = c.address;
-    await chogAfterConnect(false);
+    // The wallet changes under the flow: another account starts over with it; Monad chosen in the wallet continues; a
+    // locked or disconnected wallet stops with a way on. Only until the signature is sent.
+    chogUnwatch = watchWallet(id, {
+      accounts: (a) => {
+        if (t !== chogRun || !['network', 'switching', 'checking', 'none', 'signing'].includes(chog.s)) return;
+        if (!a[0]) { chogStop(); chogShow({ s: 'error', code: 'no_account' }); return; }
+        if (a[0].toLowerCase() === chogAddr.toLowerCase()) return;
+        chogAddr = a[0];
+        chogStop();
+        const t2 = chogRun;
+        void chogAfterConnect(false, t2);
+      },
+      chain: (hex) => {
+        if (t !== chogRun || chog.s !== 'network' || parseInt(hex, 16) !== parseInt(MONAD_CHAIN_HEX, 16)) return;
+        void chogAfterConnect(false, t);
+      },
+      disconnect: () => { if (t === chogRun && BUSY_STEPS.has(chog.s) && chog.s !== 'verifying' && chog.s !== 'loading') { chogStop(); chogShow({ s: 'error', code: 'no_account' }); } },
+    });
+    await chogAfterConnect(false, t);
   }
-  async function chogAfterConnect(askSwitch: boolean) {
+  async function chogAfterConnect(switchNow: boolean, t: number) {
     const id = chogWallet!.id;
-    const n = await chogNetwork(id, askSwitch);
+    const n = await chogNetwork(id, switchNow);
+    if (t !== chogRun) return;
     if (n === 'wrong') return chogShow({ s: 'network', wallet: chogWallet!.name });
     if (n !== 'ok') return chogShow({ s: 'error', code: n });
-    chogShow({ s: 'checking' });
-    const el = await chogEligibility(chogAddr);
+    chogShow({ s: 'checking', address: chogAddr });
+    const addr = chogAddr;
+    const el = await chogEligibility(addr);
+    if (t !== chogRun) return;
     if (typeof el === 'string') return chogShow({ s: 'error', code: el });
-    if (el.count === 0) return chogShow({ s: 'none' });
+    if (el.count === 0) return chogShow({ s: 'none', address: addr });
     chogShow({ s: 'signing', count: el.count, best: el.best });
-    const who = await chogSign(id, chogAddr, () => chogShow({ s: 'verifying' }));
+    const who = await chogSign(id, addr, () => { if (t === chogRun) chogShow({ s: 'verifying' }); });
+    if (t !== chogRun) return;
+    chogUnwatch();
     if (typeof who === 'string') return chogShow({ s: 'error', code: who });
     chogShow({ s: 'loading' });
     auth.session = await fetchSession();
     acct.tokens = null;
     acct.choice = null;
     if (net && net.state !== 'match') { net.close(); net = null; }
-    while (accountLoading) await new Promise((r) => setTimeout(r, 80));
     await refreshAccount();
+    watchSignedWallet(id);
     const top = (acct.tokens as account.OwnedToken[] | null)?.[0];
     const name = top ? top.oneOfOne ?? `Chog #${top.metadataId}` : 'your Chog';
     chog = { s: 'done', name };
@@ -985,11 +1057,26 @@ async function start() {
     if (net && net.state !== 'match' && net.state !== 'reconnecting') { net.close(); net = null; }
     render();
   }
-  let accountLoading = false;
-  /** Reloads the account from the site: the one source of progression. `loaded` runs once the profile is in. */
-  async function refreshAccount(loaded?: () => void) {
-    if (accountLoading) return;
-    accountLoading = true;
+  let accountLoading: Promise<void> | null = null;
+  let accountAgain = false;
+  /**
+   * Reloads the account from the site: the one source of progression. `loaded` runs once the profile is in. A call
+   * while a load is running gets one more load after it (that one sees what changed since, e.g. a purchase), and both
+   * callers wait for it, so the screen never keeps showing the older account.
+   */
+  async function refreshAccount(loaded?: () => void): Promise<void> {
+    if (accountLoading) {
+      accountAgain = true;
+      await accountLoading;
+      if (accountLoading) await accountLoading;
+      loaded?.();
+      return;
+    }
+    accountLoading = loadAccount(loaded);
+    try { await accountLoading; } finally { accountLoading = null; }
+    if (accountAgain) { accountAgain = false; await refreshAccount(); }
+  }
+  async function loadAccount(loaded?: () => void): Promise<void> {
     try {
       acct.config = await account.gameConfig();
       if (!acct.config) return;
@@ -1013,7 +1100,6 @@ async function start() {
         if (!acct.choice && acct.tokens.length) acct.choice = { tokenId: acct.tokens[0].tokenId };
       }
     } finally {
-      accountLoading = false;
       if (phase === 'title' && titleView !== 'nick' && titleView !== 'howto') render();
     }
   }
@@ -1199,7 +1285,10 @@ async function start() {
     practiceTicket = null;
     const runId = t?.runId ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
     const before = acct.profile ? { xp: acct.profile.xp, shards: acct.profile.shards } : null;
+    const run = runIndex;
     void account.practice({ runId, ticket: t?.ticket, demo, ...facts, seconds: Math.max(1, seconds) }).then(async (r) => {
+      // A slow answer for an earlier run never overwrites the results of the run on screen now.
+      if (run !== runIndex) { if (r?.reward && (r.reward.xp || r.reward.shards)) await refreshAccount(); return; }
       if (r?.ok && acct.profile) {
         if (r.records) acct.profile.practice = r.records;
         if (r.medals) acct.profile.medals = r.medals;
@@ -1281,6 +1370,8 @@ async function start() {
   window.addEventListener('popstate', () => {
     if (phase === 'title' && titleView !== 'main') { titleView = titleView === 'nick' ? nickReturn : 'main'; confirmReset = false; render(); }
     else if (phase === 'play') go('pause');
+    // Back again on the pause card: keep a guard entry, so only the card's own Leave leaves the match.
+    if (phase === 'pause') { try { history.pushState({ rz: 1 }, ''); } catch { /* ignore */ } }
   });
   // Leaving the tab pauses the match: the sim must never run while nobody is watching. Online the match goes on, so
   // every control is released at once (SB): the render loop stops with the page and would never send the release.
@@ -1290,6 +1381,9 @@ async function start() {
     if (document.hidden && phase === 'play') go('pause');
   });
   window.addEventListener('pagehide', releaseOnline);
+  // Back from Google by the browser's own Back (page restored from the back-forward cache): the sign-in sheet is
+  // usable again, never stuck on "Opening Google".
+  window.addEventListener('pageshow', (e) => { if (e.persisted) { auth.busy = false; auth.message = ''; if (phase === 'title') render(); } });
   // Every resize re-lays the stage out first (a phone turning upright turns the stage, src/ui/stage.ts), then the
   // canvas follows at once. An orientation flip of the browser mid-run moves every thumb position on the glass, so the
   // run pauses (same run, nothing lost; Resume continues) and every held stick/key is released: their coordinates
@@ -1319,7 +1413,9 @@ async function start() {
   document.addEventListener('fullscreenchange', onFullscreen);
   document.addEventListener('webkitfullscreenchange', onFullscreen);
   // Losing window focus (alt-tab, notification shade, another window) pauses too.
+  window.addEventListener('focus', () => { focusLost = false; });
   window.addEventListener('blur', () => {
+    focusLost = true;
     releaseOnline();
     if (phase === 'play') go('pause');
   });
@@ -1587,6 +1683,8 @@ async function start() {
     if (input.takePause()) {
       if (phase === 'play') go('pause');
       else if (phase === 'pause') go('resume');
+      // Esc closes a sheet or sub-screen of the hub (Back), like its close button.
+      else if (phase === 'title' && titleView !== 'main' && overlayInputAllowed(phase, summaryGate)) menuAct('back');
     }
 
     pollOnline();

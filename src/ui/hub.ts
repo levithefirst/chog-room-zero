@@ -18,7 +18,7 @@ import { medalSvg, portraitSvg, tokenSvg } from './art';
 import { displayName } from './profile';
 import { TICKET_WARN, tierBadge, type AcctView } from './account';
 import { esc, type ScreenCtx } from './screens';
-import { CHOG_ERRORS, type ChogStep } from './auth';
+import { CHOG_ERRORS, walletOffers, type ChogStep, type WalletChoice } from './auth';
 
 export type PlayMode = 'solo' | '1v1' | '3v3' | '5v5';
 
@@ -119,7 +119,10 @@ function identity(c: HubCtx): string {
   // Your Chog is your identity: shown by name and tier once verified (or demo); otherwise the way to bring it.
   const chog = k.source !== 'free'
     ? `<span class="chog-chip${one ? ' one' : ''}" style="--accent:${one ? hexColor(one.color) : 'var(--chog-pink)'}">${tierBadge(k.tokenTier ?? k.tier, k.source === 'demo')}<b>${one ? esc(one.name) : `Chog #${k.metadataId}`}</b>${k.source === 'token' ? '<i class="ok" title="Verified on Monad">✓</i>' : ''}</span>`
-    : a.hasWallet && a.tokens && !a.tokens.length ? '<span class="chog-chip none">No Chog · Free class</span>'
+    // Monad could not be read: say so and offer the read again (never "No Chog" for a holder whose read failed).
+    : a.hasWallet && a.tokensError ? '<button class="chog-chip none" data-act="chog-recheck" id="chog-recheck">Chog check failed · Retry</button>'
+    // Signed in with a wallet that holds none: a way to bring the wallet that does.
+    : a.hasWallet && a.tokens && !a.tokens.length ? '<button class="chog-chip none" data-act="chog" id="chog-other-wallet">No Chog · Use another wallet</button>'
       : `<button class="chog-cta" data-act="chog" id="chog-cta"><span>Enter with CHOG</span></button>`;
   return `<div class="ident">
 <button class="player-chip" data-act="${nick ? 'nick' : 'career'}" aria-label="${nick ? 'Set your callsign' : 'Career'}">${tokenSvg(fav ? fav.accent : null, fav?.id)}<span class="pc-txt"><b id="callsign">${esc(displayName(c.profile))}</b>${nick ? `<i class="new edit">${ICON.edit}</i>` : ''}
@@ -211,7 +214,9 @@ function playBar(c: HubCtx): string {
   let status = '';
   if (sel === '5v5' && lock) {
     disabled = true;
-    status = `<p class="status warn" id="lockwhy"><b>CHOG HOLDERS ONLY</b> · ${esc(lock)}</p>${!c.acct.signedIn || !c.acct.hasWallet ? '<button class="btn small" data-act="chog">Enter with CHOG</button>' : ''}`;
+    status = `<p class="status warn" id="lockwhy"><b>CHOG HOLDERS ONLY</b> · ${esc(lock)}</p>${!c.acct.signedIn || !c.acct.hasWallet ? '<button class="btn small" data-act="chog">Enter with CHOG</button>'
+      : c.acct.tokensError ? '<button class="btn small" data-act="chog-recheck">Check again</button>'
+      : c.acct.tokens && !c.acct.tokens.length ? '<button class="btn small" data-act="chog">Use a wallet with a Chog</button>' : ''}`;
   }
   if (sel !== 'solo' && !v.url) { disabled = true; status = '<p class="status warn">Online unavailable</p>'; }
   if (v.follower && sel !== 'solo') { disabled = true; status = '<p class="status">Leader starts the match</p>'; }
@@ -409,7 +414,7 @@ ${rewards}
 }
 
 // ---- Sign in (a sheet over whatever screen asked for it; never routed through Settings) ----
-export interface AuthSheet { config: { google: boolean; wallet: boolean } | null | false; session: { provider: 'google' | 'wallet'; label: string }[]; wallets: { id: string; name: string }[]; busy: boolean; message: string; pickWallet: boolean }
+export interface AuthSheet { config: { google: boolean; wallet: boolean } | null | false; session: { provider: 'google' | 'wallet'; label: string }[]; wallets: WalletChoice[]; busy: boolean; message: string; pickWallet: boolean; mobile?: boolean; pageUrl?: string }
 
 const G_ICON = '<svg viewBox="0 0 24 24" class="ico brand" aria-hidden="true"><path d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3z" fill="#4285F4"/><path d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22z" fill="#34A853"/><path d="M6.4 14a6 6 0 0 1 0-3.9V7.5H3.1a10 10 0 0 0 0 9z" fill="#FBBC05"/><path d="M12 5.9c1.5 0 2.8.5 3.8 1.5l2.9-2.9A10 10 0 0 0 3.1 7.5l3.3 2.6C7.2 7.7 9.4 5.9 12 5.9z" fill="#EA4335"/></svg>';
 const W_ICON = '<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M3 7h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM3 7l13-3v3M16 13h2"/></svg>';
@@ -423,8 +428,8 @@ export function authHtml(s: AuthSheet, host: string): string {
   let wallet = '';
   if (!has('wallet')) {
     wallet = `<button class="btn auth-btn" data-act="signin-wallet"${walletOff || s.busy ? ' disabled' : ''}>${W_ICON}<span>Continue with Wallet</span></button>`;
-    if (s.pickWallet && s.wallets.length > 1) wallet += `<div class="wallet-list">${s.wallets.map((w) => `<button class="btn small" data-wallet="${esc(w.id)}">${esc(w.name)}</button>`).join('')}</div>`;
-    if (s.pickWallet && !s.wallets.length) wallet += `<p class="note small" id="nowallet">No wallet in this browser</p><div class="wallet-list"><a class="btn small" href="https://metamask.app.link/dapp/${esc(host)}" rel="noopener">Open in MetaMask</a></div>`;
+    if (s.pickWallet && s.wallets.length > 1) wallet += `<div class="wallet-grid">${s.wallets.map((w) => walletButtonHtml(w, 'data-wallet', s.busy)).join('')}</div>`;
+    if (s.pickWallet && !s.wallets.length) wallet += noWalletHtml(!!s.mobile, s.pageUrl ?? `https://${host}/`, 'nowallet');
   }
   return `<div class="card dialog auth-sheet" id="authsheet" role="dialog" aria-label="Sign in">
 <button class="icon-btn small close" data-act="back" aria-label="Close">×</button>
@@ -434,8 +439,29 @@ ${s.config === false ? '<p class="note warn" id="authmsg">Sign-in unavailable ri
 ${s.session.length ? '<button class="btn small" data-act="signout">Sign out</button>' : ''}</div>`;
 }
 
+// ---- Wallet chooser (FS, owner 2026-10-17: logos, more wallets, no dead ends) ----
+/** A wallet's mark: our vendored logo for a known wallet, else the icon it announced (an <img>, never inline markup). */
+function walletMark(w: { logo: string | null; icon: string | null }): string {
+  if (w.logo) return `<span class="wmark">${w.logo}</span>`;
+  if (w.icon) return `<span class="wmark"><img src="${esc(w.icon)}" alt="" width="24" height="24"></span>`;
+  return `<span class="wmark">${W_ICON}</span>`;
+}
+export function walletButtonHtml(w: WalletChoice, attr: 'data-wallet' | 'data-chogwallet', busy = false): string {
+  return `<button class="btn wallet-btn" ${attr}="${esc(w.id)}"${busy ? ' disabled' : ''}>${walletMark(w)}<span class="wname">${esc(w.name)}</span><small>Detected</small></button>`;
+}
+/**
+ * No wallet in this browser. Desktop: get one (each install page). Phone: open this page inside a wallet app, whose own
+ * browser has the wallet built in (links documented by each wallet). And a look-again that needs no reload.
+ */
+export function noWalletHtml(mobile: boolean, pageUrl: string, id = 'chogstate'): string {
+  const offers = walletOffers(mobile, pageUrl);
+  const links = offers.map((o) => `<a class="btn wallet-btn" href="${esc(o.href)}" rel="noopener"${mobile ? '' : ' target="_blank"'} data-offer="${esc(o.rdns)}"><span class="wmark">${o.logo}</span><span class="wname">${mobile ? `Open in ${esc(o.name)}` : esc(o.name)}</span><small>${mobile ? 'App' : 'Get'}</small></a>`).join('');
+  const lede = mobile ? 'No wallet in this browser. Open Room Zero in your wallet app:' : 'No wallet in this browser. Install one, then look again:';
+  return `<p class="note" id="${id}" data-state="nowallet">${lede}</p><div class="wallet-grid">${links}</div><div class="btns"><button class="btn small" data-act="wallet-rescan">Look again</button></div>`;
+}
+
 // ---- Enter with CHOG (CF): your Chog is your game identity. Ownership = eligibility; the signature = authentication ----
-export interface ChogSheet { step: ChogStep; wallets: { id: string; name: string }[]; wallet: string; ready: boolean; off: boolean }
+export interface ChogSheet { step: ChogStep; wallets: WalletChoice[]; wallet: string; ready: boolean; off: boolean; mobile?: boolean; pageUrl?: string }
 
 const CHOG_MARK = '<svg viewBox="0 0 120 120" class="chog-mark" aria-hidden="true"><circle cx="60" cy="60" r="40" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="10 7"/><path d="M60 22l8 14 15-6-3 16 15 5-12 11 9 13-16 1-1 16-14-8-12 11-4-16-16 3 7-15-14-8 15-6-4-16 16 5z" fill="#6B3FA0" stroke="#0E091C" stroke-width="3"/><ellipse cx="60" cy="66" rx="17" ry="13" fill="#FFF8E7"/><circle cx="53" cy="63" r="3.4" fill="#0E091C"/><circle cx="67" cy="63" r="3.4" fill="#0E091C"/><circle cx="47" cy="71" r="3" fill="#FF6B9D" opacity=".85"/><circle cx="73" cy="71" r="3" fill="#FF6B9D" opacity=".85"/></svg>';
 
@@ -446,23 +472,26 @@ export function chogHtml(c: ChogSheet, host: string): string {
   const st = c.step;
   const at = st.s === 'pick' || st.s === 'connecting' || st.s === 'network' ? 0 : st.s === 'checking' || st.s === 'none' ? 1 : st.s === 'signing' || st.s === 'verifying' ? 2 : st.s === 'error' ? -1 : 3;
   const track = `<ol class="chog-track" aria-label="Steps">${CHOG_TRACK.map((t, i) => `<li class="${i < at ? 'done' : i === at ? 'now' : ''}">${t}</li>`).join('')}</ol>`;
-  const busy = (t: string, sub = '', key: string = st.s) => `<div class="chog-busy" id="chogstate" data-state="${key}"><i class="spin" aria-hidden="true"></i><p><b>${t}</b>${sub ? `<small>${sub}</small>` : ''}</p></div>`;
+  // Every waiting state can be left (a wallet that never answers is never a dead end).
+  const busy = (t: string, sub = '', key: string = st.s) => `<div class="chog-busy" id="chogstate" data-state="${key}"><i class="spin" aria-hidden="true"></i><p><b>${t}</b>${sub ? `<small>${sub}</small>` : ''}</p></div>${key === 'finding' ? '' : '<div class="btns"><button class="btn small" data-act="chog-cancel">Cancel</button></div>'}`;
+  const short = (a: string) => (a.length > 12 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
   let body = '';
   switch (st.s) {
     case 'pick':
       if (c.off) body = '<p class="note warn" id="chogstate" data-state="off">Sign-in is not available right now.</p>';
       else if (!c.ready) body = busy('Looking for wallets', '', 'finding');
-      else if (!c.wallets.length) body = `<p class="note" id="chogstate" data-state="nowallet">No wallet in this browser.</p><div class="btns"><a class="btn" href="https://metamask.app.link/dapp/${esc(host)}" rel="noopener">Open in MetaMask</a></div>`;
+      else if (!c.wallets.length) body = noWalletHtml(!!c.mobile, c.pageUrl ?? `https://${host}/`);
       else body = `<p class="chog-lede" id="chogstate" data-state="pick">Your Chog is your operator. We look for it in your wallet, then you sign a free message to prove the wallet is yours.</p>
-<div class="chog-wallets">${c.wallets.map((w) => `<button class="btn chog-wallet" data-chogwallet="${esc(w.id)}">${esc(w.name)}</button>`).join('')}</div>`;
+<div class="wallet-grid chog-wallets">${c.wallets.map((w) => walletButtonHtml(w, 'data-chogwallet')).join('')}</div>`;
       break;
-    case 'connecting': body = busy(`Connecting to ${esc(st.wallet)}`, 'Approve in your wallet'); break;
-    case 'network': body = `<p class="note warn" id="chogstate" data-state="network"><b>Switch networks to continue.</b> Chog Genesis lives on Monad.</p><div class="btns"><button class="btn primary" data-act="chog-switch">Switch to Monad</button><button class="btn" data-act="chog-other">Back</button></div>`; break;
-    case 'checking': body = busy('Looking for your Chog', 'Reading Monad'); break;
-    case 'none': body = `<p class="note warn" id="chogstate" data-state="none"><b>CHOG not found in this wallet.</b> You can still play every mode except 5v5.</p><div class="btns"><button class="btn" data-act="chog-other">Try another wallet</button><button class="btn primary" data-act="chog-free">Play free</button></div>`; break;
+    case 'connecting': body = busy(`Connecting to ${esc(st.wallet)}`, 'Approve in your wallet. Locked? Unlock it first.'); break;
+    case 'network': body = `<p class="note warn" id="chogstate" data-state="network"><b>Switch networks to continue.</b> Your wallet is on another network; Chog Genesis lives on Monad. If your wallet does not have Monad yet, it will be offered.</p><div class="btns"><button class="btn primary" data-act="chog-switch">Switch to Monad</button><button class="btn" data-act="chog-other">Back</button></div>`; break;
+    case 'switching': body = busy('Switching to Monad', `Approve in ${esc(st.wallet)}.`); break;
+    case 'checking': body = busy('Looking for your Chog', `Connected ${esc(short(st.address))} · reading Monad`); break;
+    case 'none': body = `<p class="note warn" id="chogstate" data-state="none"><b>CHOG not found in this wallet.</b> ${esc(short(st.address))} holds no Chog Genesis on Monad. You can still play every mode except 5v5.</p><div class="btns"><button class="btn" data-act="chog-account">Use another account</button><button class="btn" data-act="chog-other">Try another wallet</button><button class="btn primary" data-act="chog-free">Play free</button></div>`; break;
     case 'signing': body = busy(`${st.count} Chog found${st.best ? ` · best ${esc(st.best)}` : ''}`, 'Sign the message in your wallet. It is free and sends nothing.'); break;
-    case 'verifying': body = busy('Checking your signature'); break;
-    case 'loading': body = busy('Verifying your Chog', 'Reading your tokens on Monad'); break;
+    case 'verifying': body = busy('Checking your signature', 'Signature received'); break;
+    case 'loading': body = busy('Verifying your Chog', 'Entering Room Zero'); break;
     case 'done': body = `<p class="note good" id="chogstate" data-state="done"><b>CHOG verified.</b> ${esc(st.name)}</p>`; break;
     case 'error': body = `<p class="note warn" id="chogstate" data-state="error" data-code="${st.code}"><b>${esc(CHOG_ERRORS[st.code])}</b></p><div class="btns"><button class="btn primary" data-act="chog-retry">Try again</button><button class="btn" data-act="chog-other">Back</button></div>`; break;
   }
