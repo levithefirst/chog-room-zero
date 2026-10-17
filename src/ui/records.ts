@@ -6,16 +6,19 @@ export interface Best {
   bestWinSeconds: number | null; mostKills: number; runs: number; wins: number;
   // Career totals (RC-7, profile and medals). Older saves lack them; loadRecords fills 0.
   kills: number; bullets: number; hits: number; damageDealt: number; damageTaken: number; seconds: number; pickups: number; abilities: number;
+  // GP: revives given, loot bags taken, grenades thrown (medals).
+  revives: number; loots: number; thrown: number;
 }
 export interface Records { overall: Best; heroes: Record<string, Best> }
 export interface RunSummary {
   hero: string; won: boolean; seconds: number; kills: number;
   bullets?: number; hits?: number; damageDealt?: number; damageTaken?: number; pickups?: number; abilities?: number;
+  revives?: number; loots?: number; thrown?: number;
 }
-const TOTALS = ['kills', 'bullets', 'hits', 'damageDealt', 'damageTaken', 'seconds', 'pickups', 'abilities'] as const;
+const TOTALS = ['kills', 'bullets', 'hits', 'damageDealt', 'damageTaken', 'seconds', 'pickups', 'abilities', 'revives', 'loots', 'thrown'] as const;
 
 export const RECORDS_KEY = 'chog-room-zero:records:v1';
-const empty = (): Best => ({ bestWinSeconds: null, mostKills: 0, runs: 0, wins: 0, kills: 0, bullets: 0, hits: 0, damageDealt: 0, damageTaken: 0, seconds: 0, pickups: 0, abilities: 0 });
+const empty = (): Best => ({ bestWinSeconds: null, mostKills: 0, runs: 0, wins: 0, kills: 0, bullets: 0, hits: 0, damageDealt: 0, damageTaken: 0, seconds: 0, pickups: 0, abilities: 0, revives: 0, loots: 0, thrown: 0 });
 // Fill fields an older save does not have (and drop non-numbers), so totals always add up.
 function norm(b: Partial<Best> | undefined): Best {
   const e = empty();

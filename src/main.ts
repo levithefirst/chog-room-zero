@@ -29,7 +29,8 @@ import { DEFAULT_SETTINGS, QUALITY_DPR, SETTINGS_KEY, STICK_PX, displayName, loa
 import { MEDALS, awardMedals, loadMedals, type MedalDef, type Unlocked } from './ui/medals';
 import { TIPS_KEY, loadShownTips, nextTip, saveShownTips, tipText, type TipId } from './ui/tips';
 import { esc, howtoHtml, medalCard, nickHtml, resultsHtml, selectHtml, settingsHtml, type AuthView } from './ui/screens';
-import { authHtml, chogHtml, boardScreenHtml, careerHtml, classOf, hubHtml, medalsScreenHtml, onlineResultsHtml, upgradesHtml, upgradesReady, type HubCtx, type NetView, type PlayMode } from './ui/hub';
+import { authHtml, chogHtml, boardScreenHtml, careerHtml, classOf, hubHtml, medalsScreenHtml, onlineResultsHtml, topbar, upgradesHtml, upgradesReady, type HubCtx, type NetView, type PlayMode } from './ui/hub';
+import { docsHtml, filterDocs } from './ui/docs';
 import { CHOG_ERRORS, chogConnect, chogEligibility, chogNetwork, chogPickAccount, chogSign, discoverWallets, fetchAuthConfig, fetchSession, googleSignIn, isMobileBrowser, signOut, walletSignIn, watchWallet, MONAD_CHAIN_HEX, type ChogStep } from './ui/auth';
 import { SIDEGRADES } from './sim/operators';
 import { createAutopilot, type Autopilot } from './debug/autopilot';
@@ -157,7 +158,16 @@ async function start() {
     : 'Guest';
   // Onboarding: shown once on first launch, re-openable from the title.
   const ONBOARD_KEY = 'chog.onboarded';
-  type TitleView = 'main' | 'howto' | 'demo' | 'settings' | 'nick' | 'upgrades' | 'ranks' | 'career' | 'medals' | 'auth' | 'chog';
+  type TitleView = 'main' | 'howto' | 'docs' | 'demo' | 'settings' | 'nick' | 'upgrades' | 'ranks' | 'career' | 'medals' | 'auth' | 'chog';
+  // GP Game Docs: the section opened when the screen is shown (the search box filters the rest live).
+  let docsOpen: string | null = null;
+  document.addEventListener('input', (e) => {
+    const t = e.target as HTMLInputElement | null;
+    if (t?.id !== 'docsq') return;
+    const n = filterDocs(document, t.value);
+    const none = document.getElementById('docsnone');
+    if (none) none.hidden = n > 0;
+  });
   let titleView: TitleView = (() => { try { return localStorage.getItem(ONBOARD_KEY) === '1' ? 'main' : 'howto'; } catch { return 'main'; } })();
   let lastRun: { newBest: { time: boolean; kills: boolean }; earned: MedalDef[]; saved: 'account' | 'session' | 'saving' | 'failed'; reward?: RewardView | null } | null = null;
   // The signed start ticket of the current signed-in run (the site pays a run only with it).
@@ -502,6 +512,7 @@ async function start() {
     const c = ctx();
     switch (titleView) {
       case 'howto': return show(howtoHtml(c));
+      case 'docs': return show(docsHtml(input.mode === 'touch', docsOpen, topbar('Game Docs')));
       case 'demo': return showDemo();
       case 'settings': return show(settingsHtml(c, confirmReset));
       case 'upgrades': return show(upgradesHtml(c));
@@ -679,6 +690,10 @@ async function start() {
   function menuAct(a: string) {
     switch (a) {
       case 'howto': titleView = 'howto'; break;
+      case 'docs':
+        // From the first-launch card, reading the docs counts as having seen it.
+        if (titleView === 'howto') { try { localStorage.setItem(ONBOARD_KEY, '1'); } catch { /* storage blocked */ } }
+        titleView = 'docs'; docsOpen = 'how-to-play'; break;
       case 'howto-close': closeHowto(); break;
       case 'play': hubPlay(); return;
       case 'demo-online': if (identity.tokenId && tierOfMetadataId(Number(identity.tokenId))) setChoice({ demo: Number(identity.tokenId) }); break;
@@ -697,7 +712,14 @@ async function start() {
       case 'demo': titleView = 'demo'; break;
       case 'demo-close': titleView = 'main'; break;
       case 'upgrades': titleView = 'upgrades'; void refreshAccount(); break;
-      case 'ranks': titleView = 'ranks'; void refreshAccount(); break;
+      case 'ranks': titleView = 'ranks'; void loadBoard(); break;
+      // GP leaderboards: Solo / Online tabs, pages, retry, and "show me on the boards".
+      case 'board-solo': acct.boardTab = 'solo'; acct.boardOffset = 0; void loadBoard(); break;
+      case 'board-online': acct.boardTab = 'online'; acct.boardOffset = 0; void loadBoard(); break;
+      case 'board-next': if (acct.boardOffset + BOARD_PAGE < acct.boardTotal) { acct.boardOffset += BOARD_PAGE; void loadBoard(); } break;
+      case 'board-prev': acct.boardOffset = Math.max(0, acct.boardOffset - BOARD_PAGE); void loadBoard(); break;
+      case 'board-retry': void loadBoard(); break;
+      case 'board-hide': if (acct.boardMe) void account.setPrefs({ hidden: !acct.boardMe.hidden }).then(() => loadBoard()); break;
       case 'career': titleView = 'career'; void refreshAccount(); break;
       case 'medals': titleView = 'medals'; break;
       case 'settings': titleView = 'settings'; confirmReset = false; refreshAuth(); break;
@@ -1064,6 +1086,22 @@ async function start() {
    * while a load is running gets one more load after it (that one sees what changed since, e.g. a purchase), and both
    * callers wait for it, so the screen never keeps showing the older account.
    */
+  // GP: one page of the open board, with your own rank. A failure keeps what was shown and offers a retry.
+  const BOARD_PAGE = 20;
+  let boardSeq = 0;
+  async function loadBoard(draw = true) {
+    const seq = ++boardSeq;
+    acct.boardLoading = true;
+    acct.boardError = false;
+    if (draw) render();
+    const b = await account.leaderboard(acct.boardTab, acct.boardOffset);
+    if (seq !== boardSeq) return;
+    acct.boardLoading = false;
+    if (!b) acct.boardError = true;
+    else { acct.board = b.rows ?? []; acct.boardMe = b.me ?? null; acct.boardTotal = b.total ?? acct.board.length; }
+    if (draw) render();
+  }
+
   async function refreshAccount(loaded?: () => void): Promise<void> {
     if (accountLoading) {
       accountAgain = true;
@@ -1091,7 +1129,7 @@ async function start() {
       // A signed-in player plays as their favourite operator unless they picked another one this session.
       if (acct.profile?.favourite && !heroPicked && HEROES.some((x) => x.id === acct.profile!.favourite)) heroId = acct.profile.favourite;
       // The leaderboard is public: loaded whenever the database is on, signed in or not.
-      if (acct.config.db) { const b = await account.leaderboard(); acct.board = b?.rows ?? []; acct.boardMe = b?.me ?? null; }
+      if (acct.config.db) await loadBoard(false);
       if (acct.hasWallet) {
         const t = await account.loadTokens();
         acct.tokens = t?.tokens ?? [];
@@ -1268,7 +1306,10 @@ async function start() {
     if (LAB_ON) { lastRun = { newBest: { time: false, kills: false }, earned: [], saved: 'session' }; return; }
     const p = player(world);
     const seconds = Math.round(playTime);
-    const facts = { hero: heroId, won, seconds, kills: p.kills, bullets: p.bullets, hits: p.hits, damageDealt: Math.round(p.damageDealt), damageTaken: Math.round(p.damageTaken), pickups: runPickups, abilities: runAbilities, hpLeft: Math.max(0, Math.round(p.hp)) };
+    // GP: revives given and received, loot bags, grenades thrown and AI teammates lost (medals; bounded on the server).
+    const alliesLost = world.actors.filter((a) => a !== p && a.team === p.team && !a.alive).length;
+    const facts = { hero: heroId, won, seconds, kills: p.kills, bullets: p.bullets, hits: p.hits, damageDealt: Math.round(p.damageDealt), damageTaken: Math.round(p.damageTaken), pickups: runPickups, abilities: runAbilities, hpLeft: Math.max(0, Math.round(p.hp)),
+      revives: p.revives, revived: p.revived, loots: p.loots, thrown: p.thrown, alliesLost: Math.min(2, alliesLost) };
     const demo = p.power.demo;
     if (!signedIn()) {
       const r = recordBest(guestStore, facts);

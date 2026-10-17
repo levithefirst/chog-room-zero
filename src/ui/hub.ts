@@ -14,7 +14,7 @@ import type { BoardRow, Reward } from '../net/account';
 import type { PartyMember } from '../net/protocol';
 import { MEDALS } from './medals';
 import { fmtTime } from './records';
-import { medalSvg, portraitSvg, tokenSvg } from './art';
+import { RARITY_LABEL, medalSvg, portraitSvg, tokenSvg } from './art';
 import { displayName } from './profile';
 import { TICKET_WARN, tierBadge, type AcctView } from './account';
 import { esc, type ScreenCtx } from './screens';
@@ -59,7 +59,7 @@ const ICON = {
 const hexColor = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
 const pct = (a: number, b: number) => (b > 0 ? `${Math.round((a / b) * 100)}%` : '--');
 
-function topbar(title: string, right = '') {
+export function topbar(title: string, right = '') {
   return `<header class="topbar"><button class="icon-btn" data-act="back" aria-label="Back to the hub">${ICON.back}</button><h2 class="bar-title">${title}</h2><div class="bar-right">${right}</div></header>`;
 }
 
@@ -243,6 +243,7 @@ function boardPreview(c: HubCtx): string {
   const a = c.acct;
   let body: string;
   if (!a.config?.db) body = '<p class="note">Offline</p>';
+  else if (a.boardError) body = '<p class="note">Could not load</p>';
   else if (a.board === null) body = '<p class="note">…</p>';
   else if (!a.board.length) body = '<p class="note">No ranks yet</p>';
   else {
@@ -250,7 +251,7 @@ function boardPreview(c: HubCtx): string {
     const me = a.boardMe ?? a.board.find((r) => r.you) ?? null;
     body = `<table class="mini-board"><tr><th>#</th><th>Player</th><th>Kills</th><th></th></tr>${top.map(boardRow).join('')}${me && !top.some((r) => r.you) ? `<tr class="gap"><td colspan="4">…</td></tr>${boardRow(me)}` : ''}</table>`;
   }
-  return `<section class="hub-card board" id="boardpreview"><div class="card-head"><h3>Leaderboard</h3><button class="btn small" data-act="ranks">All</button></div>${body}</section>`;
+  return `<section class="hub-card board" id="boardpreview"><div class="card-head"><h3>Leaderboard <small class="note">${a.boardTab === 'solo' ? 'Solo' : 'Online'}</small></h3><button class="btn small" data-act="ranks">All</button></div>${body}</section>`;
 }
 
 function squadPanel(c: HubCtx): string {
@@ -278,9 +279,9 @@ export function hubHtml(c: HubCtx): string {
 <nav class="hub-nav" aria-label="More">
   <button class="navbtn" data-act="upgrades">${ICON.up}<span>Upgrades</span>${ready ? ` <i class="num dot">${ready}</i>` : ''}</button>
   <button class="navbtn" data-act="career">${ICON.card}<span>Career</span></button>
-  <button class="navbtn" data-act="medals">${ICON.medal}<span>Medals</span> <i class="num">${Object.keys(c.medals).length}/${MEDALS.length}</i></button>
+  <button class="navbtn" data-act="medals">${ICON.medal}<span>Medals</span> <i class="num">${MEDALS.filter((m) => c.medals[m.id]).length}/${MEDALS.length}</i></button>
   <button class="navbtn" data-act="ranks">${ICON.board}<span>Leaderboard</span></button>
-  <button class="navbtn" data-act="howto">${ICON.help}<span>Help</span></button>
+  <button class="navbtn" data-act="docs">${ICON.help}<span>Game Docs</span></button>
   <button class="navbtn demo-link" data-act="demo"><span class="demo">DEMO</span></button>
 </nav>
 <aside class="hub-right">${classOf(c.acct).source !== 'free' ? chogPanel(c) : ''}${squadPanel(c)}${boardPreview(c)}</aside>
@@ -312,17 +313,40 @@ ${a.message ? `<p class="note warn up-msg">${esc(a.message)}</p>` : ''}
 }
 
 // ---- Leaderboard (full) ----
+/** GP: the avatar beside a name: the account's favourite operator, else a plain token. */
+const avatar = (hero: string | null | undefined) => { const h = hero ? HEROES.find((x) => x.id === hero) : null; return `<span class="av">${tokenSvg(h ? h.accent : null, h?.id)}</span>`; };
+const BOARD_RULE = { solo: 'Kills in checked solo runs · then clears · then fewer runs', online: 'Kills in saved online matches · then wins · then fewer matches' } as const;
+
+/** Your own standing on the open board: rank and kills, or what to do to get one. */
+function myRank(c: ScreenCtx): string {
+  const a = c.acct, tab = a.boardTab;
+  if (!a.signedIn) return `<div class="myrank"><div><b>My rank</b><small>Sign in to keep your kills and get a rank.</small></div><button class="btn small primary" data-act="signin">Sign in</button></div>`;
+  const m = a.boardMe;
+  if (!m) return `<div class="myrank"><div><b>My rank</b><small>${tab === 'solo' ? 'Not ranked yet: finish a solo run while signed in.' : 'Not ranked yet: finish an online match.'}</small></div></div>`;
+  return `<div class="myrank me"><div><b>My rank</b><span class="num big">#${m.rank}</span><small>${esc(m.name)} · <b class="num">${m.kills}</b> kills · ${m.wins} ${tab === 'solo' ? 'clears' : 'wins'}${a.boardTotal ? ` · of ${a.boardTotal}` : ''}</small></div>
+<button class="btn small" data-act="board-hide" aria-pressed="${!m.hidden}">${m.hidden ? 'Hidden from others' : 'Shown to others'}</button></div>`;
+}
+
 export function boardScreenHtml(c: ScreenCtx): string {
-  const a = c.acct;
-  const head = '<tr><th>#</th><th>Player</th><th>Kills</th><th>Wins</th><th>Matches</th><th>Level</th><th>Rating</th><th>Chog</th></tr>';
-  const row = (r: BoardRow) => `<tr class="${r.you ? 'me' : ''}"><td class="num">${r.rank}</td><td>${esc(r.name)}${r.you ? ' (you)' : ''}</td><td class="num"><b>${r.kills}</b></td><td class="num">${r.wins}</td><td class="num">${r.matches}</td><td class="num">${r.level}</td><td class="num">${r.rating}</td><td>${r.nftTier ? tierBadge(r.nftTier) : '<span class="note">none</span>'}</td></tr>`;
+  const a = c.acct, tab = a.boardTab, solo = tab === 'solo';
+  const head = `<tr><th>#</th><th>Player</th><th>Kills</th><th>${solo ? 'Clears' : 'Wins'}</th><th>${solo ? 'Runs' : 'Matches'}</th><th>Level</th>${solo ? '' : '<th>Rating</th>'}</tr>`;
+  const row = (r: BoardRow) => `<tr class="${r.you ? 'me' : ''}"><td class="num">${r.rank}</td><td class="who">${avatar(r.hero)}<span>${esc(r.name)}${r.you ? ' <em>you</em>' : ''}</span>${r.nftTier ? ` ${tierBadge(r.nftTier)}` : ''}</td><td class="num"><b>${r.kills}</b></td><td class="num">${r.wins}</td><td class="num">${r.matches}</td><td class="num">${r.level}</td>${solo ? '' : `<td class="num">${r.rating}</td>`}</tr>`;
+  const tabs = `<div class="tabs" role="tablist">${(['solo', 'online'] as const).map((t) => `<button class="tab${t === tab ? ' on' : ''}" role="tab" aria-selected="${t === tab}" data-act="board-${t}">${t === 'solo' ? 'Solo' : 'Online'}</button>`).join('')}</div>`;
   let body: string;
-  if (!a.config?.db) body = '<p class="note warn">Offline</p>';
-  else if (a.board === null) body = '<p class="note">…</p>';
-  else if (!a.board.length) body = '<p class="note">No ranks yet</p>';
-  else body = `<table class="kv board">${head}${a.board.map(row).join('')}${a.boardMe && !a.board.some((r) => r.you) ? `<tr class="gap"><td colspan="8">…</td></tr>${row(a.boardMe)}` : ''}</table>`;
+  if (!a.config?.db) body = '<p class="note warn">Offline: the leaderboard needs the server.</p>';
+  else if (a.boardError) body = '<p class="note warn">Could not load the leaderboard.</p><div class="btns tight"><button class="btn small" data-act="board-retry">Retry</button></div>';
+  else if (a.board === null || (a.boardLoading && !a.board.length)) body = '<p class="note">Loading…</p>';
+  else if (!a.board.length) body = `<p class="note">No one on this board yet.${a.signedIn ? ' Your next run puts you on it.' : ''}</p>`;
+  else {
+    const me = a.boardMe;
+    const extra = me && !a.board.some((r) => r.you) && !me.hidden ? `<tr class="gap"><td colspan="${solo ? 6 : 7}">…</td></tr>${row(me)}` : '';
+    const from = a.boardOffset + 1, to = a.boardOffset + a.board.length;
+    const pager = a.boardTotal > a.board.length || a.boardOffset > 0
+      ? `<div class="pager"><button class="btn small" data-act="board-prev"${a.boardOffset === 0 ? ' disabled' : ''}>Prev</button><span class="num">${from}-${to} of ${a.boardTotal}</span><button class="btn small" data-act="board-next"${to >= a.boardTotal ? ' disabled' : ''}>Next</button></div>` : '';
+    body = `<div class="board-scroll"><table class="kv board${a.boardLoading ? ' loading' : ''}">${head}${a.board.map(row).join('')}${extra}</table></div>${pager}`;
+  }
   return `<div class="screen ranks">${topbar('Leaderboard')}<div class="scroll-body"><section class="hub-card wide">
-<p class="note small rankrule">Kills · then wins · then fewer matches</p>${body}</section></div></div>`;
+${tabs}${a.config?.db ? myRank(c) : ''}<p class="note small rankrule">${BOARD_RULE[tab]}</p>${body}</section></div></div>`;
 }
 
 // ---- Career (player card, online and practice) ----
@@ -368,9 +392,15 @@ ${rows([
 
 // ---- Medals ----
 export function medalsScreenHtml(c: ScreenCtx, cardHtml: (m: (typeof MEDALS)[number]) => string): string {
-  const sorted = [...MEDALS].sort((x, y) => Number(!!c.medals[y.id]) - Number(!!c.medals[x.id]));
-  return `<div class="screen medals-screen">${topbar(`Medals <span class="num">${Object.keys(c.medals).length}/${MEDALS.length}</span>`)}
-<div class="scroll-body"><div class="medals">${sorted.map(cardHtml).join('')}</div></div></div>`;
+  // GP: grouped by rarity (common to epic), earned first in each group, with a count per group.
+  const groups = (['common', 'uncommon', 'rare', 'epic'] as const).map((r) => {
+    const list = MEDALS.filter((m) => m.rarity === r).sort((x, y) => Number(!!c.medals[y.id]) - Number(!!c.medals[x.id]));
+    const got = list.filter((m) => c.medals[m.id]).length;
+    return `<h4 class="medal-group rar ${r}">${RARITY_LABEL[r]} <span class="num">${got}/${list.length}</span></h4><div class="medals">${list.map(cardHtml).join('')}</div>`;
+  }).join('');
+  const earned = MEDALS.filter((m) => c.medals[m.id]).length;
+  return `<div class="screen medals-screen">${topbar(`Medals <span class="num">${earned}/${MEDALS.length}</span>`)}
+<div class="scroll-body">${groups}</div></div>`;
 }
 
 // ---- Online results ----

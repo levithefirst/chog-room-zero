@@ -649,7 +649,7 @@ export class Lobby {
       id: room.id, mode: room.mode, demo: room.demo, private: room.private, winner: w.winner, reason, seconds: Math.round(matchSeconds(w)), endedAt: Math.floor(Date.now() / 1000),
       players: w.actors.map((a) => {
         const t = room.members[a.id].ticket;
-        return { acc: t?.acc ?? null, team: a.team, tier: a.power.tier, tok: t?.holder ? t.tok : null, mid: t?.holder ? t.mid : null, own: t?.holder ? t.own : null, kills: a.kills, damage: Math.round(a.damageDealt), left: room.left[a.id] || away[a.id], quit: away[a.id] ? room.dropStanding[a.id] : room.quit[a.id], name: a.name, hero: a.hero.id, survived: a.alive };
+        return { acc: t?.acc ?? null, team: a.team, tier: a.power.tier, tok: t?.holder ? t.tok : null, mid: t?.holder ? t.mid : null, own: t?.holder ? t.own : null, kills: a.kills, damage: Math.round(a.damageDealt), left: room.left[a.id] || away[a.id], quit: away[a.id] ? room.dropStanding[a.id] : room.quit[a.id], name: a.name, hero: a.hero.id, survived: a.alive, revives: a.revives, loots: a.loots };
       }),
     };
     this.results.set(room.id, { at: this.opts.now(), record });

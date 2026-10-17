@@ -183,6 +183,25 @@ export const MIGRATIONS: { version: number; name: string; sql: string }[] = [
       CREATE UNIQUE INDEX IF NOT EXISTS accounts_callsign_unique ON room_zero.accounts (lower(callsign)) WHERE callsign IS NOT NULL
     `,
   },
+  {
+    version: 6,
+    name: 'gameplay reality: revives, loot, grenades and allies lost per run; revives and loot per match; leaderboard visibility',
+    // Additive. lb_hidden: a player who chose not to be listed (prefs), and the production smoke's own test accounts
+    // (display name "SmokeA" / "SmokeB", never given a callsign), which were showing as the whole leaderboard. Nothing
+    // is deleted; a hidden account still sees its own rank.
+    sql: `
+      ALTER TABLE room_zero.practice_runs ADD COLUMN IF NOT EXISTS revives integer NOT NULL DEFAULT 0;
+      ALTER TABLE room_zero.practice_runs ADD COLUMN IF NOT EXISTS revived integer NOT NULL DEFAULT 0;
+      ALTER TABLE room_zero.practice_runs ADD COLUMN IF NOT EXISTS loots integer NOT NULL DEFAULT 0;
+      ALTER TABLE room_zero.practice_runs ADD COLUMN IF NOT EXISTS thrown integer NOT NULL DEFAULT 0;
+      ALTER TABLE room_zero.practice_runs ADD COLUMN IF NOT EXISTS allies_lost integer NOT NULL DEFAULT 0;
+      ALTER TABLE room_zero.match_players ADD COLUMN IF NOT EXISTS revives integer NOT NULL DEFAULT 0;
+      ALTER TABLE room_zero.match_players ADD COLUMN IF NOT EXISTS loots integer NOT NULL DEFAULT 0;
+      ALTER TABLE room_zero.accounts ADD COLUMN IF NOT EXISTS lb_hidden boolean NOT NULL DEFAULT false;
+      CREATE INDEX IF NOT EXISTS match_players_account ON room_zero.match_players(account_id);
+      UPDATE room_zero.accounts SET lb_hidden = true WHERE callsign IS NULL AND display_name ~ '^Smoke[A-Z]$'
+    `,
+  },
 ];
 
 /**

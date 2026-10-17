@@ -38,16 +38,19 @@ async function api<T>(action: string, body?: object): Promise<T | null> {
 export const gameConfig = () => api<GameConfig>('config');
 export const loadProfile = () => api<{ signedIn: boolean; progression?: boolean; identities?: { provider: 'google' | 'wallet'; label: string }[]; profile?: AccountProfile }>('profile');
 export const setCallsign = (name: string) => api<{ ok: boolean; callsign?: string; error?: string }>('callsign', { name });
-export const setPrefs = (p: { favourite?: string | null; pins?: string[] }) => api<{ ok: boolean; error?: string }>('prefs', p);
-export interface PracticeRun { runId: string; ticket?: string; demo?: boolean; hero: string; won: boolean; seconds: number; kills: number; bullets: number; hits: number; damageDealt: number; damageTaken: number; hpLeft: number; pickups: number; abilities: number }
+export const setPrefs = (p: { favourite?: string | null; pins?: string[]; hidden?: boolean }) => api<{ ok: boolean; error?: string }>('prefs', p);
+export interface PracticeRun { runId: string; ticket?: string; demo?: boolean; hero: string; won: boolean; seconds: number; kills: number; bullets: number; hits: number; damageDealt: number; damageTaken: number; hpLeft: number; pickups: number; abilities: number; revives?: number; revived?: number; loots?: number; thrown?: number; alliesLost?: number }
 /** A signed start ticket for one run: the run is paid only with it, and only once the claimed time has passed. */
 export const practiceStart = () => api<{ ok: boolean; ticket?: string; runId?: string }>('practice-start', {});
 export const practice = (r: PracticeRun) => api<{ ok: boolean; reason?: string; already?: boolean; reward?: PracticeReward; earned?: string[]; newBest?: { time: boolean; kills: boolean }; records?: Records; medals?: Record<string, string> }>('practice', r);
 export const loadTokens = () => api<{ wallet: boolean; ok?: boolean; error?: string; tokens: OwnedToken[] }>('tokens');
-export interface BoardRow { rank: number; name: string; kills: number; matches: number; wins: number; xp: number; level: number; rating: number; nftTier: Tier | null; you: boolean }
-export const leaderboard = () => api<{ progression: boolean; rows: BoardRow[]; me: BoardRow | null }>('leaderboard');
+export interface BoardRow { rank: number; name: string; kills: number; matches: number; wins: number; xp: number; level: number; rating: number; nftTier: Tier | null; hero?: string | null; you: boolean; hidden?: boolean }
+export type Board = 'solo' | 'online';
+/** GP: one page of a board (solo or online) from `offset`, with your own row and rank when you are signed in. */
+export const leaderboard = (board: Board = 'solo', offset = 0) =>
+  api<{ progression: boolean; signedIn?: boolean; rows: BoardRow[]; me: BoardRow | null; total?: number; board?: Board; offset?: number }>(`leaderboard?board=${board}&offset=${Math.max(0, Math.floor(offset))}`);
 export const buyUpgrade = (id: string) => api<{ ok: boolean; rank?: number; shards?: number; reason?: string }>('upgrade', { id });
-export const settle = (matchId: string) => api<{ ok: boolean; already?: boolean; reason?: string; error?: string; mine?: Reward | null }>('settle', { matchId });
+export const settle = (matchId: string) => api<{ ok: boolean; already?: boolean; reason?: string; error?: string; mine?: (Reward & { earned?: string[] }) | null }>('settle', { matchId });
 /** Whether a settle answer is worth asking again (no answer, the database or the game server briefly down); an
  * unknown or bad match, or a settled one, never is. */
 export const settleRetryable = (r: { ok?: boolean; error?: string } | null): boolean => !r || r.error === 'progression_offline' || r.error === 'game_server';

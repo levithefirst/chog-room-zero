@@ -86,16 +86,17 @@ describe('RC-7 medals', () => {
   });
   it('one-run medals check the run that just ended', () => {
     const s = mem();
-    const r = finish(s, run({ won: true, kills: 5, seconds: 45, bullets: 20, hits: 12, damageTaken: 0, hpLeft: 100, pickups: 3, abilities: 3 }));
-    expect(r.earned.map((m) => m.id).sort()).toEqual(['cleared', 'first-blood', 'in-and-out', 'scavenger', 'steady-hand', 'toolkit', 'untouched'].sort());
+    const r = finish(s, run({ won: true, kills: 5, seconds: 25, bullets: 20, hits: 12, damageTaken: 0, hpLeft: 100, pickups: 3, abilities: 3 }));
+    // GP: 36 medals; this run also makes Hat Trick, Brawler and Ace (all five yours, nobody lost).
+    expect(r.earned.map((m) => m.id).sort()).toEqual(['ace', 'brawler', 'cleared', 'first-blood', 'hat-trick', 'in-and-out', 'scavenger', 'steady-hand', 'toolkit', 'untouched'].sort());
     expect(r.unlocked['close-call']).toBeUndefined();
     expect(r.unlocked.survivor).toBeUndefined();
   });
-  it('boundaries: 60 s is not under 60, 49% is not 50%, 9 bullets is too few, 16 health is not 15', () => {
+  it('boundaries: 30 s is not under 30 (GP: was 60), 49% is not 50%, 9 bullets is too few, 16 health is not 15', () => {
     const s = mem();
-    const r = finish(s, run({ won: true, kills: 5, seconds: 60, bullets: 100, hits: 49, damageTaken: 1, hpLeft: 16 }));
+    const r = finish(s, run({ won: true, kills: 5, seconds: 30, bullets: 100, hits: 49, damageTaken: 1, hpLeft: 16 }));
     for (const id of ['in-and-out', 'steady-hand', 'close-call', 'untouched']) expect(r.unlocked[id]).toBeUndefined();
-    const t = finish(mem(), run({ won: true, kills: 5, seconds: 59, bullets: 9, hits: 9, hpLeft: 15 }));
+    const t = finish(mem(), run({ won: true, kills: 5, seconds: 29, bullets: 9, hits: 9, hpLeft: 15 }));
     expect(t.unlocked['in-and-out']).toBeDefined();
     expect(t.unlocked['steady-hand']).toBeUndefined();
     expect(t.unlocked['close-call']).toBeDefined();

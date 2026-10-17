@@ -332,7 +332,7 @@ describe('13: unique callsigns', () => {
     const add = (id: string, cs: string, at: string) => old.query(`INSERT INTO room_zero.accounts (id, callsign, display_name, created_at) VALUES ($1, $2, $2, $3)`, [id, cs, at]);
     await add('AAAAfirst000000', 'Viper', '2026-10-01'); await add('BBBBsecond00000', 'viper', '2026-10-02'); await add('CCCCthird000000', 'VIPER', '2026-10-03');
     await add('DDDDother000000', 'Nomad', '2026-10-01');
-    expect(await migrate(old)).toEqual([5]);
+    expect(await migrate(old)).toEqual([5, 6]);
     const rows = await old.query<{ id: string; callsign: string; display_name: string }>(`SELECT id, callsign, display_name FROM room_zero.accounts ORDER BY id`);
     expect(rows).toEqual([
       { id: 'AAAAfirst000000', callsign: 'Viper', display_name: 'Viper' },

@@ -76,7 +76,7 @@ export function howtoHtml(c: ScreenCtx): string {
 <tr><td>Your ring</td><td>The dashed ring when you move is how far you are heard. Creep and it shrinks; stand still and it is gone.</td></tr>
 <tr><td>Stand still</td><td>Your aim tightens and your lamp reaches further. Running loosens both.</td></tr>
 <tr><td>Team</td><td>You + 2 AI teammates vs 5 bots. Down: a teammate revives you.</td></tr><tr><td>Win</td><td>Your side downs all five hostiles.</td></tr></table></div>
-<div class="btns"><button class="btn primary" data-act="howto-close">Got it</button></div></div>`;
+<div class="btns"><button class="btn" data-act="docs">Game Docs</button><button class="btn primary" data-act="howto-close">Got it</button></div></div>`;
 }
 
 // ---- Callsign ----
@@ -118,7 +118,8 @@ ${statBar('Health', (h.maxHp + h.maxArmor) / 180)}${statBar('Speed', (h.speed - 
 // ---- Medal card (Medals screen) ----
 export function medalCard(m: MedalDef, c: ScreenCtx): string {
   const got = !!c.medals[m.id];
-  const prog = medalProgress(m, c.records, c.medals);
+  const o = c.acct.profile?.online;
+  const prog = medalProgress(m, c.records, c.medals, o ? { matches: o.matches, finished: o.matches, wins: o.wins, kills: o.kills } : undefined);
   const pinned = c.profile.pinned.includes(m.id);
   return `<button class="medal${got ? ' got' : ''}${pinned ? ' pinned' : ''}" ${got ? `data-pin="${m.id}"` : 'disabled'} aria-label="${esc(m.name)}${got ? ', earned' : ', locked'}">
 ${medalSvg(m, got)}<span class="rar ${m.rarity}">${RARITY_LABEL[m.rarity]}</span><b>${esc(m.name)}</b><small>${esc(m.text)}</small>

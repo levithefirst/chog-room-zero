@@ -15,7 +15,7 @@
 import type { Db, Tx } from './db.js';
 import { b64url, sign, unsign } from './auth.js';
 import { PRACTICE_REWARDS, rewardBreakdown, type RewardLine, type NoReward } from '../../src/config/progression.js';
-import { MEDALS, type RunFacts } from '../../src/ui/medals.js';
+import { MEDALS, medalsDue, type OnlineTotals, type RunFacts } from '../../src/ui/medals.js';
 import type { Best, Records } from '../../src/ui/records.js';
 import { validateNickname } from '../../src/ui/profile.js';
 import { heroIdOf } from '../../src/config/heroes.js';
@@ -84,7 +84,12 @@ export async function setCallsign(db: Db, acc: string, raw: unknown): Promise<{ 
 }
 
 /** Favourite operator (a hero id or null) and up to three pinned medals, which must be medals this account earned. */
-export async function setPrefs(db: Db, acc: string, b: { favourite?: unknown; pins?: unknown }): Promise<{ ok: boolean; error?: string }> {
+export async function setPrefs(db: Db, acc: string, b: { favourite?: unknown; pins?: unknown; hidden?: unknown }): Promise<{ ok: boolean; error?: string }> {
+  // GP: "Show me on the leaderboards" (off: others never see your row; you still see your own rank).
+  if (b.hidden !== undefined) {
+    if (typeof b.hidden !== 'boolean') return { ok: false, error: 'bad_hidden' };
+    await db.query(`UPDATE room_zero.accounts SET lb_hidden = $2 WHERE id = $1`, [acc, b.hidden]);
+  }
   if (b.favourite !== undefined) {
     if (b.favourite !== null && !heroIdOf(b.favourite)) return { ok: false, error: 'bad_favourite' };
     await db.query(`UPDATE room_zero.accounts SET favourite_hero = $2 WHERE id = $1`, [acc, b.favourite === null ? null : heroIdOf(b.favourite)]);
@@ -105,14 +110,14 @@ export async function medalsOf(q: Tx, acc: string): Promise<Record<string, strin
 }
 
 // ---- practice career ----
-const emptyBest = (): Best => ({ bestWinSeconds: null, mostKills: 0, runs: 0, wins: 0, kills: 0, bullets: 0, hits: 0, damageDealt: 0, damageTaken: 0, seconds: 0, pickups: 0, abilities: 0 });
+const emptyBest = (): Best => ({ bestWinSeconds: null, mostKills: 0, runs: 0, wins: 0, kills: 0, bullets: 0, hits: 0, damageDealt: 0, damageTaken: 0, seconds: 0, pickups: 0, abilities: 0, revives: 0, loots: 0, thrown: 0 });
 
 /** Practice records (the same shape the medals and player card read), aggregated from the stored verified runs. */
 export async function practiceRecords(q: Tx, acc: string): Promise<Records> {
   const rows = await q.query<Record<string, string | number | null>>(
     `SELECT hero, count(*) AS runs, count(*) FILTER (WHERE won) AS wins, min(seconds) FILTER (WHERE won) AS best, max(kills) AS most,
        sum(kills) AS kills, sum(bullets) AS bullets, sum(hits) AS hits, sum(damage_dealt) AS dealt, sum(damage_taken) AS taken,
-       sum(seconds) AS seconds, sum(pickups) AS pickups, sum(abilities) AS abilities
+       sum(seconds) AS seconds, sum(pickups) AS pickups, sum(abilities) AS abilities, sum(revives) AS revives, sum(loots) AS loots, sum(thrown) AS thrown
      FROM room_zero.practice_runs WHERE account_id = $1 AND verified GROUP BY hero`, [acc]);
   const rec: Records = { overall: emptyBest(), heroes: {} };
   for (const r of rows) {
@@ -120,6 +125,7 @@ export async function practiceRecords(q: Tx, acc: string): Promise<Records> {
       bestWinSeconds: r.best === null ? null : Number(r.best), mostKills: Number(r.most), runs: Number(r.runs), wins: Number(r.wins),
       kills: Number(r.kills), bullets: Number(r.bullets), hits: Number(r.hits), damageDealt: Number(r.dealt), damageTaken: Number(r.taken),
       seconds: Number(r.seconds), pickups: Number(r.pickups), abilities: Number(r.abilities),
+      revives: Number(r.revives ?? 0), loots: Number(r.loots ?? 0), thrown: Number(r.thrown ?? 0),
     };
     // Runs stored under a pre-roster id (kettle, mop, brick, wick) count for the character that replaced it.
     const id = heroIdOf(r.hero) ?? String(r.hero);
@@ -128,9 +134,29 @@ export async function practiceRecords(q: Tx, acc: string): Promise<Records> {
     const o = rec.overall;
     o.runs += b.runs; o.wins += b.wins; o.mostKills = Math.max(o.mostKills, b.mostKills);
     if (b.bestWinSeconds !== null && (o.bestWinSeconds === null || b.bestWinSeconds < o.bestWinSeconds)) o.bestWinSeconds = b.bestWinSeconds;
-    for (const k of ['kills', 'bullets', 'hits', 'damageDealt', 'damageTaken', 'seconds', 'pickups', 'abilities'] as const) o[k] += b[k];
+    for (const k of ['kills', 'bullets', 'hits', 'damageDealt', 'damageTaken', 'seconds', 'pickups', 'abilities', 'revives', 'loots', 'thrown'] as const) o[k] += b[k];
   }
   return rec;
+}
+
+/** GP: online totals for medals, from the settled match rows only (the game server's record, never the browser). */
+export async function onlineTotals(q: Tx, acc: string): Promise<OnlineTotals> {
+  const r = await q.query<{ n: string; f: string; w: string; k: string }>(
+    `SELECT count(*) AS n, count(*) FILTER (WHERE NOT left_early) AS f, count(*) FILTER (WHERE won) AS w, coalesce(sum(kills), 0) AS k
+     FROM room_zero.match_players WHERE account_id = $1`, [acc]);
+  return { matches: Number(r[0]?.n ?? 0), finished: Number(r[0]?.f ?? 0), wins: Number(r[0]?.w ?? 0), kills: Number(r[0]?.k ?? 0) };
+}
+
+/** Award every medal the stored career now meets (optionally with the run just stored). Idempotent: ON CONFLICT. */
+export async function awardDue(tx: Tx, acc: string, run: RunFacts | null, records?: Records): Promise<string[]> {
+  const have = await medalsOf(tx, acc);
+  const due = medalsDue(have, records ?? await practiceRecords(tx, acc), run, await onlineTotals(tx, acc));
+  const earned: string[] = [];
+  for (const m of due) {
+    const r = await tx.query(`INSERT INTO room_zero.medals (account_id, medal_id) VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING medal_id`, [acc, m.id]);
+    if (r.length) earned.push(m.id);
+  }
+  return earned;
 }
 
 const int = (v: unknown, lo: number, hi: number) => (typeof v === 'number' && Number.isInteger(v) && v >= lo && v <= hi ? v : null);
@@ -144,10 +170,17 @@ export function validPractice(b: Record<string, unknown>): (RunFacts & { runId: 
     seconds: int(b.seconds, 1, 900), kills: int(b.kills, 0, bots), bullets: int(b.bullets, 0, 20000), hits: int(b.hits, 0, 20000),
     damageDealt: int(b.damageDealt, 0, 50000), damageTaken: int(b.damageTaken, 0, 50000), hpLeft: int(b.hpLeft, 0, 1000),
     pickups: int(b.pickups, 0, 200), abilities: int(b.abilities, 0, 300),
+    // GP (optional for older clients: absent counts as 0): revives given and received, loot bags, grenades thrown, AI
+    // teammates eliminated. Bounded by what one run can hold (two AI teammates, five hostiles to drop kit).
+    revives: b.revives === undefined ? 0 : int(b.revives, 0, 20), revived: b.revived === undefined ? 0 : int(b.revived, 0, 10),
+    loots: b.loots === undefined ? 0 : int(b.loots, 0, 40), thrown: b.thrown === undefined ? 0 : int(b.thrown, 0, 60),
+    alliesLost: b.alliesLost === undefined ? 0 : int(b.alliesLost, 0, 2),
   };
   if (!runId || !hero || typeof b.won !== 'boolean' || Object.values(f).some((v) => v === null)) return null;
   const n = f as { [K in keyof typeof f]: number };
   if (n.hits > n.bullets) return null;
+  // A revive takes 3 s of standing still: a run cannot hold more than its length allows.
+  if (n.revives * 3 + n.revived * 3 > n.seconds) return null;
   // (A clear needs every hostile down, but the default game has AI teammates who down some of them too.)
   return { runId, hero, won: b.won, ...n };
 }
@@ -194,9 +227,10 @@ export async function recordPractice(db: Db, acc: string, raw: Record<string, un
     const facts = { won: run.won, kills: run.kills, damage: run.damageDealt, seconds: run.seconds, leftEarly: false, demo: raw.demo === true, unverified: !verified };
     let r = rewardBreakdown({ ...facts, capped: Number(paid[0].n) >= PRACTICE_REWARDS.dailyCap }, PRACTICE_REWARDS);
     if (r.shards && Number(paid[0].s) + r.shards > PRACTICE_SHARDS_PER_DAY) r = rewardBreakdown({ ...facts, capped: true }, PRACTICE_REWARDS);
-    const ins = await tx.query(`INSERT INTO room_zero.practice_runs (account_id, run_id, hero, won, seconds, kills, bullets, hits, damage_dealt, damage_taken, pickups, abilities, hp_left, xp, shards, verified)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) ON CONFLICT DO NOTHING RETURNING run_id`,
-      [acc, run.runId, run.hero, run.won, run.seconds, run.kills, run.bullets, run.hits, run.damageDealt, run.damageTaken, run.pickups, run.abilities, run.hpLeft, r.xp, r.shards, verified]);
+    const ins = await tx.query(`INSERT INTO room_zero.practice_runs (account_id, run_id, hero, won, seconds, kills, bullets, hits, damage_dealt, damage_taken, pickups, abilities, hp_left, xp, shards, verified, revives, revived, loots, thrown, allies_lost)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21) ON CONFLICT DO NOTHING RETURNING run_id`,
+      [acc, run.runId, run.hero, run.won, run.seconds, run.kills, run.bullets, run.hits, run.damageDealt, run.damageTaken, run.pickups, run.abilities, run.hpLeft, r.xp, r.shards, verified,
+        run.revives ?? 0, run.revived ?? 0, run.loots ?? 0, run.thrown ?? 0, run.alliesLost ?? 0]);
     // The open run is spent once it is stored verified.
     if (ins.length && verified) await tx.query(`UPDATE room_zero.accounts SET practice_rid = NULL WHERE id = $1`, [acc]);
     // Career, medals and bests move only for a newly stored verified run.
@@ -213,15 +247,7 @@ export async function recordPractice(db: Db, acc: string, raw: Record<string, un
       reward = { xp: Number(prevRun[0]?.xp ?? 0), shards: Number(prevRun[0]?.shards ?? 0), lines: [], none: null };
     }
     const records = await practiceRecords(tx, acc);
-    const have = await medalsOf(tx, acc);
-    const earned: string[] = [];
-    if (counts) {
-      for (const m of MEDALS) {
-        if (have[m.id] || m.progress(records, run) < m.goal) continue;
-        await tx.query(`INSERT INTO room_zero.medals (account_id, medal_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [acc, m.id]);
-        earned.push(m.id);
-      }
-    }
+    const earned = counts ? await awardDue(tx, acc, run, records) : [];
     const newBest = {
       time: counts && run.won && (prev.bestWinSeconds === null || run.seconds < prev.bestWinSeconds),
       kills: counts && run.kills > prev.mostKills,
@@ -233,7 +259,7 @@ export async function recordPractice(db: Db, acc: string, raw: Record<string, un
 function mergeBest(a: Best, b: Best): Best {
   const out = { ...a, mostKills: Math.max(a.mostKills, b.mostKills) };
   if (b.bestWinSeconds !== null && (a.bestWinSeconds === null || b.bestWinSeconds < a.bestWinSeconds)) out.bestWinSeconds = b.bestWinSeconds;
-  for (const k of ['runs', 'wins', 'kills', 'bullets', 'hits', 'damageDealt', 'damageTaken', 'seconds', 'pickups', 'abilities'] as const) out[k] = a[k] + b[k];
+  for (const k of ['runs', 'wins', 'kills', 'bullets', 'hits', 'damageDealt', 'damageTaken', 'seconds', 'pickups', 'abilities', 'revives', 'loots', 'thrown'] as const) out[k] = a[k] + b[k];
   return out;
 }
 

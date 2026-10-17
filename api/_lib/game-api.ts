@@ -20,8 +20,8 @@
 import { env as authEnv, json, readSession, sameOrigin, secretOk, type Env, type Identity } from './auth.js';
 import { schemaStatus, type Db } from './db.js';
 import { readOwnership, selfCheck, type Fetch, type Holding, type OwnershipResult, type SelfCheck } from './chain.js';
-import { setNftTier, accountFor, buyUpgrade, callsignOf, standingOf, checkTicket, issueTicket, leaderboard, settleMatch, ticketSecret, tokenHistory, upgradesOf, validRecord, type GameTicket } from './game.js';
-import { accountView, practiceSecret, recordPractice, setCallsign, setPrefs, startPractice } from './career.js';
+import { BOARD_PAGE, setNftTier, accountFor, buyUpgrade, callsignOf, standingOf, checkTicket, issueTicket, leaderboard, settleMatch, ticketSecret, tokenHistory, upgradesOf, validRecord, type GameTicket } from './game.js';
+import { accountView, awardDue, practiceSecret, recordPractice, setCallsign, setPrefs, startPractice } from './career.js';
 import { NO_UPGRADES, ONE_OF_ONE, SIGNATURES, TIER_DEFS, TIERS, chogName, tierOfMetadataId, type Tier } from '../../src/config/power.js';
 
 export interface GameEnv extends Env {
@@ -272,9 +272,14 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
         const rec = (await res.json()) as unknown;
         if (!validRecord(rec) || rec.id !== id) return json({ error: 'bad_record' }, 502);
         const r = await settleMatch(db, rec);
+        // GP: online career medals for every account in the match, from the stored rows (idempotent: a second settle
+        // or a medal already held adds nothing).
+        const earned = new Map<string, string[]>();
+        if (r.ok) for (const p of r.players) earned.set(p.acc, await db.tx((tx) => awardDue(tx, p.acc, null)));
         const s = await readSession(req, e);
         const me = s?.ids.length ? await accountFor(db, s.ids) : null;
-        return json({ ...r, mine: r.ok ? r.players.find((p) => p.acc === me) ?? null : null, players: undefined });
+        const mine = r.ok ? r.players.find((p) => p.acc === me) ?? null : null;
+        return json({ ...r, mine: mine ? { ...mine, earned: earned.get(mine.acc) ?? [] } : null, players: undefined });
       }
 
       case 'GET chain': {
@@ -283,10 +288,13 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
       }
 
       case 'GET leaderboard': {
-        if (!db) return json({ progression: false, rows: [], me: null });
+        if (!db) return json({ progression: false, rows: [], me: null, total: 0 });
+        const q = new URL(req.url).searchParams;
+        const board = q.get('board') === 'solo' ? 'solo' : 'online';
+        const offset = Math.max(0, Math.min(100_000, Number.parseInt(q.get('offset') ?? '0', 10) || 0));
         const s = await readSession(req, e);
         const me = s?.ids.length ? await accountFor(db, s.ids) : null;
-        return json({ progression: true, rankedBy: 'kills', ...(await leaderboard(db, 50, me)) });
+        return json({ progression: true, rankedBy: 'kills', signedIn: !!me, ...(await leaderboard(db, BOARD_PAGE, me, { board, offset })) });
       }
 
       case 'GET health':

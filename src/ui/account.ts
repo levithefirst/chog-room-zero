@@ -1,7 +1,7 @@
 // Account state the hub and every screen read (master build stage E, master integration pass): what the site said about
 // the signed-in account, its held Chogs, the ticket choice and the leaderboard. Plain data; the browser never guesses.
 import { TIER_DEFS, powerFor, type Tier } from '../config/power';
-import type { AccountProfile, BoardRow, GameConfig, OwnedToken, TicketProfile } from '../net/account';
+import type { AccountProfile, Board, BoardRow, GameConfig, OwnedToken, TicketProfile } from '../net/account';
 import { esc } from './screens';
 
 export interface AcctView {
@@ -20,9 +20,15 @@ export interface AcctView {
   choice: { tokenId?: number; demo?: number } | null;
   ticket: TicketProfile | null;
   ticketWarning: string | null;
-  /** The kills leaderboard (null = not loaded), and your own row when you are outside the shown ranks. */
+  /** The kills leaderboard page (null = not loaded), and your own row and rank. GP: two boards (solo, online), paged. */
   board: BoardRow[] | null;
   boardMe: BoardRow | null;
+  boardTab: Board;
+  boardOffset: number;
+  boardTotal: number;
+  /** The last load failed (shown with a retry), or is still running. */
+  boardError: boolean;
+  boardLoading: boolean;
   busy: boolean;
   message: string;
   /** The upgrade just bought (a short highlight on its card). */
@@ -31,7 +37,7 @@ export interface AcctView {
 
 export const emptyAcct = (): AcctView => ({
   config: null, signedIn: false, progression: false, profile: null, tokens: null, tokensError: null, hasWallet: false, identities: [],
-  choice: null, ticket: null, ticketWarning: null, board: null, boardMe: null, busy: false, message: '', justBought: null,
+  choice: null, ticket: null, ticketWarning: null, board: null, boardMe: null, boardTab: 'solo', boardOffset: 0, boardTotal: 0, boardError: false, boardLoading: false, busy: false, message: '', justBought: null,
 });
 
 export const tierBadge = (t: Tier, demo = false) =>

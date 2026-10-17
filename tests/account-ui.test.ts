@@ -12,7 +12,7 @@ const cfg = { db: true, nftCombat: true, demo: true };
 const blaze = { tokenId: 5, metadataId: 53, name: 'Blaze (#53)', oneOfOne: 'Blaze', tier: 'legendary' as const, tierLabel: '1:1', signature: { name: 'Flashfire', text: 'x', telegraph: 't', counter: 'c' }, history: { matches: 2, wins: 1, kills: 3 } };
 const prof = (o: Partial<AccountProfile> = {}): AccountProfile => ({
   account: 'acc_123456789', xp: 150, level: 2, into: 50, next: 150, shards: 45, rating: 1012, matches: 3, wins: 2, upgrades: { ...NO_UPGRADES },
-  callsign: 'Viper', favourite: null, pins: [], medals: {}, practice: { overall: { bestWinSeconds: null, mostKills: 0, runs: 0, wins: 0, kills: 0, bullets: 0, hits: 0, damageDealt: 0, damageTaken: 0, seconds: 0, pickups: 0, abilities: 0 }, heroes: {} },
+  callsign: 'Viper', favourite: null, pins: [], medals: {}, practice: { overall: { bestWinSeconds: null, mostKills: 0, runs: 0, wins: 0, kills: 0, bullets: 0, hits: 0, damageDealt: 0, damageTaken: 0, seconds: 0, pickups: 0, abilities: 0, revives: 0, loots: 0, thrown: 0 }, heroes: {} },
   online: { matches: 3, wins: 2, kills: 4, damage: 500, survived: 2, heroes: {} }, nft: null, ...o,
 });
 const ctx = (acct: AcctView, o: Partial<HubCtx> = {}): HubCtx => ({
@@ -123,10 +123,15 @@ describe('sub-screens', () => {
   });
   it('leaderboard: full columns, own row beyond the shown ranks, tier shown not ranked', () => {
     const row = (rank: number, you = false) => ({ rank, name: `P${rank}`, kills: 10 - rank, matches: 3, wins: 1, xp: 0, level: 1, rating: 1000, nftTier: rank === 1 ? 'rare' as const : null, you });
-    const b = boardScreenHtml(ctx(signed({ board: [row(1), row(2)], boardMe: row(77, true) })));
-    for (const col of ['Kills', 'Wins', 'Matches', 'Level', 'Rating', 'Chog']) expect(b).toContain(`<th>${col}</th>`);
-    expect(b).toMatch(/P77 \(you\)/);
-    expect(b).toMatch(/Kills · then wins · then fewer matches/);
+    // GP: two boards; the online one keeps the owner's columns, the Chog tier is a badge beside the name.
+    const b = boardScreenHtml(ctx(signed({ board: [row(1), row(2)], boardMe: row(77, true), boardTab: 'online' })));
+    for (const col of ['Kills', 'Wins', 'Matches', 'Level', 'Rating']) expect(b).toContain(`<th>${col}</th>`);
+    expect(b).toMatch(/P77 <em>you<\/em>/);
+    expect(b).toMatch(/tier-rare/);
+    expect(b).toMatch(/Kills in saved online matches · then wins · then fewer matches/);
+    const solo = boardScreenHtml(ctx(signed({ board: [row(1)], boardMe: row(1, true), boardTab: 'solo' })));
+    for (const col of ['Kills', 'Clears', 'Runs', 'Level']) expect(solo).toContain(`<th>${col}</th>`);
+    expect(solo).not.toContain('<th>Rating</th>');
   });
   it('career: online and practice careers from the account', () => {
     const c = careerHtml(ctx(signed()));

@@ -11,6 +11,7 @@
 import type { Db, Tx } from './db.js';
 import { b64url, sign, unsign, type Identity } from './auth.js';
 import { MAX_SUPPLY } from './chain.js';
+import { heroIdOf } from '../../src/config/heroes.js';
 import { NO_UPGRADES, TIERS, UPGRADES, UPGRADE_IDS, clampUpgrades, tierOfMetadataId, type Tier, type UpgradeId, type Upgrades } from '../../src/config/power.js';
 import { RATING, levelOf, rewardBreakdown, ratingDelta, REWARDS, type RewardLine, type NoReward } from '../../src/config/progression.js';
 
@@ -159,7 +160,7 @@ export interface MatchRecord {
   /** A private room code: friends play who they invite, so nothing is rewarded or rated (no win trading). */
   private?: boolean;
   /** left: gone before the end. quit: gone while still standing (absent in older records: left counts as a quit). */
-  players: { acc: string | null; team: string; tier: Tier; tok: number | null; mid: number | null; own: string | null; kills: number; damage: number; left: boolean; quit?: boolean; name?: string; hero?: string; survived?: boolean }[];
+  players: { acc: string | null; team: string; tier: Tier; tok: number | null; mid: number | null; own: string | null; kills: number; damage: number; left: boolean; quit?: boolean; name?: string; hero?: string; survived?: boolean; revives?: number; loots?: number }[];
 }
 
 /** A callsign as the game server validated it, made safe again for storage and display (length, no control characters). */
@@ -186,7 +187,8 @@ export function validRecord(r: unknown): r is MatchRecord {
     && m.players.every((p) => p && (p.acc === null || str(p.acc, 64)) && str(p.team, 16) && (TIERS as readonly unknown[]).includes(p.tier)
       && (p.tok === null || p.tok === undefined || intIn(p.tok, 1, MAX_SUPPLY)) && (p.mid === null || p.mid === undefined || intIn(p.mid, 1, MAX_SUPPLY))
       && (p.own === null || p.own === undefined || str(p.own, 64))
-      && intIn(p.kills, 0, 1000) && intIn(p.damage, 0, 10_000_000) && typeof p.left === 'boolean');
+      && intIn(p.kills, 0, 1000) && intIn(p.damage, 0, 10_000_000) && typeof p.left === 'boolean'
+      && (p.revives === undefined || intIn(p.revives, 0, 1000)) && (p.loots === undefined || intIn(p.loots, 0, 1000)));
 }
 
 export type SettleResult =
@@ -252,10 +254,10 @@ export async function settleMatch(db: Db, m: MatchRecord): Promise<SettleResult>
       if (p.tok && p.mid && tierOfMetadataId(p.mid)) await setNftTier(tx, acc, { tokenId: p.tok, metadataId: p.mid });
       if (r.xp) await tx.query(`INSERT INTO room_zero.ledger (account_id, kind, delta, reason, ref) VALUES ($1, 'xp', $2, 'match', $3) ON CONFLICT DO NOTHING`, [acc, r.xp, m.id]);
       if (r.shards) await tx.query(`INSERT INTO room_zero.ledger (account_id, kind, delta, reason, ref) VALUES ($1, 'shards', $2, 'match', $3) ON CONFLICT DO NOTHING`, [acc, r.shards, m.id]);
-      await tx.query(`INSERT INTO room_zero.match_players (match_id, account_id, team, tier, token_id, kills, damage, won, left_early, xp, shards, rating_before, rating_after, hero, survived)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+      await tx.query(`INSERT INTO room_zero.match_players (match_id, account_id, team, tier, token_id, kills, damage, won, left_early, xp, shards, rating_before, rating_after, hero, survived, revives, loots)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
         [m.id, acc, p.team, p.tier, p.tok, Math.round(p.kills), Math.round(p.damage), won, p.left, r.xp, r.shards, before, before + delta,
-          typeof p.hero === 'string' ? p.hero.slice(0, 16) : null, typeof p.survived === 'boolean' ? p.survived : null]);
+          typeof p.hero === 'string' ? p.hero.slice(0, 16) : null, typeof p.survived === 'boolean' ? p.survived : null, p.revives ?? 0, p.loots ?? 0]);
       if (p.tok && p.mid && p.own) {
         await tx.query(`INSERT INTO room_zero.token_history (token_id, match_id, account_id, owner_address, metadata_id, kills, won) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING`,
           [p.tok, m.id, acc, p.own, p.mid, Math.round(p.kills), won]);
@@ -285,6 +287,7 @@ export interface BoardRow {
   rank: number;
   name: string;
   kills: number;
+  /** Online: matches played; solo: runs played. */
   matches: number;
   wins: number;
   xp: number;
@@ -292,35 +295,59 @@ export interface BoardRow {
   rating: number;
   /** Current Chog tier (display only), or null for no verified Chog. */
   nftTier: Tier | null;
+  /** The account's favourite operator (its avatar), or null. */
+  hero: string | null;
   you: boolean;
+  /** Your own row while you chose not to be listed (others never see it). */
+  hidden?: boolean;
 }
 
+export type Board = 'online' | 'solo';
+export const BOARD_PAGE = 20;
+
 /**
- * The leaderboard (owner requirement 2026-10-14): ranked by opponents killed in validated online matches, then wins,
- * then fewer matches played, then account id (stable). Kills are summed from persisted match rows of matches that
- * paid rewards (at least REWARDS.minSeconds long), so a quit-and-requeue loop adds nothing. Rating, XP and NFT tier
- * are shown but never decide the order. Account-based: guests and demo matches never appear.
+ * The leaderboards (owner requirement 2026-10-14: ranked by opponents killed, then wins, then fewer matches, then
+ * account id). ONLINE (the owner's board): kills in validated online matches (settled from the game server's record,
+ * matches that paid rewards), every account with a saved match. SOLO (GP, owner 2026-10-17: "the actual player can see
+ * themselves"; most play is the default solo game): kills in verified practice runs (ticketed, timed, plausible,
+ * capped; the browser simulates them, so they never mix into the online board). Rating, XP and the Chog tier are shown
+ * and never decide the order. Accounts that chose not to be listed (and the production smoke's test accounts) are
+ * left out for everyone else; you always get your own row and rank. Pages of BOARD_PAGE from `offset`.
  */
-export async function leaderboard(db: Tx, limit = 20, me: string | null = null): Promise<{ rows: BoardRow[]; me: BoardRow | null }> {
-  const rows = await db.query<{ id: string; display_name: string | null; callsign: string | null; xp: string; rating: number; matches: number; wins: number; nft_tier: string | null; kills: string; rank: string }>(
-    `WITH k AS (
-       SELECT mp.account_id, coalesce(sum(mp.kills) FILTER (WHERE m.rewarded), 0) AS kills
-       FROM room_zero.match_players mp JOIN room_zero.matches m ON m.id = mp.match_id GROUP BY mp.account_id
-     ), ranked AS (
-       SELECT a.id, a.display_name, a.callsign, a.xp, a.rating, a.matches, a.wins, a.nft_tier, coalesce(k.kills, 0) AS kills,
-         row_number() OVER (ORDER BY coalesce(k.kills, 0) DESC, a.wins DESC, a.matches ASC, a.id) AS rank
-       FROM room_zero.accounts a LEFT JOIN k ON k.account_id = a.id
-       WHERE a.matches > 0
-     )
-     SELECT * FROM ranked WHERE rank <= $1 OR id = $2 ORDER BY rank`, [limit, me]);
-  const toRow = (r: (typeof rows)[number]): BoardRow => ({
-    rank: Number(r.rank), name: r.callsign ?? r.display_name ?? `Player ${r.id.slice(0, 4)}`, kills: Number(r.kills), matches: Number(r.matches), wins: Number(r.wins),
+export async function leaderboard(db: Tx, limit = BOARD_PAGE, me: string | null = null, opts: { board?: Board; offset?: number } = {}): Promise<{ rows: BoardRow[]; me: BoardRow | null; total: number; board: Board; offset: number }> {
+  const board: Board = opts.board === 'solo' ? 'solo' : 'online';
+  const offset = Math.max(0, Math.min(100_000, Math.floor(Number(opts.offset) || 0)));
+  limit = Math.max(1, Math.min(100, Math.floor(limit)));
+  // One account's numbers on this board, for every account that has played on it.
+  const base = board === 'online'
+    ? `SELECT a.id, a.display_name, a.callsign, a.xp, a.rating, a.nft_tier, a.favourite_hero, a.lb_hidden, coalesce(k.kills, 0) AS kills, a.wins AS won, a.matches AS played
+       FROM room_zero.accounts a LEFT JOIN (
+         SELECT mp.account_id, sum(mp.kills) FILTER (WHERE m.rewarded) AS kills FROM room_zero.match_players mp JOIN room_zero.matches m ON m.id = mp.match_id GROUP BY mp.account_id
+       ) k ON k.account_id = a.id WHERE a.matches > 0`
+    : `SELECT a.id, a.display_name, a.callsign, a.xp, a.rating, a.nft_tier, a.favourite_hero, a.lb_hidden, k.kills, k.won, k.played
+       FROM room_zero.accounts a JOIN (
+         SELECT account_id, coalesce(sum(kills), 0) AS kills, count(*) FILTER (WHERE won) AS won, count(*) AS played FROM room_zero.practice_runs WHERE verified GROUP BY account_id
+       ) k ON k.account_id = a.id`;
+  type R = { id: string; display_name: string | null; callsign: string | null; xp: string; rating: number; nft_tier: string | null; favourite_hero: string | null; lb_hidden: boolean; kills: string; won: string; played: string; rank: string; total?: string };
+  const page = await db.query<R>(
+    `WITH b AS (${base}), v AS (SELECT * FROM b WHERE NOT lb_hidden),
+     r AS (SELECT *, row_number() OVER (ORDER BY kills DESC, won DESC, played ASC, id) AS rank FROM v)
+     SELECT *, (SELECT count(*) FROM v) AS total FROM r WHERE rank > $1 AND rank <= $1 + $2 ORDER BY rank`, [offset, limit]);
+  // Your rank: one more than the listed players who sort ahead of you (where you stand even when you are not listed).
+  const mine = me ? await db.query<R>(
+    `WITH b AS (${base})
+     SELECT x.*, 1 + (SELECT count(*) FROM b o WHERE NOT o.lb_hidden AND o.id <> x.id AND (o.kills > x.kills OR (o.kills = x.kills AND (o.won > x.won
+       OR (o.won = x.won AND (o.played < x.played OR (o.played = x.played AND o.id < x.id))))))) AS rank
+     FROM b x WHERE x.id = $1`, [me]) : [];
+  const toRow = (r: R): BoardRow => ({
+    rank: Number(r.rank), name: r.callsign ?? r.display_name ?? `Player ${r.id.slice(0, 4)}`, kills: Number(r.kills), matches: Number(r.played), wins: Number(r.won),
     xp: Number(r.xp), level: levelOf(Number(r.xp)).level, rating: Number(r.rating),
     nftTier: r.nft_tier && ['common', 'uncommon', 'rare', 'epic', 'legendary'].includes(r.nft_tier) ? (r.nft_tier as Tier) : null,
-    you: !!me && r.id === me,
+    hero: heroIdOf(r.favourite_hero), you: !!me && r.id === me, ...(me && r.id === me && r.lb_hidden ? { hidden: true } : {}),
   });
-  const all = rows.map(toRow);
-  return { rows: all.filter((r) => r.rank <= limit), me: all.find((r) => r.you) ?? null };
+  let total = Number(page[0]?.total ?? 0);
+  if (!page.length && offset > 0) total = Number((await db.query<{ n: string }>(`WITH b AS (${base}) SELECT count(*) AS n FROM b WHERE NOT lb_hidden`))[0]?.n ?? 0);
+  return { rows: page.map(toRow), me: mine[0] ? toRow(mine[0]) : null, total, board, offset };
 }
 
 /** The callsign an account chose (shown everywhere the account plays), or null. */

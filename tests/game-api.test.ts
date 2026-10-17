@@ -186,11 +186,11 @@ describe('leaderboard and health endpoints', () => {
     const mine = await call('GET', 'leaderboard', { cookie: await cookieFor([{ provider: 'google', subject: 'a', label: 'a' }]) });
     expect(mine.j.me).toMatchObject({ name: 'Alpha', rank: 2, you: true });
     const h = await call('GET', 'health');
-    expect(h.j.migrations.map((m: { version: number }) => m.version)).toEqual([1, 2, 3, 4, 5]);
+    expect(h.j.migrations.map((m: { version: number }) => m.version)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(h.j.tables).toContain('match_players');
     db = null;
     expect((await call('GET', 'health')).j).toEqual({ db: false });
-    expect((await call('GET', 'leaderboard')).j).toEqual({ progression: false, rows: [], me: null });
+    expect((await call('GET', 'leaderboard')).j).toEqual({ progression: false, rows: [], me: null, total: 0 });
   });
   it('a live wallet read sets the account\'s displayed Chog tier to its best held Chog', async () => {
     await call('POST', 'ticket', { cookie: await cookieFor([{ provider: 'wallet', subject: WALLET, label: 'w' }]), body: {} });

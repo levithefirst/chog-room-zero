@@ -39,7 +39,7 @@ beforeEach(async () => { db = await memoryDb(); await migrate(db); clock = Date.
 
 describe('migration v3 is additive', () => {
   it('adds the profile columns and tables; nothing drops or deletes', async () => {
-    expect(MIGRATIONS.map((m) => m.version)).toEqual([1, 2, 3, 4, 5]);
+    expect(MIGRATIONS.map((m) => m.version)).toEqual([1, 2, 3, 4, 5, 6]);
     for (const m of MIGRATIONS) expect(m.sql).not.toMatch(/\b(DROP|TRUNCATE|DELETE)\b/i);
     const t = await db.query<{ table_name: string }>(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'room_zero' ORDER BY table_name`);
     expect(t.map((r) => r.table_name)).toEqual(expect.arrayContaining(['medals', 'practice_runs', 'accounts', 'match_players']));

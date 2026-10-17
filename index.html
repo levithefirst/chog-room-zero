@@ -293,7 +293,9 @@
       .medal:disabled { opacity: 1; cursor: default; }
       .medal-badge { width: 44px; height: 48px; } .medal-badge.locked { opacity: 0.8; }
       .medal b { font-size: 16px; letter-spacing: 0.06em; text-transform: uppercase; } .medal small { color: var(--dim); font-size: 12px; line-height: 1.25; min-height: 2.5em; }
-      .rar { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; } .rar.common { color: var(--chog-cream-warm); } .rar.rare { color: var(--armor); } .rar.epic { color: var(--signal); }
+      .rar { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; } .rar.common { color: var(--chog-cream-warm); } .rar.uncommon { color: var(--armor); } .rar.rare { color: var(--chog-purple-bright); } .rar.epic { color: var(--chog-pink); }
+      /* GP: medal groups by rarity. */
+      .medal-group { margin: 12px 2px 6px; font-size: 13px; } .medal-group:first-child { margin-top: 2px; } .medal-group .num { color: var(--dim); letter-spacing: 0; margin-left: 6px; }
       .prog { position: relative; width: 100%; height: 16px; background: var(--bg-elevated); border-radius: 3px; overflow: hidden; margin-top: 4px; }
       .prog i { position: absolute; inset: 0 auto 0 0; background: var(--chog-purple-deep); } .medal.got .prog i { background: var(--signal); }
       .prog em { position: relative; font-style: normal; font-family: var(--mono); font-size: 11px; line-height: 16px; color: var(--ink); }
@@ -564,6 +566,34 @@
       .sig-h { display: flex; justify-content: space-between; align-items: baseline; } .sig p.small em { display: inline-block; min-width: 66px; }
       .hist { margin: 4px 0 0; font-size: 12px; color: var(--dim); letter-spacing: 0.06em; }
       .rankrule { text-transform: uppercase; letter-spacing: 0.12em; margin: 0 0 6px; }
+      /* GP leaderboards: your rank on top, the table scrolls sideways on a narrow screen (never the page), a pager. */
+      .myrank { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; margin: 0 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg-elevated); }
+      .myrank.me { border-color: var(--signal); }
+      .myrank > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; min-width: 0; }
+      .myrank b { text-transform: uppercase; letter-spacing: 0.12em; font-size: 12px; color: var(--dim); }
+      .myrank .big { font-size: 24px; color: var(--ink); letter-spacing: 0; }
+      .myrank small { color: var(--dim); font-size: 13px; } .myrank small b { font-size: 13px; color: var(--ink); letter-spacing: 0; }
+      .board-scroll { overflow-x: auto; max-width: 100%; }
+      table.board td.who { display: flex; align-items: center; gap: 6px; min-width: 120px; }
+      table.board td.who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; }
+      table.board td.who em { font-style: normal; font-size: 11px; color: var(--signal); text-transform: uppercase; letter-spacing: .08em; }
+      table.board tr.me td { background: rgba(245, 230, 200, 0.08); }
+      table.board.loading { opacity: 0.55; }
+      .av { display: inline-flex; width: 22px; height: 22px; flex: none; } .av svg { width: 22px; height: 22px; }
+      /* GP Game Docs: a search box and short sections that open in place; readable line length, mobile first. */
+      .docs #docsq { width: 100%; max-width: 560px; margin: 0 auto 10px; display: block; }
+      .docs-list { max-width: 720px; margin: 0 auto; }
+      details.doc { border-bottom: 1px solid var(--line); }
+      details.doc > summary { cursor: pointer; padding: 11px 4px; font-size: 16px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink); list-style: none; display: flex; justify-content: space-between; align-items: center; min-height: 24px; }
+      details.doc > summary::-webkit-details-marker { display: none; }
+      details.doc > summary::after { content: '+'; color: var(--signal); font-size: 20px; }
+      details.doc[open] > summary::after { content: '\2212'; }
+      details.doc > summary:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+      .doc-body { padding: 0 6px 12px; color: var(--dim); font-size: 15px; line-height: 1.5; }
+      .doc-body ul { margin: 4px 0; padding-left: 18px; } .doc-body li { margin: 4px 0; } .doc-body b { color: var(--ink); }
+      .doc-body table.howto { margin: 4px 0; }
+      .faq dt { color: var(--ink); margin-top: 8px; } .faq dd { margin: 2px 0 6px 0; }
+      .pager { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 8px; }
       #overlay > .screen.upgrades { align-items: stretch; }
       .up-wrap { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 4px 0; }
       .up-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; width: min(100%, 720px); }

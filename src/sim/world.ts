@@ -129,6 +129,10 @@ export interface Actor {
   /** GP: a trigger pull made while the body was still turning, kept this many seconds until it lines up (a tap is
    * one step long and would otherwise be lost). */
   fireQueued: number;
+  /** GP: teammates this actor got up, times it was got up, loot bags it took from (results, medals). */
+  revives: number;
+  revived: number;
+  loots: number;
 }
 
 /** A thrown grenade: rolls to rest, bounces off walls, flies over waist-high cover, explodes when the fuse ends. */
@@ -370,7 +374,7 @@ function makeActor(id: number, team: Team, name: string, hero: HeroDef, sg: Side
     revealLeft: 0, shieldLeft: 0, frenzyLeft: 0, slowLeft: 0, slowMul: 1, burstLeft: 0, stepAcc: 0, hitFlash: 0, muzzle: 0, deadFor: 0, lastSpread: weapon.spreadDeg, lastHitTick: -999, lastHitFrom: null,
     shots: 0, bullets: 0, hits: 0, kills: 0, damageDealt: 0, damageTaken: 0, death: null, zoneTick: -999,
     downed: false, reviveProgress: 0, downInfo: null, firedLast: false,
-    grenades: nades, maxGrenades: nades, nadeCd: 0, thrown: 0, volley: 0, volleyGap: 0, fireQueued: 0,
+    grenades: nades, maxGrenades: nades, nadeCd: 0, thrown: 0, volley: 0, volleyGap: 0, fireQueued: 0, revives: 0, revived: 0, loots: 0,
   };
 }
 
@@ -1113,6 +1117,7 @@ function stepLoot(w: World, dt: number): void {
       a.hp += g.health; l.health -= g.health;
       a.armor += g.armor; l.armor -= g.armor;
       a.grenades += g.grenades; l.grenades -= g.grenades;
+      a.loots++;
       emit(w, 'pickup', l.x, l.y, TUNING.sound.pickup, a);
       w.sounds[w.sounds.length - 1].loot = l.id;
     }
@@ -1229,6 +1234,8 @@ function stepRevive(w: World, dt: number): void {
         t.reviveProgress = 0;
         t.hp = Math.round(t.maxHp * R.hpShare);
         t.armor = 0;
+        t.revived++;
+        helper.revives++;
         emit(w, 'revive', t.x, t.y, TUNING.sound.reload, helper);
       }
       continue;

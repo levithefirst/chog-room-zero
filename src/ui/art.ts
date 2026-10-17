@@ -68,8 +68,8 @@ export function tokenSvg(accent: number | null, heroId?: string): string {
 <circle cx="20" cy="20" r="14" fill="${B.bgElevated}" stroke="${B.bgDeep}" stroke-width="2"/><circle cx="20" cy="20" r="7.5" fill="none" stroke="${accent === null ? B.disabled : hex(accent)}" stroke-width="2.5"/></svg>`;
 }
 
-// Rarity: cream, bright purple, pink (tokens); the initials and the label carry it too, not colour alone.
-const RARITY: Record<Rarity, string> = { common: B.creamWarm, rare: B.purpleBright, epic: B.pink };
+// Rarity: cream, armour blue, bright purple, pink (tokens); the initials and the label carry it too, not colour alone.
+const RARITY: Record<Rarity, string> = { common: B.creamWarm, uncommon: B.armor, rare: B.purpleBright, epic: B.pink };
 
 /** Medal badge: hexagon in the rarity colour with the medal's initials; dim and locked until earned. */
 export function medalSvg(m: MedalDef, unlocked: boolean): string {
@@ -83,7 +83,7 @@ ${unlocked ? `<text x="24" y="31" text-anchor="middle" font-family="Barlow Cond,
 </svg>`;
 }
 
-export const RARITY_LABEL: Record<Rarity, string> = { common: 'Common', rare: 'Rare', epic: 'Epic' };
+export const RARITY_LABEL: Record<Rarity, string> = { common: 'Common', uncommon: 'Uncommon', rare: 'Rare', epic: 'Epic' };
 
 /**
  * Controls diagram for How to play. Touch: a landscape phone held in two hands, left thumb on the move stick, right
