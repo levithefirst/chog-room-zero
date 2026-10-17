@@ -790,9 +790,14 @@ async function start() {
     render();
   }
 
-  overlay.addEventListener('pointerdown', (e) => onOverlayPress(e));
-  // A keyboard press of a focused button (Enter or Space: the browser clicks it with detail 0) acts like a tap.
-  overlay.addEventListener('click', (e) => { if (e.detail === 0 && (e.target as HTMLElement).closest('button, [data-act], [data-go]')) onOverlayPress(e); });
+  // GP: when the last pointer press was (a tap or click acts on press; its own click follows on whatever is under the
+  // finger once the screen has changed).
+  let pressedAt = -1e9;
+  overlay.addEventListener('pointerdown', (e) => { pressedAt = performance.now(); onOverlayPress(e); });
+  // A keyboard press of a focused button (Enter or Space: the browser clicks it with detail 0) acts like a tap. A click
+  // right after a pointer press is that press's own click (some browsers send it with detail 0 too): ignored, or a
+  // tap on Back would also hit the hub button drawn under the finger (it opened Career).
+  overlay.addEventListener('click', (e) => { if (e.detail === 0 && performance.now() - pressedAt > 700 && (e.target as HTMLElement).closest('button, [data-act], [data-go]')) onOverlayPress(e); });
   function onOverlayPress(e: Event) {
     if ((e as PointerEvent).pointerType === 'touch') input.mode = 'touch';
     if (!overlayInputAllowed(phase, summaryGate)) return;
