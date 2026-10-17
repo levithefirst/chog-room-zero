@@ -55,6 +55,13 @@ export const TUNING = {
     turnFreeDeg: 8,
     turnFullDeg: 40,
     turnSpreadDeg: 4,
+    // GP (owner 2026-10-17: "stationary 360 fire"): a new trigger pull waits until the body has turned within this
+    // many degrees of the aim. Before, a 180 flick fired its first rounds along the OLD facing (up to 168 deg off, the
+    // wrong way) for the 0.25 s the capped turn takes. Now the first round leaves at most ~0.2 s later, toward the aim
+    // (still loose: the turn spread above applies between 8 and 40 deg).
+    fireMaxLagDeg: 40,
+    // A pull made while still turning is kept this long (a tap fires once the body lines up, never lost).
+    fireQueueSeconds: 0.3,
     // Armour soaks this share of each hit (before armour-pen) until the armour pool is empty.
     armorSoak: 0.6,
     // Lean rule: a shooter within this distance of a half-cover box shoots over it (box ignored).
@@ -68,12 +75,16 @@ export const TUNING = {
     // space, not a vending machine). Map-wide: health 8 x 40 / 30 s = 10.7 hp/s (FP 6.4 on 676 tiles; per tile 0.0055,
     // was 0.0095), armour 6 x 35 / 35 s = 6.0/s (was 4.7), grenades 6 / 50 s = 7.2 throws a minute for the whole room
     // (was 4.5). tests/pickup-layout.test.ts holds both sides of that.
-    // Health +40, back after 30 s: worth a detour, not a camping spot.
-    health: { amount: 40, respawn: 30 },
-    // Armour +35, back after 35 s.
-    armor: { amount: 35, respawn: 35 },
-    // Ammo: one magazine's worth x2 into reserve (never over the carry ceiling), back after 20 s.
-    ammo: { mags: 2, respawn: 20 },
+    // GP (owner 2026-10-17: "increase resource availability ... ammo relatively frequent, health and armour moderate,
+    // grenades slower"): 30 pickups (4 more ammo, in the corner rooms) and faster comebacks; kills now also drop what
+    // the fallen carried (TUNING.loot). Map-wide: health 8 x 40 / 25 s = 12.8 hp/s (was 10.7), armour 6 x 35 / 30 s =
+    // 7.0/s (was 6.0), ammo 10 x 2 mags / 14 s = 1.4 mags/s (was 0.6), grenades unchanged.
+    // Health +40, back after 25 s: worth a detour, not a camping spot.
+    health: { amount: 40, respawn: 25 },
+    // Armour +35, back after 30 s.
+    armor: { amount: 35, respawn: 30 },
+    // Ammo: one magazine's worth x2 into reserve (never over the carry ceiling), back after 14 s.
+    ammo: { mags: 2, respawn: 14 },
     // Grenade +1, never above the carrier's capacity (3 free, more by verified tier), back after 50 s. A refill for a
     // key moment, never a stream.
     grenade: { amount: 1, respawn: 50 },
@@ -91,29 +102,47 @@ export const TUNING = {
     // the pickup is taken on the same step the drawn body touches the drawn pickup (tests/rc8-pickups.test.ts).
     radius: 0.7,
     // Master integration pass (owner 2026-10-14: a pickup at full health must not be irrelevant). Health over the
-    // maximum is kept as overheal up to +25% of max health and drains at 2 per second back to the maximum; armour can
-    // go 25 over its cap and drains at 1 per second. Above those hard caps the pickup is left for someone else.
+    // maximum is kept as overheal up to +25% of max health; armour can go 25 over its cap. Above those hard caps the
+    // pickup is left for someone else. GP (owner 2026-10-17, "health ticks down when I'm not fighting"): the extra no
+    // longer drains (it was 2 hp and 1 armour a second, with no hit to explain it); damage takes it first.
     overhealShare: 0.25,
-    overhealDecay: 2,
     overArmor: 25,
-    overArmorDecay: 1,
     // A health or armour pickup is taken only if it would add at least this much (no pickup wasted for a sliver).
     minGain: 5,
   },
 
   revive: {
-    // Team modes (3v3, 5v5): a player dropped to 0 with a teammate still standing is DOWNED, not out. The downed pool
-    // (60) bleeds out over 15 s, faster under fire; at 0 they are eliminated and the one who downed them gets the kill.
-    // 1v1 and the last standing member of a team are eliminated at once (nobody can rescue them).
+    // GP (owner 2026-10-17: "0 HP -> DOWNED -> 10-second revive window -> REVIVED or ELIMINATED"). With a teammate still
+    // standing (solo: you and your AI teammates; online 3v3 and 5v5), 0 health downs you instead of ending you. The
+    // downed pool (60) bleeds out over 10 s; hits on a downed player take it faster (finishing). At 0 they are
+    // eliminated from this match (never signed out) and the one who downed them gets the kill. 1v1 and a team's last
+    // standing member are eliminated at once (nobody can rescue them).
     downHp: 60,
-    bleedSeconds: 15,
+    bleedSeconds: 10,
     // A standing teammate within 1.4 m who is not firing revives them in 3 s, back up at 30% health and no armour.
-    // Any hit on the downed player or the rescuer resets the progress.
+    // While someone is reviving, the bleed-out waits (the window is to REACH them). Any hit on the downed player or the
+    // rescuer, the rescuer firing or stepping away, stops it and the progress starts again.
     range: 1.4,
     seconds: 3,
     hpShare: 0.3,
     // Downed players crawl at 25% speed and cannot shoot, reload, use the ability or take pickups.
     crawl: 0.25,
+    // AI teammates go to revive when nothing they can see is within dangerSeen u and they were not hit in the last
+    // calmSeconds, only the nearest one goes (the other covers), and only if they can get there with marginSeconds
+    // of the window to spare.
+    dangerSeen: 9,
+    calmSeconds: 1.2,
+    marginSeconds: 0.5,
+    reachRange: 22,
+  },
+
+  loot: {
+    // GP kill loot (src/sim/world.ts Loot): a bag of what the eliminated actor carried, at its feet, for 30 s. Taken on
+    // touch like a pickup; each part only up to the taker's own ceiling, and the rest stays for someone else.
+    on: true,
+    seconds: 30,
+    // The field dressing every operator carries (a kill always drops something worth a detour): +15 health.
+    dressing: 15,
   },
 
   abilities: {
@@ -249,9 +278,11 @@ export const TUNING = {
     // the noisy kinds bring it under 10 while still calling a third of what the player then sees. The 15 zoned
     // pickups (owner 2026-10-17) move the squad and the bots around more: 2.2 s made 10.5 a minute, 2.5 s makes 8.5.
     // FS (68 x 42 venue, an active hostile squad that walks audibly): 2.5 s made 10.5 a minute again; 2.8 s brings it back.
-    gap: 2.8,
+    // GP: AI teammates now also say when they come to revive you and when they go for a bag you cannot see (both once),
+    // and downed teammates who are revived fight on and talk: 2.8 s made 10.7 a minute, 3.0 s 10.4; 3.1 s.
+    gap: 3.1,
     // Seconds before the same teammate makes the same kind of call again.
-    rest: { contact: 4, behind: 4, lost: 8, steps: 10, shots: 10, reloading: 12, hurt: 10 } as Record<string, number>,
+    rest: { contact: 4, behind: 4, lost: 8, steps: 10, shots: 10, reloading: 12, hurt: 10, reviving: 6, supply: 15 } as Record<string, number>,
     // A heard call (footsteps, shots) is skipped when the player stands this close to the caller: they heard it too.
     nearPlayer: 5,
     // "Behind us": a contact more than this many degrees off where you face.
@@ -360,6 +391,31 @@ export const TUNING = {
       walkingReaction: 0.15,
       // A job further than this (u) is jogged to (louder, faster); a near one is walked.
       jogDistance: 12,
+    },
+    // GP AI teammates and resources (src/sim/bots.ts allySupply): utility = need - walk/distancePerPoint, taken when
+    // over minScore. Need: health below healthBelow of max (x healthWeight), armour below armorBelow, reserve below two
+    // magazines, grenades below capacity (lowest weight). A bag adds lootBonus (several things at once). Calm only (no
+    // hostile in sight, not hit for calmSeconds); never within dangerRadius of the last threat it knows of; never
+    // further than leash u from you (leashCritical when the need is critical); and a teammate who needs health or
+    // armour more and is within yieldExtra u as close gets it first. Re-judged every thinkSeconds. PROPOSAL.
+    supply: {
+      calmSeconds: 2,
+      thinkSeconds: 0.5,
+      minScore: 0.18,
+      distancePerPoint: 30,
+      healthBelow: 0.85,
+      healthWeight: 1.6,
+      armorBelow: 0.6,
+      armorWeight: 0.9,
+      ammoWeight: 1.2,
+      grenadeWeight: 0.45,
+      lootBonus: 0.1,
+      critical: 0.8,
+      range: 18,
+      leash: 9.5,
+      leashCritical: 20,
+      dangerRadius: 7,
+      yieldExtra: 6,
     },
     patrolPauseJitter: 1.6,
     listenSeconds: 0.55,

@@ -66,6 +66,10 @@ export const PARTY_CODE = /^[2-9A-HJ-NP-Z]{5}$/;
 
 export interface PlayerResult { id: number; name: string; hero: string; team: Team; kills: number; damageDealt: number; damageTaken: number; hits: number; bullets: number; alive: boolean; cause: string | null }
 
+/** GP: a loot bag your team knows about (the server decides what is in it and who takes it): what kinds are in it
+ * (k bits: 1 health, 2 armour, 4 ammo, 8 grenades) and the seconds before it is gone. */
+export interface NetLoot { id: number; x: number; y: number; k: number; left: number }
+
 export type ServerMsg =
   | { t: 'welcome'; v: number; token: string; name: string; resumed: boolean; profile?: NetProfile }
   | { t: 'queued'; mode: Mode; have: number; need: number; code: string | null }
@@ -73,7 +77,7 @@ export type ServerMsg =
   | { t: 'match'; room: string; mode: Mode; you: number; team: Team; seed: number; friendlyFire: boolean; roster: RosterEntry[]; startsIn: number; demo?: boolean; zone: { x: number; y: number; r: number }[] }
   /** ack/as (SB): the newest input seq the server had from you when it took this snapshot, and how many sim steps it has
    * applied it so far (your movement prediction replays the rest). Optional: an older server sends neither. */
-  | { t: 'snap'; tick: number; actors: NetActor[]; bullets: NetBullet[]; grenades?: NetGrenade[]; pickups: boolean[]; pk?: number[]; sp?: { id: number; x: number; y: number }[]; sounds: NetSound[]; hits: NetHit[]; barriers: { x0: number; y0: number; x1: number; y1: number; left: number }[]; ack?: number; as?: number }
+  | { t: 'snap'; tick: number; actors: NetActor[]; bullets: NetBullet[]; grenades?: NetGrenade[]; pickups: boolean[]; pk?: number[]; lt?: NetLoot[]; sp?: { id: number; x: number; y: number }[]; sounds: NetSound[]; hits: NetHit[]; barriers: { x0: number; y0: number; x1: number; y1: number; left: number }[]; ack?: number; as?: number }
   | { t: 'over'; winner: Team | null; reason: 'eliminated' | 'time'; results: PlayerResult[]; matchId?: string; settle?: boolean }
   | { t: 'pong'; at: number; tick: number }
   | { t: 'party'; code: string | null; members: PartyMember[] }

@@ -28,9 +28,9 @@ describe('Room Zero map', () => {
     for (let x = 0; x < l.w; x++) expect(tileAt(l, x + 0.5, 0.5)).not.toBe(FLOOR);
     expect(tileAt(l, l.playerSpawn.x, l.playerSpawn.y)).toBe(FLOOR);
     for (const b of BOT_SPAWNS) for (const [x, y] of b.patrol) expect(walkable(tileAt(l, x + 0.5, y + 0.5)), `${b.name} ${x},${y}`).toBe(true);
-    // Pickups are laid out by zone (tests/pickup-layout.test.ts covers the rules); the map itself has no fixed ones.
+    // Pickups are laid out by zone (tests/pickup-layout.test.ts covers the rules); the map itself has no fixed ones. GP: 4 more ammo.
     const pk = createWorld().pickups;
-    for (const [k, n] of [['health', 8], ['armor', 6], ['ammo', 6], ['grenade', 6]] as const) expect(pk.filter((p) => p.kind === k).length).toBe(n);
+    for (const [k, n] of [['health', 8], ['armor', 6], ['ammo', 10], ['grenade', 6]] as const) expect(pk.filter((p) => p.kind === k).length).toBe(n);
   });
   it('every walkable tile and every pickup is reachable from the player spawn', () => {
     const seen = new Uint8Array(l.w * l.h);
@@ -88,6 +88,7 @@ describe('collision', () => {
 describe('projectiles', () => {
   it('travel over several ticks (no hitscan)', () => {
     const w = createWorld({ map: TEST_MAP, bots: [] });
+    player(w).facing = Math.PI / 2; // already facing the aim (GP: a pull waits for the body to turn)
     stepWorld(w, input({ aim: Math.PI / 2, firing: true }));
     const b = w.bullets[0];
     const d1 = Math.hypot(b.x - b.ox, b.y - b.oy);
@@ -181,6 +182,7 @@ describe('bot perception limits', () => {
     const step: SoundEvent = { type: 'quietStep', x: 2.5, y: 2.5, radius: TUNING.sound.quietStep, sourceId: 0, team: 'player', tick: 0 };
     expect(hears(l, 8.5, 2.5, step)).toBe(false);
     const w = createWorld({ map: TEST_MAP, bots: BOT_RIGHT });
+    player(w).facing = Math.PI; // already facing the aim (GP: a pull waits for the body to turn)
     stepWorld(w, input({ aim: Math.PI, firing: true }));
     stepWorld(w, IDLE_INPUT);
     expect(w.brains.get(1)!.state).toBe('investigate');

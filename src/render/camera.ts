@@ -1,5 +1,5 @@
 // Camera with aim lead (CHOG-DES-001). Two cascaded first-order filters, so it never overshoots:
-//   lead  -> eases toward facing x lookahead over leadSmoothing (slow: aim flicks and touch-aim noise don't whip
+//   lead  -> eases toward the lead target over leadSmoothing (slow: aim flicks and touch-aim noise don't whip
 //            the view; the lead vector crosses through the player on a 180 deg flick instead of swinging round)
 //   pos   -> eases toward player + lead over cameraSmoothing (tight: the player never drifts off screen)
 // A new camera starts on the player with zero lead, so spawn is centred and the lead ramps in.
@@ -10,10 +10,26 @@ export function createCamera(px: number, py: number): Camera {
   return { x: px, y: py, lx: 0, ly: 0 };
 }
 
-export function stepCamera(c: Camera, px: number, py: number, facing: number, dt: number, T: CameraTuning): void {
+/**
+ * The lead target in u. Touch: facing x lookahead (the aim comes from the thumb, never from the screen). PC (GP): the
+ * cursor's offset from the screen centre, scaled and capped at lookahead. The PC aim is the cursor's angle from the
+ * player's screen spot, so a lead taken from the facing moved that spot under a still cursor and turned the aim with
+ * it: standing still, the aim crept, and behind you it flipped (the player slid past a near cursor). A lead parallel
+ * to the cursor's offset keeps player, screen centre and cursor on one line: the aim stays where the cursor points.
+ */
+export function leadTarget(facing: number, T: CameraTuning, cursor?: { dx: number; dy: number }): { x: number; y: number } {
+  if (!cursor) return { x: Math.cos(facing) * T.lookahead, y: Math.sin(facing) * T.lookahead };
+  const x = cursor.dx * CURSOR_LEAD, y = cursor.dy * CURSOR_LEAD, d = Math.hypot(x, y);
+  const k = d > T.lookahead ? T.lookahead / d : 1;
+  return { x: x * k, y: y * k };
+}
+/** u of lead per u of cursor offset from the screen centre (PC): a cursor at the edge of a 22 u view leads ~1.5 u. */
+const CURSOR_LEAD = 0.14;
+
+export function stepCamera(c: Camera, px: number, py: number, lead: { x: number; y: number }, dt: number, T: CameraTuning): void {
   const kl = 1 - Math.exp(-dt / T.leadSmoothing);
-  c.lx += (Math.cos(facing) * T.lookahead - c.lx) * kl;
-  c.ly += (Math.sin(facing) * T.lookahead - c.ly) * kl;
+  c.lx += (lead.x - c.lx) * kl;
+  c.ly += (lead.y - c.ly) * kl;
   const k = 1 - Math.exp(-dt / T.cameraSmoothing);
   c.x += (px + c.lx - c.x) * k;
   c.y += (py + c.ly - c.y) * k;

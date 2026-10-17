@@ -24,10 +24,10 @@ const tile = (w: World, x: number, y: number) => w.level.tiles[Math.floor(y) * w
 const reach = (w: World) => walkField(w.level, [w.level.playerSpawn]);
 
 describe('the layout', () => {
-  it('26 pickups: 8 health, 6 armour, 6 grenades, 6 ammo, every zone with room to move (4+ tiles), solo and online', () => {
+  it('30 pickups: 8 health, 6 armour, 6 grenades, 10 ammo (GP: 4 more ammo), every zone with room to move (4+ tiles), solo and online', () => {
     for (const w of [solo(1), online(1, 1), online(1, 3), online(1, 5)]) {
       const n = (k: string) => w.pickups.filter((p) => p.kind === k).length;
-      expect([n('health'), n('armor'), n('grenade'), n('ammo')]).toEqual([8, 6, 6, 6]);
+      expect([n('health'), n('armor'), n('grenade'), n('ammo')]).toEqual([8, 6, 6, 10]);
       for (const [i, s] of w.pickupSpots.entries()) expect(s.length, PICKUP_ZONES[i].name).toBeGreaterThanOrEqual(4);
     }
   });
@@ -109,7 +109,7 @@ describe('comebacks', () => {
     expect(worst).toBeLessThanOrEqual(P.balanceTolerance + 1.5);
   });
   it('substantially more on the map than before, but no more per tile of floor (a resource space, not a vending machine)', () => {
-    // FS: 26 pickups on 1,950 floor tiles. Before (FP): 4 health at 40/25 s, 4 armour at 35/30 s, 3 grenades at 40 s, on 676 tiles.
+    // FS: 26 pickups on 1,950 floor tiles (GP: 30, faster comebacks; the per-tile bars below still hold). Before (FP): 4 health at 40/25 s, 4 armour at 35/30 s, 3 grenades at 40 s, on 676 tiles.
     const w = solo(1);
     const floor = Array.from(w.level.tiles).filter((t) => t === FLOOR || t === 4).length;
     const n = (k: string) => w.pickups.filter((p) => p.kind === k).length;

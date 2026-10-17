@@ -27,7 +27,7 @@ describe('pickups', () => {
     for (let i = 0; i < TUNING.pickups.health.respawn * 60 + 2; i++) stepWorld(w, IDLE_INPUT);
     expect(hp.active).toBe(true);
   });
-  it('a full-health actor overheals by the pickup (capped at +25%), and it drains back to max at 2 per second', () => {
+  it('a full-health actor overheals by the pickup (capped at +25%), and it stays (GP: no phantom drain)', () => {
     const w = createWorld({ map: ROOM, bots: [] });
     const p = player(w);
     p.x = 5.5; p.y = 1.5;
@@ -36,10 +36,9 @@ describe('pickups', () => {
     expect(p.hp).toBeCloseTo(Math.min(hpCeiling(p), p.maxHp + TUNING.pickups.health.amount), 0);
     const over = p.hp - p.maxHp;
     p.x = 2.5;
-    for (let i = 0; i < 60; i++) stepWorld(w, IDLE_INPUT);
-    expect(p.hp - p.maxHp).toBeCloseTo(over - TUNING.pickups.overhealDecay, 1);
+    expect(over).toBeGreaterThan(0);
     for (let i = 0; i < 60 * 30; i++) stepWorld(w, IDLE_INPUT);
-    expect(p.hp).toBe(p.maxHp);
+    expect(p.hp - p.maxHp).toBeCloseTo(over, 6);
   });
   it('at the overheal ceiling a health pickup is left for someone else', () => {
     const w = createWorld({ map: ROOM, bots: [] });
@@ -49,7 +48,7 @@ describe('pickups', () => {
     stepWorld(w, IDLE_INPUT);
     expect(w.pickups.find((k) => k.kind === 'health')!.active).toBe(true);
   });
-  it('armour at its cap goes up to 25 over it, then drains at 1 per second', () => {
+  it('armour at its cap goes up to 25 over it, and it stays (GP: no phantom drain)', () => {
     const w = createWorld({ map: ROOM, bots: [] });
     const p = player(w);
     p.armor = p.maxArmor;
@@ -57,6 +56,9 @@ describe('pickups', () => {
     stepWorld(w, IDLE_INPUT);
     expect(p.armor).toBeCloseTo(armorCeiling(p), 1);
     expect(armorCeiling(p)).toBe(p.maxArmor + TUNING.pickups.overArmor);
+    p.x = 2.5;
+    for (let i = 0; i < 60 * 30; i++) stepWorld(w, IDLE_INPUT);
+    expect(p.armor).toBeCloseTo(armorCeiling(p), 6);
   });
   it('armour adds armour (capped); ammo adds two magazines to reserve', () => {
     const w = createWorld({ map: ROOM, bots: [] });

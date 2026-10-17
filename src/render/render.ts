@@ -6,12 +6,12 @@
 import { Application, Container, Graphics, Sprite, Text } from 'pixi.js';
 import { TUNING } from '../config/tuning';
 import { placeLabel, stackLabels, type Rect } from './labels';
-import { createCamera, frameAxis, stepCamera, viewScale } from './camera';
+import { createCamera, frameAxis, leadTarget, stepCamera, viewScale } from './camera';
 import { WALL, walkable, type Level } from '../sim/level';
 import { pointInPolygon } from '../sim/geom';
 import { canSee, visibilityPolygon } from '../sim/vision';
 import { createLightMesh, type LightMesh, type LightParams } from './lightmesh';
-import { player, revealed, wants, type Actor, type World } from '../sim/world';
+import { lootTake, player, revealed, wants, type Actor, type World } from '../sim/world';
 import type { Brain } from '../sim/bots';
 import { touchStick, AIM_DEADZONE, type Input } from '../input/input';
 import { bakeMap, type Baked } from './bake';
@@ -214,6 +214,8 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
   let visBots = 0, flashBots = 0;
   let exploreTimer = 0;
   const pickupLabels: Text[] = [];
+  // GP loot bag labels, pooled.
+  const lootLabels: Text[] = [];
   // SB call-out lines above AI teammates, pooled (one per caller on screen at a time).
   const commsTexts: Text[] = [];
   // Pickups as you last saw them (CF-E): out of your light you remember, you do not watch the respawn.
@@ -525,7 +527,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
     else if ((gh.hold -= frameDt) <= 0) gh.hp = Math.max(a.hp, gh.hp - a.maxHp * 2 * frameDt);
     if (gh.hp > a.hp && !a.downed) bars.rect(x, y, W * Math.min(1, Math.max(0, gh.hp / a.maxHp)), H).fill({ color: P.signal, alpha: 0.85 });
     bars.rect(x, y, W * Math.min(1, Math.max(0, a.hp / a.maxHp)), H).fill(a.downed ? P.signal : hostile ? P.hostile : P.team);
-    // Overheal (a health pickup taken at full health): a cream extension past the bar's end, draining back.
+    // Overheal (a health pickup taken at full health): a cream extension past the bar's end, kept until damage takes it.
     if (a.hp > a.maxHp && !a.downed) bars.rect(x + W, y, W * Math.min(0.25, (a.hp - a.maxHp) / a.maxHp), H).fill(P.signal);
     if (a.maxArmor > 0 && a.armor > 0) bars.rect(x, y + H + 0.015, W * Math.min(1, a.armor / a.maxArmor), 0.05).fill(P.armor);
   }
@@ -615,6 +617,38 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       else if (p.kind === 'grenade') { circle(props, p.x, p.y + 0.03 + bob, 0.15).fill(col); props.rect(p.x - 0.05, p.y - 0.2 + bob, 0.1, 0.09).rect(p.x + 0.02, p.y - 0.2 + bob, 0.14, 0.04).fill(col); }
       else for (let k = 0; k < 3; k++) props.rect(p.x - 0.17 + k * 0.13, p.y - 0.16 + bob, 0.08, 0.32).fill(col);
     });
+    // GP loot bags (what a fallen operator carried): a bright satchel with a dot per kind still in it and a ring that
+    // runs down to its timeout. Pulses when it holds something you would take. Only what your light shows.
+    const pal = TUNING.palette;
+    let li = 0;
+    for (const l of w.loot) {
+      const lit = !!explored[Math.floor(l.y) * level.w + Math.floor(l.x)] && (!LAB.dark || pointInPolygon(l.x, l.y, poly));
+      if (!lit) continue;
+      const bob = Math.sin(w.tick / 16 + l.id) * 0.04;
+      if (me.alive && !me.downed && lootTake(me, l)) {
+        const pulse = 0.5 + 0.5 * Math.sin(w.tick / 8);
+        circle(props, l.x, l.y + bob, 0.55 + pulse * 0.08, 28).fill({ color: P.signal, alpha: 0.12 + pulse * 0.1 }).stroke({ width: 0.06, color: P.signal, alpha: 0.5 + pulse * 0.4 });
+      }
+      props.ellipse(l.x + 0.05, l.y + 0.14, 0.4, 0.26).fill({ color: 0x000000, alpha: 0.35 });
+      props.roundRect(l.x - 0.36, l.y - 0.28 + bob, 0.72, 0.56, 0.14).fill(px('bgPanel')).stroke({ width: 0.07, color: P.signal });
+      props.rect(l.x - 0.14, l.y - 0.36 + bob, 0.28, 0.1).fill(P.signal);
+      const dots = [l.health >= 1 ? pal.heal : -1, l.armor >= 1 ? pal.armor : -1, l.mags >= 0.05 ? pal.ammo : -1, l.grenades > 0 ? pal.grenade : -1].filter((c) => c >= 0);
+      dots.forEach((c, k) => circle(props, l.x - (dots.length - 1) * 0.085 + k * 0.17, l.y + 0.02 + bob, 0.07).fill(c));
+      arc(props, l.x, l.y + bob, 0.46, -Math.PI / 2, -Math.PI / 2 + Math.max(0, Math.min(1, l.left / TUNING.loot.seconds)) * Math.PI * 2).stroke({ width: 0.04, color: P.signal, alpha: 0.7 });
+      let t = lootLabels[li];
+      if (!t) {
+        t = new Text({ text: 'LOOT', style: { fontFamily: 'Plex Mono, monospace', fontSize: 22, fontWeight: '600', fill: 0xffffff, stroke: { color: 0x000000, width: 4 } } });
+        t.anchor.set(0.5, 0);
+        t.scale.set(1 / 80);
+        t.tint = P.signal;
+        labels.addChild(t);
+        lootLabels.push(t);
+      }
+      t.visible = true;
+      t.position.set(l.x, l.y + 0.42);
+      li++;
+    }
+    for (; li < lootLabels.length; li++) lootLabels[li].visible = false;
     // Deployed slabs.
     for (const b of w.barriers) {
       const bx = b.box;
@@ -705,7 +739,9 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       const sw = app.screen.width, sh = app.screen.height;
       const portrait = sh > sw;
       ppu = viewScale(sw, sh, R) * (opts.menu ?? 1);
-      stepCamera(cam, p.x, p.y, p.facing, dt, portrait ? PORTRAIT_CAM : R);
+      const CT = portrait ? PORTRAIT_CAM : R;
+      const cursor = input.mode === 'pc' && opts.playing ? { dx: (input.mouseX - sw / 2) / ppu, dy: (input.mouseY - sh / 2) / ppu } : undefined;
+      stepCamera(cam, p.x, p.y, leadTarget(p.facing, CT, cursor), dt, CT);
       camX = cam.x;
       camY = cam.y;
       if (opts.menu) { cam.x = camX = p.x; cam.y = camY = p.y; cam.lx = cam.ly = 0; }

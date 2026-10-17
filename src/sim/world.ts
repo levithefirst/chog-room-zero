@@ -126,6 +126,9 @@ export interface Actor {
   /** Burst weapons: rounds still to fire in the current burst, and seconds until the next one. */
   volley: number;
   volleyGap: number;
+  /** GP: a trigger pull made while the body was still turning, kept this many seconds until it lines up (a tap is
+   * one step long and would otherwise be lost). */
+  fireQueued: number;
 }
 
 /** A thrown grenade: rolls to rest, bounces off walls, flies over waist-high cover, explodes when the fuse ends. */
@@ -179,6 +182,8 @@ export interface SoundEvent {
   // Online: the server sent what hearing it tells this player (a 'clear' line spot, or through a 'wall' a bearing
   // and distance band), not the source's spot. The client uses it as is (no second blur).
   est?: 'clear' | 'wall';
+  // GP: a 'pickup' sound from a loot bag carries the bag's id (the client words what was taken).
+  loot?: number;
 }
 
 export interface HitEvent {
@@ -215,7 +220,7 @@ export interface KillInfo {
  * ("Contact, north"), the player's contact intel and the other AI teammates use it. Never carries what the caller does
  * not know: x/y are the caller's own belief (a sighting is exact, a heard guess carries the caller's error).
  */
-export type CommsKind = 'contact' | 'behind' | 'lost' | 'steps' | 'shots' | 'reloading' | 'hurt';
+export type CommsKind = 'contact' | 'behind' | 'lost' | 'steps' | 'shots' | 'reloading' | 'hurt' | 'reviving' | 'supply';
 export interface CommsEvent {
   from: number;
   kind: CommsKind;
@@ -228,6 +233,8 @@ export interface CommsEvent {
   /** How far off the caller's own belief may be (0 = it saw it). */
   r: number;
   tick: number;
+  /** GP 'supply': what it is going for ('loot', 'ammo', ...). */
+  what?: string;
 }
 
 export type PickupKind = 'health' | 'armor' | 'ammo' | 'grenade';
@@ -241,6 +248,32 @@ export interface Pickup {
   /** Its zone in w.pickupSpots (-1: a fixed spawn from the map characters), and how many times it has moved. */
   zone: number;
   moves: number;
+}
+
+/**
+ * GP kill loot (owner 2026-10-17: "killing opponents should produce loot"). What an eliminated actor was carrying,
+ * dropped where it fell: its rounds (kept as a share of its own magazine, so any gun can take them), its grenades, the
+ * armour left on it, and the field dressing everyone carries (TUNING.loot.dressing, never used by its owner). Nothing
+ * is made up: a bag only holds what the actor had, and every take moves it out of the bag. Gone after TUNING.loot.seconds
+ * or once empty. The sim (on the game server online) decides all of it; clients only draw it.
+ */
+export interface Loot {
+  id: number;
+  x: number;
+  y: number;
+  /** Rounds as magazines of the dropper's gun (0.5 = half a magazine), health, armour, grenades still in the bag. */
+  mags: number;
+  health: number;
+  armor: number;
+  grenades: number;
+  /** Seconds until it is gone. */
+  left: number;
+  /** Who dropped it and their team. */
+  from: number;
+  team: Team;
+  /** Teams that know it is there: the killer's and the dropper's, and any team that has since had it in sight (AI
+   * teammates only go for loot their team knows about). */
+  known: Team[];
 }
 
 export interface Barrier {
@@ -274,6 +307,9 @@ export interface World {
   /** Walking distance from the west and east online spawns (pickups stay even for both sides), or null. */
   pickupFields: { alpha: Field; bravo: Field } | null;
   barriers: Barrier[];
+  /** GP: dropped kit of eliminated actors (Loot), and the next loot id. */
+  loot: Loot[];
+  lootSeq: number;
   brains: Map<number, Brain>;
   /** Ids of bots currently allowed to shoot at the player (cap: TUNING.perception.attackTokens). */
   attackTokens: number[];
@@ -334,7 +370,7 @@ function makeActor(id: number, team: Team, name: string, hero: HeroDef, sg: Side
     revealLeft: 0, shieldLeft: 0, frenzyLeft: 0, slowLeft: 0, slowMul: 1, burstLeft: 0, stepAcc: 0, hitFlash: 0, muzzle: 0, deadFor: 0, lastSpread: weapon.spreadDeg, lastHitTick: -999, lastHitFrom: null,
     shots: 0, bullets: 0, hits: 0, kills: 0, damageDealt: 0, damageTaken: 0, death: null, zoneTick: -999,
     downed: false, reviveProgress: 0, downInfo: null, firedLast: false,
-    grenades: nades, maxGrenades: nades, nadeCd: 0, thrown: 0, volley: 0, volleyGap: 0,
+    grenades: nades, maxGrenades: nades, nadeCd: 0, thrown: 0, volley: 0, volleyGap: 0, fireQueued: 0,
   };
 }
 
@@ -372,7 +408,7 @@ export function createWorld(opts: WorldOptions = {}): World {
     });
     return {
       tick: 0, rng: seed, level, actors, bullets: [], grenades: [], nadeSeq: 0, sounds: [], prevSounds: [], comms: [], prevComms: [], commsAt: -1e9, hits: [],
-      ...initPickups(level, seed, opts), barriers: [],
+      ...initPickups(level, seed, opts), barriers: [], loot: [], lootSeq: 0,
       brains, attackTokens: [], squadAI: false, squadPoints: [], perceptionLog: null, outcome: 'playing', playerKill: null,
       mode: 'versus', winner: null, friendlyFire: !!opts.friendlyFire,
       zone: opts.zone === false ? null : planZone(level, seed, ZONE_CENTRES, TUNING.zone, spawns),
@@ -398,7 +434,7 @@ export function createWorld(opts: WorldOptions = {}): World {
   });
   return {
     tick: 0, rng: seed, level, actors, bullets: [], grenades: [], nadeSeq: 0, sounds: [], prevSounds: [], comms: [], prevComms: [], commsAt: -1e9, hits: [],
-    ...initPickups(level, seed, opts), barriers: [],
+    ...initPickups(level, seed, opts), barriers: [], loot: [], lootSeq: 0,
     brains, attackTokens: [], perceptionLog: opts.log ? [] : null, outcome: 'playing', playerKill: null,
     // The lab's 'before' (LAB.pacing off: the RC-8 map and bots) keeps the RC-8 patrols, so it stays a fixed baseline.
     squadAI: opts.squadAI ?? (opts.bots === undefined && LAB.pacing),
@@ -688,11 +724,16 @@ function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
     if (a.reloadLeft > 0) return;
   }
   // Burst weapons finish the burst they started (one trigger pull, W.burst rounds W.burstGap apart).
+  // GP: a new pull leaves only once the body faces within fireMaxLagDeg of the aim; one made while turning waits.
+  const aligned = a.aimLag <= TUNING.combat.fireMaxLagDeg * DEG;
+  if (inp.firing && !aligned) a.fireQueued = TUNING.combat.fireQueueSeconds;
+  else a.fireQueued = Math.max(0, a.fireQueued - dt);
   if (a.volley > 0) {
     a.volleyGap -= dt;
     if (a.volleyGap <= 0 && a.ammo > 0 && a.shieldLeft === 0) fireRound(w, a);
     else if (a.ammo === 0 || a.shieldLeft > 0) { a.volley = 0; a.cooldown = W.fireInterval; }
-  } else if (inp.firing && a.cooldown === 0 && a.ammo > 0 && a.shieldLeft === 0) {
+  } else if ((inp.firing || a.fireQueued > 0) && aligned && a.cooldown === 0 && a.ammo > 0 && a.shieldLeft === 0) {
+    a.fireQueued = 0;
     a.shots++;
     a.volley = W.burst ?? 1;
     fireRound(w, a);
@@ -1009,6 +1050,7 @@ function drop(w: World, t: Actor, info: KillInfo): 'downed' | 'out' {
 }
 
 export function down(w: World, t: Actor, info: KillInfo): void {
+  dropLoot(w, t, info);
   t.hp = 0;
   t.alive = false;
   t.downed = false;
@@ -1018,6 +1060,69 @@ export function down(w: World, t: Actor, info: KillInfo): void {
   t.death = info;
   emit(w, 'death', t.x, t.y, TUNING.sound.death, t);
   if (w.mode === 'solo' && t.id === 0) w.playerKill = info;
+}
+
+/** GP: what t carried becomes a bag at its feet (Loot). Called once, at elimination. */
+function dropLoot(w: World, t: Actor, info: KillInfo): void {
+  const L = TUNING.loot;
+  if (!L.on || !t.alive) return;
+  const mags = (t.ammo + t.reserve) / t.weapon.magazine, armor = Math.max(0, Math.floor(t.armor)), grenades = Math.max(0, t.grenades);
+  const killer = info.killerId >= 0 ? w.actors[info.killerId] : null;
+  const known: Team[] = [t.team];
+  if (killer && killer.team !== t.team) known.push(killer.team);
+  w.loot.push({ id: w.lootSeq++, x: t.x, y: t.y, mags, health: L.dressing, armor, grenades, left: L.seconds, from: t.id, team: t.team, known });
+  t.ammo = t.reserve = 0;
+  t.armor = 0;
+  t.grenades = 0;
+}
+
+/** What `a` would take from a bag right now (each part only up to its own ceiling), or null if nothing. */
+export function lootTake(a: Actor, l: Loot): { rounds: number; mags: number; health: number; armor: number; grenades: number } | null {
+  if (!a.alive || a.downed) return null;
+  const rounds = Math.max(0, Math.min(Math.floor(l.mags * a.weapon.magazine + 1e-9), ammoCeiling(a) - a.reserve));
+  const health = Math.max(0, Math.min(l.health, a.maxHp - a.hp));
+  const armor = Math.max(0, Math.min(l.armor, a.maxArmor - a.armor));
+  const grenades = Math.max(0, Math.min(l.grenades, a.maxGrenades - a.grenades));
+  if (rounds === 0 && health < 1 && armor < 1 && grenades === 0) return null;
+  return { rounds, mags: rounds / a.weapon.magazine, health: health >= 1 ? health : 0, armor: armor >= 1 ? armor : 0, grenades };
+}
+
+const lootEmpty = (l: Loot) => l.mags < 0.05 && l.health < 1 && l.armor < 1 && l.grenades === 0;
+
+/**
+ * Bags on the floor: who takes what (the nearest standing actor in reach with a clear line who wants something,
+ * one taker per bag per step, so two people never take the same thing), who knows they are there, and the timeout.
+ */
+function stepLoot(w: World, dt: number): void {
+  if (!w.loot.length) return;
+  const R = TUNING.pickups.radius;
+  for (const l of w.loot) {
+    l.left -= dt;
+    if (l.left <= 0) continue;
+    let a: Actor | null = null, ad = Infinity;
+    for (const o of w.actors) {
+      if (!o.alive || o.downed) continue;
+      const d = Math.hypot(o.x - l.x, o.y - l.y);
+      if (d > R || d >= ad || !sightClear(w.level, o.x, o.y, l.x, l.y) || !lootTake(o, l)) continue;
+      a = o; ad = d;
+    }
+    if (a) {
+      const g = lootTake(a, l)!;
+      a.reserve += g.rounds;
+      l.mags = Math.max(0, l.mags - g.mags);
+      a.hp += g.health; l.health -= g.health;
+      a.armor += g.armor; l.armor -= g.armor;
+      a.grenades += g.grenades; l.grenades -= g.grenades;
+      emit(w, 'pickup', l.x, l.y, TUNING.sound.pickup, a);
+      w.sounds[w.sounds.length - 1].loot = l.id;
+    }
+    // A team learns of a bag when one of its standing members has it in its light.
+    for (const o of w.actors) {
+      if (!o.alive || o.downed || l.known.includes(o.team)) continue;
+      if (Math.hypot(o.x - l.x, o.y - l.y) <= o.view.range && sightClear(w.level, o.x, o.y, l.x, l.y)) l.known.push(o.team);
+    }
+  }
+  w.loot = w.loot.filter((l) => l.left > 0 && !lootEmpty(l));
 }
 
 /** Match time in seconds (the zone clock). */
@@ -1097,46 +1202,49 @@ function stepPickups(w: World, dt: number): void {
       emit(w, 'pickup', p.x, p.y, TUNING.sound.pickup, a);
     }
   }
-  // After pickups (so a pickup sees the true value): overheal and over-armour drain back to the normal maximum.
-  for (const a of w.actors) {
-    if (!a.alive || a.downed) continue;
-    if (a.hp > a.maxHp) a.hp = Math.max(a.maxHp, a.hp - P.overhealDecay * dt);
-    if (a.armor > a.maxArmor) a.armor = Math.max(a.maxArmor, a.armor - P.overArmorDecay * dt);
-  }
+  // GP (owner 2026-10-17: "health ticks down when I'm not fighting"): overheal and over-armour no longer drain. They
+  // were the only loss with no hit, no zone and no sound; now they stay until damage takes them.
 }
 
 /**
- * Downed and revive (team modes, TUNING.revive). Downed actors bleed out; a standing teammate in range who did not
- * fire this step revives them; a hit on either resets the progress. A team with nobody standing is out: every downed
- * member is eliminated (kill credit to whoever downed them).
+ * Downed and revive (TUNING.revive). Downed actors bleed out over the 10 s window; a standing teammate in range who did
+ * not fire this step revives them, and while they do the bleed-out waits; a hit on either, the rescuer firing or leaving
+ * the range resets the progress. A team with nobody standing is out: every downed member is eliminated (kill credit to
+ * whoever downed them).
  */
 function stepRevive(w: World, dt: number): void {
   const R = TUNING.revive;
   for (const t of w.actors) {
     if (!t.alive || !t.downed) continue;
-    // Any helper in range who was not hit this step keeps the revive going (not just the first in actor order).
-    const helpers = w.actors.filter((m) => m !== t && m.team === t.team && standing(m) && !m.firedLast && Math.hypot(m.x - t.x, m.y - t.y) <= R.range);
+    // Any helper in range who was not hit this step keeps the revive going (not just the first in actor order). One
+    // revive per downed actor: two rescuers at once are no faster than one.
+    const helpers = w.actors.filter((m) => m !== t && m.team === t.team && standing(m) && !m.firedLast && Math.hypot(m.x - t.x, m.y - t.y) <= R.range && sightClear(w.level, m.x, m.y, t.x, t.y));
     const helper = helpers.find((m) => m.lastHitTick !== w.tick) ?? helpers[0];
     const hitNow = t.lastHitTick === w.tick || (helper && helper.lastHitTick === w.tick);
     if (helper && !hitNow) {
       t.reviveProgress += dt;
-      if (t.reviveProgress >= R.seconds) {
+      if (t.reviveProgress >= R.seconds - 1e-9) {
         t.downed = false;
         t.downInfo = null;
         t.reviveProgress = 0;
         t.hp = Math.round(t.maxHp * R.hpShare);
+        t.armor = 0;
         emit(w, 'revive', t.x, t.y, TUNING.sound.reload, helper);
-        continue;
       }
-    } else t.reviveProgress = 0;
+      continue;
+    }
+    t.reviveProgress = 0;
     t.hp -= (R.downHp / R.bleedSeconds) * dt;
-    if (t.hp <= 0) drop(w, t, t.downInfo ?? { cause: 'shot', killerId: -1, weapon: 'Bled out', fromX: t.x, fromY: t.y, toX: t.x, toY: t.y, tick: w.tick });
+    if (t.hp <= 1e-9) drop(w, t, t.downInfo ?? { cause: 'shot', killerId: -1, weapon: 'Bled out', fromX: t.x, fromY: t.y, toX: t.x, toY: t.y, tick: w.tick });
   }
   for (const t of w.actors) {
     if (!t.downed || !t.alive) continue;
-    if (!w.actors.some((m) => m.team === t.team && standing(m))) drop(w, t, t.downInfo!);
+    if (!w.actors.some((m) => m.team === t.team && standing(m))) drop(w, t, t.downInfo ?? { cause: 'shot', killerId: -1, weapon: 'Bled out', fromX: t.x, fromY: t.y, toX: t.x, toY: t.y, tick: w.tick });
   }
 }
+
+/** Seconds of the downed window left (at the current bleed, with no more hits), for the HUD and the AI. */
+export const downLeft = (t: Actor) => t.downed ? Math.max(0, t.hp) / (TUNING.revive.downHp / TUNING.revive.bleedSeconds) : 0;
 
 function stepBarriers(w: World, dt: number): void {
   let any = false;
@@ -1199,6 +1307,7 @@ export function stepWorld(
   stepGrenades(w, dt);
   stepZone(w, dt);
   stepPickups(w, dt);
+  stepLoot(w, dt);
   stepRevive(w, dt);
   stepBarriers(w, dt);
   if (w.outcome === 'playing') {

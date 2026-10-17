@@ -13,7 +13,7 @@ import { heroIdOf } from '../src/config/heroes';
 import { VERSUS_SPAWNS } from '../src/config/map';
 import { TUNING } from '../src/config/tuning';
 import { validateNickname } from '../src/ui/profile';
-import { MODE_SIZE, PROTOCOL, parseClientMsg, toActorInput, type ClientMsg, type Mode, type NetActor, type NetBullet, type NetGrenade, type NetHit, type NetProfile, type NetSound, type PlayerResult, type ServerMsg } from '../src/net/protocol';
+import { MODE_SIZE, PROTOCOL, parseClientMsg, toActorInput, type ClientMsg, type Mode, type NetActor, type NetBullet, type NetGrenade, type NetHit, type NetLoot, type NetProfile, type NetSound, type PlayerResult, type ServerMsg } from '../src/net/protocol';
 import { BASE_POWER, powerFor, signatureFor, type Power, type Tier } from '../src/config/power';
 import { RATING } from '../src/config/progression';
 import type { GameTicket, MatchRecord } from '../api/_lib/game';
@@ -605,8 +605,12 @@ export class Lobby {
     // Where every pickup is, whenever the layout changed since this player's last snapshot (and once at the start).
     const pk = p.pickRev !== w.pickupRev ? w.pickups.flatMap((k) => [k.x, k.y]) : undefined;
     p.pickRev = w.pickupRev;
+    // GP loot: the bags this player's team knows about (its own and its kills' drops, and any it has seen), with what
+    // kinds they hold. The server alone decides what is in a bag and who takes it.
+    const lt: NetLoot[] = w.loot.filter((l) => l.known.includes(me.team)).map((l) => ({ id: l.id, x: r3(l.x), y: r3(l.y), left: r3(l.left),
+      k: (l.health >= 1 ? 1 : 0) | (l.armor >= 1 ? 2 : 0) | (l.mags >= 0.05 ? 4 : 0) | (l.grenades > 0 ? 8 : 0) }));
     return {
-      t: 'snap', tick: w.tick, actors, bullets, grenades, pickups: w.pickups.map((k) => k.active), ...(pk ? { pk } : {}), ...(sp.length ? { sp } : {}), sounds: heard, hits: netHits,
+      t: 'snap', tick: w.tick, actors, bullets, grenades, pickups: w.pickups.map((k) => k.active), ...(pk ? { pk } : {}), ...(lt.length ? { lt } : {}), ...(sp.length ? { sp } : {}), sounds: heard, hits: netHits,
       barriers: w.barriers.map((b) => ({ ...b.box, left: r3(b.left) })), ack: room.acks[p.actorId], as: room.ackSteps[p.actorId],
     };
   }

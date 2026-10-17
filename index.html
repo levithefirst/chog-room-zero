@@ -60,6 +60,18 @@
       .row { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.08em; }
       .row .num { color: var(--ink); font-size: 15px; letter-spacing: 0; }
       #hero { font-size: 12px; color: var(--dim); margin-top: 2px; }
+      /* GP: a timed effect on you (a Snare slow) in words and seconds, never a silent slow-down. */
+      #status { font-size: 12px; color: var(--armor); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 3px; min-height: 0; }
+      #status:empty { display: none; }
+      /* GP downed window: the countdown and the revive, centre top, big enough to read mid-fight on a phone. */
+      #downcard { left: 50%; top: calc(var(--st) + 112px); transform: translateX(-50%); text-align: center; padding: 8px 16px 10px; min-width: 220px; display: none; }
+      #downcard.on { display: block; }
+      #downcard b { display: block; font-size: 15px; letter-spacing: 0.16em; color: var(--damage); }
+      #downcard .num { display: block; font-size: 30px; line-height: 1.1; color: var(--ink); }
+      #downcard small { display: block; font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.08em; }
+      #downcard .bar { width: 100%; margin-top: 6px; }
+      #downbar { background: var(--health); width: 0; }
+      #downcard.save b { color: var(--health); }
       #foes { left: 50%; top: var(--st); transform: translateX(-50%); padding: 5px 12px; display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.1em; }
       #pips { display: flex; gap: 4px; }
       #pips i { width: 9px; height: 9px; background: var(--enemy); clip-path: polygon(50% 0, 100% 100%, 50% 72%, 0 100%); }
@@ -734,6 +746,7 @@
         <div class="row"><span>Armour</span><span class="num" id="arn">0</span></div>
         <div class="bar" id="arbar"><i id="arfill"></i></div>
         <div id="hero"></div>
+        <div id="status" aria-live="polite"></div>
       </div>
       <div id="foes" class="panel"><span id="foesn" class="num">5</span><span>hostiles</span><span id="pips"></span><span id="zone"><i aria-hidden="true"></i><b id="zphase">Zone in</b><span id="ztime" class="num"></span></span></div>
       <div id="sys">
@@ -749,6 +762,7 @@
       <button id="nade" type="button" aria-label="Throw grenade"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="11" cy="14.6" rx="6.2" ry="6.6" /><path d="M8.6 8.2V6.3h4.8v1.9" /><path d="M13.4 6.6c2.4-.2 4-1.4 4.6-3.4" /><circle cx="18.6" cy="3.4" r="1.5" /><path d="M7.5 13.4h7M7.5 16.4h7" /></svg><b id="naden" class="num">3</b><small class="keyhint">G</small></button>
       <button id="reload" type="button">Reload</button>
       <div id="hint"></div>
+      <div id="downcard" class="panel" role="status" aria-live="polite"><b id="downh">DOWNED</b><span id="downt" class="num"></span><small id="downwhy"></small><div class="bar"><i id="downbar"></i></div></div>
       <div id="toast"></div>
     </div>
     <div id="overlay" class="layer"></div>

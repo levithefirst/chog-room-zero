@@ -3,7 +3,7 @@ import { createInput, touchStick } from './input/input';
 import { createSummaryGate, overlayInputAllowed } from './input/gate';
 import { createAudio } from './audio/audio';
 import { fixedSteps } from './sim/sim';
-import { createWorld, hears, matchSeconds, player, stepWorld, touchingFull, wants, IDLE_INPUT, type Pickup, type PickupKind, type World } from './sim/world';
+import { createWorld, downLeft, hears, matchSeconds, player, standing, stepWorld, touchingFull, wants, IDLE_INPUT, type Pickup, type PickupKind, type World } from './sim/world';
 import { outsideCircle, zoneAt } from './sim/zone';
 import { OnlineSession, serverUrl } from './net/client';
 import { MODE_SIZE, type Mode } from './net/protocol';
@@ -87,7 +87,7 @@ const BOOT_TIPS = [
   'Running is loud. Creep (half push or Shift) and they hear nothing.',
   'Footprints are steps you heard. A tick around you is a noise through a wall.',
   'Stand still and your aim tightens and your lamp reaches further. Run and both loosen.',
-  'In 3v3 and 5v5 a downed teammate can be revived: stand next to them and hold fire.',
+  'A downed teammate has 10 s: stand next to them and hold fire for 3 s to get them up.',
   'A health pickup at full health still overheals you for a while.',
   'Your Chog sets your starting class. Your account upgrades take it further.',
   'The ten 1:1 legends each have their own signature, telegraph and counter.',
@@ -1445,11 +1445,21 @@ async function start() {
   // A pickup the player just took: what it gave, in its colour, at the player (pages 6-9 of the reference: a named
   // pickup with a ring), instead of a generic "Picked up".
   const PICKUP_LABEL: Record<PickupKind, string> = { health: 'HEALTH', armor: 'ARMOUR', ammo: 'AMMO', grenade: 'GRENADE' };
+  // What you carried after the last step: a loot bag's take is the difference (the bag's contents are the sim's).
+  let kit = { hp: 0, armor: 0, reserve: 0, grenades: 0 }, kitBefore = kit;
   function collected(x: number, y: number) {
     const pk = world.pickups.find((q) => q.x === x && q.y === y);
     const p = player(world);
     runPickups++;
-    if (!pk) { toast('Picked up'); return; }
+    if (!pk) {
+      // GP: a loot bag. Say what it gave you, in the order you would look for it.
+      const k = kitBefore;
+      const got = [p.hp - k.hp >= 1 ? `+${Math.round(p.hp - k.hp)} HEALTH` : '', p.armor - k.armor >= 1 ? `+${Math.round(p.armor - k.armor)} ARMOUR` : '',
+        p.reserve > k.reserve ? `+${p.reserve - k.reserve} AMMO` : '', p.grenades > k.grenades ? `+${p.grenades - k.grenades} GRENADE${p.grenades - k.grenades > 1 ? 'S' : ''}` : ''].filter(Boolean);
+      toast(got.length ? `LOOT ${got.join(' · ')}` : 'LOOT');
+      fx.collects.push({ x: p.x, y: p.y, age: 0, color: TUNING.palette.signal });
+      return;
+    }
     const P = TUNING.pickups;
     const amount = pk.kind === 'health' ? `+${P.health.amount} ` : pk.kind === 'armor' ? `+${P.armor.amount} ` : pk.kind === 'grenade' ? `+${P.grenade.amount} ` : `+${P.ammo.mags * p.weapon.magazine} `;
     toast(`${amount}${PICKUP_LABEL[pk.kind]}`);
@@ -1499,6 +1509,9 @@ async function start() {
   function afterStep() {
     const p = player(world);
     const view = p.view;
+    // Kit as it was after the last step (a loot take this step is shown as the difference), then today's.
+    kitBefore = kit;
+    kit = { hp: p.hp, armor: p.armor, reserve: p.reserve, grenades: p.grenades };
     for (const s of world.sounds) {
       const own = s.sourceId === 0;
       const dx = s.x - p.x, dy = s.y - p.y;
@@ -1654,6 +1667,7 @@ async function start() {
   const pipsEl = $('pips');
   let lastHud = '';
   let lastZone = '';
+  let lastStatus = '', lastDown = '';
   let hpGhost = 0, ghostHold = 0, lastGhost = '', abilityWas = 0;
   let zoneTickLeft = 0;
 
@@ -1700,7 +1714,6 @@ async function start() {
       playTime += dt;
       if (!p.alive && !deathWhy.length && fight.hits.length) { deathWhy = explainDeath(); if (deathWhy.length) showHint(esc(deathWhy[0].text), 5); }
       if (!p.alive && hintLeft <= 0) showHint('You are out. Your side plays on; the result comes when it ends.', 4);
-      else if (p.downed && hintLeft <= 0) showHint(`DOWNED: crawl to cover. A teammate within ${TUNING.revive.range} m who holds fire revives you in ${TUNING.revive.seconds} s.`, 3);
       if (net.state === 'reconnecting' || net.state === 'error') showHint(esc(net.message), 1);
     } else if (online && net && phase === 'pause') {
       // Paused online, the match goes on: let go of every control so the operator stands still (the server keeps
@@ -1825,6 +1838,35 @@ async function start() {
       $('naden').textContent = String(p.grenades);
       nd.classList.toggle('empty', p.grenades === 0);
       nd.classList.toggle('cool', p.grenades > 0 && p.nadeCd > 0);
+    }
+    // GP: timed effects on you and the downed window, in words and seconds (a slow or a crawl is never unexplained).
+    {
+      const st = p.alive && p.slowLeft > 0 ? `Slowed ${Math.round((1 - p.slowMul) * 100)}% · ${p.slowLeft.toFixed(1)} s` : '';
+      if (st !== lastStatus) { lastStatus = st; $('status').textContent = st; }
+      // You down, or a teammate down next to you (you are the one reviving): one card, one countdown.
+      const R = TUNING.revive;
+      const mate = !p.downed && p.alive ? world.actors.find((m) => m !== p && m.team === p.team && m.alive && m.downed && Math.hypot(m.x - p.x, m.y - p.y) <= R.range + 1.5) : undefined;
+      const who = p.alive && p.downed ? p : mate;
+      let card = '';
+      if (who) {
+        const reviving = who.reviveProgress > 0;
+        const left = downLeft(who);
+        const helper = reviving ? world.actors.find((m) => m !== who && m.team === who.team && standing(m) && Math.hypot(m.x - who.x, m.y - who.y) <= R.range) : undefined;
+        const head = who === p ? (reviving ? 'BEING REVIVED' : 'DOWNED') : reviving ? `REVIVING ${who.name.toUpperCase()}` : `${who.name.toUpperCase()} IS DOWN`;
+        const big = reviving ? `${who.reviveProgress.toFixed(1)} / ${R.seconds} s` : `${left.toFixed(1)} s`;
+        const why = who === p
+          ? (reviving ? `${helper?.name ?? 'A teammate'} is getting you up · stay still` : world.actors.some((m) => m !== p && m.team === p.team && standing(m)) ? 'Crawl to a teammate · they revive you' : 'Nobody left to revive you')
+          : reviving ? 'Hold fire · stay close' : `Stand next to them and hold fire · ${R.seconds} s`;
+        const share = reviving ? who.reviveProgress / R.seconds : left / R.bleedSeconds;
+        card = `${head}|${big}|${why}|${Math.round(share * 100)}|${reviving ? 1 : 0}`;
+        if (card !== lastDown) {
+          $('downh').textContent = head; $('downt').textContent = big; $('downwhy').textContent = why;
+          ($('downbar') as HTMLElement).style.width = `${Math.round(share * 100)}%`;
+          ($('downbar') as HTMLElement).style.background = reviving ? 'var(--health)' : 'var(--damage)';
+          $('downcard').classList.toggle('save', reviving);
+        }
+      }
+      if (card !== lastDown) { lastDown = card; $('downcard').classList.toggle('on', !!card); }
     }
     // Danger zone HUD (RC-8): phase words + countdown; "Outside" and a red edge while it is hurting you.
     if (world.zone) {

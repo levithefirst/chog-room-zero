@@ -128,10 +128,12 @@ function audit(seeds: number, opts: { quiet?: boolean } = {}) {
   return { calls, perMin: +(calls / minutes).toFixed(1), minGap: +minGap.toFixed(2), kinds, wins, seeds, warnedByCall: +(warnedByCall / Math.max(1, sightings)).toFixed(3), cover: +(coverTurns / Math.max(1, coverChecks)).toFixed(2), coverChecks };
 }
 
-describe('the squad talks without spam and without wallhacks (default game, autopilot, 16 seeds)', () => {
+describe('the squad talks without spam and without wallhacks (default game, autopilot, 32 seeds)', () => {
   let on: ReturnType<typeof audit>, off: ReturnType<typeof audit>;
   it('audits every call against its caller, and every belief from a call against the call', () => {
-    on = audit(16);
+    // GP: 32 seeds (was 16). The rate moved by +-0.4 a minute between 16-seed samples of the same build; 32 halves
+    // that, so the bars below judge the build, not the sample.
+    on = audit(32);
     off = audit(16, { quiet: true });
     (globalThis as { __sbComms?: unknown }).__sbComms = { on, off };
     const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};

@@ -327,6 +327,8 @@ export class OnlineSession {
     this.spotted = (m.sp ?? []).map((s) => ({ id: v(s.id), x: s.x, y: s.y }));
     // The server's word on where each pickup is (they move when they come back).
     if (m.pk) w.pickups.forEach((k, i) => { if (m.pk!.length > i * 2 + 1) { k.x = m.pk![i * 2]; k.y = m.pk![i * 2 + 1]; } });
+    // GP loot bags the server says your team knows of: drawn from what kinds they hold, never decided here.
+    w.loot = (m.lt ?? []).map((l) => ({ id: l.id, x: l.x, y: l.y, left: l.left, health: l.k & 1 ? 1 : 0, armor: l.k & 2 ? 1 : 0, mags: l.k & 4 ? 1 : 0, grenades: l.k & 8 ? 1 : 0, from: -1, team: 'bot' as const, known: [] }));
     w.barriers = m.barriers.map((b) => ({ box: { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 }, left: b.left, owner: -1 }));
     // The view level's solid boxes carry the slabs too, so your predicted walk stops at one like the server's does.
     const solid = w.level.solidBoxes;

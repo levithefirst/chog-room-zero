@@ -92,6 +92,11 @@ export const PICKUP_ZONES: { kind: 'health' | 'armor' | 'ammo' | 'grenade'; x0: 
   { kind: 'ammo', x0: 48, y0: 30, x1: 58, y1: 31, name: 'south corridor east', side: 'east' },
   { kind: 'ammo', x0: 28, y0: 19, x1: 39, y1: 22, name: 'atrium centre', side: 'mid' },
   { kind: 'ammo', x0: 13, y0: 34, x1: 54, y1: 40, name: 'dock', side: 'mid' },
+  // GP (owner 2026-10-17: "ammo relatively frequent"): the corner rooms carry ammo too, so a safe long route resupplies.
+  { kind: 'ammo', x0: 1, y0: 1, x1: 11, y1: 8, name: 'north-west offices', side: 'west' },
+  { kind: 'ammo', x0: 56, y0: 1, x1: 66, y1: 8, name: 'north-east offices', side: 'east' },
+  { kind: 'ammo', x0: 1, y0: 33, x1: 11, y1: 40, name: 'south-west storage', side: 'west' },
+  { kind: 'ammo', x0: 56, y0: 33, x1: 66, y1: 40, name: 'south-east storage', side: 'east' },
 ];
 
 /** The RC-8 layout (LAB.pacing off), kept so the lab can measure the old map against the new one. */

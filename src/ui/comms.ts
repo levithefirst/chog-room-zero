@@ -20,5 +20,7 @@ export function commsLine(e: CommsEvent, px: number, py: number): string {
     case 'shots': return `Shots, ${dir}.`;
     case 'reloading': return 'Reloading!';
     case 'hurt': return "I'm hit, cover me!";
+    case 'reviving': return e.target === 0 ? 'Hang on, coming to get you up!' : 'Reviving, cover me!';
+    case 'supply': return e.what === 'loot' ? `Grabbing their kit, ${dir}.` : `Taking the ${e.what}, ${dir}.`;
   }
 }

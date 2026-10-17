@@ -30,6 +30,9 @@ describe('CHOG-INPUT-001 tap fire', () => {
     const w = createWorld({ bots: [], seed: 2, hero: 'kettle' });
     const p = w.actors[0];
     p.reserve = 999;
+    // The cursor sits at the page origin: face that way first (GP: a pull waits for the body to turn; the tap that
+    // lands mid-turn is covered in tests/gp-combat.test.ts).
+    p.facing = Math.atan2(-360, -640);
     const framesBetween = Math.ceil(WEAPONS.rifle.fireInterval * 60) + 2;
     for (let tap = 0; tap < 20; tap++) {
       el.dispatchEvent(ev('pointerdown', {}));
