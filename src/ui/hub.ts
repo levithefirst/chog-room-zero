@@ -330,7 +330,7 @@ function myRank(c: ScreenCtx): string {
 export function boardScreenHtml(c: ScreenCtx): string {
   const a = c.acct, tab = a.boardTab, solo = tab === 'solo';
   const head = `<tr><th>#</th><th>Player</th><th>Kills</th><th>${solo ? 'Clears' : 'Wins'}</th><th>${solo ? 'Runs' : 'Matches'}</th><th>Level</th>${solo ? '' : '<th>Rating</th>'}</tr>`;
-  const row = (r: BoardRow) => `<tr class="${r.you ? 'me' : ''}"><td class="num">${r.rank}</td><td class="who">${avatar(r.hero)}<span>${esc(r.name)}${r.you ? ' <em>you</em>' : ''}</span>${r.nftTier ? ` ${tierBadge(r.nftTier)}` : ''}</td><td class="num"><b>${r.kills}</b></td><td class="num">${r.wins}</td><td class="num">${r.matches}</td><td class="num">${r.level}</td>${solo ? '' : `<td class="num">${r.rating}</td>`}</tr>`;
+  const row = (r: BoardRow) => `<tr class="${r.you ? 'me' : ''}"><td class="num">${r.rank}</td><td class="who"><div>${avatar(r.hero)}<span>${esc(r.name)}${r.you ? ' <em>you</em>' : ''}</span>${r.nftTier ? ` ${tierBadge(r.nftTier)}` : ''}</div></td><td class="num"><b>${r.kills}</b></td><td class="num">${r.wins}</td><td class="num">${r.matches}</td><td class="num">${r.level}</td>${solo ? '' : `<td class="num">${r.rating}</td>`}</tr>`;
   const tabs = `<div class="tabs" role="tablist">${(['solo', 'online'] as const).map((t) => `<button class="tab${t === tab ? ' on' : ''}" role="tab" aria-selected="${t === tab}" data-act="board-${t}">${t === 'solo' ? 'Solo' : 'Online'}</button>`).join('')}</div>`;
   let body: string;
   if (!a.config?.db) body = '<p class="note warn">Offline: the leaderboard needs the server.</p>';

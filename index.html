@@ -66,6 +66,10 @@
       /* GP downed window: the countdown and the revive, centre top, big enough to read mid-fight on a phone. */
       #downcard { left: 50%; top: calc(var(--st) + 112px); transform: translateX(-50%); text-align: center; padding: 8px 16px 10px; min-width: 220px; display: none; }
       #downcard.on { display: block; }
+      /* Phones: the card sits higher and smaller, so it never covers you (the stage centre) while you are down. */
+      body.compact #downcard { top: calc(var(--st) + 46px); padding: 4px 12px 6px; min-width: 200px; }
+      body.compact #downcard b { font-size: 12px; } body.compact #downcard .num { font-size: 22px; } body.compact #downcard small { font-size: 11px; }
+      body.compact table.board th { padding: 2px 6px; }
       #downcard b { display: block; font-size: 15px; letter-spacing: 0.16em; color: var(--damage); }
       #downcard .num { display: block; font-size: 30px; line-height: 1.1; color: var(--ink); }
       #downcard small { display: block; font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.08em; }
@@ -574,7 +578,9 @@
       .myrank .big { font-size: 24px; color: var(--ink); letter-spacing: 0; }
       .myrank small { color: var(--dim); font-size: 13px; } .myrank small b { font-size: 13px; color: var(--ink); letter-spacing: 0; }
       .board-scroll { overflow-x: auto; max-width: 100%; }
-      table.board td.who { display: flex; align-items: center; gap: 6px; min-width: 120px; }
+      table.board th { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); font-weight: 500; text-align: right; padding: 2px 8px; }
+      table.board th:nth-child(2) { text-align: left; }
+      table.board td.who > div { display: flex; align-items: center; gap: 6px; min-width: 120px; }
       table.board td.who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; }
       table.board td.who em { font-style: normal; font-size: 11px; color: var(--signal); text-transform: uppercase; letter-spacing: .08em; }
       table.board tr.me td { background: rgba(245, 230, 200, 0.08); }

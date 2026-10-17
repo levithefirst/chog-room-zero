@@ -510,7 +510,10 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
       if (t.text !== c.text) t.text = c.text;
       const life = TUNING.comms.chipSeconds;
       t.alpha = c.age < life * 0.66 ? 1 : Math.max(0, (life - c.age) / (life * 0.34));
-      t.position.set(a.x, a.y - TUNING.movement.radius * R.actorScale - 0.62);
+      // Kept on screen: a teammate near the edge still says the whole line (it ran off the side).
+      const vw = app.screen.width / ppu / 2 - 0.3, half = t.width / 2;
+      const x = half < vw ? Math.min(Math.max(a.x, camX - vw + half), camX + vw - half) : camX;
+      t.position.set(x, a.y - TUNING.movement.radius * R.actorScale - 0.62);
       t.visible = true;
       i++;
     }
