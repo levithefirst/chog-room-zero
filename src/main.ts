@@ -712,10 +712,18 @@ async function start() {
       case 'demo': titleView = 'demo'; break;
       case 'demo-close': titleView = 'main'; break;
       case 'upgrades': titleView = 'upgrades'; void refreshAccount(); break;
-      case 'ranks': titleView = 'ranks'; void loadBoard(); break;
+      case 'ranks': {
+        titleView = 'ranks';
+        // Opens on the board you play on (online only so far: Online), until you pick a tab yourself.
+        const pr = acct.profile;
+        if (!boardPicked) acct.boardTab = pr && pr.matches > 0 && pr.practice.overall.runs === 0 ? 'online' : 'solo';
+        acct.boardOffset = 0;
+        void loadBoard();
+        break;
+      }
       // GP leaderboards: Solo / Online tabs, pages, retry, and "show me on the boards".
-      case 'board-solo': acct.boardTab = 'solo'; acct.boardOffset = 0; void loadBoard(); break;
-      case 'board-online': acct.boardTab = 'online'; acct.boardOffset = 0; void loadBoard(); break;
+      case 'board-solo': boardPicked = true; acct.boardTab = 'solo'; acct.boardOffset = 0; void loadBoard(); break;
+      case 'board-online': boardPicked = true; acct.boardTab = 'online'; acct.boardOffset = 0; void loadBoard(); break;
       case 'board-next': if (acct.boardOffset + BOARD_PAGE < acct.boardTotal) { acct.boardOffset += BOARD_PAGE; void loadBoard(); } break;
       case 'board-prev': acct.boardOffset = Math.max(0, acct.boardOffset - BOARD_PAGE); void loadBoard(); break;
       case 'board-retry': void loadBoard(); break;
@@ -1093,7 +1101,7 @@ async function start() {
    */
   // GP: one page of the open board, with your own rank. A failure keeps what was shown and offers a retry.
   const BOARD_PAGE = 20;
-  let boardSeq = 0;
+  let boardSeq = 0, boardPicked = false;
   async function loadBoard(draw = true) {
     const seq = ++boardSeq;
     acct.boardLoading = true;
