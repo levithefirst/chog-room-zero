@@ -718,7 +718,9 @@ async function start() {
         const pr = acct.profile;
         if (!boardPicked) acct.boardTab = pr && pr.matches > 0 && pr.practice.overall.runs === 0 ? 'online' : 'solo';
         acct.boardOffset = 0;
-        void loadBoard();
+        // The account never loaded (the API was down at boot): load it now; that loads the board too.
+        if (!acct.config?.db) void refreshAccount().then(() => render());
+        else void loadBoard();
         break;
       }
       // GP leaderboards: Solo / Online tabs, pages, retry, and "show me on the boards".
