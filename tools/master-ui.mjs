@@ -57,7 +57,7 @@ check('Upgrades screen (guest) asks to sign in to upgrade', /sign in to upgrade/
 await click('[data-act=back]'); await sleep(200);
 await click('[data-act=ranks]'); await sleep(800);
 const ranks = await ev(`document.getElementById('overlay').innerText`);
-check('Leaderboard screen opens for a guest with its ranking rule and honest service state', /leaderboard/i.test(ranks ?? '') && /kills · then wins · then fewer matches/i.test(ranks ?? '') && /\b(player|offline|no ranks yet)\b|…/i.test(ranks ?? ''));
+check('Leaderboard screen opens for a guest with its ranking rule and honest service state', /leaderboard/i.test(ranks ?? '') && /kills in (checked solo runs · then clears|saved online matches · then wins) · then fewer (runs|matches)/i.test(ranks ?? '') && /\b(player|offline|no one on this board yet|loading)\b|…/i.test(ranks ?? ''));
 await shot('leaderboard.png');
 check('no page errors', errors.length === 0, errors.join(' | '));
 try { process.kill(-proc.pid, 'SIGKILL'); } catch { proc.kill(); } await new Promise((r) => { proc.once('exit', r); setTimeout(r, 3000); }); try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* Chrome may still hold files */ }
