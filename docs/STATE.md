@@ -1,14 +1,14 @@
 # Chog: Room Zero - shared state
 
 Source of truth for every agent. Rules: `docs/RULES.md`. Edit only in a handoff commit. Under 8,000 characters.
-Last verified: 2026-10-17 by claude (GP gameplay reality pass, live from ccr-e7fadb8f-qtochk, H30).
+Last verified: 2026-10-18 by claude (V2 superiority pass, live from ccr-e7fadb8f-qtochk, H31).
 
 ## Snapshot (EVIDENCE)
-- Repo `levithefirst/chog-room-zero` (private). Default/base branch `setup/skill-system` (LOCKED, owner 2026-10-11: no `main`). Never merge without the owner.
-- Open PRs stacked #1 to #9, then PR #10 = ccr-e7fadb8f-qtochk. GP (with FS, SB, FP) live from ccr-e7fadb8f-qtochk (H30). Client and server always ship from one commit (Render `/stats` names it).
-- Vercel project `chog-room-zero` (protection off). Production `chogroomzero.xyz`: see the Latest handoff (H30). Rollback: `dpl_2DsgcLK3fjiJW9ZfaiXfVGro6D1o` (7c7a78f, FS; Render must go back with it; migration v6 is additive and harmless to it). Sign-in env vars and `DATABASE_URL` (Neon) set by the owner; no `NFT_COMBAT` (power on). Game server: Render Free `https://room-zero-game.onrender.com` (redeploys on every push to ccr-e7fadb8f-qtochk); `ALLOWED_ORIGINS` = production + that branch's preview. No test hooks in production.
+- Repo `levithefirst/chog-room-zero` (private). Default/base branch `setup/skill-system` (LOCKED, owner 2026-10-11: no `main`). Never merge without owner.
+- Open PRs stacked #1 to #9, then PR #10 = ccr-e7fadb8f-qtochk. V2 (with GP, FS, SB, FP) live from ccr-e7fadb8f-qtochk (H31). Client and server always ship from one commit (Render `/stats` names it).
+- Vercel project `chog-room-zero` (protection off). Production `chogroomzero.xyz` = `dpl_84DLkQYDr8cEBRSWTa88KQy6nokZ` (f82b511). Rollback: `dpl_ELJaG68acs2YeTABLvrtq14xBonp` (18ccfdc, GP) with Render on 18ccfdc; migrations 7-8 are additive and harmless to it. Sign-in env vars and `DATABASE_URL` (Neon) set by the owner; no `NFT_COMBAT` (power on). Game server: Render Free `https://room-zero-game.onrender.com` (redeploys on every push to ccr-e7fadb8f-qtochk); `ALLOWED_ORIGINS` = production + that branch's preview. No test hooks in production.
 - Chog Genesis (NFT-R1, EVIDENCE): Monad 143, contract `0xc96d31F8626c6D03Fae5dCD3d61e3FB9F4a73763` (ChogMint, Sourcify exact match), ERC-721, supply 1,969, catalogue in `data/chog-genesis/`; token id is NOT the displayed number. Live check 2026-10-17 (`/api/game/chain`): chain 143, `metadataId(1)` = 1462.
-- Chogathon 2026 (`docs/SUBMISSION.md`): "the Chog NFT must be essential". Deadline and start: UNKNOWN.
+- Chogathon 2026 (`docs/SUBMISSION.md`): "the Chog NFT must be essential".
 
 ## LOCKED (owner; 2026-10-07, 2026-10-11, 2026-10-12, 2026-10-13)
 1. Dark top-down tactical survival shooter, ~90 s rooms, mobile and PC, original IP. Bullet Echo is a benchmark only: nothing copied.
@@ -30,10 +30,11 @@ Last verified: 2026-10-17 by claude (GP gameplay reality pass, live from ccr-e7f
 17. Owner 2026-10-14 FINAL QA: the default game is YOU + 2 AI TEAMMATES vs bots (never confused with online 3v3); "Sign in" opens a sign-in sheet (Continue with Google / Continue with Wallet), never Settings; minimal UI copy.
 
 ## PROPOSALS (not approved)
-- Class numbers, upgrades, revive timings, signatures (`docs/design/power.md`). Hub, medals, tips. Deps: @neondatabase/serverless, dev @electric-sql/pglite, @noble/*.
+- Class numbers, upgrades, revive timings, signatures (`docs/design/power.md`). Deps: @neondatabase/serverless, dev @electric-sql/pglite, @noble/*.
 - NFT-R1 layers (`docs/research/chog-genesis/IDENTITY-AND-MAPPING.md`). PROVISIONAL CHOG palette (`docs/BRAND.md`), zone tuning, operator art.
-- All tuning numbers (roster, weapons, grenades), lean rules, art direction, the map, fonts.
-- GP (H30): loot (30 s, 15 hp dressing), revive 10 s window, AI supply/revive utility, 30 pickups and respawns, fire waits for 40 deg, comms gap 3.1 s, medal roster and bars. FS (H29): venue, TUNING.bots.squad, comms gap 2.8 s, practice limits, the solo 1v5 bar per roster. FP: reward amounts, heal delay, tier worth. SB/CF: intel, comms, turn cap, lab (`?lab`).
+- All tuning numbers, lean rules, art direction, the map, fonts.
+- V2 (H31): perks (4, one slot, match only), AI guard, daily challenges and rewards, Ace damage rule, solo board 25 runs/day, telemetry fields. Earlier tuning: H25-H30.
+- V2 owner decisions open (`docs/ROOM_ZERO_V2_SUPERIORITY.md` section 4): NFT combat power in open modes vs LOCKED 9 (recommended: power only in 5v5); paid always-on game server; labelled bot backfill online.
 
 ## UNKNOWN (never guess)
 - Chog Genesis art and name rights; `baseURI`, totalSupply read from chain; metadata hash check (`docs/research/chog-genesis/`).
@@ -41,15 +42,14 @@ Last verified: 2026-10-17 by claude (GP gameplay reality pass, live from ccr-e7f
 - Whether a real holder can sign in and play 5v5 (fake-chain holder passes locally).
 
 ## Implemented (EVIDENCE)
-- GP (H30, live): kill loot, 10 s downed window with AI revives, AI teammates using resources, 360 fire fix, no phantom drain, 36 medals, Solo/Online boards with My Rank, Game Docs. `docs/ROOM_ZERO_GAMEPLAY_REALITY.md`.
-- FS (H29): 68 x 42 venue, active hostile squad, wallet chooser, 57 audit fixes (`docs/ROOM_ZERO_FINAL_SUPERIORITY.md`). FP (H28), SB (H27), CF and earlier: `docs/HANDOFFS.md`.
+- V2 (H31, live): forensic report checked against code; online shooter-boundary test + unseen-shooter distance tag; session revocation (migration 7); hidden pause card inert; downed card (who is coming, distance, known threat, BLED OUT); roster numbers; perks; AI guard; Ace tightened; solo board daily cap; anonymous match telemetry (migration 8, opt-out); daily challenges; kill feed. `docs/ROOM_ZERO_V2_SUPERIORITY.md`.
+- GP (H30): kill loot, downed/revive, 36 medals, two boards, Game Docs. FS/FP/SB/CF and earlier: `docs/HANDOFFS.md`.
 
 ## Automated tests (EVIDENCE, Node 22.22)
-GP (H30): vitest 866/866 (85 files), tsc clean. Browser (headless Chromium, emulated, local stack): qa-journey 38/38, gp-ui 34/34, gp-aim 2/2, master-ui 8/8, qa-errors 7/7, qa-rewards 13/13, cf-chog 18/18, fs-wallet 29/29, qa-screens clean, rc8-online 1v1+3v3 PASS, cf-visual 11 sizes. Production smoke 54/54 (H30).
+V2 (H31): vitest 908/908 (95 files), tsc clean. Browser (headless Chromium, emulated, local stack): qa-journey 38/38, gp-ui 34/34, master-ui 8/8, qa-errors 7/7, qa-rewards 13/13, qa-screens clean, rc8-online 1v1+3v3 PASS. Production: health (migrations 1-8), challenges, report-summary, solo board 200; no runtime errors; Render /stats = f82b511.
 
 ## Not performed (needs the owner)
-- CF to GP: any human play (venue, squad, loot, revive, aim, rewards, prediction on a real network), a real wallet extension or phone wallet app.
-- Pixel 7 / iPhone 13, real-GPU FPS, audio by ear, hosted 5v5 with a real holder, art rights in writing, the demo video.
+- Any human play of CF to V2 (15-30 players, 150+ matches; telemetry now records each), real phones, real-GPU FPS, audio by ear, a real wallet, hosted 5v5 with a holder, art rights, the demo video.
 
 ## Gates
 Core Feel Gate: BLOCKED on owner playtests (class numbers, CF, SB, FP). G10: automated PASS; playtest not run.
@@ -57,9 +57,9 @@ Core Feel Gate: BLOCKED on owner playtests (class numbers, CF, SB, FP). G10: aut
 ## Current task
 | Id | Owner | Branch | Files | Done when | Status |
 |---|---|---|---|---|---|
-| GP | claude | claude/gp-gameplay-reality | see H30 | Owner 2026-10-17 GAMEPLAY REALITY PASS | live (H30); owner: playtest loot, revive, aim, boards |
-| FS, FP, SB | claude | see H29, H28, H27 | see those | Owner 2026-10-16/17 | live; owner playtest |
+| V2 | claude | ccr-e7fadb8f-qtochk | see H31 | Owner 2026-10-18 V2 SUPERIORITY PASS (continuous) | passes 1-6 live (H31); owner decisions + human playtest open |
+| GP, FS, FP, SB | claude | see H30-H27 | see those | Owner 2026-10-16/17 | live; owner playtest |
 | RC-8 | claude | ccr-e7fadb8f-qtochk, PR #10 | see H16 | Owner RC-8 mandate | PR #10 not merged (stacked on #9; owner decides) |
 
 ## Handoffs
-Latest: H30 (2026-10-17, claude -> owner; GP live on chogroomzero.xyz). History: `docs/HANDOFFS.md`.
+Latest: H31 (2026-10-18, claude -> owner; V2 live on chogroomzero.xyz). History: `docs/HANDOFFS.md`.
