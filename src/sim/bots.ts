@@ -80,6 +80,8 @@ export interface Brain {
   supply: { kind: 'pickup' | 'loot'; id: number; x: number; y: number; what: string; at: number } | null;
   supplyAt: number;
   rescuing: number;
+  /** V2: the teammate it is guarding (standing between them and a known threat), or -1. */
+  guarding: number;
   /** The downing it last announced a revive for ("id:tick"), so a revive it pauses and resumes is said once. */
   reviveCalled: string;
   say: { kind: 'reviving' | 'supply'; target: number; x: number; y: number; what?: string } | null;
@@ -131,7 +133,7 @@ export function createBrain(spawn: BotSpawn): Brain {
     source: null, suspicion: 0, reaction: TUNING.perception.reactionMax, pathAt: -1e9, zoneRun: false,
     nadeAt: 0, anchorLeft: 0, strafe: 1, pause: TUNING.bots.patrolPause, listen: 0,
     heardType: null, heardFrom: -1, seenId: -1, seenAt: new Map(), pendingContact: -1, track: null, rest: {}, watch: null, foundBy: null,
-    task: null, supply: null, supplyAt: -1e9, rescuing: -1, reviveCalled: '', say: null,
+    task: null, supply: null, supplyAt: -1e9, rescuing: -1, guarding: -1, reviveCalled: '', say: null,
   };
 }
 
@@ -524,6 +526,8 @@ function think(w: World, a: Actor, br: Brain, dt: number): void {
   if (a.team !== 'bot') {
     if (allyRescue(w, a, br, seen, dt)) return;
     br.rescuing = -1;
+    if (!seen && allyGuard(w, a, br, dt)) return;
+    br.guarding = -1;
   }
 
   // Danger zone (RC-8): outside, or near the edge of, the circle that is closing, getting in comes first. On the way
@@ -979,6 +983,46 @@ function allyRescue(w: World, a: Actor, br: Brain, seen: Actor | null, dt: numbe
 }
 
 const isPerson = (m: Actor) => !m.ai;
+
+/**
+ * V2 AI teammate guard (owner V2 §10: "protect weak teammates", "avoid duplicate tasks"). You are hurt and standing,
+ * and it believes a threat is near you (its OWN belief: heard, seen or told, never the threat's true position): the
+ * nearest free teammate stands between you and that spot and watches it, so you can get to a pickup or a bag. One
+ * guard at a time; it says so once.
+ */
+function allyGuard(w: World, a: Actor, br: Brain, dt: number): boolean {
+  const G = TUNING.bots.guard;
+  const lead = player(w);
+  if (!standing(lead) || lead.team !== a.team || lead.hp >= lead.maxHp * G.hpBelow) return false;
+  const th = br.lastKnown && br.suspicion > G.suspicion ? br.lastKnown : null;
+  if (!th || Math.hypot(th.x - lead.x, th.y - lead.y) > G.threatRange) return false;
+  // One guard: a teammate already on it, or a nearer free one, takes it.
+  const d = Math.hypot(lead.x - a.x, lead.y - a.y);
+  const other = w.actors.some((m) => {
+    const mb = w.brains.get(m.id);
+    if (m === a || m === lead || !m.ai || m.team !== a.team || !standing(m) || !mb) return false;
+    if (mb.guarding === lead.id) return true;
+    const free = mb.rescuing < 0 && !!mb.lastKnown && mb.suspicion > G.suspicion;
+    return free && Math.hypot(lead.x - m.x, lead.y - m.y) < d - 0.5;
+  });
+  if (other) return false;
+  // Shown on your HUD (status line), not called on the radio: a spoken line pushed the squad over its calls-a-minute
+  // bar (tests/sb-comms), and the guard stepping in beside you is the cue.
+  br.guarding = lead.id;
+  const ang = Math.atan2(th.y - lead.y, th.x - lead.x);
+  let gx = lead.x + Math.cos(ang) * G.distance, gy = lead.y + Math.sin(ang) * G.distance;
+  for (const off of [0, 0.5, -0.5, 1, -1]) {
+    const x = lead.x + Math.cos(ang + off) * G.distance, y = lead.y + Math.sin(ang + off) * G.distance;
+    if (walkable(tileAt(w.level, x, y)) && sightClear(w.level, lead.x, lead.y, x, y)) { gx = x; gy = y; break; }
+  }
+  token(w, a, false);
+  if (Math.hypot(gx - a.x, gy - a.y) > 0.6) { setGoal(w, a, br, gx, gy); follow(w, a, br, dt); }
+  else { out.moveX = out.moveY = 0; }
+  out.aim = Math.atan2(th.y - a.y, th.x - a.x);
+  out.firing = false;
+  out.quiet = false;
+  return true;
+}
 
 /**
  * GP: a downed AI teammate. Someone is coming (an AI teammate on its way, or a person beside it): it keeps still so the

@@ -13,6 +13,7 @@ import { clampMarker } from './render/visibility';
 import { muzzleFlashSeen } from './sim/vision';
 import { canSee } from './sim/vision';
 import { downedCard } from './ui/downed';
+import type { Brain } from './sim/bots';
 import { deviceClass, median, type MatchReport, type ReportCause, type ReportOutcome } from './sim/report';
 import { PERKS, type PerkId } from './config/perks';
 import { nextPhase, simRuns, type MatchEvent, type Phase } from './sim/match';
@@ -1974,7 +1975,9 @@ async function start() {
     }
     // GP: timed effects on you and the downed window, in words and seconds (a slow or a crawl is never unexplained).
     {
-      const st = p.alive && p.slowLeft > 0 ? `Slowed ${Math.round((1 - p.slowMul) * 100)}% · ${p.slowLeft.toFixed(1)} s` : '';
+      // V2: an AI teammate guarding you (src/sim/bots.ts allyGuard) is named under your health.
+      const guard = p.alive && !p.downed ? world.actors.find((m) => m.ai && m.team === p.team && m.alive && (world.brains.get(m.id) as Brain | undefined)?.guarding === p.id) : undefined;
+      const st = p.alive && p.slowLeft > 0 ? `Slowed ${Math.round((1 - p.slowMul) * 100)}% · ${p.slowLeft.toFixed(1)} s` : guard ? `${guard.name} covering you` : '';
       if (st !== lastStatus) { lastStatus = st; $('status').textContent = st; }
       // V2 perk: what you carry, and on a bag holding a different one, how to swap (stand still) and how far along.
       const bag = p.alive && !p.downed && p.perk ? world.loot.find((l) => l.perk && l.perk !== p.perk && Math.hypot(l.x - p.x, l.y - p.y) <= TUNING.pickups.radius) : undefined;

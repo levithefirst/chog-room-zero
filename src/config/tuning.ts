@@ -414,6 +414,16 @@ export const TUNING = {
     // hostile in sight, not hit for calmSeconds); never within dangerRadius of the last threat it knows of; never
     // further than leash u from you (leashCritical when the need is critical); and a teammate who needs health or
     // armour more and is within yieldExtra u as close gets it first. Re-judged every thinkSeconds. PROPOSAL.
+    // V2 AI teammates guard a hurt you: one of them stands between you and the threat it knows of.
+    guard: {
+      // You are hurt below this share of your health (and standing).
+      hpBelow: 0.4,
+      // It knows of a threat: its own belief (heard, seen, told) above this confidence, within this range of you.
+      suspicion: 0.3,
+      threatRange: 16,
+      // Where it stands: this far from you toward the threat.
+      distance: 1.8,
+    },
     supply: {
       calmSeconds: 2,
       thinkSeconds: 0.5,

@@ -55,6 +55,7 @@ ${li([`About ${Z.safeSeconds} s in, a danger zone starts closing. Outside it you
     'Create a squad on the hub and share its 5-letter code; friends join with it. The leader queues for the squad.',
     'Up to 5 in a squad. Everyone plays on the same side.',
     'In the default game your two AI teammates are your squad: they cover the arcs you are not watching, revive you and take what they need.',
+    `When you are below ${Math.round(TUNING.bots.guard.hpBelow * 100)}% health and one of them knows of a threat near you, the nearest stands between you and where it thinks the threat is (your HUD says who is covering you). It guards against what it heard or saw, never where the hostile really is.`,
   ]) },
   { id: 'revives', title: 'Revives', html: () => li([
     `At 0 health with a teammate still standing you are <b>downed</b>, not out. You have <b>${R.bleedSeconds} seconds</b>. The card at the top counts down, names the teammate coming for you and how far they are (else your nearest one), and warns of a hostile you know is within ${THREAT_RANGE} m.`,
