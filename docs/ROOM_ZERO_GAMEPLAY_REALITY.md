@@ -1,6 +1,6 @@
 # Room Zero: Gameplay Reality Pass (GP)
 
-Owner request 2026-10-17, "CHOG: ROOM ZERO — GAMEPLAY REALITY PASS". Branch `claude/gp-gameplay-reality`, shipped from
+Owner request 2026-10-17, "CHOG: ROOM ZERO, GAMEPLAY REALITY PASS". Branch `claude/gp-gameplay-reality`, shipped from
 `ccr-e7fadb8f-qtochk`. Baseline: 7c7a78f (H29). Every number below was measured in this container (autopilot, headless
 Chromium, PGlite); nothing here was played by a person.
 
@@ -69,6 +69,18 @@ Chromium, PGlite); nothing here was played by a person.
     - **Fix:** a `detail 0` click within 700 ms of a pointer press is that press's own click.
     - **Test:** `tools/gp-ui.mjs`.
 
+13. **Leaderboard numbers sat under the wrong headers (phone and desktop).**
+    - **Root cause:** the player cell was `display: flex`, which takes a `td` out of table layout; the headers kept the default left alignment while the numbers were right-aligned.
+    - **Fix:** the flex box moved inside the cell; numeric headers align right, like their numbers.
+    - **Test:** visual QA screenshots (`tools/gp-ui.mjs` 03-board-me), before and after.
+14. **The downed card covered you on a phone.**
+    - **Root cause:** the card sat 112 px under the top band; on a 390 px tall stage that is the player's own spot in the middle of the screen.
+    - **Fix:** on short stages it sits right under the top band and is smaller, so your body, the reviver and the threat stay visible.
+    - **Test:** visual QA screenshot `tools/gp-ui.mjs` 05-downed (phone).
+15. **A teammate's call-out near the screen edge ran off the side.**
+    - **Fix:** the line is clamped inside the visible view.
+    - **Test:** visual QA screenshot 05-downed (desktop).
+
 ## 3. Measurements (this container)
 
 - **AI teammates, 12 default matches (autopilot player):**
@@ -88,7 +100,15 @@ Chromium, PGlite); nothing here was played by a person.
 
 ## 4. Tests
 
-The final counts are in H30 (docs/HANDOFFS.md).
+- **Unit, integration and sim:** `npx vitest run` 866/866 (85 files); `npx tsc --noEmit` clean.
+- **Browser** (headless Chromium, emulated phone and desktop, local full stack):
+  - on the final code (68c32d4): qa-journey 38/38, gp-ui 34/34, qa-screens with no layout problems;
+  - on earlier builds of this pass (the later commits change only the board screen, the account reload and CSS): master-ui 8/8, qa-errors 7/7, qa-rewards 13/13, cf-chog 18/18, fs-wallet 29/29;
+  - rc8-online 1v1 PASS and 3v3 PASS (one Chrome per player), same;
+  - cf-visual: 11 sizes, no page errors;
+  - gp-aim 2/2 (PC and touch, 9 angles each);
+- **rc8-online 5v5** is not a valid local check since MI: 5v5 needs verified holders and the tool joins as guests, so the server refuses them (as it must). Every handoff since MI runs `MODES=1v1,3v3`. 5v5 refusal of guests and non-holders is in the production smoke.
+- **One vitest timeout, root-caused:** the whole-match loot conservation test takes 2.8 s alone. It passed vitest's 5 s default until browser suites shared the 4 cores. It now has an explicit 60 s budget, like the repo's other whole-match tests; its bar is unchanged.
 
 **New unit and integration tests:**
 - tests/gp-combat
