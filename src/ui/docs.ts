@@ -9,6 +9,7 @@ import { MEDALS } from './medals';
 import { HEROES } from '../config/heroes';
 import { THREAT_RANGE } from './downed';
 import { PERKS, PERK_IDS } from '../config/perks';
+import { CHALLENGE_REWARDS } from '../config/challenges';
 import { esc } from './screens';
 
 export interface DocSection { id: string; title: string; html: (touch: boolean) => string }
@@ -99,6 +100,7 @@ ${li(['Signed in, medals are awarded and kept on your account (any device). As a
   { id: 'upgrades', title: 'Upgrades', html: () => `<p>Shards buy upgrade ranks. Upgrades raise your free profile towards the lower Chog tiers; nothing is sold.</p>
 ${li(UPGRADE_IDS.map((id) => `<b>${esc(UPGRADES[id].name)}</b>: ${esc(UPGRADES[id].text)}, ${UPGRADES[id].ranks} ranks, first rank ${UPGRADES[id].costs[0]} shards.`))}` },
   { id: 'rewards', title: 'Rewards', html: () => li([
+    `Daily: three challenges a day (the same for everyone, new at 00:00 UTC), easy, medium and hard, paying ${CHALLENGE_REWARDS[1].shards}, ${CHALLENGE_REWARDS[2].shards} and ${CHALLENGE_REWARDS[3].shards} shards once each. They count your verified solo runs and online matches of the day (the hub card shows how far you are). Nothing carries over and nothing is lost if you skip a day.`,
     `Online match: ${REWARDS.xpPlay} XP and ${REWARDS.shardsPlay} shards for playing, more for kills and damage, ${REWARDS.xpWin} XP and ${REWARDS.shardsWin} shards for a win.`,
     `Solo (signed in): ${PRACTICE_REWARDS.xpPlay} XP and ${PRACTICE_REWARDS.shardsPlay} shards a run, kills and damage pay a little, a clear pays most; up to ${PRACTICE_REWARDS.dailyCap} paid runs a day.`,
     'A loss where you fought still moves you forward. Quitting, private rooms and demo play pay nothing.',

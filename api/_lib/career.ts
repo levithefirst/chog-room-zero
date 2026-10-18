@@ -19,6 +19,7 @@ import { MEDALS, medalsDue, type OnlineTotals, type RunFacts } from '../../src/u
 import type { Best, Records } from '../../src/ui/records.js';
 import { validateNickname } from '../../src/ui/profile.js';
 import { heroIdOf } from '../../src/config/heroes.js';
+import { CHALLENGE_REWARDS, daily, dayOf, type DayRow } from '../../src/config/challenges.js';
 import { BOT_SPAWNS } from '../../src/config/map.js';
 import type { Tier } from '../../src/config/power.js';
 import { profileOf, type Profile } from './game.js';
@@ -200,6 +201,8 @@ export interface PracticeResult {
   newBest: { time: boolean; kills: boolean };
   records: Records;
   medals: Record<string, string>;
+  /** V2: daily challenges this run completed (paid now, once). */
+  challenges: ChallengeView[];
 }
 
 /**
@@ -252,7 +255,8 @@ export async function recordPractice(db: Db, acc: string, raw: Record<string, un
       time: counts && run.won && (prev.bestWinSeconds === null || run.seconds < prev.bestWinSeconds),
       kills: counts && run.kills > prev.mostKills,
     };
-    return { ok: true, already: !ins.length, reward, earned, newBest, records, medals: await medalsOf(tx, acc) } as const;
+    const challenges = counts ? (await challengesFor(tx, acc, now)).paidNow : [];
+    return { ok: true, already: !ins.length, reward, earned, newBest, records, medals: await medalsOf(tx, acc), challenges } as const;
   });
 }
 
@@ -310,3 +314,51 @@ export async function accountView(db: Db, acc: string): Promise<AccountView | nu
   };
 }
 
+
+// ---- V2 daily challenges (src/config/challenges.ts) ----
+
+/** Today's stored results for an account: verified practice runs and settled matches that paid (UTC day `day`). */
+export async function dayRows(q: Tx, acc: string, day: number): Promise<DayRow[]> {
+  const from = day * 86400, to = from + 86400;
+  const solo = await q.query<{ hero: string; won: boolean; seconds: number; kills: number; bullets: number; hits: number; damage_taken: number; revives: number; loots: number; thrown: number; allies_lost: number }>(
+    `SELECT hero, won, seconds, kills, bullets, hits, damage_taken, revives, loots, thrown, allies_lost FROM room_zero.practice_runs
+     WHERE account_id = $1 AND verified AND created_at >= to_timestamp($2) AND created_at < to_timestamp($3)`, [acc, from, to]);
+  const online = await q.query<{ hero: string | null; won: boolean; kills: number; revives: number; loots: number }>(
+    `SELECT mp.hero, mp.won, mp.kills, mp.revives, mp.loots FROM room_zero.match_players mp JOIN room_zero.matches m ON m.id = mp.match_id
+     WHERE mp.account_id = $1 AND m.rewarded AND NOT mp.left_early AND m.settled_at >= to_timestamp($2) AND m.settled_at < to_timestamp($3)`, [acc, from, to]);
+  return [
+    ...solo.map((r) => ({ mode: 'solo' as const, hero: heroIdOf(r.hero) ?? r.hero, won: !!r.won, seconds: Number(r.seconds), kills: Number(r.kills), bullets: Number(r.bullets), hits: Number(r.hits),
+      damageTaken: Number(r.damage_taken), revives: Number(r.revives), loots: Number(r.loots), thrown: Number(r.thrown), alliesLost: Number(r.allies_lost) })),
+    ...online.map((r) => ({ mode: 'online' as const, hero: heroIdOf(r.hero) ?? r.hero ?? '', won: !!r.won, seconds: 0, kills: Number(r.kills), bullets: 0, hits: 0,
+      damageTaken: 0, revives: Number(r.revives), loots: Number(r.loots), thrown: 0, alliesLost: 0 })),
+  ];
+}
+
+export interface ChallengeView { id: string; tier: 1 | 2 | 3; text: string; goal: number; progress: number; done: boolean; paid: boolean; shards: number; xp: number }
+
+/**
+ * Today's challenges with this account's progress; any newly done one is paid here, once (ledger unique key
+ * account, kind, 'challenge', day:id), in the caller's transaction. Without an account: the list, no progress.
+ */
+export async function challengesFor(q: Tx, acc: string | null, nowMs: number): Promise<{ day: number; hero: string; list: ChallengeView[]; paidNow: ChallengeView[] }> {
+  const d = daily(dayOf(nowMs));
+  const rows = acc ? await dayRows(q, acc, d.day) : [];
+  const paid = acc ? new Set((await q.query<{ ref: string }>(`SELECT ref FROM room_zero.ledger WHERE account_id = $1 AND reason = 'challenge' AND kind = 'xp' AND ref LIKE $2`, [acc, `${d.day}:%`])).map((r) => r.ref)) : new Set<string>();
+  const list: ChallengeView[] = [], paidNow: ChallengeView[] = [];
+  for (const { def, text } of d.list) {
+    const progress = Math.min(def.goal, def.progress(rows, d.hero));
+    const rw = CHALLENGE_REWARDS[def.tier], ref = `${d.day}:${def.id}`;
+    const v: ChallengeView = { id: def.id, tier: def.tier, text, goal: def.goal, progress, done: progress >= def.goal, paid: paid.has(ref), shards: rw.shards, xp: rw.xp };
+    if (acc && v.done && !v.paid) {
+      const x = await q.query(`INSERT INTO room_zero.ledger (account_id, kind, delta, reason, ref) VALUES ($1, 'xp', $2, 'challenge', $3) ON CONFLICT DO NOTHING RETURNING id`, [acc, rw.xp, ref]);
+      if (x.length) {
+        await q.query(`INSERT INTO room_zero.ledger (account_id, kind, delta, reason, ref) VALUES ($1, 'shards', $2, 'challenge', $3) ON CONFLICT DO NOTHING`, [acc, rw.shards, ref]);
+        await q.query(`UPDATE room_zero.accounts SET xp = xp + $2, shards = shards + $3 WHERE id = $1`, [acc, rw.xp, rw.shards]);
+        v.paid = true;
+        paidNow.push(v);
+      } else v.paid = true;
+    }
+    list.push(v);
+  }
+  return { day: d.day, hero: d.hero, list, paidNow };
+}

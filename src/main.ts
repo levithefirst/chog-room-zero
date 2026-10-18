@@ -1159,6 +1159,8 @@ async function start() {
       if (acct.profile?.favourite && !heroPicked && HEROES.some((x) => x.id === acct.profile!.favourite)) heroId = acct.profile.favourite;
       // The leaderboard is public: loaded whenever the database is on, signed in or not.
       if (acct.config.db) await loadBoard(false);
+      // V2: today's challenges (progress when signed in; paid once on the site when done).
+      if (acct.config.db) { const d = await account.challenges(); acct.daily = d?.list ?? null; }
       if (acct.hasWallet) {
         const t = await account.loadTokens();
         acct.tokens = t?.tokens ?? [];
@@ -1367,6 +1369,9 @@ async function start() {
       if (r?.ok && acct.profile) {
         if (r.records) acct.profile.practice = r.records;
         if (r.medals) acct.profile.medals = r.medals;
+        // V2: a daily challenge this run completed (paid once by the site).
+        for (const c of r.challenges ?? []) toast(`DAILY DONE · ${c.text} · +${c.shards} shards`);
+        if (r.challenges?.length) await refreshAccount();
         const rw = r.reward;
         lastRun = { newBest: r.newBest ?? { time: false, kills: false }, earned: MEDALS.filter((m) => r.earned?.includes(m.id)), saved: 'account',
           reward: rw ? { ...rw, kept: true, before, upgrades: acct.profile.upgrades } : null };

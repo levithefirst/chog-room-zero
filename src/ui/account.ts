@@ -3,6 +3,7 @@
 import { TIER_DEFS, powerFor, type Tier } from '../config/power';
 import type { AccountProfile, Board, BoardRow, GameConfig, OwnedToken, TicketProfile } from '../net/account';
 import { esc } from './screens';
+import type { DailyChallenge } from '../net/account';
 
 export interface AcctView {
   config: GameConfig | null;
@@ -29,6 +30,8 @@ export interface AcctView {
   /** The last load failed (shown with a retry), or is still running. */
   boardError: boolean;
   boardLoading: boolean;
+  /** V2: today's three challenges (null = not loaded), with progress when signed in. */
+  daily: DailyChallenge[] | null;
   busy: boolean;
   message: string;
   /** The upgrade just bought (a short highlight on its card). */
@@ -37,7 +40,7 @@ export interface AcctView {
 
 export const emptyAcct = (): AcctView => ({
   config: null, signedIn: false, progression: false, profile: null, tokens: null, tokensError: null, hasWallet: false, identities: [],
-  choice: null, ticket: null, ticketWarning: null, board: null, boardMe: null, boardTab: 'solo', boardOffset: 0, boardTotal: 0, boardError: false, boardLoading: false, busy: false, message: '', justBought: null,
+  choice: null, ticket: null, ticketWarning: null, board: null, boardMe: null, boardTab: 'solo', boardOffset: 0, boardTotal: 0, boardError: false, boardLoading: false, daily: null, busy: false, message: '', justBought: null,
 });
 
 export const tierBadge = (t: Tier, demo = false) =>

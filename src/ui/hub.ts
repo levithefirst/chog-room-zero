@@ -254,6 +254,14 @@ function boardPreview(c: HubCtx): string {
   return `<section class="hub-card board" id="boardpreview"><div class="card-head"><h3>Leaderboard <small class="note">${a.boardTab === 'solo' ? 'Solo' : 'Online'}</small></h3><button class="btn small" data-act="ranks">All</button></div>${body}</section>`;
 }
 
+/** V2 daily challenges: three a day, the same for everyone; done ones are paid once by the site. */
+function dailyPanel(c: HubCtx): string {
+  const d = c.acct.daily;
+  if (!c.acct.config?.db || !d?.length) return '';
+  const rows = d.map((x) => `<li class="${x.done ? 'done' : ''}"><span>${esc(x.text)}</span><span class="num">${c.acct.signedIn ? (x.done ? '✓' : `${x.progress}/${x.goal}`) : ''} <small>+${x.shards}</small></span></li>`).join('');
+  return `<section class="hub-card daily" id="daily"><div class="card-head"><h3>Today</h3>${c.acct.signedIn ? '' : '<small class="note">Sign in to count</small>'}</div><ul class="daily-list">${rows}</ul></section>`;
+}
+
 function squadPanel(c: HubCtx): string {
   const v = c.net;
   if (!v.url) return '';
@@ -284,7 +292,7 @@ export function hubHtml(c: HubCtx): string {
   <button class="navbtn" data-act="docs">${ICON.help}<span>Game Docs</span></button>
   <button class="navbtn demo-link" data-act="demo"><span class="demo">DEMO</span></button>
 </nav>
-<aside class="hub-right">${classOf(c.acct).source !== 'free' ? chogPanel(c) : ''}${squadPanel(c)}${boardPreview(c)}</aside>
+<aside class="hub-right">${classOf(c.acct).source !== 'free' ? chogPanel(c) : ''}${squadPanel(c)}${dailyPanel(c)}${boardPreview(c)}</aside>
 <footer class="hub-bottom">${playBar(c)}</footer>
 </div>`;
 }
