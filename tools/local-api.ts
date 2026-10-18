@@ -10,8 +10,8 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { handleGame, type Deps } from '../api/_lib/game-api';
-import { SESSION_COOKIE, clearCookie, cookie, json, readSession, sign, type Identity } from '../api/_lib/auth';
-import { migrate, type Db, type Tx } from '../api/_lib/db';
+import { SESSION_COOKIE, clearCookie, cookie, json, readLiveSession, readSession, sign, type Identity } from '../api/_lib/auth';
+import { migrate, revokeSession, type Db, type Tx } from '../api/_lib/db';
 import { CONTRACT, selector } from '../api/_lib/chain';
 import { POST as walletChallenge } from '../api/auth/wallet/challenge';
 import { POST as walletVerify } from '../api/auth/wallet/verify';
@@ -86,9 +86,14 @@ async function handle(req: import('node:http').IncomingMessage, res: import('nod
   const request = new Request(url, { method: req.method, headers: req.headers as Record<string, string>, body: req.method === 'GET' || req.method === 'HEAD' ? undefined : body });
   let out: Response;
   if (url.pathname.startsWith('/api/game/')) out = await handleGame(request, url.pathname.split('/').pop()!, deps);
-  else if (url.pathname === '/api/auth/session') out = json({ identities: (await readSession(request, deps.env))?.ids ?? [] });
+  else if (url.pathname === '/api/auth/session') out = json({ identities: (await readLiveSession(request, deps.env, await deps.db()))?.ids ?? [] });
   else if (url.pathname === '/api/auth/config') out = json({ google: true, wallet: true });
-  else if (url.pathname === '/api/auth/logout') out = json({ ok: true }, 200, { 'set-cookie': clearCookie(SESSION_COOKIE) });
+  else if (url.pathname === '/api/auth/logout') {
+    // As api/auth/logout.ts: the session id is recorded as signed out, then the cookie is cleared.
+    const s = await readSession(request, deps.env), db = await deps.db();
+    if (s?.sid && db) await revokeSession(db, s.sid, s.exp);
+    out = json({ ok: true, revoked: !!(s?.sid && db) }, 200, { 'set-cookie': clearCookie(SESSION_COOKIE) });
+  }
   else if (url.pathname === '/api/auth/wallet/challenge') out = await walletChallenge(request);
   else if (url.pathname === '/api/auth/wallet/verify') out = await walletVerify(request);
   // Google cannot be reached from the test container: its start route signs in a fixed test Google identity instead and

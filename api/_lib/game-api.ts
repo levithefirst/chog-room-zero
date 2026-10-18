@@ -17,7 +17,7 @@
 //   GET  leaderboard   ranked by kills in validated matches (then wins); shows matches, XP/level, rating, Chog tier
 //   GET  health        database reachable, applied migrations, this game's tables (no data, no secrets)
 //   GET  chain         read-only live check of the ownership path on Monad (cached 60 s; no player data)
-import { env as authEnv, json, readSession, sameOrigin, secretOk, type Env, type Identity } from './auth.js';
+import { env as authEnv, json, readLiveSession, sameOrigin, secretOk, type Env, type Identity } from './auth.js';
 import { schemaStatus, type Db } from './db.js';
 import { readOwnership, selfCheck, type Fetch, type Holding, type OwnershipResult, type SelfCheck } from './chain.js';
 import { BOARD_PAGE, setNftTier, accountFor, buyUpgrade, callsignOf, standingOf, checkTicket, issueTicket, leaderboard, settleMatch, ticketSecret, tokenHistory, upgradesOf, validRecord, type GameTicket } from './game.js';
@@ -140,7 +140,7 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
         return json({ db: !!db, nftCombat: nftCombatOn(e), demo: true });
 
       case 'GET profile': {
-        const s = await readSession(req, e);
+        const s = await readLiveSession(req, e, db);
         if (!s?.ids.length) return json({ signedIn: false });
         if (!db) return json({ signedIn: true, progression: false });
         const acc = await accountFor(db, s.ids);
@@ -153,7 +153,7 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
       case 'POST practice': {
         if (!sameOrigin(req, e)) return json({ error: 'bad_origin' }, 403);
         if (!db) return json({ error: 'progression_offline' }, 503);
-        const s = await readSession(req, e);
+        const s = await readLiveSession(req, e, db);
         if (!s?.ids.length) return json({ error: 'sign_in' }, 401);
         const acc = (await accountFor(db, s.ids))!;
         if (action === 'practice-start') return json({ ok: true, ...(await startPractice(db, acc, await practiceSecret(e.AUTH_SECRET!), d.now())) });
@@ -165,7 +165,7 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
       }
 
       case 'GET tokens': {
-        const s = await readSession(req, e);
+        const s = await readLiveSession(req, e, db);
         if (!s || !wallets(s.ids).length) return json({ wallet: false, tokens: [] });
         const acc = db ? await accountFor(db, s.ids) : null;
         const own = await walletsOf(db, acc, s.ids);
@@ -208,7 +208,7 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
           log('ticket issued: demo');
           return json({ ticket: t.ticket, profile: publicTicket(t.data) });
         }
-        const s = await readSession(req, e);
+        const s = await readLiveSession(req, e, db);
         const ids = s?.ids ?? [];
         const acc = db && ids.length ? await accountFor(db, ids) : null;
         const up = db && acc ? await upgradesOf(db, acc) : NO_UPGRADES;
@@ -255,7 +255,7 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
       case 'POST upgrade': {
         if (!sameOrigin(req, e)) return json({ error: 'bad_origin' }, 403);
         if (!db) return json({ error: 'progression_offline' }, 503);
-        const s = await readSession(req, e);
+        const s = await readLiveSession(req, e, db);
         if (!s?.ids.length) return json({ error: 'sign_in' }, 401);
         const acc = (await accountFor(db, s.ids))!;
         const r = await buyUpgrade(db, acc, String((await body(req)).id ?? ''));
@@ -276,7 +276,7 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
         // or a medal already held adds nothing).
         const earned = new Map<string, string[]>();
         if (r.ok) for (const p of r.players) earned.set(p.acc, await db.tx((tx) => awardDue(tx, p.acc, null)));
-        const s = await readSession(req, e);
+        const s = await readLiveSession(req, e, db);
         const me = s?.ids.length ? await accountFor(db, s.ids) : null;
         const mine = r.ok ? r.players.find((p) => p.acc === me) ?? null : null;
         return json({ ...r, mine: mine ? { ...mine, earned: earned.get(mine.acc) ?? [] } : null, players: undefined });
@@ -292,7 +292,7 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
         const q = new URL(req.url).searchParams;
         const board = q.get('board') === 'solo' ? 'solo' : 'online';
         const offset = Math.max(0, Math.min(100_000, Number.parseInt(q.get('offset') ?? '0', 10) || 0));
-        const s = await readSession(req, e);
+        const s = await readLiveSession(req, e, db);
         const me = s?.ids.length ? await accountFor(db, s.ids) : null;
         return json({ progression: true, rankedBy: 'kills', signedIn: !!me, ...(await leaderboard(db, BOARD_PAGE, me, { board, offset })) });
       }

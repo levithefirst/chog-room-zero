@@ -7,7 +7,7 @@
 // Never put a secret in a response or a log. GOOGLE_CLIENT_SECRET and AUTH_SECRET stay server-side.
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { keccak_256 } from '@noble/hashes/sha3.js';
-import { claimNonce, type Db } from './db.js';
+import { claimNonce, sessionRevoked, type Db } from './db.js';
 
 declare const process: { env: Record<string, string | undefined> };
 
@@ -168,7 +168,8 @@ export async function readJson(req: Request, limit = 4000): Promise<Record<strin
 
 // ---- sessions ----
 /** `k: 'session'` tags a session token. Sessions issued before the tag have no `k` and are still accepted. */
-export interface Session { k?: 'session'; ids: Identity[]; exp: number }
+/** `sid`: this session's id (V2), recorded on sign-out so the cookie stops working everywhere. Older cookies have none. */
+export interface Session { k?: 'session'; ids: Identity[]; exp: number; sid?: string }
 
 const isIdentity = (i: unknown): i is Identity => {
   const x = i as Identity;
@@ -183,14 +184,26 @@ export async function readSession(req: Request, e: Env): Promise<Session | null>
   if (!secretOk(e)) return null;
   const s = await unsign<Session>(readCookie(req, SESSION_COOKIE), e.AUTH_SECRET!);
   if (!s || (s.k !== undefined && s.k !== 'session') || !Array.isArray(s.ids) || !s.ids.every(isIdentity)) return null;
+  if (s.sid !== undefined && typeof s.sid !== 'string') return null;
   return s;
+}
+
+/**
+ * readSession, minus sessions that signed out. Without a database there is nothing to check against and nothing a
+ * session could reach that needs one (progression, tickets), so the signed cookie alone stands.
+ */
+export async function readLiveSession(req: Request, e: Env, db: Db | null): Promise<Session | null> {
+  const s = await readSession(req, e);
+  if (!s?.sid || !db) return s;
+  return (await sessionRevoked(db, s.sid)) ? null : s;
 }
 
 /** Adds an identity to this browser's session (never twice), returning the Set-Cookie header. */
 export async function sessionCookieWith(prev: Session | null, id: Identity, e: Env, now = Date.now()): Promise<string> {
   const ids = (prev?.ids ?? []).filter((x) => !(x.provider === id.provider && x.subject === id.subject));
   ids.push(id);
-  const token = await sign({ k: 'session', ids: ids.slice(-4), exp: Math.floor(now / 1000) + SESSION_SECONDS }, e.AUTH_SECRET!);
+  // One id per browser session: adding an identity keeps it, so signing out revokes every cookie this session issued.
+  const token = await sign({ k: 'session', ids: ids.slice(-4), exp: Math.floor(now / 1000) + SESSION_SECONDS, sid: prev?.sid ?? randomToken(16) }, e.AUTH_SECRET!);
   return cookie(SESSION_COOKIE, token, SESSION_SECONDS);
 }
 
@@ -277,15 +290,17 @@ export async function verifyWallet(req: Request, e: Env, openDb: () => Promise<D
   const signer = recoverPersonalSign(message, String(body.signature ?? ''));
   if (!signer || signer !== ch.address) return fail('bad_signature');
   let db: Db | null = null;
+  let prev: Session | null;
   try {
     db = await openDb();
     if (db && !(await claimNonce(db, ch.nonce))) return fail('replayed');
+    // A session that signed out is not extended: the new one gets its own id.
+    prev = await readLiveSession(req, e, db);
   } catch {
     return fail('unavailable', 503);
   } finally {
     await db?.close().catch(() => undefined);
   }
-  const prev = await readSession(req, e);
   const identity = { provider: 'wallet' as const, subject: signer, label: shortAddress(signer) };
   const h = new Headers({ 'content-type': 'application/json', 'cache-control': 'no-store' });
   h.append('set-cookie', used);

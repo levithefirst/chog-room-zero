@@ -67,6 +67,8 @@ ${li([`About ${Z.safeSeconds} s in, a danger zone starts closing. Outside it you
     'When one of them sees you, it tells the others where it saw you (a moment later). They come to that spot, never straight to where you are now.',
     'They use cover, break line of sight, investigate sounds and back off when hurt. They never get to shoot you from further than you can see.',
     'They walk their jobs, so you can hear them coming.',
+    `Every bot, hostile or teammate, deals ${Math.round(TUNING.bots.damageMul * 100)}% of a weapon's damage (bullets and grenades). Real players online deal full damage.`,
+    'Hit by someone you could not see (behind you, or online a longer sight than yours): the red arc points at them, shows how far they are ("9 m"), and their muzzle flash rings them for a moment.',
   ]) },
   { id: 'pickups', title: 'Pickups', html: () => li([
     `Health +${P.health.amount} (back after ${P.health.respawn} s), armour +${P.armor.amount} (${P.armor.respawn} s), ammo: two magazines (${P.ammo.respawn} s), a grenade (${P.grenade.respawn} s).`,

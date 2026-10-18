@@ -1,7 +1,8 @@
 // GET /api/auth/google/callback: Google returns here with ?code&state. Check the state against the signed cookie,
 // exchange the code (with the client secret and PKCE verifier, server to server over TLS), read the ID token's
 // claims, and add the Google identity to this browser's session. Then back to the game.
-import { clearCookie, env, fromB64url, GOOGLE_COOKIE, googleOk, readCookie, readSession, redirect, sessionCookieWith, unsign } from '../../_lib/auth.js';
+import { clearCookie, env, fromB64url, GOOGLE_COOKIE, googleOk, readCookie, readLiveSession, redirect, sessionCookieWith, unsign } from '../../_lib/auth.js';
+import { openDb } from '../../_lib/db.js';
 
 interface GoogleClaims { iss?: string; aud?: string; sub?: string; email?: string; email_verified?: boolean; name?: string; exp?: number }
 
@@ -40,7 +41,9 @@ export async function GET(req: Request): Promise<Response> {
   const issOk = claims.iss === 'https://accounts.google.com' || claims.iss === 'accounts.google.com';
   if (!issOk || claims.aud !== e.GOOGLE_CLIENT_ID || !claims.sub || !claims.exp || claims.exp * 1000 < Date.now()) return fail('bad_token');
   const label = claims.email && claims.email_verified ? claims.email : claims.name ?? 'Google account';
-  const prev = await readSession(req, e);
+  // A session that signed out is not extended: the new one gets its own id.
+  const db = await openDb().catch(() => null);
+  const prev = await readLiveSession(req, e, db).catch(() => null).finally(() => db?.close().catch(() => undefined));
   const session = await sessionCookieWith(prev, { provider: 'google', subject: claims.sub, label }, e);
   return redirect(`${origin}/?signedin=google`, [session, clearCookie(GOOGLE_COOKIE, '/api/auth/google')]);
 }

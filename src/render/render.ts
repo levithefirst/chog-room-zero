@@ -102,7 +102,8 @@ export interface Fx {
   corpses: { x: number; y: number; hostile: boolean }[];
   // Fixed pool; `age >= 1` means free. Capped at TUNING.render.maxSparks.
   sparks: Spark[];
-  damageArcs: { ang: number; age: number }[];
+  /** `far`: metres to a shooter you could not see when it hit you (shown on the arc), else 0. */
+  damageArcs: { ang: number; age: number; far: number }[];
   /** Sonar pings: r is the ability's real radius (Ping 14 m, Deadsight 18 m); color overrides for a 1:1. */
   pings: { x: number; y: number; age: number; hostile: boolean; r?: number; color?: number }[];
   // Seconds left that each actor id stays drawn after shooting at the player (see visibility.ts).
@@ -196,8 +197,11 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
   const debugG = new Graphics();
   const debugLabels = new Container();
   const screen = new Graphics();
+  // V2: "shot from the dark" tags on damage arcs (distance to a shooter you could not see), pooled.
+  const arcTags = new Container();
+  const arcTagPool: Text[] = [];
   world.addChild(dimSprite, fogG, lightLayer, props, zoneG, labels, marks, actors, bars, fxG, recapG, debugG, debugLabels);
-  app.stage.addChild(world, screen);
+  app.stage.addChild(world, screen, arcTags);
 
   let level: Level;
   let baked: Baked | null = null;
@@ -962,10 +966,28 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
         }
       }
       // Damage direction: a red arc around the player toward where the shot came from.
+      // V2: a shooter you could not see when it hit you also gets its distance on the arc ("9 m"), so a hit from
+      // the dark reads as "someone out there saw me", with where and how far, not as a bot that knew.
+      let tags = 0;
       for (const da of fx.damageArcs) {
         const al = 1 - da.age / R.damageArcSeconds;
         arc(screen, ps.x, ps.y, ppu * 1.4, da.ang - 0.38, da.ang + 0.38, 12).stroke({ width: 6, color: P.hostile, alpha: 0.9 * al });
+        if (da.far <= 0) continue;
+        let t = arcTagPool[tags];
+        if (!t) {
+          t = new Text({ text: '', style: { fontFamily: 'Plex Mono, monospace', fontSize: 14, fontWeight: '600', fill: 0xffffff, stroke: { color: 0x000000, width: 4 } } });
+          t.anchor.set(0.5);
+          t.tint = P.hostile;
+          arcTags.addChild(t);
+          arcTagPool.push(t);
+        }
+        t.text = `${Math.round(da.far)} m`;
+        t.position.set(ps.x + Math.cos(da.ang) * ppu * 1.4 + Math.cos(da.ang) * 22, ps.y + Math.sin(da.ang) * ppu * 1.4 + Math.sin(da.ang) * 22);
+        t.alpha = al;
+        t.visible = true;
+        tags++;
       }
+      for (let i = tags; i < arcTagPool.length; i++) arcTagPool[i].visible = false;
       // Outside the danger zone: a red chevron next to you pointing the shortest way back in.
       if (w.zone && p.alive && opts.playing) {
         const zc = zoneAt(w.zone, matchSeconds(w)).circle;

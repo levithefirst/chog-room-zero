@@ -199,6 +199,10 @@ export function createInput(el: HTMLElement): Input {
     holdFireUntilRelease() {
       firing = false;
       fireLatched = false;
+      // V2: a key pressed while a menu was up (Space on the pause card) is not an order for the match it returns to.
+      abilityQueued = false;
+      reloadQueued = false;
+      grenadeQueued = false;
       right.active = false;
       // Only a press that is still down (e.g. the Resume press itself) is swallowed. If everything was already
       // released (Deploy -> loading -> play, Esc resume), the next press fires normally.

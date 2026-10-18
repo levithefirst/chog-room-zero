@@ -201,7 +201,7 @@ describe('RC-7 Google sign-in', () => {
     const both = cookieOf(r, 'chog_session');
     const ids = ((await (await session(get('/api/auth/session', [both]))).json()) as { identities: { provider: string }[] }).identities;
     expect(ids.map((i) => i.provider)).toEqual(['wallet', 'google']);
-    expect((logout(post('/api/auth/logout', {}, [both], 'https://other.site'))).status).toBe(403);
-    expect(cookieOf(logout(post('/api/auth/logout', {}, [both])), 'chog_session')).toBe('chog_session=');
+    expect((await logout(post('/api/auth/logout', {}, [both], 'https://other.site'))).status).toBe(403);
+    expect(cookieOf(await logout(post('/api/auth/logout', {}, [both])), 'chog_session')).toBe('chog_session=');
   });
 });

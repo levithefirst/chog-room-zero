@@ -202,7 +202,29 @@ export const MIGRATIONS: { version: number; name: string; sql: string }[] = [
       UPDATE room_zero.accounts SET lb_hidden = true WHERE callsign IS NULL AND display_name ~ '^Smoke[A-Z]$'
     `,
   },
+  {
+    version: 7,
+    name: 'signed-out sessions: a session id once its browser signed out, so a copied cookie stops working',
+    // Additive: one new table. Sessions issued before this migration carry no id and simply run to their expiry.
+    sql: `
+      CREATE TABLE IF NOT EXISTS room_zero.revoked_sessions (
+        sid text PRIMARY KEY,
+        expires_at timestamptz NOT NULL,
+        at timestamptz NOT NULL DEFAULT now()
+      )
+    `,
+  },
 ];
+
+/** Records that the session `sid` signed out (until its own expiry). Idempotent. */
+export async function revokeSession(db: Db, sid: string, expSeconds: number): Promise<void> {
+  await db.query(`INSERT INTO room_zero.revoked_sessions (sid, expires_at) VALUES ($1, to_timestamp($2)) ON CONFLICT DO NOTHING`, [sid, expSeconds]);
+}
+
+/** True when the session `sid` has signed out. */
+export async function sessionRevoked(db: Db, sid: string): Promise<boolean> {
+  return (await db.query(`SELECT 1 FROM room_zero.revoked_sessions WHERE sid = $1`, [sid])).length > 0;
+}
 
 /**
  * Marks a SIWE nonce as used. True the first time, false for a replay. Rows older than 10 minutes (twice the challenge

@@ -98,13 +98,13 @@ describe('migration v2 on an existing v1 database', () => {
     for (const stmt of MIGRATIONS[0].sql.split(';').map((x) => x.trim()).filter(Boolean)) await raw.query(stmt);
     await raw.query(`INSERT INTO room_zero.schema_migrations (version, name) VALUES (1, 'v1')`);
     await raw.query(`INSERT INTO room_zero.accounts (id, xp, shards, rating, matches, wins) VALUES ('old', 500, 70, 1040, 9, 6)`);
-    expect(await migrate(raw)).toEqual([2, 3, 4, 5, 6]);
+    expect(await migrate(raw)).toEqual([2, 3, 4, 5, 6, 7]);
     const r = await raw.query<Record<string, unknown>>(`SELECT * FROM room_zero.accounts WHERE id = 'old'`);
     expect(r[0]).toMatchObject({ id: 'old', shards: 70, rating: 1040, matches: 9, wins: 6, display_name: null, nft_tier: null });
     expect(Number(r[0].xp)).toBe(500);
     const s = await schemaStatus(raw);
-    expect(s.migrations.map((m) => m.version)).toEqual([1, 2, 3, 4, 5, 6]);
-    expect(s.tables).toEqual(['accounts', 'identities', 'ledger', 'match_players', 'matches', 'medals', 'ownership_checks', 'practice_runs', 'schema_migrations', 'token_history', 'upgrades', 'used_nonces']);
+    expect(s.migrations.map((m) => m.version)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(s.tables).toEqual(['accounts', 'identities', 'ledger', 'match_players', 'matches', 'medals', 'ownership_checks', 'practice_runs', 'revoked_sessions', 'schema_migrations', 'token_history', 'upgrades', 'used_nonces']);
     await raw.close();
   });
 });

@@ -467,11 +467,18 @@ async function start() {
     // In a match too: the phone's Back (or the browser's) pauses the match instead of leaving the site.
     if ((phase === 'play' || phase === 'loading') && !(history.state as { rz?: number } | null)?.rz) { try { history.pushState({ rz: 1 }, ''); } catch { /* ignore */ } }
     $('hud').classList.toggle('on', phase === 'play' || phase === 'pause' || phase === 'recap');
+    overlay.inert = false;
     switch (phase) {
       case 'title': return showTitle();
       case 'select': return show(selectHtml(ctx()));
       case 'loading': return showLoading();
-      case 'play': overlay.className = 'layer hidden'; return;
+      case 'play': {
+        // V2: the hidden card keeps its buttons; make them unreachable (no focus, no key clicks) while playing.
+        overlay.className = 'layer hidden';
+        if (overlay.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
+        overlay.inert = true;
+        return;
+      }
       case 'pause': return showPause();
       case 'recap': return showRecap();
       case 'results': return online ? showOnlineResults() : show(resultsHtml(ctx(), report()));
@@ -1668,9 +1675,12 @@ async function start() {
         if (settings.vibration && canVibrate) navigator.vibrate(h.killed ? 80 : 25);
         // Shake by how much it hurt (CF): a graze nudges, a shotgun blast shoves. 25 damage = the base shake.
         fx.shake = Math.max(fx.shake, TUNING.render.shakeSeconds * Math.max(0.6, Math.min(1.8, (h.hpDamage + h.armorDamage) / 25)));
-        fx.damageArcs.push({ ang: Math.atan2(h.fromY - p.y, h.fromX - p.x), age: 0 });
-        // Fairness rule: every hit comes from within your sight range with line of sight, so the shooter is
-        // always shown (ringed) for the reveal window, even when it stands outside the lamp cone. A grenade's
+        // A shooter outside your sight when it hit you (behind you, or a longer sight than yours online): its distance
+        // goes on the arc. Grenades excluded: the arc points at the blast, not the thrower.
+        const unseen = !h.grenade && !canSee(world.level, p.x, p.y, p.facing, p.view, h.fromX, h.fromY);
+        fx.damageArcs.push({ ang: Math.atan2(h.fromY - p.y, h.fromX - p.x), age: 0, far: unseen ? Math.hypot(h.fromX - p.x, h.fromY - p.y) : 0 });
+        // The shooter is shown (ringed) for the reveal window, even outside the lamp cone: solo, bots never fire
+        // beyond your sight range; online, the server sends a shooter whose muzzle flash you saw on a clear line. A grenade's
         // source is the blast you saw land (its ring); the thrower behind a wall is not revealed.
         if (!h.grenade) fx.threats[h.by] = TUNING.perception.flashSeconds;
         audio.play('hurt', 0, 0, 1, false, true);

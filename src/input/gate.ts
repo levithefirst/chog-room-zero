@@ -36,5 +36,8 @@ export function createSummaryGate(lockMs = SUMMARY_LOCK_MS): SummaryGate {
  * keys 1-4, touch) is ignored until the gate opens: 0.75 s lock, then a fresh press. Other phases are not gated.
  */
 export function overlayInputAllowed(phase: string, gate: SummaryGate): boolean {
+  // V2: during play the overlay is hidden but keeps the last menu's buttons (pause card). A key press on a button
+  // that kept focus (Enter on "Leave match") must never act behind the game.
+  if (phase === 'play') return false;
   return phase !== 'results' && phase !== 'recap' ? true : phase === 'results' && gate.canRestart();
 }
