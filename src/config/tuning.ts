@@ -145,6 +145,22 @@ export const TUNING = {
     dressing: 15,
   },
 
+  perks: {
+    // V2 (src/config/perks.ts). Who carries one at the start: solo hostiles; online every player (seeded).
+    // Soft Soles: footstep radius x0.6 (a run carries ~4.8 m instead of 8).
+    solesStepMul: 0.6,
+    // Keen Ears: the wall factor for what this actor hears (1 = walls do not shorten it; everyone else 0.8).
+    earsWallFactor: 1,
+    // Field Kit: revive progress runs this many times faster (3 s -> 1.5 s); revived at this share of health.
+    medicReviveMul: 2,
+    medicHpShare: 0.5,
+    // Marker: a hit shows the target to the shooter's team this long (like a Ping on that one hostile).
+    markerSeconds: 2,
+    // Swapping a perk you hold for the one in a bag: stand on it this long (slower than this counts as standing).
+    swapSeconds: 1,
+    swapStillSpeed: 0.5,
+  },
+
   abilities: {
     // Slip: 0.18 s at 13 u/s, about 2.3 u. Quiet.
     dashSeconds: 0.18,
@@ -410,6 +426,8 @@ export const TUNING = {
       ammoWeight: 1.2,
       grenadeWeight: 0.45,
       lootBonus: 0.1,
+      // V2: an empty perk slot values any perk in a bag this much (about a quarter-empty magazine's worth).
+      perkValue: 0.35,
       critical: 0.8,
       range: 18,
       leash: 9.5,

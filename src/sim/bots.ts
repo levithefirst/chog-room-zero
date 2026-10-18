@@ -8,7 +8,7 @@ import { angleDiff } from './geom';
 import { findPath, shotClear, sightClear, tileAt, walkable } from './level';
 import { canSee, muzzleFlashSeen } from './vision';
 import { safeSpot, zoneAt, zoneGoal } from './zone';
-import { ammoCeiling, downLeft, hears, lootTake, player, rand, revealed, standing, viewOf, wants, type Actor, type ActorInput, type CommsEvent, type CommsKind, type Loot, type Pickup, type SoundType, type World } from './world';
+import { ammoCeiling, downLeft, hears, lootTake, wallFactorOf, player, rand, revealed, standing, viewOf, wants, type Actor, type ActorInput, type CommsEvent, type CommsKind, type Loot, type Pickup, type SoundType, type World } from './world';
 import { LAB } from '../config/lab';
 
 const DEG = Math.PI / 180;
@@ -430,7 +430,7 @@ function think(w: World, a: Actor, br: Brain, dt: number): void {
       flashed = true;
       continue;
     }
-    if (!hears(w.level, a.x, a.y, s)) continue;
+    if (!hears(w.level, a.x, a.y, s, wallFactorOf(a))) continue;
     // Heard positions are uncertain: further away means a wider guess.
     const d = Math.hypot(s.x - a.x, s.y - a.y);
     const err = d * P.hearErrorShare;
@@ -1063,6 +1063,8 @@ function allySupply(w: World, a: Actor, br: Brain, seen: Actor | null, dt: numbe
       if (g.armor > 0) v += needOf(a, 'armor') * Math.min(1, g.armor / 25);
       if (g.rounds > 0) v += needOf(a, 'ammo') * Math.min(1, g.mags);
       if (g.grenades > 0) v += needOf(a, 'grenade');
+      // V2: an empty perk slot makes any perk worth a short detour.
+      if (g.perk) v += S.perkValue;
       consider('loot', l.id, l.x, l.y, v + (v > 0 ? S.lootBonus : 0), 'loot', g.health > 0 ? { health: needOf(a, 'health') } : {});
     }
     br.supply = chosen;

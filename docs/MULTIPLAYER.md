@@ -66,18 +66,22 @@ can see. Sounds: those the player can hear (same hearing rule as solo). So a mod
 | 5v5 | yes | yes: 10 browser processes, loopback (4-core machine at load ~36: slow frames, match still completed); hosted not run | Render Free, production + branch preview |
 
 Not tested: real internet latency and packet loss, phones or touch input online (the touch path produces the same
-controls as in solo, but no online run used it), more than one match at a time on the server, a hosted server.
+controls as in solo, but no online run used it), more than one match at a time on the server, hosted 3v3 and 5v5.
+(Hosted 1v1 was run, see the matrix; the production smoke runs 1v1 and 3v3 rooms against the live server.)
 
 ## Known limits
 
-- No client-side prediction: your own operator moves when the server says so (about one round trip plus up to
-  50 ms). Fine on loopback; on a phone network it will feel delayed. Next step if playtests say so.
+- Own movement is predicted since SB (H27, `src/net/predict.ts`): your operator moves at once and is corrected toward
+  the server's position. Aim, firing, damage and pickups stay server-decided.
 - Others are drawn 100 ms in the past (interpolation), so on your screen a target is slightly behind where the
   server has it. No lag compensation: you lead your shots by your ping.
+- What a client is sent (server/room.ts snapshot): exact hostiles only while you see them, saw their muzzle flash on a
+  clear line, or your Ping shows them; a teammate's sighting is a blurred spot; heard sounds are estimates. A hit on
+  you always carries where it came from (tests/snapshot-privacy, tests/v2-info-boundary).
 - One server process holds every room in memory; a restart ends running matches. Fine for a hackathon.
 - Bots are never added online and nothing online is labelled as a person unless it is one.
 
-## Hosting (owner decision; nothing is deployed or paid for)
+## Hosting (owner decision 2026-10-13: Render Free, live since RC-8; nothing is paid for)
 
 | Option | Cost | Fit | Checked |
 |---|---|---|---|

@@ -63,6 +63,8 @@
       /* GP: a timed effect on you (a Snare slow) in words and seconds, never a silent slow-down. */
       #status { font-size: 12px; color: var(--armor); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 3px; min-height: 0; }
       #status:empty { display: none; }
+      #perk { font-size: 12px; color: var(--signal); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 3px; }
+      #perk:empty { display: none; }
       /* GP downed window: the countdown and the revive, centre top, big enough to read mid-fight on a phone. */
       #downcard { left: 50%; top: calc(var(--st) + 112px); transform: translateX(-50%); text-align: center; padding: 8px 16px 10px; min-width: 220px; display: none; }
       #downcard.on { display: block; }
@@ -168,10 +170,10 @@
       .hero b i { width: 14px; height: 14px; border-radius: 50%; background: var(--ink); box-shadow: inset 0 0 0 3px var(--accent); }
       .hero .role { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; margin-top: 6px; font-weight: 600; }
       .hero p { font-size: 14px; margin: 4px 0 6px; line-height: 1.3; }
-      .stat { display: grid; grid-template-columns: 52px 1fr auto; align-items: center; gap: 6px; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.08em; margin: 2px 0; }
+      .stat { display: grid; grid-template-columns: 46px 1fr auto; align-items: center; gap: 4px; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.08em; margin: 2px 0; }
       .stat s { display: block; height: 5px; background: var(--bg-elevated); text-decoration: none; position: relative; }
       .stat s::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--v); background: var(--ink); }
-      .stat em { font-style: normal; color: var(--ink); font-variant-numeric: tabular-nums; min-width: 4.2em; text-align: right; letter-spacing: 0; text-transform: none; }
+      .stat em { font-style: normal; font-size: 10px; color: var(--ink); font-variant-numeric: tabular-nums; min-width: 0; text-align: right; letter-spacing: 0; text-transform: none; }
       .hero .ab { font-size: 13px; color: var(--ink); margin-top: 6px; line-height: 1.25; }
       .hero .ab span { color: var(--dim); }
       .hero .wp { font-size: 13px; color: var(--ink); margin-top: 4px; }
@@ -784,6 +786,7 @@
         <div class="bar" id="arbar"><i id="arfill"></i></div>
         <div id="hero"></div>
         <div id="status" aria-live="polite"></div>
+        <div id="perk"></div>
       </div>
       <div id="foes" class="panel"><span id="foesn" class="num">5</span><span>hostiles</span><span id="pips"></span><span id="zone"><i aria-hidden="true"></i><b id="zphase">Zone in</b><span id="ztime" class="num"></span></span></div>
       <div id="sys">

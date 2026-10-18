@@ -1,6 +1,7 @@
 // Online client (RC-8). Talks to the authoritative server (server/room.ts) and turns its snapshots into a local
 // "view world" the normal renderer and HUD can draw. The browser decides nothing about hits, damage, pickups or
 // the result: it sends controls and shows what the server says. You are always actor 0 in the view world.
+import { isPerk } from '../config/perks';
 import { powerFor, signatureFor } from '../config/power';
 import { applyFocus, createWorld, wrapAngle, type Actor, type ActorInput, type HitEvent, type SoundEvent, type SoundType, type World } from '../sim/world';
 import { WEAPONS } from '../config/weapons';
@@ -328,7 +329,7 @@ export class OnlineSession {
     // The server's word on where each pickup is (they move when they come back).
     if (m.pk) w.pickups.forEach((k, i) => { if (m.pk!.length > i * 2 + 1) { k.x = m.pk![i * 2]; k.y = m.pk![i * 2 + 1]; } });
     // GP loot bags the server says your team knows of: drawn from what kinds they hold, never decided here.
-    w.loot = (m.lt ?? []).map((l) => ({ id: l.id, x: l.x, y: l.y, left: l.left, health: l.k & 1 ? 1 : 0, armor: l.k & 2 ? 1 : 0, mags: l.k & 4 ? 1 : 0, grenades: l.k & 8 ? 1 : 0, from: -1, team: 'bot' as const, known: [] }));
+    w.loot = (m.lt ?? []).map((l) => ({ id: l.id, x: l.x, y: l.y, left: l.left, health: l.k & 1 ? 1 : 0, armor: l.k & 2 ? 1 : 0, mags: l.k & 4 ? 1 : 0, grenades: l.k & 8 ? 1 : 0, perk: isPerk(l.p) ? l.p : null, from: -1, team: 'bot' as const, known: [] }));
     w.barriers = m.barriers.map((b) => ({ box: { x0: b.x0, y0: b.y0, x1: b.x1, y1: b.y1 }, left: b.left, owner: -1 }));
     // The view level's solid boxes carry the slabs too, so your predicted walk stops at one like the server's does.
     const solid = w.level.solidBoxes;
@@ -426,5 +427,10 @@ function copy(act: Actor, s: NetActor): void {
   if (s.nades !== undefined) act.grenades = s.nades;
   if (s.maxNades !== undefined) act.maxGrenades = s.maxNades;
   act.focus = s.focus ?? 0;
+  act.perk = isPerk(s.perk) ? s.perk : null;
+  act.bagStill = s.bag ?? 0;
+  // Sent only when someone on your side marked it: in a two-side match that is the other side from it.
+  act.markLeft = s.mk ? TUNING.perks.markerSeconds : 0;
+  act.markTeam = s.mk ? (act.team === 'alpha' ? 'bravo' : 'alpha') : null;
   applyFocus(act);
 }

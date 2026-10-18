@@ -1,6 +1,6 @@
 // Bot perception rules (docs/design/bots.md). Deterministic.
 import { describe, expect, it } from 'vitest';
-import { createWorld, stepWorld, IDLE_INPUT, hears, viewOf, type World, type SoundEvent, type HitEvent } from '../src/sim/world';
+import { createWorld, stepWorld, IDLE_INPUT, hears, viewOf, wallFactorOf, type World, type SoundEvent, type HitEvent } from '../src/sim/world';
 import { canSee, muzzleFlashSeen } from '../src/sim/vision';
 import { TUNING } from '../src/config/tuning';
 
@@ -179,7 +179,8 @@ describe('no omniscience across seeded matches', () => {
               expect(sounds.some((s) => s.team === 'player' && s.type === 'shot' && s.x === e.x && s.y === e.y && muzzleFlashSeen(w.level, e.ox, e.oy, s.x, s.y))).toBe(true);
               break;
             case 'heard':
-              expect(sounds.some((s) => s.team === 'player' && hears(w.level, e.ox, e.oy, s))).toBe(true);
+              // V2: with the listener's own wall factor (Keen Ears hears through walls as in the open; it is a rule, not a leak).
+              expect(sounds.some((s) => s.team === 'player' && hears(w.level, e.ox, e.oy, s, wallFactorOf(bot)))).toBe(true);
               break;
             case 'shot':
               expect(hits.some((h) => h.target === e.bot)).toBe(true);

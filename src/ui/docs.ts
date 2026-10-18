@@ -8,6 +8,7 @@ import { PRACTICE_REWARDS, REWARDS } from '../config/progression';
 import { MEDALS } from './medals';
 import { HEROES } from '../config/heroes';
 import { THREAT_RANGE } from './downed';
+import { PERKS, PERK_IDS } from '../config/perks';
 import { esc } from './screens';
 
 export interface DocSection { id: string; title: string; html: (touch: boolean) => string }
@@ -80,9 +81,16 @@ ${li([`About ${Z.safeSeconds} s in, a danger zone starts closing. Outside it you
   { id: 'loot', title: 'Enemy Loot', html: () => li([
     `Anyone who is eliminated drops a bag of what they carried: their ammo, their grenades, the armour left on them, and a field dressing (+${L.dressing} health).`,
     `The bag lies where they fell for ${L.seconds} s (its ring runs down). Walk over it: you take what you can use, the rest stays for your teammates.`,
-    'Ammo converts to your own gun, magazine for magazine. Nothing is ever made up: a bag holds only what the fallen had.',
+    'Ammo converts to your own gun, magazine for magazine. Nothing is ever made up: a bag holds only what the fallen had, including its perk (see Perks).',
     'Your AI teammates go for a bag when they need what is in it and it is safe; online, the server decides every take.',
   ]) },
+  { id: 'perks', title: 'Perks', html: () => `<p>A perk is a one-slot edge you carry for this match only. It never changes health, armour, damage or speed, and it works for any operator.</p>
+${li([...PERK_IDS.map((k) => `<b>${PERKS[k].name}</b>: ${PERKS[k].text}`),
+    'Who has one: in the default game every hostile carries one; online every player starts with one (fixed by the match, shown under your health). You and your AI teammates start without one.',
+    'Kill the carrier and its perk is in the bag (the label names it). An empty slot takes it on touch.',
+    `Already carrying one? Stand still on the bag for ${TUNING.perks.swapSeconds} s to swap: yours goes into the bag. Standing still in the open is the price.`,
+    'AI teammates take a perk when their slot is empty, and never swap one they have.',
+  ])}` },
   { id: 'medals', title: 'Medals', html: () => `<p>${MEDALS.length} medals: ${rarityCount('common')} common, ${rarityCount('uncommon')} uncommon, ${rarityCount('rare')} rare, ${rarityCount('epic')} epic.
 Commons come from playing; rare and epic ones need runs most players rarely have (a clear in under 30 seconds, a last stand, a run without a scratch).</p>
 ${li(['Signed in, medals are awarded and kept on your account (any device). As a guest they last for the session.', 'Online medals come from matches the server saved, never from the browser.',

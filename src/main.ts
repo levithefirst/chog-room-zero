@@ -3,7 +3,7 @@ import { createInput, touchStick } from './input/input';
 import { createSummaryGate, overlayInputAllowed } from './input/gate';
 import { createAudio } from './audio/audio';
 import { fixedSteps } from './sim/sim';
-import { createWorld, hears, matchSeconds, player, stepWorld, touchingFull, wants, IDLE_INPUT, type Pickup, type PickupKind, type World } from './sim/world';
+import { createWorld, hears, wallFactorOf, matchSeconds, player, stepWorld, touchingFull, wants, IDLE_INPUT, type Pickup, type PickupKind, type World } from './sim/world';
 import { outsideCircle, zoneAt } from './sim/zone';
 import { OnlineSession, serverUrl } from './net/client';
 import { MODE_SIZE, type Mode } from './net/protocol';
@@ -13,6 +13,7 @@ import { clampMarker } from './render/visibility';
 import { muzzleFlashSeen } from './sim/vision';
 import { canSee } from './sim/vision';
 import { downedCard } from './ui/downed';
+import { PERKS, type PerkId } from './config/perks';
 import { nextPhase, simRuns, type MatchEvent, type Phase } from './sim/match';
 import { TUNING } from './config/tuning';
 import { HEROES, heroById, heroIdOf, squadFor } from './config/heroes';
@@ -1511,7 +1512,7 @@ async function start() {
   // pickup with a ring), instead of a generic "Picked up".
   const PICKUP_LABEL: Record<PickupKind, string> = { health: 'HEALTH', armor: 'ARMOUR', ammo: 'AMMO', grenade: 'GRENADE' };
   // What you carried after the last step: a loot bag's take is the difference (the bag's contents are the sim's).
-  let kit = { hp: 0, armor: 0, reserve: 0, grenades: 0 }, kitBefore = kit;
+  let kit: { hp: number; armor: number; reserve: number; grenades: number; perk: PerkId | null } = { hp: 0, armor: 0, reserve: 0, grenades: 0, perk: null }, kitBefore = kit;
   function collected(x: number, y: number) {
     const pk = world.pickups.find((q) => q.x === x && q.y === y);
     const p = player(world);
@@ -1520,7 +1521,8 @@ async function start() {
       // GP: a loot bag. Say what it gave you, in the order you would look for it.
       const k = kitBefore;
       const got = [p.hp - k.hp >= 1 ? `+${Math.round(p.hp - k.hp)} HEALTH` : '', p.armor - k.armor >= 1 ? `+${Math.round(p.armor - k.armor)} ARMOUR` : '',
-        p.reserve > k.reserve ? `+${p.reserve - k.reserve} AMMO` : '', p.grenades > k.grenades ? `+${p.grenades - k.grenades} GRENADE${p.grenades - k.grenades > 1 ? 'S' : ''}` : ''].filter(Boolean);
+        p.reserve > k.reserve ? `+${p.reserve - k.reserve} AMMO` : '', p.grenades > k.grenades ? `+${p.grenades - k.grenades} GRENADE${p.grenades - k.grenades > 1 ? 'S' : ''}` : '',
+        p.perk && p.perk !== k.perk ? `PERK ${PERKS[p.perk].name.toUpperCase()}${k.perk ? ` (LEFT ${PERKS[k.perk].name.toUpperCase()})` : ''}` : ''].filter(Boolean);
       toast(got.length ? `LOOT ${got.join(' · ')}` : 'LOOT');
       fx.collects.push({ x: p.x, y: p.y, age: 0, color: TUNING.palette.signal });
       return;
@@ -1577,7 +1579,7 @@ async function start() {
     const view = p.view;
     // Kit as it was after the last step (a loot take this step is shown as the difference), then today's.
     kitBefore = kit;
-    kit = { hp: p.hp, armor: p.armor, reserve: p.reserve, grenades: p.grenades };
+    kit = { hp: p.hp, armor: p.armor, reserve: p.reserve, grenades: p.grenades, perk: p.perk };
     for (const s of world.sounds) {
       const own = s.sourceId === 0;
       const dx = s.x - p.x, dy = s.y - p.y;
@@ -1613,7 +1615,7 @@ async function start() {
       // CF-C: your own noise, drawn out to the radius it is really heard at (steps by speed, reload, abilities).
       if (own && LAB.ownNoise && p.alive && OWN_NOISE.has(s.type)) fx.noise.push({ x: s.x, y: s.y, r: s.radius, age: 0 });
       // Online the server already decided you hear it (an estimate arrives where hearing puts it, not where it was).
-      const heard = own || !!s.est || hears(world.level, p.x, p.y, s);
+      const heard = own || !!s.est || hears(world.level, p.x, p.y, s, wallFactorOf(p));
       if (!heard) continue;
       if (s.type === 'impact' && s.blocked) debugStats.blockedCues++;
       audio.play(s.type === 'impact' && s.blocked ? 'blocked' : s.type, dx, dy, s.radius, !own && (s.est ? s.est === 'wall' : !sightClear(world.level, p.x, p.y, s.x, s.y)), own, s.weapon, s.sig);
@@ -1743,7 +1745,7 @@ async function start() {
   const pipsEl = $('pips');
   let lastHud = '';
   let lastZone = '';
-  let lastStatus = '', lastDown = '';
+  let lastStatus = '', lastDown = '', lastPerk = '';
   let hpGhost = 0, ghostHold = 0, lastGhost = '', abilityWas = 0;
   let zoneTickLeft = 0;
 
@@ -1919,6 +1921,12 @@ async function start() {
     {
       const st = p.alive && p.slowLeft > 0 ? `Slowed ${Math.round((1 - p.slowMul) * 100)}% · ${p.slowLeft.toFixed(1)} s` : '';
       if (st !== lastStatus) { lastStatus = st; $('status').textContent = st; }
+      // V2 perk: what you carry, and on a bag holding a different one, how to swap (stand still) and how far along.
+      const bag = p.alive && !p.downed && p.perk ? world.loot.find((l) => l.perk && l.perk !== p.perk && Math.hypot(l.x - p.x, l.y - p.y) <= TUNING.pickups.radius) : undefined;
+      const pk = !p.alive ? '' : bag?.perk
+        ? (p.bagStill > 0 ? `Swapping for ${PERKS[bag.perk].name} · ${Math.min(99, Math.round((p.bagStill / TUNING.perks.swapSeconds) * 100))}%` : `Stand still to swap for ${PERKS[bag.perk].name}`)
+        : p.perk ? `Perk · ${PERKS[p.perk].name}` : '';
+      if (pk !== lastPerk) { lastPerk = pk; $('perk').textContent = pk; ($('perk') as HTMLElement).title = p.perk ? PERKS[p.perk].text : ''; }
       // You down, or a teammate down next to you (you are the one reviving): one card, one countdown (src/ui/downed.ts).
       const dc = downedCard(world, p, matchIntel);
       let card = '';

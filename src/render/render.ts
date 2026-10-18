@@ -6,6 +6,7 @@
 import { Application, Container, Graphics, Sprite, Text } from 'pixi.js';
 import { TUNING } from '../config/tuning';
 import { placeLabel, stackLabels, type Rect } from './labels';
+import { PERKS } from '../config/perks';
 import { createCamera, frameAxis, leadTarget, stepCamera, viewScale } from './camera';
 import { WALL, walkable, type Level } from '../sim/level';
 import { pointInPolygon } from '../sim/geom';
@@ -652,6 +653,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
         lootLabels.push(t);
       }
       t.visible = true;
+      t.text = l.perk ? `LOOT · ${PERKS[l.perk].name.toUpperCase()}` : 'LOOT';
       t.position.set(l.x, l.y + 0.42);
       li++;
     }

@@ -186,13 +186,17 @@ describe('online (server-authoritative)', () => {
     step(0.1);
     const v = w.actors[1];
     v.grenades = 2;
+    const perk = v.perk;
+    expect(perk).not.toBeNull(); // V2: every online player starts with a perk
     kill(w, v, 0);
     step(0.1);
     const mine = lastSnap(cs[0])!.lt!;
     expect(mine).toHaveLength(1);
     expect(mine[0].k & 8).toBe(8);
     expect(mine[0].k & 1).toBe(1);
-    expect(Object.keys(mine[0]).sort()).toEqual(['id', 'k', 'left', 'x', 'y']);
+    // Kinds and the perk's name (the label), never amounts.
+    expect(Object.keys(mine[0]).sort()).toEqual(['id', 'k', 'left', 'p', 'x', 'y']);
+    expect(mine[0].p).toBe(perk);
     // The dropper's team knows it too (it is their teammate's body).
     const mateOfV = room!.members.findIndex((_, i) => w.actors[i].team === v.team && i !== v.id);
     expect(lastSnap(cs[mateOfV])!.lt).toHaveLength(1);

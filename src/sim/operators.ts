@@ -1,6 +1,7 @@
-// NFT sidegrades (labelled mock until the Chog contract is verified). A bound token adds ONE sidegrade on top
-// of the chosen hero. Health, armour, damage, and speed are never touched (LOCKED 9). Each sidegrade gains on one
-// axis and pays on another; balance is checked in tests/operators.test.ts.
+// NFT sidegrades, used today only by DEMO identities (?mockChog, the DEMO screen): a verified holder plays as a
+// guest identity with tier power from src/config/power.ts instead (LOCKED 9 since 2026-10-14), so nothing here
+// stacks on real tier power. A sidegrade changes range, cone, magazine, fire rate, spread and reload, never health,
+// armour, damage or speed. Each gains on one axis and pays on another; balance is checked in tests/operators.test.ts.
 export interface Sidegrade {
   id: string;
   name: string;

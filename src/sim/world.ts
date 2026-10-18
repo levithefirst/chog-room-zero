@@ -2,6 +2,7 @@
 import { TUNING } from '../config/tuning';
 import { BOT_SPAWNS, BOT_SPAWNS_RC8, PICKUP_ZONES, ROOM_ZERO, ROOM_ZERO_RC8, TACTICAL_POINTS, VERSUS_SPAWNS, ZONE_CENTRES, type BotSpawn } from '../config/map';
 import { layoutPickups, respawnSpot, walkField, zoneSpots, type Field, type PickupZone, type Spot } from './pickups';
+import { spawnPerk, type PerkId } from '../config/perks';
 import { heroById, type AbilityDef, type HeroDef } from '../config/heroes';
 import { BASE_POWER, type Power } from '../config/power';
 import { WEAPONS, damageAt, type WeaponDef } from '../config/weapons';
@@ -133,6 +134,13 @@ export interface Actor {
   revives: number;
   revived: number;
   loots: number;
+  /** V2 perk (src/config/perks.ts): one slot, match only. */
+  perk: PerkId | null;
+  /** V2 Marker: seconds this actor stays shown to markTeam after a Marker hit. */
+  markLeft: number;
+  markTeam: Team | null;
+  /** V2: seconds standing still on a bag holding a different perk (swap at TUNING.perks.swapSeconds). */
+  bagStill: number;
 }
 
 /** A thrown grenade: rolls to rest, bounces off walls, flies over waist-high cover, explodes when the fuse ends. */
@@ -270,6 +278,8 @@ export interface Loot {
   health: number;
   armor: number;
   grenades: number;
+  /** V2: the perk the fallen carried, if any (taken into an empty slot, or swapped by standing on the bag). */
+  perk: PerkId | null;
   /** Seconds until it is gone. */
   left: number;
   /** Who dropped it and their team. */
@@ -375,6 +385,7 @@ function makeActor(id: number, team: Team, name: string, hero: HeroDef, sg: Side
     shots: 0, bullets: 0, hits: 0, kills: 0, damageDealt: 0, damageTaken: 0, death: null, zoneTick: -999,
     downed: false, reviveProgress: 0, downInfo: null, firedLast: false,
     grenades: nades, maxGrenades: nades, nadeCd: 0, thrown: 0, volley: 0, volleyGap: 0, fireQueued: 0, revives: 0, revived: 0, loots: 0,
+    perk: null, markLeft: 0, markTeam: null, bagStill: 0,
   };
 }
 
@@ -398,6 +409,9 @@ export interface WorldOptions {
   pickupZones?: PickupZone[];
   /** The hostile squad's own planning (default: on unless the test gives its own bots). */
   squadAI?: boolean;
+  /** V2 perks at spawn: solo hostiles (default on unless the test gives its own bots); versus every player (default off;
+   * the game server turns it on). */
+  perks?: boolean;
 }
 
 export function createWorld(opts: WorldOptions = {}): World {
@@ -406,6 +420,7 @@ export function createWorld(opts: WorldOptions = {}): World {
   const brains = new Map<number, Brain>();
   if (opts.versus) {
     const actors = opts.versus.map((v, i) => makeActor(i, v.team, v.name, heroById(v.hero), NO_SIDEGRADE, v.x, v.y, v.facing, v.power));
+    if (opts.perks) for (const a of actors) a.perk = spawnPerk(seed, a.id);
     const spawns = (['alpha', 'bravo'] as const).map((t) => {
       const m = opts.versus!.filter((v) => v.team === t);
       return { x: m.reduce((a, v) => a + v.x, 0) / Math.max(1, m.length), y: m.reduce((a, v) => a + v.y, 0) / Math.max(1, m.length) };
@@ -433,6 +448,7 @@ export function createWorld(opts: WorldOptions = {}): World {
   (opts.bots ?? (LAB.pacing ? BOT_SPAWNS : BOT_SPAWNS_RC8)).forEach((b) => {
     const [tx, ty] = b.patrol[0];
     const a = makeActor(actors.length, 'bot', b.name, heroById(b.hero), NO_SIDEGRADE, tx + 0.5, ty + 0.5, Math.PI);
+    if (opts.perks ?? opts.bots === undefined) a.perk = spawnPerk(seed, a.id);
     actors.push(a);
     brains.set(a.id, createBrain(b));
   });
@@ -501,11 +517,14 @@ export function viewOf(a: Actor): ViewShape {
 }
 
 /** Same hearing rule for bots and the player: within the radius, shrunk when a wall is in between. */
-export function hears(l: Level, lx: number, ly: number, s: SoundEvent): boolean {
+export function hears(l: Level, lx: number, ly: number, s: SoundEvent, wallFactor: number = TUNING.sound.wallFactor): boolean {
   const d = Math.hypot(s.x - lx, s.y - ly);
   if (d > s.radius) return false;
-  return d <= s.radius * TUNING.sound.wallFactor || sightClear(l, lx, ly, s.x, s.y);
+  return d <= s.radius * wallFactor || sightClear(l, lx, ly, s.x, s.y);
 }
+
+/** How far through a wall this listener hears (V2 Keen Ears: as far as in the open). Pass to hears(). */
+export const wallFactorOf = (a: Actor): number => (a.perk === 'ears' ? TUNING.perks.earsWallFactor : TUNING.sound.wallFactor);
 
 function emit(w: World, type: SoundType, x: number, y: number, radius: number, src: Actor, weapon?: string): void {
   w.sounds.push({ type, x, y, radius, sourceId: src.id, team: src.team, tick: w.tick, weapon });
@@ -679,6 +698,7 @@ function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
   a.aimLag = Math.abs(angleDiff(a.facing, inp.aim));
   a.abilityCd = Math.max(0, a.abilityCd - dt);
   a.revealLeft = Math.max(0, a.revealLeft - dt);
+  a.markLeft = Math.max(0, a.markLeft - dt);
   a.shieldLeft = Math.max(0, a.shieldLeft - dt);
   a.frenzyLeft = Math.max(0, a.frenzyLeft - dt);
   a.slowLeft = Math.max(0, a.slowLeft - dt);
@@ -697,7 +717,7 @@ function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
   const speed = Math.hypot(a.vx, a.vy);
   if (a.stepAcc >= M.stepDistance) {
     a.stepAcc -= M.stepDistance;
-    const r = stepRadius(a.dashLeft > 0 ? 0 : speed / (M.maxSpeed * speedMul));
+    const r = stepRadius(a.dashLeft > 0 ? 0 : speed / (M.maxSpeed * speedMul)) * (a.perk === 'soles' ? TUNING.perks.solesStepMul : 1);
     emit(w, r <= TUNING.sound.quietStep + 0.01 ? 'quietStep' : 'step', a.x, a.y, r, a);
   }
   // Steady rule (CF): standing still for a moment focuses the lamp; running widens and shortens it.
@@ -1009,6 +1029,7 @@ function damage(w: World, t: Actor, by: Actor, b: Bullet, hx: number, hy: number
   t.vy += (b.dy * TUNING.combat.knockback) / b.weapon.pellets;
   by.hits++;
   t.damageTaken += m.hp + m.armor;
+  if (by.perk === 'marker' && t.team !== by.team) { t.markLeft = TUNING.perks.markerSeconds; t.markTeam = by.team; }
   const r = t.hp <= 0 ? drop(w, t, { cause: 'shot', killerId: by.id, weapon: b.weapon.name, fromX: b.ox, fromY: b.oy, toX: t.x, toY: t.y, tick: w.tick }) : null;
   w.hits.push({ target: t.id, by: by.id, x: hx, y: hy, fromX: b.ox, fromY: b.oy, hpDamage: m.hp, armorDamage: m.armor, killed: r === 'out', downed: r === 'downed' });
   emit(w, 'hit', hx, hy, TUNING.sound.impact, by);
@@ -1074,31 +1095,34 @@ function dropLoot(w: World, t: Actor, info: KillInfo): void {
   const killer = info.killerId >= 0 ? w.actors[info.killerId] : null;
   const known: Team[] = [t.team];
   if (killer && killer.team !== t.team) known.push(killer.team);
-  w.loot.push({ id: w.lootSeq++, x: t.x, y: t.y, mags, health: L.dressing, armor, grenades, left: L.seconds, from: t.id, team: t.team, known });
+  w.loot.push({ id: w.lootSeq++, x: t.x, y: t.y, mags, health: L.dressing, armor, grenades, perk: t.perk, left: L.seconds, from: t.id, team: t.team, known });
   t.ammo = t.reserve = 0;
   t.armor = 0;
   t.grenades = 0;
+  t.perk = null;
 }
 
 /** What `a` would take from a bag right now (each part only up to its own ceiling), or null if nothing. */
-export function lootTake(a: Actor, l: Loot): { rounds: number; mags: number; health: number; armor: number; grenades: number } | null {
+export function lootTake(a: Actor, l: Loot): { rounds: number; mags: number; health: number; armor: number; grenades: number; perk: PerkId | null } | null {
   if (!a.alive || a.downed) return null;
+  // V2: a perk goes into an empty slot on touch; a held one is swapped only by standing still on the bag (stepLoot).
+  const perk = !a.perk && l.perk ? l.perk : null;
   const rounds = Math.max(0, Math.min(Math.floor(l.mags * a.weapon.magazine + 1e-9), ammoCeiling(a) - a.reserve));
   const health = Math.max(0, Math.min(l.health, a.maxHp - a.hp));
   const armor = Math.max(0, Math.min(l.armor, a.maxArmor - a.armor));
   const grenades = Math.max(0, Math.min(l.grenades, a.maxGrenades - a.grenades));
-  if (rounds === 0 && health < 1 && armor < 1 && grenades === 0) return null;
-  return { rounds, mags: rounds / a.weapon.magazine, health: health >= 1 ? health : 0, armor: armor >= 1 ? armor : 0, grenades };
+  if (rounds === 0 && health < 1 && armor < 1 && grenades === 0 && !perk) return null;
+  return { rounds, mags: rounds / a.weapon.magazine, health: health >= 1 ? health : 0, armor: armor >= 1 ? armor : 0, grenades, perk };
 }
 
-const lootEmpty = (l: Loot) => l.mags < 0.05 && l.health < 1 && l.armor < 1 && l.grenades === 0;
+const lootEmpty = (l: Loot) => l.mags < 0.05 && l.health < 1 && l.armor < 1 && l.grenades === 0 && !l.perk;
 
 /**
  * Bags on the floor: who takes what (the nearest standing actor in reach with a clear line who wants something,
  * one taker per bag per step, so two people never take the same thing), who knows they are there, and the timeout.
  */
 function stepLoot(w: World, dt: number): void {
-  if (!w.loot.length) return;
+  const onBag = new Set<number>();
   const R = TUNING.pickups.radius;
   for (const l of w.loot) {
     l.left -= dt;
@@ -1117,9 +1141,24 @@ function stepLoot(w: World, dt: number): void {
       a.hp += g.health; l.health -= g.health;
       a.armor += g.armor; l.armor -= g.armor;
       a.grenades += g.grenades; l.grenades -= g.grenades;
+      if (g.perk) { a.perk = g.perk; l.perk = null; }
       a.loots++;
       emit(w, 'pickup', l.x, l.y, TUNING.sound.pickup, a);
       w.sounds[w.sounds.length - 1].loot = l.id;
+    }
+    // V2 swap: a person standing still on a bag whose perk differs from theirs swaps after swapSeconds (their old perk
+    // goes into the bag). AI teammates and bots never swap: they keep the first perk they took.
+    for (const o of w.actors) {
+      if (o.ai || !o.alive || o.downed || !o.perk || !l.perk || l.perk === o.perk) continue;
+      if (onBag.has(o.id) || Math.hypot(o.x - l.x, o.y - l.y) > R || Math.hypot(o.vx, o.vy) > TUNING.perks.swapStillSpeed) continue;
+      onBag.add(o.id);
+      o.bagStill += dt;
+      if (o.bagStill >= TUNING.perks.swapSeconds) {
+        [o.perk, l.perk] = [l.perk, o.perk];
+        o.bagStill = -1e9; // no swapping back until they step off the bag
+        emit(w, 'pickup', l.x, l.y, TUNING.sound.pickup, o);
+        w.sounds[w.sounds.length - 1].loot = l.id;
+      }
     }
     // A team learns of a bag when one of its standing members has it in its light.
     for (const o of w.actors) {
@@ -1128,6 +1167,8 @@ function stepLoot(w: World, dt: number): void {
     }
   }
   w.loot = w.loot.filter((l) => l.left > 0 && !lootEmpty(l));
+  // Stepping off (or moving on) a bag starts the swap count again.
+  for (const o of w.actors) if (o.bagStill !== 0 && !onBag.has(o.id)) o.bagStill = 0;
 }
 
 /** Match time in seconds (the zone clock). */
@@ -1227,12 +1268,12 @@ function stepRevive(w: World, dt: number): void {
     const helper = helpers.find((m) => m.lastHitTick !== w.tick) ?? helpers[0];
     const hitNow = t.lastHitTick === w.tick || (helper && helper.lastHitTick === w.tick);
     if (helper && !hitNow) {
-      t.reviveProgress += dt;
+      t.reviveProgress += dt * (helper.perk === 'medic' ? TUNING.perks.medicReviveMul : 1);
       if (t.reviveProgress >= R.seconds - 1e-9) {
         t.downed = false;
         t.downInfo = null;
         t.reviveProgress = 0;
-        t.hp = Math.round(t.maxHp * R.hpShare);
+        t.hp = Math.round(t.maxHp * (helper.perk === 'medic' ? TUNING.perks.medicHpShare : R.hpShare));
         t.armor = 0;
         t.revived++;
         helper.revives++;
@@ -1281,9 +1322,11 @@ function invalidatePaths(w: World): void {
 
 /** Hostiles a viewer's sonar is revealing right now (ignores walls, by design of the ability). */
 export function revealed(w: World, viewer: Actor): Actor[] {
-  if (viewer.revealLeft <= 0) return [];
+  // V2 Marker: a hostile someone on the viewer's team hit with Marker is shown to the whole team for a moment.
+  const marked = (a: Actor) => a.markLeft > 0 && a.markTeam === viewer.team;
+  if (viewer.revealLeft <= 0) return w.actors.some(marked) ? w.actors.filter((a) => a.alive && a.team !== viewer.team && marked(a)) : [];
   const R = viewer.ability.radius ?? TUNING.abilities.sonarRadius;
-  return w.actors.filter((a) => a.alive && a.team !== viewer.team && Math.hypot(a.x - viewer.x, a.y - viewer.y) <= R);
+  return w.actors.filter((a) => a.alive && a.team !== viewer.team && (marked(a) || Math.hypot(a.x - viewer.x, a.y - viewer.y) <= R));
 }
 
 /** Advance one fixed step with the player's input. Bots decide their own input from what they perceive. */

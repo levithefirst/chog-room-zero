@@ -6,6 +6,9 @@ import type { KeyValueStore } from '../nft/history';
 import type { Records } from './records';
 import { HEROES } from '../config/heroes.js';
 
+/** The hero's base health (before any tier power): Ace's damage limit. Unknown heroes count as 100. */
+const heroMaxHp = (id: string) => HEROES.find((h) => h.id === id)?.maxHp ?? 100;
+
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic';
 
 /** What the game knows about the run that just ended (the same numbers the results screen shows). */
@@ -99,8 +102,10 @@ export const MEDALS: MedalDef[] = [
   // ---- epic (2) ----
   { id: 'untouched', name: 'Untouched', rarity: 'epic', text: 'Clear the room without taking any damage.', goal: 1, progress: (_r, run) => (won(run) && run!.damageTaken === 0 ? 1 : 0) },
   // All five yourself, never downed, no teammate lost: 1 of 84 autopilot runs (4 with the teammate rule off).
-  { id: 'ace', name: 'Ace', rarity: 'epic', text: 'Clear the room with all five hostiles downed by you, never downed and no teammate lost.', goal: 1,
-    progress: (_r, run) => (won(run) && run!.kills >= 5 && (run!.revived ?? 0) === 0 && (run!.alliesLost ?? 0) === 0 ? 1 : 0) },
+  // V2: plus "less damage than one full health bar". Measured over 168 autopilot runs (V2 report): without it Ace came
+  // in 1.8% of runs (3.0% with perks), above the epic bar; the runs it kept had taken 92 to 151 damage.
+  { id: 'ace', name: 'Ace', rarity: 'epic', text: 'Clear the room with all five hostiles downed by you, never downed, no teammate lost, and less damage taken than your full health.', goal: 1,
+    progress: (_r, run) => (won(run) && run!.kills >= 5 && (run!.revived ?? 0) === 0 && (run!.alliesLost ?? 0) === 0 && run!.damageTaken < heroMaxHp(run!.hero) ? 1 : 0) },
 ];
 
 export const MEDALS_KEY = 'chog-room-zero:medals:v1';

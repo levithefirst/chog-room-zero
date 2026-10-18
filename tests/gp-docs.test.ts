@@ -4,7 +4,7 @@ import { DOCS, docsHtml } from '../src/ui/docs';
 import { TUNING } from '../src/config/tuning';
 import { MEDALS } from '../src/ui/medals';
 
-const WANT = ['How to Play', 'Combat', 'Movement', 'Vision & Information', 'Sound', 'Squads', 'Revives', 'Enemy Teams', 'Pickups', 'Enemy Loot', 'Medals', 'Upgrades', 'Rewards', 'CHOG', 'Matchmaking', 'Leaderboards', 'Controls', 'Game Modes', 'FAQ'];
+const WANT = ['How to Play', 'Combat', 'Movement', 'Vision & Information', 'Sound', 'Squads', 'Revives', 'Enemy Teams', 'Pickups', 'Enemy Loot', 'Perks', 'Medals', 'Upgrades', 'Rewards', 'CHOG', 'Matchmaking', 'Leaderboards', 'Controls', 'Game Modes', 'FAQ'];
 
 describe('Game Docs', () => {
   it('has every section the owner asked for, in order, with unique ids and real content on both platforms', () => {
@@ -28,7 +28,7 @@ describe('Game Docs', () => {
     const h = docsHtml(false, 'revives', '<header></header>');
     expect(h).toContain('id="docsq"');
     expect(h).toContain('id="doc-revives" data-doc="revives" open');
-    expect((h.match(/<details class="doc"/g) ?? []).length).toBe(19);
+    expect((h.match(/<details class="doc"/g) ?? []).length).toBe(WANT.length);
   });
   it('CHOG is explained only where it matters to play (never a sales pitch)', () => {
     const all = DOCS.map((d) => d.html(false)).join(' ').toLowerCase();

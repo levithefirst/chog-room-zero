@@ -6,7 +6,7 @@
 import { randomBytes } from 'node:crypto';
 import { createWorld, down, IDLE_INPUT, matchSeconds, revealed, standing, stepWorld, type Actor, type ActorInput, type HitEvent, type SoundEvent, type Team, type World } from '../src/sim/world';
 import { canSee, muzzleFlashSeen } from '../src/sim/vision';
-import { hears } from '../src/sim/world';
+import { hears, wallFactorOf } from '../src/sim/world';
 import { hearReport, locatesSource, noise3, type Salt } from '../src/sim/intel';
 import { sightClear } from '../src/sim/level';
 import { heroIdOf } from '../src/config/heroes';
@@ -449,7 +449,7 @@ export class Lobby {
       const s = VERSUS_SPAWNS[team][used[team]++];
       return { name: p.name, hero: p.hero, team, x: s.x, y: s.y, facing: team === 'alpha' ? 0 : Math.PI, power: Lobby.powerOf(p.ticket) };
     });
-    const world = createWorld({ seed: this.opts.seed(), versus, zone: true, friendlyFire: this.opts.friendlyFire });
+    const world = createWorld({ seed: this.opts.seed(), versus, zone: true, perks: true, friendlyFire: this.opts.friendlyFire });
     const room: Room = {
       id, mode, world, members, inputs: members.map(() => ({ ...IDLE_INPUT })), acks: members.map(() => 0), ackSteps: members.map(() => 0), fireLatch: members.map(() => false),
       startTick: Math.round(this.opts.countdownSec / STEP), steps: 0, lastShot: members.map(() => -1e9), left: members.map(() => false), quit: members.map(() => false),
@@ -572,6 +572,9 @@ export class Lobby {
       shieldLeft: r3(a.shieldLeft), frenzyLeft: r3(a.frenzyLeft), slowLeft: r3(a.slowLeft), burstLeft: r3(a.burstLeft),
       downed: a.downed, reviveProgress: r3(a.reviveProgress), nades: a.grenades, maxNades: a.maxGrenades, focus: r3(a.focus),
       ...(a.slowLeft > 0 ? { slowMul: r3(a.slowMul) } : {}),
+      ...(a.team === me.team && a.perk ? { perk: a.perk } : {}),
+      ...(a === me && a.bagStill > 0 ? { bag: r3(a.bagStill) } : {}),
+      ...(a.team !== me.team && a.markLeft > 0 && a.markTeam === me.team ? { mk: 1 as const } : {}),
     }));
     // Grenades: your team's always; a hostile one when you can see it or it is close to you on a clear line (you hear
     // it land and see the ring), so you can read the danger you are in. Never one behind a wall.
@@ -587,7 +590,7 @@ export class Lobby {
     // Sounds you hear. A hostile's sound that says where its maker is, from a maker you are not shown exactly, is sent
     // as what hearing it tells you (a spot off by a share of the distance, or through a wall a bearing and a distance
     // band), flagged so the client does not blur it twice.
-    const heard: NetSound[] = sounds.filter((s) => s.sourceId === me.id || hears(w.level, me.x, me.y, s)).map((s) => {
+    const heard: NetSound[] = sounds.filter((s) => s.sourceId === me.id || hears(w.level, me.x, me.y, s, wallFactorOf(me))).map((s) => {
       const base = { type: s.type, radius: s.radius, source: s.sourceId, team: s.team, weapon: s.weapon, blocked: s.blocked, sig: s.sig };
       if (s.team === me.team || s.sourceId === me.id || visible(w.actors[s.sourceId]) || !locatesSource(s.type)) return { ...base, x: r3(s.x), y: r3(s.y) };
       const est = hearReport(w, me, s, room.salt);
@@ -608,7 +611,7 @@ export class Lobby {
     // GP loot: the bags this player's team knows about (its own and its kills' drops, and any it has seen), with what
     // kinds they hold. The server alone decides what is in a bag and who takes it.
     const lt: NetLoot[] = w.loot.filter((l) => l.known.includes(me.team)).map((l) => ({ id: l.id, x: r3(l.x), y: r3(l.y), left: r3(l.left),
-      k: (l.health >= 1 ? 1 : 0) | (l.armor >= 1 ? 2 : 0) | (l.mags >= 0.05 ? 4 : 0) | (l.grenades > 0 ? 8 : 0) }));
+      k: (l.health >= 1 ? 1 : 0) | (l.armor >= 1 ? 2 : 0) | (l.mags >= 0.05 ? 4 : 0) | (l.grenades > 0 ? 8 : 0), ...(l.perk ? { p: l.perk } : {}) }));
     return {
       t: 'snap', tick: w.tick, actors, bullets, grenades, pickups: w.pickups.map((k) => k.active), ...(pk ? { pk } : {}), ...(lt.length ? { lt } : {}), ...(sp.length ? { sp } : {}), sounds: heard, hits: netHits,
       barriers: w.barriers.map((b) => ({ ...b.box, left: r3(b.left) })), ack: room.acks[p.actorId], as: room.ackSteps[p.actorId],

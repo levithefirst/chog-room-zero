@@ -37,6 +37,10 @@ export interface NetActor {
   downed?: boolean; reviveProgress?: number;
   /** Grenades left and capacity (the server's count). */
   nades?: number; maxNades?: number;
+  /** V2: the perk (your own team's actors only) and your seconds standing on a swappable bag (yourself only). */
+  perk?: string; bag?: number;
+  /** V2 Marker: this hostile was hit by someone on your team with Marker and is shown to you. */
+  mk?: 1;
   /** CF-E gait focus (-1 run .. 1 steady): the client reshapes the lamp from it. */
   focus?: number;
   /** SB: how hard a Snare slows it (with slowLeft), so its own client predicts the slowed walk. */
@@ -68,7 +72,8 @@ export interface PlayerResult { id: number; name: string; hero: string; team: Te
 
 /** GP: a loot bag your team knows about (the server decides what is in it and who takes it): what kinds are in it
  * (k bits: 1 health, 2 armour, 4 ammo, 8 grenades) and the seconds before it is gone. */
-export interface NetLoot { id: number; x: number; y: number; k: number; left: number }
+/** A loot bag your team knows of: what kinds it holds (k bits), and its perk (`p`) if any. */
+export interface NetLoot { id: number; x: number; y: number; k: number; left: number; p?: string }
 
 export type ServerMsg =
   | { t: 'welcome'; v: number; token: string; name: string; resumed: boolean; profile?: NetProfile }

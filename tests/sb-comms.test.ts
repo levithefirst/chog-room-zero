@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { TUNING } from '../src/config/tuning';
 import { HEROES, squadFor } from '../src/config/heroes';
-import { createWorld, hears, stepWorld, IDLE_INPUT, type CommsEvent, type World } from '../src/sim/world';
+import { createWorld, hears, stepWorld, wallFactorOf, IDLE_INPUT, type CommsEvent, type World } from '../src/sim/world';
 import { canSee } from '../src/sim/vision';
 import { createAutopilot } from '../src/debug/autopilot';
 import { createIntel, senseFor } from '../src/sim/intel';
@@ -92,7 +92,8 @@ function audit(seeds: number, opts: { quiet?: boolean } = {}) {
           if (e.kind === 'contact' || e.kind === 'behind') expect(mine('seen', e.tick), `${e.kind} backed by a sighting`).toBe(true);
           if (e.kind === 'steps' || e.kind === 'shots') {
             expect(mine('heard', e.tick), `${e.kind} backed by a heard guess`).toBe(true);
-            expect(prevSounds.some((s) => s.sourceId === e.target && hears(w.level, log.find((l) => l.bot === e.from && l.tick === e.tick)!.ox, log.find((l) => l.bot === e.from && l.tick === e.tick)!.oy, s))).toBe(true);
+            // V2: with the caller's own wall factor (Keen Ears is a rule of hearing, not a leak).
+            expect(prevSounds.some((s) => s.sourceId === e.target && hears(w.level, log.find((l) => l.bot === e.from && l.tick === e.tick)!.ox, log.find((l) => l.bot === e.from && l.tick === e.tick)!.oy, s, wallFactorOf(w.actors[e.from])))).toBe(true);
           }
           if (e.kind === 'lost') expect(mine('seen', e.tick - 3 * 60), 'lost backed by an earlier sighting').toBe(true);
           if (e.target >= 0) calledAt.set(e.target, t);

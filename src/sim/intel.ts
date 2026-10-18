@@ -7,7 +7,7 @@
 import { TUNING } from '../config/tuning';
 import { canSee, muzzleFlashSeen } from './vision';
 import { sightClear } from './level';
-import { hears, revealed, standing, type Actor, type CommsEvent, type SoundEvent, type SoundType, type World } from './world';
+import { hears, revealed, wallFactorOf, standing, type Actor, type CommsEvent, type SoundEvent, type SoundType, type World } from './world';
 
 /** Which mark a heard sound gets (CF-D): a step, a shot and a reload read apart with the sound off. */
 export type MarkKind = 'step' | 'shot' | 'reload' | 'impact' | 'ability' | 'grenade' | 'death' | 'other';
@@ -206,7 +206,7 @@ export function senseFor(w: World, me: Actor, intel: Intel, dt: number, sounds: 
     seenNow.add(sp.id);
   }
   for (const s of sounds) {
-    if (s.team === me.team || s.sourceId === me.id || seenNow.has(s.sourceId) || (!s.est && !hears(w.level, me.x, me.y, s))) continue;
+    if (s.team === me.team || s.sourceId === me.id || seenNow.has(s.sourceId) || (!s.est && !hears(w.level, me.x, me.y, s, wallFactorOf(me)))) continue;
     const src = w.actors[s.sourceId];
     if (!src?.alive) continue;
     const r = hearReport(w, me, s);
