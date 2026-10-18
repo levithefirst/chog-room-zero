@@ -201,8 +201,6 @@ export interface PracticeResult {
   newBest: { time: boolean; kills: boolean };
   records: Records;
   medals: Record<string, string>;
-  /** V2: daily challenges this run completed (paid now, once). */
-  challenges: ChallengeView[];
 }
 
 /**
@@ -255,8 +253,7 @@ export async function recordPractice(db: Db, acc: string, raw: Record<string, un
       time: counts && run.won && (prev.bestWinSeconds === null || run.seconds < prev.bestWinSeconds),
       kills: counts && run.kills > prev.mostKills,
     };
-    const challenges = counts ? (await challengesFor(tx, acc, now)).paidNow : [];
-    return { ok: true, already: !ins.length, reward, earned, newBest, records, medals: await medalsOf(tx, acc), challenges } as const;
+    return { ok: true, already: !ins.length, reward, earned, newBest, records, medals: await medalsOf(tx, acc) } as const;
   });
 }
 
@@ -338,7 +335,9 @@ export interface ChallengeView { id: string; tier: 1 | 2 | 3; text: string; goal
 
 /**
  * Today's challenges with this account's progress; any newly done one is paid here, once (ledger unique key
- * account, kind, 'challenge', day:id), in the caller's transaction. Without an account: the list, no progress.
+ * account, kind, 'challenge', day:id), in the caller's transaction. Without an account: the list, no progress. Called
+ * only by GET /api/game/challenges (the client asks after every run and match), so a practice run or a settlement pays
+ * exactly what it always did.
  */
 export async function challengesFor(q: Tx, acc: string | null, nowMs: number): Promise<{ day: number; hero: string; list: ChallengeView[]; paidNow: ChallengeView[] }> {
   const d = daily(dayOf(nowMs));

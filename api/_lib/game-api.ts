@@ -277,13 +277,10 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
         // or a medal already held adds nothing).
         const earned = new Map<string, string[]>();
         if (r.ok) for (const p of r.players) earned.set(p.acc, await db.tx((tx) => awardDue(tx, p.acc, null)));
-        // V2: daily challenges the match completed, for every account in it (paid once).
-        const done = new Map<string, unknown[]>();
-        if (r.ok) for (const p of r.players) done.set(p.acc, await db.tx(async (tx) => (await challengesFor(tx, p.acc, d.now())).paidNow));
         const s = await readLiveSession(req, e, db);
         const me = s?.ids.length ? await accountFor(db, s.ids) : null;
         const mine = r.ok ? r.players.find((p) => p.acc === me) ?? null : null;
-        return json({ ...r, mine: mine ? { ...mine, earned: earned.get(mine.acc) ?? [], challenges: done.get(mine.acc) ?? [] } : null, players: undefined });
+        return json({ ...r, mine: mine ? { ...mine, earned: earned.get(mine.acc) ?? [] } : null, players: undefined });
       }
 
       // V2 daily challenges: today's three, your progress (signed in), and any just completed paid once.

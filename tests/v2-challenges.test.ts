@@ -63,3 +63,26 @@ describe('paid once, from stored results only', () => {
     expect(g.paidNow).toHaveLength(0);
   });
 });
+
+describe('GET /api/game/challenges', () => {
+  it('a guest gets the list; a signed-in account with a done challenge is paid once across two asks', async () => {
+    const { handleGame } = await import('../api/_lib/game-api');
+    const { SESSION_COOKIE, sign } = await import('../api/_lib/auth');
+    const { accountFor } = await import('../api/_lib/game');
+    const SECRET = 'test-secret-'.padEnd(48, 'x'), HOST = 'chogroomzero.xyz';
+    const id = { provider: 'google' as const, subject: 'g-ch', label: 'c@h.x' };
+    const cookie = `${SESSION_COOKIE}=${encodeURIComponent(await sign({ k: 'session', ids: [id], exp: Math.floor(Date.now() / 1000) + 3600 }, SECRET))}`;
+    const deps = { env: { AUTH_SECRET: SECRET, AUTH_ORIGIN: `https://${HOST}` }, db: async () => ({ ...db, close: async () => undefined }), fetch: async () => new Response('{}'), now: () => NOW };
+    const get = (c?: string) => handleGame(new Request(`https://${HOST}/api/game/challenges`, { headers: c ? { cookie: c } : {} }), 'challenges', deps);
+    const guest = (await (await get()).json()) as { signedIn: boolean; list: unknown[] };
+    expect(guest.signedIn).toBe(false);
+    expect(guest.list).toHaveLength(3);
+    const acc = (await accountFor(db, [id]))!;
+    await db.query(`INSERT INTO room_zero.practice_runs (account_id, run_id, hero, won, seconds, kills, bullets, hits, damage_dealt, damage_taken, pickups, abilities, hp_left, xp, shards, verified, revives, loots, thrown, created_at)
+      VALUES ($1, 'x', 'benja', true, 60, 9, 40, 16, 200, 30, 1, 1, 50, 10, 1, true, 3, 5, 5, to_timestamp($2))`, [acc, NOW / 1000 - 60]);
+    const one = (await (await get(cookie)).json()) as { paidNow: { tier: number }[] };
+    const two = (await (await get(cookie)).json()) as { paidNow: unknown[] };
+    expect(one.paidNow.length).toBeGreaterThan(0);
+    expect(two.paidNow).toHaveLength(0);
+  });
+});

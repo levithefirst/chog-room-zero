@@ -1172,6 +1172,15 @@ async function start() {
       if (phase === 'title' && titleView !== 'nick' && titleView !== 'howto') render();
     }
   }
+  /** V2: ask the site for today's challenges; it pays any newly done one once, and we say so. */
+  async function checkDaily() {
+    if (!acct.config?.db || !acct.signedIn) return;
+    const d = await account.challenges();
+    if (!d?.list) return;
+    acct.daily = d.list;
+    for (const c of d.paidNow ?? []) toast(`DAILY DONE · ${c.text} · +${c.shards} shards`);
+    if (d.paidNow?.length) await refreshAccount();
+  }
   async function buyUpgrade(id: string) {
     // One purchase at a time (a double tap must never send two; the server also refuses to spend shards twice).
     if (acct.busy) return;
@@ -1286,6 +1295,7 @@ async function start() {
       lastReward = { ...lastReward, pending: false, reward: r?.mine ?? null, note: r?.error === 'progression_offline' ? 'Saved progression is offline right now.' : r?.mine ? '' : 'Result not saved to your account.' };
       if (r?.mine && !lastReward.before) lastReward.before = { xp: 0, shards: 0, rating: r.mine.ratingBefore };
       if (settleRetry && auto) setTimeout(() => { if (lastReward.matchId === matchId && settleRetry) { settleOnline(matchId, false); if (phase === 'results' && online) render(); } }, 4000);
+      if (r?.mine) void checkDaily();
       await refreshAccount();
       if (phase === 'results' && online) render();
     });
@@ -1369,9 +1379,8 @@ async function start() {
       if (r?.ok && acct.profile) {
         if (r.records) acct.profile.practice = r.records;
         if (r.medals) acct.profile.medals = r.medals;
-        // V2: a daily challenge this run completed (paid once by the site).
-        for (const c of r.challenges ?? []) toast(`DAILY DONE · ${c.text} · +${c.shards} shards`);
-        if (r.challenges?.length) await refreshAccount();
+        // V2: daily challenges this run completed (the site pays each once when asked).
+        void checkDaily();
         const rw = r.reward;
         lastRun = { newBest: r.newBest ?? { time: false, kills: false }, earned: MEDALS.filter((m) => r.earned?.includes(m.id)), saved: 'account',
           reward: rw ? { ...rw, kept: true, before, upgrades: acct.profile.upgrades } : null };

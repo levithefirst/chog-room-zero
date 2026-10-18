@@ -46,7 +46,7 @@ export interface PracticeRun { runId: string; ticket?: string; demo?: boolean; h
 export interface DailyChallenge { id: string; tier: 1 | 2 | 3; text: string; goal: number; progress: number; done: boolean; paid: boolean; shards: number; xp: number }
 export const challenges = () => api<{ progression: boolean; signedIn?: boolean; day?: number; hero?: string; list?: DailyChallenge[]; paidNow?: DailyChallenge[] }>('challenges');
 export const practiceStart = () => api<{ ok: boolean; ticket?: string; runId?: string }>('practice-start', {});
-export const practice = (r: PracticeRun) => api<{ ok: boolean; reason?: string; already?: boolean; reward?: PracticeReward; earned?: string[]; newBest?: { time: boolean; kills: boolean }; records?: Records; medals?: Record<string, string>; challenges?: DailyChallenge[] }>('practice', r);
+export const practice = (r: PracticeRun) => api<{ ok: boolean; reason?: string; already?: boolean; reward?: PracticeReward; earned?: string[]; newBest?: { time: boolean; kills: boolean }; records?: Records; medals?: Record<string, string> }>('practice', r);
 export const loadTokens = () => api<{ wallet: boolean; ok?: boolean; error?: string; tokens: OwnedToken[] }>('tokens');
 export interface BoardRow { rank: number; name: string; kills: number; matches: number; wins: number; xp: number; level: number; rating: number; nftTier: Tier | null; hero?: string | null; you: boolean; hidden?: boolean }
 export type Board = 'solo' | 'online';
