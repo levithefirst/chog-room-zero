@@ -100,7 +100,8 @@ try {
   const hp = await H.ev(`({ chog: document.getElementById('chogpanel').innerText, five: document.querySelector('[data-mode="5v5"]').innerText })`);
   await H.shot('03-holder-hub');
   check('wallet: guest -> Continue with Wallet -> signed in (real signature check) and back in the hub', h.signedIn && h.ids.includes('wallet'), JSON.stringify(h));
-  check('wallet: Chog detected on Monad (fake RPC), class Blaze 1:1 with +75% health, signature and counter', /Blaze/i.test(hp.chog) && /1:1/.test(hp.chog) && /\+75%/.test(hp.chog) && /Flashfire/i.test(hp.chog) && /Counter/i.test(hp.chog), hp.chog.replace(/\n/g, ' | '));
+  // Owner 2026-10-18: rarity adds no health (the panel's health row shows upgrades only); the 1:1 keeps its signature.
+  check('wallet: Chog detected on Monad (fake RPC), class Blaze 1:1 with its signature and counter, no rarity health', /Blaze/i.test(hp.chog) && /1:1/.test(hp.chog) && /HEALTH\s*\+0%/i.test(hp.chog) && /Flashfire/i.test(hp.chog) && /Counter/i.test(hp.chog), hp.chog.replace(/\n/g, ' | '));
   check('wallet: 5v5 open for the holder', !/Holders only/i.test(hp.five), hp.five);
 
   // ---- 3. Squad + online 3v3: A leads a squad with B; four solo players fill the room; A and B on one team ----

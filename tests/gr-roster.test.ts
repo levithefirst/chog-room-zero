@@ -47,10 +47,11 @@ describe('free roster', () => {
     for (const h of HEROES) {
       const a = createWorld({ hero: h.id, bots: [] }).actors[0];
       expect([a.maxHp, a.armor, a.weapon.id, a.ability.name]).toEqual([h.maxHp, h.maxArmor, h.weapon, h.ability.name]);
-      // A holder tier scales the same character; it never swaps the kit (except a 1:1's signature replacing the ability).
+      // A holder tier never swaps the kit (only a Chog's superpower or a 1:1's signature takes the ability slot), and
+      // since owner 2026-10-18 it adds no health, armour or damage either.
       const e = createWorld({ hero: h.id, bots: [], power: powerFor('epic') }).actors[0];
       expect([e.weapon.id, e.ability.name, e.hero.id]).toEqual([h.weapon, h.ability.name, h.id]);
-      expect(e.maxHp).toBeGreaterThan(a.maxHp);
+      expect([e.maxHp, e.armor]).toEqual([a.maxHp, a.armor]);
     }
     expect(HEROES.every((h) => !('tier' in h))).toBe(true);
     expect(BASE_POWER.tier).toBe('free');

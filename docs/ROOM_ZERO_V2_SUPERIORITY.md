@@ -25,7 +25,7 @@ Nothing here is human-tested. Every "feels" question is UNKNOWN until the playte
 | Solo board forgeable, no daily cap (weakness 10) | Confirmed: runs are browser-simulated, plausibility-bounded, rate-limited, and uncapped on the board. | First 25 runs per UTC day count on the board. Replay verification is still open. |
 | Stale docs (weakness 19) | MULTIPLAYER.md said there was no prediction; the operators.ts header said "mock". | Fixed. |
 | Hostiles never downed in solo (3.8) | Confirmed, by design (GP): the downed state is for your side and online teams. | None. |
-| NFT combat power live (weakness 4) | Confirmed: up to x1.75 health, +35 armour, x1.12 damage. Owner LOCKED 9 (2026-10-14) turned it on. | **Owner decision required** (section 4). Not changed. |
+| NFT combat power live (weakness 4) | Confirmed at 18ccfdc: up to x1.75 health, +35 armour, x1.12 damage (owner LOCKED 9, 2026-10-14). | Removed by the owner 2026-10-18 (superpowers instead, `docs/design/superpowers.md`). |
 | No telemetry, no human data (weakness 3) | On-device counters only; nothing was collected. | Anonymous end-of-match records (section 2.6). |
 
 ## 2. What changed (VERIFIED by tests named; feel UNKNOWN)
@@ -87,7 +87,7 @@ Nothing here is human-tested. Every "feels" question is UNKNOWN until the playte
 
 ## 4. Owner decisions (not changed without you)
 
-1. **NFT combat power in open modes (P0 in the report).** LOCKED 9 (owner 2026-10-14) says power is ON, and the original 2026-10-11 rule was "never flat damage, health". Options, with my recommendation first:
+1. **NFT combat power in open modes (P0 in the report). Answered by the owner 2026-10-18 (CHOG SUPERPOWER SYSTEM, rule 6): no rarity health, armour or damage anywhere; a verified Chog plays the superpower its traits carry (`docs/design/superpowers.md`).** The options as they were put: LOCKED 9 (owner 2026-10-14) says power is ON, and the original 2026-10-11 rule was "never flat damage, health". Options, with my recommendation first:
 
    | Option | What it means | Cost and effect |
    |---|---|---|

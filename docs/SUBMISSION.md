@@ -13,18 +13,18 @@ A dark top-down tactical shooter in the browser, for PC and phones. One basement
 
 Online: 1v1 and 3v3 for everyone, 5v5 for verified Chog holders, on an authoritative server (the server decides every hit). A persistent, account-based leaderboard ranks players by opponents killed in saved matches; owning a Chog never moves anyone up it.
 
-What is new: the Chog decides what you can play and how you start. Rarity sets starting power, the ten 1:1 Chogs each carry their own signature ability, and 5v5 is for holders only. Free players earn shards to climb to Common power; rating is separate from power.
+What is new (2026-10-18): your Chog's real traits are its superpower. Laser eyes fire a beam, visor eyes an X-Ray beam through walls, a Bubblegum mouth cages, a Drooling mouth glues to a wall, an Aura makes you untouchable. Rarity ranks the power (longer, further, sooner), never health or damage. The ten 1:1 Chogs each carry their own signature ability, and 5v5 is for holders only. Every power has a drill in CHOG Training.
 
 ## 03 Why Chog matters
 Built and tested (2026-10-14, see `docs/design/power.md` and `docs/HANDOFFS.md`):
 - **Real ownership check.** Sign in with the wallet (free signature, no transaction). The site then reads Monad mainnet (chain 143, contract `0xc96d31F8626c6D03Fae5dCD3d61e3FB9F4a73763`): `tokensOfOwner` for the wallet and `metadataId` for each token, so the token-to-traits mapping comes from the contract, not from us. Any failure plays on as a free profile. The browser's claims are never trusted: the site signs a 10 minute single-use ticket and the game server asks the site whether it is genuine.
 - **Holder-only 5v5**, enforced on the game server.
-- **Rarity sets starting power** (Common to Epic: more health and armour; 1:1: the top tier plus one of ten signature abilities such as Flashfire, Howl, Gold Shell). Speed never changes. Every tier is shown to the other side.
+- **Traits are superpowers** (`docs/design/superpowers.md`): five powers mapped from exact trait values, ranked by the token's verified rarity, each with a telegraph and a counter, server-authoritative online. The 1:1s carry one of ten signature abilities (Flashfire, Howl, Gold Shell...). No rarity adds health, armour or damage. Every opponent's power is named and shown.
 - **Token history** is saved per token and stays with the token when it is sold; account XP and shards stay with the account.
-- **Removal test:** remove the Chog and you lose 5v5, your tier and signature, and the token's history.
+- **Removal test:** remove the Chog and you lose 5v5, your superpower or signature, its Training drill, and the token's history.
 
 Honest limits (say them in the submission):
-- NFT combat power for real holders is switched off in production until a person has playtested the feel (the project's own Core Feel Gate). Holders already get 5v5 and verified identity; the tier power can be seen in the labelled DEMO (any Chog number, solo or demo-only online rooms, no rewards).
+- The superpower numbers are proposals until people playtest them (the project's own Core Feel Gate). Anyone can try every power at every rank in the labelled DEMO Training, which records nothing.
 - Saved progression and the leaderboard run on the owner's Neon database (connected 2026-10-14). They fill only from signed-in online matches; no match had been saved yet at the time of writing.
 - A real holder signing in and playing 5v5 has not been tried yet. The holder flow is tested against a simulated chain, and the live chain path is checked on the deployed site by a read-only self-check (`/api/game/chain`).
 - No Chog artwork or token titles are shown: their rights are not confirmed. The game uses its own operators and shows "Chog #N".

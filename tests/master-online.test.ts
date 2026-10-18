@@ -95,14 +95,15 @@ describe('power from the ticket, visible to both sides, and the match record', (
     });
     const a = await join('A', 'a.t'), b = await join('B', 'b.t');
     a.say({ t: 'queue', mode: '1v1' }); b.say({ t: 'queue', mode: '1v1' });
-    // A 1:1 and a fresh free player are far apart in matchmaking strength: they meet once the bar has dropped.
+    // Same rating: a 1:1 adds no matchmaking strength (owner 2026-10-18: no rarity stats), so they meet.
     for (let i = 0; i < 30 && !a.c.last('match'); i++) { a.say({ t: 'ping', at: i }); b.say({ t: 'ping', at: i }); run(1); }
     const m = a.c.last('match')!;
     expect(m.roster.map((r) => [r.tier, r.holder, r.ability.name])).toEqual([['legendary', true, 'Red Rush'], ['free', false, 'Ping']]);
     expect(b.c.last('match')!.roster[0].tier).toBe('legendary');
     const room = [...lobby.rooms.values()][0];
     const kettle = HEROES.find((h) => h.id === 'benja')!;
-    expect(room.world.actors[0].maxHp).toBe(Math.round(kettle.maxHp * 1.75));
+    // The ticket's tier brings the 1:1's signature, never health (owner 2026-10-18); upgrades still count (actor 1).
+    expect(room.world.actors[0].maxHp).toBe(kettle.maxHp);
     expect(room.world.actors[1].maxHp).toBe(Math.round(kettle.maxHp * 1.09));
     run(3.1); // past the countdown: a leave before the start voids the match (no record)
     b.say({ t: 'leave' });

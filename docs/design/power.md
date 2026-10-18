@@ -1,5 +1,7 @@
 # Class system: tiers, upgrades, signatures, caps
 
+**Owner 2026-10-18 ("CHOG SUPERPOWER SYSTEM", rule 6: "Do not use NFT rarity for generic health/damage stat inflation") replaced the tier stat power below.** Every tier now starts at base health, armour and damage, the 1:1s included. A verified Chog's rarity is the rank of the superpower its real traits carry (`docs/design/superpowers.md`). The ten 1:1s keep their signatures. Upgrades, caps and grenade capacity are unchanged. The tier table and duel table that follow are kept as the record of what shipped before (H31 and earlier).
+
 Status: the direction is LOCKED (owner 2026-10-13 master build prompt; owner 2026-10-14 master integration pass: "NFT holders start with power, free players start lower and catch up. This is not cosmetic", the ten 1:1s are "legendary, God-tier and intentionally dominant", a fully progressed free player must be competitive with the lower NFT tiers). The numbers below are PROPOSALS chosen from measured duels; a person must judge them (playtest questions at the end).
 
 Code: `src/config/power.ts` (every number), `src/nft/tier-table.ts` (generated from the verified catalogue), `src/sim/world.ts` (applies them). Tests: `tests/power.test.ts`.
@@ -9,6 +11,8 @@ NFT combat power is ON for verified holders (`NFT_COMBAT` unset or anything but 
 ## Tiers
 
 Tier is the token's `Tier` trait from the verified catalogue, looked up by the metadata id the contract itself returns (`metadataId(tokenId)`). Never a hash or anything the browser says.
+
+Before 2026-10-18 (removed):
 
 | Tier | Tokens | Health | Armour | Damage | Grenades | Ability |
 |---|---|---|---|---|---|---|
@@ -42,7 +46,7 @@ Everything costs 3,250 shards: about 160 wins or 325 losses (10 shards a saved m
 | Cooldown multiplier | 0.80 |
 | Speed | never changed |
 
-## Measured duels (why these numbers)
+## Measured duels (before 2026-10-18; the tier stats are gone, see superpowers.md for the current bands)
 
 Harness `tests/helpers/duel.ts`: two copies of the same hero in a 28 x 7 hall, strafing and firing with perfect aim, 12 seeds x 2 slot orders, at 3 / 6 m. Share = wins of the first side over decided duels. Measured 2026-10-14 on the committed values.
 

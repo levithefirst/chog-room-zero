@@ -1,6 +1,6 @@
 // Seeded mirror duel between two online-style actors with any power profile (class system balance, docs/design/power.md).
 // Both sides strafe on their own rhythm and fire at each other down a hall; slots swap to cancel slot bias.
-import { createWorld, stepWorld, IDLE_INPUT, type Actor, type ActorInput } from '../../src/sim/world';
+import { createWorld, stepWorld, untouchable, IDLE_INPUT, type Actor, type ActorInput } from '../../src/sim/world';
 import type { Power } from '../../src/config/power';
 
 export const HALL = ['##############################', ...Array.from({ length: 7 }, () => '#............................#'), '##############################'];
@@ -12,8 +12,9 @@ export function duel(heroA: string, pa: Power, heroB: string, pb: Power, d: numb
   const w = createWorld({ seed, map: HALL, zone: false, versus: [{ ...left, ...la, x: 15 - d / 2 }, { ...right, ...lb, x: 15 + d / 2 }] });
   const L = w.actors[0], R = w.actors[1];
   const dir = new Map<number, number>([[0, 1], [1, -1]]);
+  // The written counter to Gold Shell, Shell and Aura: hold fire while the foe is untouchable, and reload meanwhile.
   const steer = (me: Actor, foe: Actor): ActorInput => ({
-    ...IDLE_INPUT, firing: true, reload: me.ammo === 0, aim: Math.atan2(foe.y - me.y, foe.x - me.x), moveY: dir.get(me.id)!,
+    ...IDLE_INPUT, firing: !untouchable(foe), reload: me.ammo === 0 || (untouchable(foe) && me.ammo < me.weapon.magazine), aim: Math.atan2(foe.y - me.y, foe.x - me.x), moveY: dir.get(me.id)!,
     // Abilities: fire when off cooldown and the foe is close enough for a signature to matter (both sides get the same rule).
     ability: useAbility && me.abilityCd === 0 && Math.hypot(foe.x - me.x, foe.y - me.y) < 5,
   });
@@ -35,5 +36,6 @@ export function duel(heroA: string, pa: Power, heroB: string, pb: Power, d: numb
 export function share(heroA: string, pa: Power, heroB: string, pb: Power, d: number, n = 30, useAbility = false): number {
   let a = 0, b = 0;
   for (let i = 0; i < n; i++) for (const swap of [false, true]) { const r = duel(heroA, pa, heroB, pb, d, 900 + i, swap, useAbility); if (r === 'A') a++; else if (r === 'B') b++; }
-  return a / Math.max(1, a + b);
+  // Nothing decided (every duel ran out of time) is even, not a loss.
+  return a + b ? a / (a + b) : 0.5;
 }

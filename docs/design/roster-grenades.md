@@ -9,8 +9,8 @@ duel matrix in `tests/gr-roster.test.ts` is the measured check that no free char
 BRIEF: Free roster (7 characters, 5 departments)
 PURPOSE      Free players pick a combat identity, not a stat line. Four heroes were too few to feel like a roster.
 GAMEPLAY     Pick reach vs. speed vs. staying power, then an ability that covers one weakness, never all of them.
-NFT RELATION Not NFT related. Holders pick from the same roster; their Chog adds tier power on top (removal test
-             unchanged: removing ownership removes the tier power and grenade capacity, the roster stays).
+NFT RELATION Not NFT related. Holders pick from the same roster; their Chog's superpower takes the ability slot
+             (2026-10-18; removal test: removing ownership removes the power and grenade capacity, the roster stays).
 PLAYER FEEL  Seven silhouettes that read apart at a glance; each wins some fights and loses others (no character
              above 62% average win rate in the duel matrix).
 TECH COST    ~1 day: data (heroes, 3 weapons), burst fire in the sim, art gear per character, roster screen,
