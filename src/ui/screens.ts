@@ -3,6 +3,7 @@
 // for the session only. The hub itself is src/ui/hub.ts. Nothing is sold; no chests.
 // Test hooks kept from earlier builds: data-go/data-act/data-hero/data-demo, #selchip, #resultpb, table.howto,
 // table.stats, the results h2.
+import { TUNING } from '../config/tuning';
 import type { WalletChoice } from './auth';
 import { HEROES, type HeroDef } from '../config/heroes';
 import { WEAPONS } from '../config/weapons';
@@ -89,8 +90,9 @@ export function nickHtml(c: ScreenCtx, error: string, saved: boolean): string {
 }
 
 // ---- Operator select ----
-function statBar(label: string, v: number) {
-  return `<div class="stat">${label}<s style="--v:${Math.round(Math.max(0.08, Math.min(1, v)) * 100)}%"></s></div>`;
+/** V2 (report §3.6: "stat bars with no numbers"): the bar shows the comparison, the number beside it the fact. */
+function statBar(label: string, v: number, value: string) {
+  return `<div class="stat">${label}<s style="--v:${Math.round(Math.max(0.08, Math.min(1, v)) * 100)}%"></s><em>${value}</em></div>`;
 }
 
 /** Damage per second of a weapon at point blank, bursts included (the roster's Punch bar). */
@@ -106,7 +108,7 @@ export function selectHtml(c: ScreenCtx): string {
     return `<button class="hero${h.id === c.heroId ? ' sel' : ''}" data-hero="${h.id}" style="--accent:#${h.accent.toString(16).padStart(6, '0')}">
 <div class="hero-art">${portraitSvg(h, `s${i}`, h.id === c.heroId ? c.marking : null)}${fav ? '<i class="fav" title="Favourite">★</i>' : ''}</div>
 <div class="role dept-${h.dept}">${esc(h.role)}</div><b>${esc(h.name)}</b>
-${statBar('Health', (h.maxHp + h.maxArmor) / 180)}${statBar('Speed', (h.speed - 0.8) / 0.32)}${statBar('Sight', h.vision.range / 12)}${statBar('Punch', weaponDps(w) / 450)}
+${statBar('Health', (h.maxHp + h.maxArmor) / 180, `${h.maxHp}+${h.maxArmor}`)}${statBar('Speed', (h.speed - 0.8) / 0.32, `${(TUNING.movement.maxSpeed * h.speed).toFixed(1)} m/s`)}${statBar('Sight', h.vision.range / 12, `${h.vision.range} m`)}${statBar('Punch', weaponDps(w) / 450, `${Math.round(weaponDps(w))}/s`)}
 <div class="wp">${esc(w.name)}</div><div class="ab" title="${esc(h.ability.text)}">${esc(h.ability.name)}</div></button>`;
   }).join('');
   const demo = c.demoChip.includes('DEMO') ? `<div class="mock" id="selchip">${c.demoChip}</div>` : '';

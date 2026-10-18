@@ -3,7 +3,7 @@ import { createInput, touchStick } from './input/input';
 import { createSummaryGate, overlayInputAllowed } from './input/gate';
 import { createAudio } from './audio/audio';
 import { fixedSteps } from './sim/sim';
-import { createWorld, downLeft, hears, matchSeconds, player, standing, stepWorld, touchingFull, wants, IDLE_INPUT, type Pickup, type PickupKind, type World } from './sim/world';
+import { createWorld, hears, matchSeconds, player, stepWorld, touchingFull, wants, IDLE_INPUT, type Pickup, type PickupKind, type World } from './sim/world';
 import { outsideCircle, zoneAt } from './sim/zone';
 import { OnlineSession, serverUrl } from './net/client';
 import { MODE_SIZE, type Mode } from './net/protocol';
@@ -12,6 +12,7 @@ import { findPath, sightClear, walkable } from './sim/level';
 import { clampMarker } from './render/visibility';
 import { muzzleFlashSeen } from './sim/vision';
 import { canSee } from './sim/vision';
+import { downedCard } from './ui/downed';
 import { nextPhase, simRuns, type MatchEvent, type Phase } from './sim/match';
 import { TUNING } from './config/tuning';
 import { HEROES, heroById, heroIdOf, squadFor } from './config/heroes';
@@ -1053,6 +1054,7 @@ async function start() {
     drawnWorld = world;
     fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = fx.rings.length = fx.noise.length = fx.comms.length = 0;
     matchIntel = createIntel();
+    wasDowned = false;
     fight = createFightRecord();
     deathWhy = [];
     tele = createTelemetry();
@@ -1569,6 +1571,7 @@ async function start() {
   }
 
   // Per-step presentation: sounds feed audio and heard markers, hits feed feedback.
+  let wasDowned = false;
   function afterStep() {
     const p = player(world);
     const view = p.view;
@@ -1689,6 +1692,13 @@ async function start() {
       }
       if (h.killed) fx.corpses.push({ x: world.actors[h.target].x, y: world.actors[h.target].y, hostile: world.actors[h.target].team !== p.team });
     }
+    // V2: going from downed to out without a killing hit or the zone is the window running out (or the last teammate
+    // falling): said plainly, once, so it never reads as a crash or a disconnect.
+    if (wasDowned && !p.alive && !world.hits.some((h) => h.target === 0 && h.killed) && p.death?.cause !== 'zone') {
+      const left = world.actors.some((m) => m !== p && m.team === p.team && m.alive && !m.downed);
+      toast(left ? `BLED OUT · nobody reached you in ${TUNING.revive.bleedSeconds} s` : 'OUT · nobody left standing to revive you');
+    }
+    wasDowned = p.alive && p.downed;
   }
 
   let fpsAcc = 0, fpsFrames = 0;
@@ -1909,27 +1919,16 @@ async function start() {
     {
       const st = p.alive && p.slowLeft > 0 ? `Slowed ${Math.round((1 - p.slowMul) * 100)}% · ${p.slowLeft.toFixed(1)} s` : '';
       if (st !== lastStatus) { lastStatus = st; $('status').textContent = st; }
-      // You down, or a teammate down next to you (you are the one reviving): one card, one countdown.
-      const R = TUNING.revive;
-      const mate = !p.downed && p.alive ? world.actors.find((m) => m !== p && m.team === p.team && m.alive && m.downed && Math.hypot(m.x - p.x, m.y - p.y) <= R.range + 1.5) : undefined;
-      const who = p.alive && p.downed ? p : mate;
+      // You down, or a teammate down next to you (you are the one reviving): one card, one countdown (src/ui/downed.ts).
+      const dc = downedCard(world, p, matchIntel);
       let card = '';
-      if (who) {
-        const reviving = who.reviveProgress > 0;
-        const left = downLeft(who);
-        const helper = reviving ? world.actors.find((m) => m !== who && m.team === who.team && standing(m) && Math.hypot(m.x - who.x, m.y - who.y) <= R.range) : undefined;
-        const head = who === p ? (reviving ? 'BEING REVIVED' : 'DOWNED') : reviving ? `REVIVING ${who.name.toUpperCase()}` : `${who.name.toUpperCase()} IS DOWN`;
-        const big = reviving ? `${who.reviveProgress.toFixed(1)} / ${R.seconds} s` : `${left.toFixed(1)} s`;
-        const why = who === p
-          ? (reviving ? `${helper?.name ?? 'A teammate'} is getting you up · stay still` : world.actors.some((m) => m !== p && m.team === p.team && standing(m)) ? 'Crawl to a teammate · they revive you' : 'Nobody left to revive you')
-          : reviving ? 'Hold fire · stay close' : `Stand next to them and hold fire · ${R.seconds} s`;
-        const share = reviving ? who.reviveProgress / R.seconds : left / R.bleedSeconds;
-        card = `${head}|${big}|${why}|${Math.round(share * 100)}|${reviving ? 1 : 0}`;
+      if (dc) {
+        card = `${dc.head}|${dc.big}|${dc.why}|${Math.round(dc.share * 100)}|${dc.reviving ? 1 : 0}`;
         if (card !== lastDown) {
-          $('downh').textContent = head; $('downt').textContent = big; $('downwhy').textContent = why;
-          ($('downbar') as HTMLElement).style.width = `${Math.round(share * 100)}%`;
-          ($('downbar') as HTMLElement).style.background = reviving ? 'var(--health)' : 'var(--damage)';
-          $('downcard').classList.toggle('save', reviving);
+          $('downh').textContent = dc.head; $('downt').textContent = dc.big; $('downwhy').textContent = dc.why;
+          ($('downbar') as HTMLElement).style.width = `${Math.round(dc.share * 100)}%`;
+          ($('downbar') as HTMLElement).style.background = dc.reviving ? 'var(--health)' : 'var(--damage)';
+          $('downcard').classList.toggle('save', dc.reviving);
         }
       }
       if (card !== lastDown) { lastDown = card; $('downcard').classList.toggle('on', !!card); }

@@ -85,8 +85,14 @@ describe('P0-1 server noise is keyed with a per-room secret', () => {
 
   it('two rooms with the same seed and the same scene send different spots (the key is per room)', () => {
     const a = spottedScene(9), b = spottedScene(9);
-    const spa = a.lobby.snapshot(a.room as never, a.room.members[0] as never).sp!.find((x) => x.id === a.foe.id)!;
-    const spb = b.lobby.snapshot(b.room as never, b.room.members[0] as never).sp!.find((x) => x.id === b.foe.id)!;
+    // Spots are rounded to a 0.25 u grid, so two independent keys land on the same cell now and then (about 1 in
+    // 300): compare a run of refreshed spots, which only a shared key keeps identical.
+    const refresh = Math.round(TUNING.sound.spottedRefresh / TUNING.simStepSeconds);
+    const seq = (m: typeof a) => Array.from({ length: 4 }, () => {
+      m.w.tick += refresh;
+      return m.lobby.snapshot(m.room as never, m.room.members[0] as never).sp!.find((x) => x.id === m.foe.id)!;
+    });
+    const spa = seq(a), spb = seq(b);
     expect(a.w.tick).toBe(b.w.tick);
     expect(spa).not.toEqual(spb);
   });

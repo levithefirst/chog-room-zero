@@ -7,6 +7,7 @@ import { GRENADES, UPGRADES, UPGRADE_IDS } from '../config/power';
 import { PRACTICE_REWARDS, REWARDS } from '../config/progression';
 import { MEDALS } from './medals';
 import { HEROES } from '../config/heroes';
+import { THREAT_RANGE } from './downed';
 import { esc } from './screens';
 
 export interface DocSection { id: string; title: string; html: (touch: boolean) => string }
@@ -55,11 +56,11 @@ ${li([`About ${Z.safeSeconds} s in, a danger zone starts closing. Outside it you
     'In the default game your two AI teammates are your squad: they cover the arcs you are not watching, revive you and take what they need.',
   ]) },
   { id: 'revives', title: 'Revives', html: () => li([
-    `At 0 health with a teammate still standing you are <b>downed</b>, not out. You have <b>${R.bleedSeconds} seconds</b> (the card at the top counts down).`,
+    `At 0 health with a teammate still standing you are <b>downed</b>, not out. You have <b>${R.bleedSeconds} seconds</b>. The card at the top counts down, names the teammate coming for you and how far they are (else your nearest one), and warns of a hostile you know is within ${THREAT_RANGE} m.`,
     `A teammate within ${R.range} m who holds fire gets you up in ${R.seconds} s, back at ${Math.round(R.hpShare * 100)}% health. While they do, your countdown waits.`,
     'A hit on either of you, the rescuer firing, or the rescuer stepping away stops the revive; it starts again from zero.',
     'Downed you can only crawl: no shooting, reloading, abilities, grenades or pickups. Hostiles can finish you.',
-    'When the countdown ends you are eliminated from this match (never signed out). In 1v1, or as the last one standing, 0 health is out at once.',
+    'When the countdown ends you are eliminated from this match (BLED OUT, never signed out); the run goes on to its result. In 1v1, or as the last one standing, 0 health is out at once.',
     'To revive someone: stand next to them and stop shooting. AI teammates go when it is safe and they can make it in time.',
   ]) },
   { id: 'enemies', title: 'Enemy Teams', html: () => li([
