@@ -45,6 +45,7 @@ ${li([`About ${Z.safeSeconds} s in, a danger zone starts closing. Outside it you
     'A red dotted ring is where a hostile you lost could be by now. It grows as they could have moved and fades as you forget.',
     'AI teammates call what they see and hear ("Contact, north", "Lost him", "Behind us!"), and when they come to get you up.',
     'Nobody sees through walls, including the bots: every bot decision comes from what it saw, heard or was told.',
+    'Top right, the feed lists the last knock-outs and downs (✸ for a grenade) for a few seconds. Online it never says where they happened.',
   ]) },
   { id: 'sound', title: 'Sound', html: () => li([
     `Footsteps carry about ${TUNING.sound.quietStep} m creeping and ${TUNING.sound.runStep} m running; standing still is silent.`,

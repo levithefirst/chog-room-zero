@@ -13,6 +13,7 @@ import { clampMarker } from './render/visibility';
 import { muzzleFlashSeen } from './sim/vision';
 import { canSee } from './sim/vision';
 import { downedCard } from './ui/downed';
+import { feedAdd, feedLine, type FeedLine } from './ui/feed';
 import type { Brain } from './sim/bots';
 import { deviceClass, median, type MatchReport, type ReportCause, type ReportOutcome } from './sim/report';
 import { PERKS, type PerkId } from './config/perks';
@@ -1060,6 +1061,7 @@ async function start() {
     matchIntel = createIntel();
     wasDowned = false;
     rep = { sent: false, downs: 0, bled: 0, fireAt: -1, firing: false, delays: [] };
+    feed = [];
     fight = createFightRecord();
     deathWhy = [];
     tele = createTelemetry();
@@ -1223,6 +1225,7 @@ async function start() {
     matchIntel = createIntel();
     wasDowned = false;
     rep = { sent: false, downs: 0, bled: 0, fireAt: -1, firing: false, delays: [] };
+    feed = [];
     fight = createFightRecord();
     deathWhy = [];
     tele = createTelemetry();
@@ -1597,6 +1600,13 @@ async function start() {
 
   // Per-step presentation: sounds feed audio and heard markers, hits feed feedback.
   let wasDowned = false;
+  // V2 kill feed (report: "no kill feed"): the last four knock-outs and downs this match, newest first, for 6 s each.
+  // Only what the game already tells you (the server sends every knock-out to everyone online, placed only as a spot).
+  let feed: FeedLine[] = [], lastFeed = '';
+  function feedPush(by: number, target: number, killed: boolean, grenade: boolean) {
+    const t = world.actors[target];
+    if (t) feed = feedAdd(feed, feedLine(player(world), world.actors[by], t, killed, grenade, playTime));
+  }
   // V2 playtest telemetry for this match (src/sim/report.ts): downs, bleed-outs, trigger-to-shot times, sent once.
   let rep = { sent: false, downs: 0, bled: 0, fireAt: -1, firing: false, delays: [] as number[] };
   /** Trigger press seen this frame: the time it went down (the shot that answers it closes the measure). */
@@ -1759,6 +1769,7 @@ async function start() {
         setTimeout(() => (($('hurt') as HTMLElement).style.opacity = '0'), 90);
       }
       if (h.killed) fx.corpses.push({ x: world.actors[h.target].x, y: world.actors[h.target].y, hostile: world.actors[h.target].team !== p.team });
+      if (h.killed || h.downed) feedPush(h.by, h.target, h.killed, !!h.grenade);
     }
     // V2: going from downed to out without a killing hit or the zone is the window running out (or the last teammate
     // falling): said plainly, once, so it never reads as a crash or a disconnect.
@@ -1993,6 +2004,9 @@ async function start() {
       const guard = p.alive && !p.downed ? world.actors.find((m) => m.ai && m.team === p.team && m.alive && (world.brains.get(m.id) as Brain | undefined)?.guarding === p.id) : undefined;
       const st = p.alive && p.slowLeft > 0 ? `Slowed ${Math.round((1 - p.slowMul) * 100)}% · ${p.slowLeft.toFixed(1)} s` : guard ? `${guard.name} covering you` : '';
       if (st !== lastStatus) { lastStatus = st; $('status').textContent = st; }
+      feed = feed.filter((f) => playTime - f.t < 6);
+      const fh = feed.map((f) => `<li class="${f.mine ? 'mine' : ''}${f.down ? ' down' : ''}">${f.html}</li>`).join('');
+      if (fh !== lastFeed) { lastFeed = fh; $('feed').innerHTML = fh; }
       // V2 perk: what you carry, and on a bag holding a different one, how to swap (stand still) and how far along.
       const bag = p.alive && !p.downed && p.perk ? world.loot.find((l) => l.perk && l.perk !== p.perk && Math.hypot(l.x - p.x, l.y - p.y) <= TUNING.pickups.radius) : undefined;
       const pk = !p.alive ? '' : bag?.perk

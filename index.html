@@ -91,6 +91,9 @@
       #foes.outside #zone b { color: var(--chog-cream); background: var(--danger-zone); padding: 0 5px; border-radius: 3px; }
       #zoneedge { box-shadow: inset 0 0 16vmin 5vmin rgba(255, 45, 45, 0.5); opacity: 0; transition: opacity 200ms linear; }
       #sys { right: var(--sr); top: var(--st); display: flex; gap: 8px; pointer-events: auto; }
+      #feed { right: var(--sr); top: calc(var(--st) + 50px); list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; font-size: 12px; pointer-events: none; }
+      #feed li { background: rgba(11,12,13,.62); padding: 2px 8px; border-radius: 3px; color: var(--dim); white-space: nowrap; }
+      #feed li.mine { color: var(--chog-cream); } #feed li.down { font-style: italic; } #feed b.h { color: var(--damage); font-weight: 600; } #feed b.f { color: var(--team); font-weight: 600; }
       #sys button { width: 44px; height: 40px; display: grid; place-items: center; padding: 0; }
       #sys svg { width: 20px; height: 20px; stroke: var(--ink); fill: none; stroke-width: 2; }
       #sys #fs { display: none; } body.touch.canfs #sys #fs { display: grid; }
@@ -399,6 +402,7 @@
         body.narrow #foes { left: auto; right: var(--sr); top: calc(var(--st) + 48px); transform: none; padding: 4px 9px; gap: 6px; font-size: 11px; }
         body.narrow #hint { top: calc(var(--st) + 96px); max-width: calc(var(--vw) * 84); }
         body.narrow #toast { top: 28%; font-size: 16px; }
+        body.narrow #feed { top: calc(var(--st) + 82px); font-size: 10px; }
         body.narrow.touch #ability { right: var(--sr); bottom: calc(var(--sb) + calc(var(--vh) * 22)); }
         body.narrow.touch #reload { right: calc(var(--sr) + 7px); bottom: calc(var(--sb) + calc(var(--vh) * 22) + 84px); }
         body.narrow.touch #nade { right: calc(var(--sr) + 84px); bottom: calc(var(--sb) + calc(var(--vh) * 22) + 6px); }
@@ -790,6 +794,7 @@
         <div id="status" aria-live="polite"></div>
         <div id="perk"></div>
       </div>
+      <ol id="feed" aria-live="polite"></ol>
       <div id="foes" class="panel"><span id="foesn" class="num">5</span><span>hostiles</span><span id="pips"></span><span id="zone"><i aria-hidden="true"></i><b id="zphase">Zone in</b><span id="ztime" class="num"></span></span></div>
       <div id="sys">
         <button id="fs" class="panel" type="button" aria-label="Full screen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" /></svg></button>
