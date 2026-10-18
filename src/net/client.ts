@@ -36,6 +36,9 @@ export class OnlineSession {
   state: NetState = 'offline';
   message = '';
   queue: { mode: Mode; have: number; need: number; code: string | null } | null = null;
+  /** V2 telemetry: seconds from queueing to the match starting (the last match's). */
+  queueS: number | null = null;
+  private queuedAt: number | null = null;
   match: Extract<ServerMsg, { t: 'match' }> | null = null;
   over: OverInfo | null = null;
   world: World | null = null;
@@ -153,6 +156,8 @@ export class OnlineSession {
 
   joinQueue(mode: Mode, code?: string): void {
     this.over = null;
+    this.queuedAt = performance.now();
+    this.queueS = null;
     this.queue = { mode, have: 0, need: 0, code: code ?? null };
     this.pendingQueue = { mode, code };
     // After a match the server already has this player back in its lobby: queue straight away.
@@ -263,6 +268,7 @@ export class OnlineSession {
         return;
       case 'match':
         this.state = 'match';
+        if (this.queuedAt !== null) { this.queueS = Math.round((performance.now() - this.queuedAt) / 1000); this.queuedAt = null; }
         this.message = '';
         this.queue = null;
         if (!this.match || this.match.room !== m.room) this.buildWorld(m);

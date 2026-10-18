@@ -18,7 +18,8 @@
 //   GET  health        database reachable, applied migrations, this game's tables (no data, no secrets)
 //   GET  chain         read-only live check of the ownership path on Monad (cached 60 s; no player data)
 import { env as authEnv, json, readLiveSession, sameOrigin, secretOk, type Env, type Identity } from './auth.js';
-import { schemaStatus, type Db } from './db.js';
+import { reportSummary, schemaStatus, storeReport, type Db } from './db.js';
+import { validReport } from '../../src/sim/report.js';
 import { readOwnership, selfCheck, type Fetch, type Holding, type OwnershipResult, type SelfCheck } from './chain.js';
 import { BOARD_PAGE, setNftTier, accountFor, buyUpgrade, callsignOf, standingOf, checkTicket, issueTicket, leaderboard, settleMatch, ticketSecret, tokenHistory, upgradesOf, validRecord, type GameTicket } from './game.js';
 import { accountView, awardDue, practiceSecret, recordPractice, setCallsign, setPrefs, startPractice } from './career.js';
@@ -285,6 +286,20 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
       case 'GET chain': {
         if (!chainCache || d.now() - chainCache.at > 60_000) chainCache = { at: d.now(), r: await selfCheck(d.fetch) };
         return json({ ...chainCache.r, checkedAt: new Date(chainCache.at).toISOString() });
+      }
+
+      // V2 playtest telemetry: one anonymous record per match (src/sim/report.ts). No session is read or stored.
+      case 'POST report': {
+        if (!sameOrigin(req, e)) return json({ error: 'bad_origin' }, 403);
+        if (!db) return json({ ok: false, error: 'progression_offline' }, 503);
+        const r = validReport(await body(req));
+        if (!r) return json({ ok: false, error: 'bad_report' }, 400);
+        return (await storeReport(db, r, r)) ? json({ ok: true }) : json({ ok: false, error: 'rate' }, 429);
+      }
+      case 'GET report-summary': {
+        if (!db) return json({ progression: false });
+        const days = Number.parseInt(new URL(req.url).searchParams.get('days') ?? '30', 10) || 30;
+        return json(await reportSummary(db, days));
       }
 
       case 'GET leaderboard': {

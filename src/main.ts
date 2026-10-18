@@ -13,6 +13,7 @@ import { clampMarker } from './render/visibility';
 import { muzzleFlashSeen } from './sim/vision';
 import { canSee } from './sim/vision';
 import { downedCard } from './ui/downed';
+import { deviceClass, median, type MatchReport, type ReportCause, type ReportOutcome } from './sim/report';
 import { PERKS, type PerkId } from './config/perks';
 import { nextPhase, simRuns, type MatchEvent, type Phase } from './sim/match';
 import { TUNING } from './config/tuning';
@@ -444,7 +445,7 @@ async function start() {
     if (next === phase) return;
     const from = phase;
     if (e === 'restart') product.retries++;
-    if (e === 'quit' && (from === 'play' || from === 'pause')) product.quits++;
+    if (e === 'quit' && (from === 'play' || from === 'pause')) { product.quits++; sendMatchReport('quit'); }
     phase = next;
     if (next === 'results') {
       resultsAt = performance.now();
@@ -802,6 +803,7 @@ async function start() {
     else if (name === 'sound') { audio.muted = val === 'off'; paintMute(); }
     else if (name === 'vibration') s.vibration = val === 'on';
     else if (name === 'tips') s.tips = val === 'on';
+    else if (name === 'share') s.shareStats = val === 'on';
     else if (name === 'quality' && (val === 'low' || val === 'medium' || val === 'high')) s.quality = val;
     else if (name === 'stick' && (val === 'small' || val === 'medium' || val === 'large')) s.stick = val;
     setSettings(s);
@@ -1056,6 +1058,7 @@ async function start() {
     fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = fx.rings.length = fx.noise.length = fx.comms.length = 0;
     matchIntel = createIntel();
     wasDowned = false;
+    rep = { sent: false, downs: 0, bled: 0, fireAt: -1, firing: false, delays: [] };
     fight = createFightRecord();
     deathWhy = [];
     tele = createTelemetry();
@@ -1206,6 +1209,8 @@ async function start() {
     drawnWorld = world;
     fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = fx.rings.length = fx.noise.length = fx.comms.length = 0;
     matchIntel = createIntel();
+    wasDowned = false;
+    rep = { sent: false, downs: 0, bled: 0, fireAt: -1, firing: false, delays: [] };
     fight = createFightRecord();
     deathWhy = [];
     tele = createTelemetry();
@@ -1308,12 +1313,14 @@ async function start() {
       go('pick');
     }
     if (online && net.over && (phase === 'play' || phase === 'pause')) {
+      sendMatchReport(net.over.winner !== null && net.over.winner === player(world).team ? 'won' : 'lost');
       if (phase === 'pause') go('resume');
       go('won');
     }
     // Out of the match with no result: it was cancelled before the start, or the connection could not come back. Back
     // to the hub, where the session's message says what happened (never a frozen match screen).
     if (online && !net.over && (net.state === 'idle' || net.state === 'error' || net.state === 'offline') && (phase === 'play' || phase === 'pause')) {
+      sendMatchReport('disconnect');
       online = false;
       if (phase === 'play') go('pause');
       go('quit');
@@ -1325,6 +1332,7 @@ async function start() {
   // Match end: the one place a practice run is saved. Signed in: the site stores it on the account and awards medals
   // there. Guest: this session's memory only. Never per frame, never to localStorage.
   function endRun(won: boolean) {
+    sendMatchReport(won ? 'won' : 'lost');
     product.completed++;
     if (won) product.won++; else product.died++;
     // The lab room keeps no records anywhere: no progression, no medals (CF lab).
@@ -1574,6 +1582,48 @@ async function start() {
 
   // Per-step presentation: sounds feed audio and heard markers, hits feed feedback.
   let wasDowned = false;
+  // V2 playtest telemetry for this match (src/sim/report.ts): downs, bleed-outs, trigger-to-shot times, sent once.
+  let rep = { sent: false, downs: 0, bled: 0, fireAt: -1, firing: false, delays: [] as number[] };
+  /** Trigger press seen this frame: the time it went down (the shot that answers it closes the measure). */
+  function trackFire(firing: boolean) {
+    const p = player(world);
+    if (firing && !rep.firing && p.alive && !p.downed && p.ammo > 0 && p.reloadLeft <= 0) rep.fireAt = performance.now();
+    rep.firing = firing;
+  }
+  function anonId(): string {
+    try {
+      let id = localStorage.getItem('chog-room-zero:anon');
+      if (!id || !/^[A-Za-z0-9_-]{16,40}$/.test(id)) {
+        const b = crypto.getRandomValues(new Uint8Array(16));
+        id = btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        localStorage.setItem('chog-room-zero:anon', id);
+      }
+      return id;
+    } catch { return ''; }
+  }
+  /** The match is over (won, lost, quit, dropped): one anonymous record, if the player shares stats. */
+  function sendMatchReport(outcome: ReportOutcome) {
+    if (rep.sent || LAB_ON || !settings.shareStats) return;
+    rep.sent = true;
+    const anon = anonId();
+    if (!anon) return;
+    const p = player(world);
+    const lastHit = fight.hits[fight.hits.length - 1];
+    const cause: ReportCause = p.alive ? null : rep.bled ? 'bled' : (online ? !!lastHit && matchIntel.now - lastHit.t < 1.5 : (world.playerKill ?? p.death)?.cause === 'shot') ? 'shot' : 'zone';
+    const allies = world.actors.filter((a) => a !== p && a.team === p.team && a.ai);
+    const r: MatchReport = {
+      v: 1, anon, mode: online ? onlineMode : 'solo', hero: p.hero.id, outcome, seconds: Math.round(playTime), cause,
+      killer: cause === 'shot' ? (online ? 'player' : 'bot') : null, noCue: deathWhy.some((i) => i.id === 'blindside'),
+      damageTaken: Math.round(p.damageTaken), firstContactS: tele.firstContactS === null ? null : Math.round(tele.firstContactS),
+      bullets: p.bullets, hits: p.hits, fireDelayMs: median(rep.delays), kills: p.kills,
+      aiKills: allies.reduce((n, a) => n + a.kills, 0), aiRevives: allies.reduce((n, a) => n + a.revives, 0), aiLoots: allies.reduce((n, a) => n + a.loots, 0),
+      aiLost: allies.filter((a) => !a.alive).length, revives: p.revives, revived: p.revived, downs: rep.downs, bledOut: rep.bled,
+      loots: p.loots, lootExpired: world.lootExpired, zoneDeaths: world.actors.filter((a) => !a.alive && a.death?.cause === 'zone').length,
+      perk: p.perk, rttMs: online && net ? Math.round(net.rtt) : null, queueS: online && net ? net.queueS : null,
+      device: deviceClass(navigator.userAgent, innerWidth, innerHeight, input.mode === 'touch'),
+    };
+    void account.sendReport(r);
+  }
   function afterStep() {
     const p = player(world);
     const view = p.view;
@@ -1606,6 +1656,7 @@ async function start() {
       if (own && s.type === 'pickup') collected(s.x, s.y);
       if (own && s.type === 'impact' && s.blocked) blockedNow = true;
       if (own && s.type === 'shot') {
+        if (rep.fireAt >= 0) { rep.delays.push(performance.now() - rep.fireAt); rep.fireAt = -1; }
         const g = gaitOf(p);
         fight.shots.push({ t: matchIntel.now, gait: g });
         tele.shots[g]++;
@@ -1696,8 +1747,10 @@ async function start() {
     }
     // V2: going from downed to out without a killing hit or the zone is the window running out (or the last teammate
     // falling): said plainly, once, so it never reads as a crash or a disconnect.
+    if (p.alive && p.downed && !wasDowned) rep.downs++;
     if (wasDowned && !p.alive && !world.hits.some((h) => h.target === 0 && h.killed) && p.death?.cause !== 'zone') {
       const left = world.actors.some((m) => m !== p && m.team === p.team && m.alive && !m.downed);
+      rep.bled = 1;
       toast(left ? `BLED OUT · nobody reached you in ${TUNING.revive.bleedSeconds} s` : 'OUT · nobody left standing to revive you');
     }
     wasDowned = p.alive && p.downed;
@@ -1785,6 +1838,7 @@ async function start() {
       const p = player(world);
       const ps = renderer.toScreen(p.x, p.y);
       const inp = onlineDriver ? onlineDriver(world) : input.read(ps.x, ps.y, renderer.toScreen(p.x + 1, p.y).x - ps.x);
+      trackFire(inp.firing);
       net.sendInput(p.alive ? inp : { ...inp, firing: false, moveX: 0, moveY: 0 }, performance.now());
       net.update(p.alive ? inp.aim : null);
       showCountdown();
@@ -1805,6 +1859,7 @@ async function start() {
       acc = r.remainder;
       // Only consume input on frames that step the sim, so a latched tap is never lost on a 0-step frame.
       const inp = r.steps > 0 ? input.read(ps.x, ps.y, renderer.toScreen(p.x + 1, p.y).x - ps.x) : null;
+      if (inp) trackFire(inp.firing);
       for (let i = 0; inp && i < r.steps && world.outcome === 'playing'; i++) {
         stepWorld(world, autopilot ? autopilot.next(world) : inp);
         inp.reload = false;

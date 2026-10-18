@@ -137,6 +137,7 @@ ${li(UPGRADE_IDS.map((id) => `<b>${esc(UPGRADES[id].name)}</b>: ${esc(UPGRADES[i
 <dt>Can I play without a wallet?</dt><dd>Yes: solo, 1v1 and 3v3 never need one.</dd>
 <dt>Where is my rank?</dt><dd>Leaderboard, at the top: sign in and finish a run (Solo) or a match (Online).</dd>
 <dt>Do I lose my progress as a guest?</dt><dd>A guest's runs last for the session. Sign in (Google or wallet) to keep XP, shards, upgrades, medals and your rank.</dd>
+<dt>What match stats does the game send?</dt><dd>At the end of a match, one anonymous record: mode, operator, how long, how you went out, shots and hits, revives, loot, trigger-to-shot time, and your device type (touch or mouse, screen size, browser family). No name, account, wallet or IP. It is tied to a random id kept in this browser so the totals can count players. Switch it off in Settings (Share match stats).</dd>
 </dl>` },
 ];
 

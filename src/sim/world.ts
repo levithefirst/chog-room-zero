@@ -324,6 +324,8 @@ export interface World {
   /** GP: dropped kit of eliminated actors (Loot), and the next loot id. */
   loot: Loot[];
   lootSeq: number;
+  /** V2 telemetry: bags that ran out with something still in them. */
+  lootExpired: number;
   brains: Map<number, Brain>;
   /** Ids of bots currently allowed to shoot at the player (cap: TUNING.perception.attackTokens). */
   attackTokens: number[];
@@ -427,7 +429,7 @@ export function createWorld(opts: WorldOptions = {}): World {
     });
     return {
       tick: 0, rng: seed, level, actors, bullets: [], grenades: [], nadeSeq: 0, sounds: [], prevSounds: [], comms: [], prevComms: [], commsAt: -1e9, hits: [],
-      ...initPickups(level, seed, opts), barriers: [], loot: [], lootSeq: 0,
+      ...initPickups(level, seed, opts), barriers: [], loot: [], lootSeq: 0, lootExpired: 0,
       brains, attackTokens: [], squadAI: false, squadPoints: [], perceptionLog: null, outcome: 'playing', playerKill: null,
       mode: 'versus', winner: null, friendlyFire: !!opts.friendlyFire,
       zone: opts.zone === false ? null : planZone(level, seed, ZONE_CENTRES, TUNING.zone, spawns),
@@ -454,7 +456,7 @@ export function createWorld(opts: WorldOptions = {}): World {
   });
   return {
     tick: 0, rng: seed, level, actors, bullets: [], grenades: [], nadeSeq: 0, sounds: [], prevSounds: [], comms: [], prevComms: [], commsAt: -1e9, hits: [],
-    ...initPickups(level, seed, opts), barriers: [], loot: [], lootSeq: 0,
+    ...initPickups(level, seed, opts), barriers: [], loot: [], lootSeq: 0, lootExpired: 0,
     brains, attackTokens: [], perceptionLog: opts.log ? [] : null, outcome: 'playing', playerKill: null,
     // The lab's 'before' (LAB.pacing off: the RC-8 map and bots) keeps the RC-8 patrols, so it stays a fixed baseline.
     squadAI: opts.squadAI ?? (opts.bots === undefined && LAB.pacing),
@@ -1166,6 +1168,7 @@ function stepLoot(w: World, dt: number): void {
       if (Math.hypot(o.x - l.x, o.y - l.y) <= o.view.range && sightClear(w.level, o.x, o.y, l.x, l.y)) l.known.push(o.team);
     }
   }
+  w.lootExpired += w.loot.filter((l) => l.left <= 0 && !lootEmpty(l)).length;
   w.loot = w.loot.filter((l) => l.left > 0 && !lootEmpty(l));
   // Stepping off (or moving on) a bag starts the swap count again.
   for (const o of w.actors) if (o.bagStill !== 0 && !onBag.has(o.id)) o.bagStill = 0;

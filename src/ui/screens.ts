@@ -157,6 +157,7 @@ export function settingsHtml(c: ScreenCtx, confirmReset: boolean): string {
 <div class="row2"><span>Vibration</span>${toggle('vibration', s.vibration && c.canVibrate, !c.canVibrate)}</div>
 
 <div class="row2"><span>Tips</span>${toggle('tips', s.tips)}</div>
+<div class="row2"><span>Share match stats</span>${toggle('share', s.shareStats)}</div>
 <div class="row2"><span>Tutorial</span><button class="btn small" data-act="replay">Replay tutorial</button></div></section>
 <section><h3>Display</h3>
 <div class="row2"><span>Graphics quality</span>${seg('quality', s.quality, [['low', 'Low'], ['medium', 'Medium'], ['high', 'High']])}</div>

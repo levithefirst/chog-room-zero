@@ -13,7 +13,7 @@ import { b64url, sign, unsign, type Identity } from './auth.js';
 import { MAX_SUPPLY } from './chain.js';
 import { heroIdOf } from '../../src/config/heroes.js';
 import { NO_UPGRADES, TIERS, UPGRADES, UPGRADE_IDS, clampUpgrades, tierOfMetadataId, type Tier, type UpgradeId, type Upgrades } from '../../src/config/power.js';
-import { RATING, levelOf, rewardBreakdown, ratingDelta, REWARDS, type RewardLine, type NoReward } from '../../src/config/progression.js';
+import { PRACTICE_REWARDS, RATING, levelOf, rewardBreakdown, ratingDelta, REWARDS, type RewardLine, type NoReward } from '../../src/config/progression.js';
 
 export const TICKET_SECONDS = 10 * 60;
 
@@ -304,13 +304,19 @@ export interface BoardRow {
 
 export type Board = 'online' | 'solo';
 export const BOARD_PAGE = 20;
+/**
+ * V2 (forensic report weakness 10: the Solo board had no daily cap): only an account's first runs of each UTC day
+ * count on the Solo board, the same number as the day's rewarded runs. Later runs still count for career and medals.
+ * A modified client can still post plausible runs; this bounds what it can add to the board in a day.
+ */
+export const SOLO_BOARD_RUNS_PER_DAY = PRACTICE_REWARDS.dailyCap;
 
 /**
  * The leaderboards (owner requirement 2026-10-14: ranked by opponents killed, then wins, then fewer matches, then
  * account id). ONLINE (the owner's board): kills in validated online matches (settled from the game server's record,
  * matches that paid rewards), every account with a saved match. SOLO (GP, owner 2026-10-17: "the actual player can see
  * themselves"; most play is the default solo game): kills in verified practice runs (ticketed, timed, plausible,
- * capped; the browser simulates them, so they never mix into the online board). Rating, XP and the Chog tier are shown
+ * capped, at most SOLO_BOARD_RUNS_PER_DAY a day; the browser simulates them, so they never mix into the online board). Rating, XP and the Chog tier are shown
  * and never decide the order. Accounts that chose not to be listed (and the production smoke's test accounts) are
  * left out for everyone else; you always get your own row and rank. Pages of BOARD_PAGE from `offset`.
  */
@@ -326,7 +332,10 @@ export async function leaderboard(db: Tx, limit = BOARD_PAGE, me: string | null 
        ) k ON k.account_id = a.id WHERE a.matches > 0`
     : `SELECT a.id, a.display_name, a.callsign, a.xp, a.rating, a.nft_tier, a.favourite_hero, a.lb_hidden, k.kills, k.won, k.played
        FROM room_zero.accounts a JOIN (
-         SELECT account_id, coalesce(sum(kills), 0) AS kills, count(*) FILTER (WHERE won) AS won, count(*) AS played FROM room_zero.practice_runs WHERE verified GROUP BY account_id
+         SELECT account_id, coalesce(sum(kills), 0) AS kills, count(*) FILTER (WHERE won) AS won, count(*) AS played FROM (
+           SELECT account_id, kills, won, row_number() OVER (PARTITION BY account_id, (created_at AT TIME ZONE 'UTC')::date ORDER BY created_at, run_id) AS nth
+           FROM room_zero.practice_runs WHERE verified
+         ) pr WHERE nth <= ${SOLO_BOARD_RUNS_PER_DAY} GROUP BY account_id
        ) k ON k.account_id = a.id`;
   type R = { id: string; display_name: string | null; callsign: string | null; xp: string; rating: number; nft_tier: string | null; favourite_hero: string | null; lb_hidden: boolean; kills: string; won: string; played: string; rank: string; total?: string };
   const page = await db.query<R>(

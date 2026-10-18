@@ -4,6 +4,7 @@
 import type { Tier, Upgrades } from '../config/power';
 import type { Records } from '../ui/records';
 import type { NoReward, RewardLine } from '../config/progression';
+import type { MatchReport } from '../sim/report';
 
 export interface GameConfig { db: boolean; nftCombat: boolean; demo: boolean }
 export interface OnlineCareer { matches: number; wins: number; kills: number; damage: number; survived: number; heroes: Record<string, { matches: number; wins: number; kills: number }> }
@@ -47,6 +48,8 @@ export const loadTokens = () => api<{ wallet: boolean; ok?: boolean; error?: str
 export interface BoardRow { rank: number; name: string; kills: number; matches: number; wins: number; xp: number; level: number; rating: number; nftTier: Tier | null; hero?: string | null; you: boolean; hidden?: boolean }
 export type Board = 'solo' | 'online';
 /** GP: one page of a board (solo or online) from `offset`, with your own row and rank when you are signed in. */
+/** V2: the anonymous end-of-match record (src/sim/report.ts), sent once; failures are dropped. */
+export const sendReport = (r: MatchReport) => api<{ ok: boolean }>('report', r);
 export const leaderboard = (board: Board = 'solo', offset = 0) =>
   api<{ progression: boolean; signedIn?: boolean; rows: BoardRow[]; me: BoardRow | null; total?: number; board?: Board; offset?: number }>(`leaderboard?board=${board}&offset=${Math.max(0, Math.floor(offset))}`);
 export const buyUpgrade = (id: string) => api<{ ok: boolean; rank?: number; shards?: number; reason?: string }>('upgrade', { id });

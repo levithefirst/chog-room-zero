@@ -36,6 +36,8 @@ export interface Settings {
   stick: StickSize;
   /** In-match tips that explain a mechanic the first time you meet it. */
   tips: boolean;
+  /** V2: send the anonymous end-of-match record (src/sim/report.ts). */
+  shareStats: boolean;
 }
 
 export const PROFILE_KEY = 'chog-room-zero:profile:v1';
@@ -43,7 +45,7 @@ export const SETTINGS_KEY = 'chog-room-zero:settings:v1';
 export const QUALITY_DPR: Record<Quality, number> = { low: 1, medium: 1.5, high: 2 };
 // Full-push stick travel in px: 44 for small thumbs or short pushes, 56 default (RC-1 tuning), 72 for big phones.
 export const STICK_PX: Record<StickSize, number> = { small: 44, medium: 56, large: 72 };
-export const DEFAULT_SETTINGS: Settings = { volume: 1, vibration: true, quality: 'medium', stick: 'medium', tips: true };
+export const DEFAULT_SETTINGS: Settings = { volume: 1, vibration: true, quality: 'medium', stick: 'medium', tips: true, shareStats: true };
 
 // Crockford base32 without I, L, O, U: readable aloud, no lookalikes.
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -112,6 +114,7 @@ export function loadSettings(store: KeyValueStore): Settings {
     quality: s?.quality === 'low' || s?.quality === 'medium' || s?.quality === 'high' ? s.quality : d.quality,
     stick: s?.stick === 'small' || s?.stick === 'medium' || s?.stick === 'large' ? s.stick : d.stick,
     tips: typeof s?.tips === 'boolean' ? s.tips : d.tips,
+    shareStats: typeof s?.shareStats === 'boolean' ? s.shareStats : d.shareStats,
   };
 }
 

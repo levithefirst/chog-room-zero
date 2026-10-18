@@ -214,7 +214,69 @@ export const MIGRATIONS: { version: number; name: string; sql: string }[] = [
       )
     `,
   },
+  {
+    version: 8,
+    name: 'playtest telemetry: one anonymous record per match (src/sim/report.ts), no account, name, address or IP',
+    // Additive: one new table. The install id is a random string kept in the player's browser.
+    sql: `
+      CREATE TABLE IF NOT EXISTS room_zero.match_reports (
+        id bigserial PRIMARY KEY,
+        anon text NOT NULL,
+        mode text NOT NULL,
+        at timestamptz NOT NULL DEFAULT now(),
+        data jsonb NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS match_reports_anon ON room_zero.match_reports(anon, at);
+      CREATE INDEX IF NOT EXISTS match_reports_at ON room_zero.match_reports(at)
+    `,
+  },
 ];
+
+/** Reports one install may send a minute (a match lasts longer than this allows; a loop or a script does not). */
+export const REPORTS_PER_MINUTE = 4;
+
+/** Stores a validated match report unless this install is over its rate. True when stored. */
+export async function storeReport(db: Db, r: { anon: string; mode: string }, data: object): Promise<boolean> {
+  const recent = await db.query<{ n: string }>(`SELECT count(*) AS n FROM room_zero.match_reports WHERE anon = $1 AND at > now() - interval '1 minute'`, [r.anon]);
+  if (Number(recent[0]?.n ?? 0) >= REPORTS_PER_MINUTE) return false;
+  await db.query(`INSERT INTO room_zero.match_reports (anon, mode, data) VALUES ($1, $2, $3::jsonb)`, [r.anon, r.mode, JSON.stringify(data)]);
+  return true;
+}
+
+/**
+ * What the playtests are answering (V2 report section 11, day-30 gate): aggregates only, never a row. Shares are of
+ * matches in the window (default 30 days).
+ */
+export async function reportSummary(db: Db, days = 30): Promise<Record<string, unknown>> {
+  const r = await db.query<Record<string, string | null>>(`
+    SELECT count(*) AS matches, count(DISTINCT anon) AS players,
+      count(*) FILTER (WHERE mode = 'solo') AS solo, count(*) FILTER (WHERE mode <> 'solo') AS online,
+      percentile_cont(0.5) WITHIN GROUP (ORDER BY (data->>'seconds')::int) AS median_seconds,
+      count(*) FILTER (WHERE data->>'outcome' = 'won') AS won, count(*) FILTER (WHERE data->>'outcome' = 'quit') AS quits,
+      count(*) FILTER (WHERE data->>'outcome' = 'disconnect') AS disconnects,
+      count(*) FILTER (WHERE data->>'cause' = 'shot') AS died_shot, count(*) FILTER (WHERE data->>'cause' = 'zone') AS died_zone,
+      count(*) FILTER (WHERE data->>'cause' = 'bled') AS died_bled, count(*) FILTER (WHERE (data->>'noCue')::boolean) AS no_cue_deaths,
+      percentile_cont(0.5) WITHIN GROUP (ORDER BY (data->>'fireDelayMs')::int) FILTER (WHERE data->>'fireDelayMs' IS NOT NULL) AS median_fire_delay_ms,
+      percentile_cont(0.5) WITHIN GROUP (ORDER BY (data->>'firstContactS')::int) FILTER (WHERE data->>'firstContactS' IS NOT NULL) AS median_first_contact_s,
+      coalesce(sum((data->>'downs')::int), 0) AS downs, coalesce(sum((data->>'revived')::int), 0) AS revived, coalesce(sum((data->>'bledOut')::int), 0) AS bled_out,
+      coalesce(sum((data->>'hits')::int), 0) AS hits, coalesce(sum((data->>'bullets')::int), 0) AS bullets,
+      coalesce(sum((data->>'kills')::int), 0) AS kills, coalesce(sum((data->>'aiKills')::int), 0) AS ai_kills,
+      coalesce(sum((data->>'loots')::int), 0) AS loots, coalesce(sum((data->>'lootExpired')::int), 0) AS loot_expired,
+      count(*) FILTER (WHERE data->'device'->>'input' = 'touch') AS touch
+    FROM room_zero.match_reports WHERE at > now() - ($1 || ' days')::interval`, [String(Math.max(1, Math.min(365, Math.floor(days))))]);
+  const o = r[0] ?? {};
+  const num = (k: string) => (o[k] === null || o[k] === undefined ? null : Number(o[k]));
+  const n = num('matches') ?? 0, deaths = (num('died_shot') ?? 0);
+  const share = (x: number | null, of: number) => (of > 0 && x !== null ? Math.round((x / of) * 1000) / 1000 : null);
+  return {
+    days, matches: n, players: num('players'), solo: num('solo'), online: num('online'), touchShare: share(num('touch'), n),
+    medianSeconds: num('median_seconds'), winShare: share(num('won'), n), quitShare: share(num('quits'), n), disconnects: num('disconnects'),
+    deaths: { shot: num('died_shot'), zone: num('died_zone'), bledOut: num('died_bled') }, noCueShareOfShotDeaths: share(num('no_cue_deaths'), deaths),
+    medianFireDelayMs: num('median_fire_delay_ms'), medianFirstContactS: num('median_first_contact_s'),
+    reviveShare: share(num('revived'), num('downs') ?? 0), accuracy: share(num('hits'), num('bullets') ?? 0),
+    kills: num('kills'), aiKills: num('ai_kills'), loots: num('loots'), lootExpired: num('loot_expired'),
+  };
+}
 
 /** Records that the session `sid` signed out (until its own expiry). Idempotent. */
 export async function revokeSession(db: Db, sid: string, expSeconds: number): Promise<void> {
