@@ -252,6 +252,8 @@ export interface HitEvent {
   downed?: boolean;
   /** A grenade blast (from = the blast, not the thrower, who may be behind a wall). */
   grenade?: boolean;
+  /** A superpower beam or glob (online, its owner is not told where an unseen target is). */
+  power?: boolean;
 }
 
 export interface KillInfo {
@@ -718,6 +720,21 @@ export function beamEnd(w: World, a: Actor): { x: number; y: number; target: Act
   return { x: a.x + (ex - a.x) * best, y: a.y + (ey - a.y) * best, target };
 }
 
+/**
+ * The stretch of a hostile beam that a player is warned of when its owner is not shown to them: from 5 u before them
+ * along the line (never nearer its owner than halfway) to 2 u past, only while the line passes within 1.5 u of them. null when it does not cross them. One
+ * rule for the server's snapshot and for solo drawing (never where the owner stands).
+ */
+export function beamNear(w: World, a: Actor, me: Actor): { x: number; y: number; a: number; len: number } | null {
+  if (!me.alive || (a.chargeLeft <= 0 && a.beamLeft <= 0)) return null;
+  const end = beamEnd(w, a), dx = Math.cos(a.beamAng), dy = Math.sin(a.beamAng);
+  const reach = Math.hypot(end.x - a.x, end.y - a.y);
+  const along = (me.x - a.x) * dx + (me.y - a.y) * dy;
+  if (along < 0 || along > reach + 1.5 || Math.abs((me.x - a.x) * dy - (me.y - a.y) * dx) > 1.5) return null;
+  const from = Math.max(along - 5, along / 2), to = Math.min(reach, along + 2);
+  return { x: a.x + dx * from, y: a.y + dy * from, a: a.beamAng, len: Math.max(0, to - from) };
+}
+
 /** Laser / X-Ray each step: the charge counts down, then the beam burns in pulses of BEAM.pulse s. */
 function stepBeam(w: World, a: Actor, dt: number): void {
   const turn = BEAM.turnDegPerSec * DEG * dt;
@@ -737,7 +754,7 @@ function stepBeam(w: World, a: Actor, dt: number): void {
   const t = end.target;
   if (!t) return;
   if (untouchable(t)) {
-    w.hits.push({ target: t.id, by: a.id, x: end.x, y: end.y, fromX: a.x, fromY: a.y, hpDamage: 0, armorDamage: 0, killed: false, downed: false });
+    w.hits.push({ target: t.id, by: a.id, x: end.x, y: end.y, fromX: a.x, fromY: a.y, hpDamage: 0, armorDamage: 0, killed: false, downed: false, power: true });
     return;
   }
   hurt(w, t, a, (a.ability.amount ?? 0) * BEAM.pulse, a.ability.armorPen ?? 0, end.x, end.y, a.ability.name);
@@ -755,7 +772,7 @@ function hurt(w: World, t: Actor, by: Actor, raw: number, armorPen: number, hx: 
   t.lastHitFrom = { x: by.x, y: by.y };
   t.damageTaken += m.hp + m.armor;
   const r = t.hp <= 0 ? drop(w, t, { cause: 'shot', killerId: by.id, weapon: name, fromX: by.x, fromY: by.y, toX: t.x, toY: t.y, tick: w.tick }) : null;
-  w.hits.push({ target: t.id, by: by.id, x: hx, y: hy, fromX: by.x, fromY: by.y, hpDamage: m.hp, armorDamage: m.armor, killed: r === 'out', downed: r === 'downed' });
+  w.hits.push({ target: t.id, by: by.id, x: hx, y: hy, fromX: by.x, fromY: by.y, hpDamage: m.hp, armorDamage: m.armor, killed: r === 'out', downed: r === 'downed', power: true });
   emit(w, 'hit', hx, hy, TUNING.sound.impact, by);
 }
 
@@ -801,7 +818,7 @@ function cage(w: World, t: Actor, by: Actor): void {
   t.vx = t.vy = 0;
   t.lastHitTick = w.tick;
   t.lastHitFrom = { x: by.x, y: by.y };
-  w.hits.push({ target: t.id, by: by.id, x: t.x, y: t.y, fromX: by.x, fromY: by.y, hpDamage: 0, armorDamage: 0, killed: false, downed: false });
+  w.hits.push({ target: t.id, by: by.id, x: t.x, y: t.y, fromX: by.x, fromY: by.y, hpDamage: 0, armorDamage: 0, killed: false, downed: false, power: true });
   emit(w, 'caged', t.x, t.y, TUNING.sound.ability, by);
 }
 
@@ -835,7 +852,7 @@ function glue(w: World, t: Actor, by: Actor): void {
   t.vx = t.vy = 0;
   t.lastHitTick = w.tick;
   t.lastHitFrom = { x: by.x, y: by.y };
-  w.hits.push({ target: t.id, by: by.id, x: t.x, y: t.y, fromX: by.x, fromY: by.y, hpDamage: 0, armorDamage: 0, killed: false, downed: false });
+  w.hits.push({ target: t.id, by: by.id, x: t.x, y: t.y, fromX: by.x, fromY: by.y, hpDamage: 0, armorDamage: 0, killed: false, downed: false, power: true });
   emit(w, 'pinned', t.x, t.y, TUNING.sound.ability, by);
 }
 

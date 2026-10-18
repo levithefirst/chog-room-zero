@@ -220,6 +220,37 @@ export function createAudio(): Audio {
           thump(0, 0.6, 1980, 1960, 0.15);
           len = 0.65;
           break;
+        // CHOG superpowers: each has its own cue, loud enough that the side it is used on can react.
+        case 'charge': // a rising whine: a beam is charging along a line
+          thump(0, 0.45, 600, 1800, 0.3);
+          burst(0, 0.4, 'bandpass', 2400, 3, 0.15);
+          len = 0.5;
+          break;
+        case 'beam': // the beam burning: a buzzing tone
+          thump(0, 0.6, 220, 200, 0.45);
+          thump(0, 0.6, 330, 300, 0.25);
+          len = 0.65;
+          break;
+        case 'orb': // a wet blow: a bubble or a glob launched
+          burst(0, 0.18, 'lowpass', 700, 1.2, 0.4);
+          thump(0, 0.15, 300, 180, 0.3);
+          len = 0.22;
+          break;
+        case 'caged': // a pop and a rubbery ring
+          thump(0, 0.08, 1400, 600, 0.5);
+          thump(0.05, 0.4, 520, 500, 0.25);
+          len = 0.45;
+          break;
+        case 'pinned': // a wet splat
+          burst(0, 0.2, 'lowpass', 500, 0.8, 0.6);
+          len = 0.25;
+          break;
+        case 'aura': // a chime that hangs
+          thump(0, 0.9, 880, 880, 0.25);
+          thump(0, 0.9, 1320, 1320, 0.18);
+          thump(0, 0.9, 1760, 1760, 0.1);
+          len = 0.95;
+          break;
         case 'frenzy': // a low growl
           thump(0, 0.4, 70, 110, 0.6);
           burst(0, 0.3, 'lowpass', 500, 1.2, 0.4);

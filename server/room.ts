@@ -4,7 +4,7 @@
 // The server owns the match: it steps the same deterministic sim as solo play (src/sim/world.ts) with each player's
 // latest controls. Clients never send positions, hits, damage or results, only controls.
 import { randomBytes } from 'node:crypto';
-import { createWorld, down, IDLE_INPUT, matchSeconds, revealed, standing, stepWorld, type Actor, type ActorInput, type HitEvent, type SoundEvent, type Team, type World } from '../src/sim/world';
+import { beamNear, createWorld, down, IDLE_INPUT, matchSeconds, revealed, standing, stepWorld, type Actor, type ActorInput, type HitEvent, type SoundEvent, type Team, type World } from '../src/sim/world';
 import { canSee, muzzleFlashSeen } from '../src/sim/vision';
 import { hears, wallFactorOf } from '../src/sim/world';
 import { hearReport, locatesSource, noise3, type Salt } from '../src/sim/intel';
@@ -13,7 +13,7 @@ import { heroIdOf } from '../src/config/heroes';
 import { VERSUS_SPAWNS } from '../src/config/map';
 import { TUNING } from '../src/config/tuning';
 import { validateNickname } from '../src/ui/profile';
-import { MODE_SIZE, PROTOCOL, parseClientMsg, toActorInput, type ClientMsg, type Mode, type NetActor, type NetBullet, type NetGrenade, type NetHit, type NetLoot, type NetProfile, type NetSound, type PlayerResult, type ServerMsg } from '../src/net/protocol';
+import { MODE_SIZE, PROTOCOL, parseClientMsg, toActorInput, type ClientMsg, type Mode, type NetActor, type NetBeam, type NetBullet, type NetGrenade, type NetHit, type NetLoot, type NetOrb, type NetProfile, type NetSound, type PlayerResult, type ServerMsg } from '../src/net/protocol';
 import { BASE_POWER, powerFor, signatureFor, type Power, type Tier } from '../src/config/power';
 import { RATING } from '../src/config/progression';
 import type { GameTicket, MatchRecord } from '../api/_lib/game';
@@ -577,12 +577,30 @@ export class Lobby {
       ...(a.team === me.team && a.perk ? { perk: a.perk } : {}),
       ...(a === me && a.bagStill > 0 ? { bag: r3(a.bagStill) } : {}),
       ...(a.team !== me.team && a.markLeft > 0 && a.markTeam === me.team ? { mk: 1 as const } : {}),
+      // CHOG superpowers in progress: what a client needs to draw them (and, for its own operator, to predict a cage
+      // or glue). All of it happens on a body this player is already shown.
+      ...(a.chargeLeft > 0 || a.beamLeft > 0 ? { cl: r3(a.chargeLeft), bl: r3(a.beamLeft), ba: r3(a.beamAng) } : {}),
+      ...(a.trapLeft > 0 ? { tl: r3(a.trapLeft), tx: r3(a.trapX), ty: r3(a.trapY), tr: r3(a.trapR) } : {}),
+      ...(a.pinLeft > 0 ? { pl: r3(a.pinLeft), px: r3(a.pinX), py: r3(a.pinY) } : {}),
+      ...(a.auraLeft > 0 ? { al: r3(a.auraLeft) } : {}),
     }));
     // Grenades: your team's always; a hostile one when you can see it or it is close to you on a clear line (you hear
     // it land and see the ring), so you can read the danger you are in. Never one behind a wall.
     const near = (x: number, y: number, r: number) => Math.hypot(me.x - x, me.y - y) <= r && sightClear(w.level, me.x, me.y, x, y);
     const grenades: NetGrenade[] = w.grenades.filter((g) => g.team === me.team || iSee(g.x, g.y) || near(g.x, g.y, TUNING.grenade.radius + 1.5))
       .map((g) => ({ id: g.id, x: r3(g.x), y: r3(g.y), vx: r3(g.vx), vy: r3(g.vy), fuse: r3(g.fuse), owner: g.owner }));
+    // Superpower globs: like grenades, your team's, or one you can see or that is close to you on a clear line.
+    const ob: NetOrb[] = w.orbs.filter((o) => o.team === me.team || iSee(o.x, o.y) || near(o.x, o.y, 3))
+      .map((o) => ({ id: o.id, k: o.kind, x: r3(o.x), y: r3(o.y), dx: r3(o.dx), dy: r3(o.dy), owner: o.owner }));
+    // A charging or burning beam of a hostile you are not shown, whose line passes within 1.5 u of you: the counter to
+    // X-Ray (and a laser from the dark) is seeing the line cross you. Only the stretch of line near you is sent (from
+    // 5 u before you along it), never where its owner stands.
+    const bm: NetBeam[] = [];
+    for (const a of w.actors) {
+      if (visible(a) || a.team === me.team || !a.alive) continue;
+      const n = beamNear(w, a, me);
+      if (n) bm.push({ o: a.id, k: a.ability.kind === 'xray' ? 'xray' : 'laser', x: r3(n.x), y: r3(n.y), a: r3(n.a), len: r3(n.len), c: r3(a.chargeLeft), l: r3(a.beamLeft) });
+    }
     // Bullets: your team's, and a hostile one you can see in flight or that passes close to you on a clear line. Where
     // it was fired from only when you are shown the shooter (else the tracer starts where the bullet is).
     const bullets: NetBullet[] = w.bullets.filter((b) => w.actors[b.owner].team === me.team || iSee(b.x, b.y) || near(b.x, b.y, 2.5)).map((b) => {
@@ -604,7 +622,8 @@ export class Lobby {
     const netHits: NetHit[] = hits.filter((h) => h.target === me.id || h.by === me.id || w.actors[h.target].team === me.team || h.killed || h.downed).map((h) => {
       const open = h.target === me.id || h.by === me.id || visible(w.actors[h.by]);
       const t = w.actors[h.target];
-      const at = t.team !== me.team && h.by !== me.id && !visible(t) ? blur(h.x, h.y, h.target, 3) : { x: r3(h.x), y: r3(h.y) };
+      // A superpower (an X-Ray through a wall) never tells its owner where an unseen target is: blurred like a spot.
+      const at = t.team !== me.team && (h.by !== me.id || h.power) && !visible(t) ? blur(h.x, h.y, h.target, 3) : { x: r3(h.x), y: r3(h.y) };
       return { target: h.target, by: h.by, ...at, fromX: open ? r3(h.fromX) : at.x, fromY: open ? r3(h.fromY) : at.y, killed: h.killed, downed: h.downed, grenade: h.grenade };
     });
     // Where every pickup is, whenever the layout changed since this player's last snapshot (and once at the start).
@@ -615,7 +634,7 @@ export class Lobby {
     const lt: NetLoot[] = w.loot.filter((l) => l.known.includes(me.team)).map((l) => ({ id: l.id, x: r3(l.x), y: r3(l.y), left: r3(l.left),
       k: (l.health >= 1 ? 1 : 0) | (l.armor >= 1 ? 2 : 0) | (l.mags >= 0.05 ? 4 : 0) | (l.grenades > 0 ? 8 : 0), ...(l.perk ? { p: l.perk } : {}) }));
     return {
-      t: 'snap', tick: w.tick, actors, bullets, grenades, pickups: w.pickups.map((k) => k.active), ...(pk ? { pk } : {}), ...(lt.length ? { lt } : {}), ...(sp.length ? { sp } : {}), sounds: heard, hits: netHits,
+      t: 'snap', tick: w.tick, actors, bullets, grenades, ...(ob.length ? { ob } : {}), ...(bm.length ? { bm } : {}), pickups: w.pickups.map((k) => k.active), ...(pk ? { pk } : {}), ...(lt.length ? { lt } : {}), ...(sp.length ? { sp } : {}), sounds: heard, hits: netHits,
       barriers: w.barriers.map((b) => ({ ...b.box, left: r3(b.left) })), ack: room.acks[p.actorId], as: room.ackSteps[p.actorId],
     };
   }

@@ -42,6 +42,8 @@ import { createAutopilot, type Autopilot } from './debug/autopilot';
 import { createOnlineDriver } from './debug/onlineDriver';
 import * as account from './net/account';
 import { emptyAcct } from './ui/account';
+import { SUPERPOWERS } from './config/superpowers';
+import { pointInPolygon } from './sim/geom';
 import { chogName, powerForToken, signatureFor, tierOfMetadataId, ONE_OF_ONE, TIER_DEFS, type Power } from './config/power';
 import { tierEffect } from './ui/account';
 import { LAB, applyLab } from './config/lab';
@@ -1252,7 +1254,8 @@ async function start() {
     $('pips').innerHTML = world.actors.filter((a) => a.team !== me.team).map(() => '<i></i>').join('');
     lastHud = '';
     const others = (net?.match?.roster ?? []).filter((r) => r.team !== me.team && r.tier !== 'free');
-    onlineIntro = `Online ${esc(onlineMode)}: ${MODE_SIZE[onlineMode] / 2} a side, real players. Your side is ringed green.${others.length ? ` Facing: ${others.map((r) => `${esc(r.name)} (${r.tier === 'legendary' ? `1:1, ${esc(r.ability.name)}` : esc(r.tier)})`).join(', ')}.` : ''}`;
+    // Every opponent's power is named up front (owner 2026-10-18: you can learn "this enemy has X-Ray Eyes").
+    onlineIntro = `Online ${esc(onlineMode)}: ${MODE_SIZE[onlineMode] / 2} a side, real players. Your side is ringed green.${others.length ? ` Facing: ${others.map((r) => `${esc(r.name)} (${r.tier === 'legendary' ? `1:1, ${esc(r.ability.name)}` : r.sp ? `${esc(r.tier)}, ${esc(SUPERPOWERS[r.sp].name)}` : esc(r.tier)})`).join(', ')}.` : ''}`;
     countShown = 0;
     showHint(onlineIntro, 6);
   }
@@ -1751,8 +1754,11 @@ async function start() {
         else if (!confirmed) audio.play('confirm', 0, 0, 1, false, true);
         confirmed = true;
         tele.ranges.push(Math.hypot(h.x - p.x, h.y - p.y));
-        fx.hitMarks.push({ x: h.x, y: h.y, age: 0, kill: h.killed });
-        spark(h.x, h.y, h.killed ? 10 : 4, true);
+        // An X-Ray beam through a wall tells you it landed, never where (no mark or spark outside your light).
+        if (!h.power || pointInPolygon(h.x, h.y, renderer.visPoly())) {
+          fx.hitMarks.push({ x: h.x, y: h.y, age: 0, kill: h.killed });
+          spark(h.x, h.y, h.killed ? 10 : 4, true);
+        }
         if (h.killed) toast(`${world.actors[h.target].name} eliminated`);
         else if (h.downed) toast(`${world.actors[h.target].name} DOWNED · finish or they get revived`);
       }
@@ -1975,7 +1981,7 @@ async function start() {
     const shown = menuOn ? menuWorldNow() : world;
     fx.intel = menuOn ? menuIntel : matchIntel;
     if (shown !== drawnWorld) { renderer.reset(shown); drawnWorld = shown; }
-    renderer.draw(shown, fx, input, dt, { recap: phase === 'recap' || (phase === 'results' && world.outcome === 'dead'), marking: identity.marking, showSticks: phase === 'play' && input.mode === 'touch', playing: phase === 'play', debug: DEBUG_OVERLAY && !menuOn, hud: hudRects(), menu: menuOn ? (stage().w < 1000 ? 1.8 : 2) : undefined });
+    renderer.draw(shown, fx, input, dt, { recap: phase === 'recap' || (phase === 'results' && world.outcome === 'dead'), marking: identity.marking, showSticks: phase === 'play' && input.mode === 'touch', playing: phase === 'play', debug: DEBUG_OVERLAY && !menuOn, hud: hudRects(), menu: menuOn ? (stage().w < 1000 ? 1.8 : 2) : undefined, beams: online && net ? net.beams : undefined });
 
     // HUD: only touch the DOM when a value changed.
     const p = player(world);
@@ -2012,7 +2018,12 @@ async function start() {
     {
       // V2: an AI teammate guarding you (src/sim/bots.ts allyGuard) is named under your health.
       const guard = p.alive && !p.downed ? world.actors.find((m) => m.ai && m.team === p.team && m.alive && (world.brains.get(m.id) as Brain | undefined)?.guarding === p.id) : undefined;
-      const st = p.alive && p.slowLeft > 0 ? `Slowed ${Math.round((1 - p.slowMul) * 100)}% · ${p.slowLeft.toFixed(1)} s` : guard ? `${guard.name} covering you` : '';
+      // CHOG superpowers on you, or yours running: what holds you and for how long.
+      const st = !p.alive ? ''
+        : p.pinLeft > 0 ? `Glued to the wall · ${p.pinLeft.toFixed(1)} s · you can still shoot`
+        : p.trapLeft > 0 ? `Caged · ${p.trapLeft.toFixed(1)} s · you can still shoot`
+        : p.auraLeft > 0 ? `Aura · untouchable ${p.auraLeft.toFixed(1)} s · press again to drop it`
+        : p.slowLeft > 0 ? `Slowed ${Math.round((1 - p.slowMul) * 100)}% · ${p.slowLeft.toFixed(1)} s` : guard ? `${guard.name} covering you` : '';
       if (st !== lastStatus) { lastStatus = st; $('status').textContent = st; }
       feed = feed.filter((f) => playTime - f.t < 6);
       const fh = feed.map((f) => `<li class="${f.mine ? 'mine' : ''}${f.down ? ' down' : ''}">${f.html}</li>`).join('');

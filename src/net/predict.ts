@@ -10,7 +10,9 @@ import type { Level } from '../sim/level';
 const STEP = TUNING.simStepSeconds;
 
 /** The part of an actor prediction moves (the rest comes from the server as is). */
-export type Body = Pick<Actor, 'x' | 'y' | 'vx' | 'vy' | 'hero' | 'slowLeft' | 'slowMul' | 'dashLeft' | 'dashX' | 'dashY' | 'downed'>;
+export type Body = Pick<Actor, 'x' | 'y' | 'vx' | 'vy' | 'hero' | 'slowLeft' | 'slowMul' | 'dashLeft' | 'dashX' | 'dashY' | 'downed'>
+  // CHOG superpowers on you (absent: none): beam slow, Bubble cage, Drool glue.
+  & Partial<Pick<Actor, 'chargeLeft' | 'beamLeft' | 'trapLeft' | 'trapX' | 'trapY' | 'trapR' | 'pinLeft' | 'pinX' | 'pinY'>>;
 
 export class Predictor {
   /** Inputs sent and not yet fully applied by the server, with how many steps each has been held here. */

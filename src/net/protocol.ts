@@ -46,7 +46,19 @@ export interface NetActor {
   focus?: number;
   /** SB: how hard a Snare slows it (with slowLeft), so its own client predicts the slowed walk. */
   slowMul?: number;
+  /** CHOG superpowers, sent only while running: beam charge and burn seconds and the beam's angle; caged (seconds,
+   * centre, radius); glued (seconds, wall spot); aura seconds. */
+  cl?: number; bl?: number; ba?: number;
+  tl?: number; tx?: number; ty?: number; tr?: number;
+  pl?: number; px?: number; py?: number;
+  al?: number;
 }
+
+/** A Bubble or Drool glob in flight (your team's, or one you can see or that is close to you on a clear line). */
+export interface NetOrb { id: number; k: 'bubble' | 'drool'; x: number; y: number; dx: number; dy: number; owner: number }
+/** A beam of a hostile you are not shown that points at you: only the part of its line near you (never where its
+ * owner stands), its kind, and its charge and burn seconds left. */
+export interface NetBeam { o: number; k: 'laser' | 'xray'; x: number; y: number; a: number; len: number; c: number; l: number }
 
 /** What everyone in a match knows about each player: power is never hidden from the opponent. */
 export interface RosterEntry {
@@ -85,7 +97,7 @@ export type ServerMsg =
   | { t: 'match'; room: string; mode: Mode; you: number; team: Team; seed: number; friendlyFire: boolean; roster: RosterEntry[]; startsIn: number; demo?: boolean; zone: { x: number; y: number; r: number }[] }
   /** ack/as (SB): the newest input seq the server had from you when it took this snapshot, and how many sim steps it has
    * applied it so far (your movement prediction replays the rest). Optional: an older server sends neither. */
-  | { t: 'snap'; tick: number; actors: NetActor[]; bullets: NetBullet[]; grenades?: NetGrenade[]; pickups: boolean[]; pk?: number[]; lt?: NetLoot[]; sp?: { id: number; x: number; y: number }[]; sounds: NetSound[]; hits: NetHit[]; barriers: { x0: number; y0: number; x1: number; y1: number; left: number }[]; ack?: number; as?: number }
+  | { t: 'snap'; tick: number; actors: NetActor[]; bullets: NetBullet[]; grenades?: NetGrenade[]; ob?: NetOrb[]; bm?: NetBeam[]; pickups: boolean[]; pk?: number[]; lt?: NetLoot[]; sp?: { id: number; x: number; y: number }[]; sounds: NetSound[]; hits: NetHit[]; barriers: { x0: number; y0: number; x1: number; y1: number; left: number }[]; ack?: number; as?: number }
   | { t: 'over'; winner: Team | null; reason: 'eliminated' | 'time'; results: PlayerResult[]; matchId?: string; settle?: boolean }
   | { t: 'pong'; at: number; tick: number }
   | { t: 'party'; code: string | null; members: PartyMember[] }

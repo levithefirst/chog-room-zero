@@ -317,6 +317,11 @@ describe('Aura', () => {
     expect(c.actors[0].auraLeft).toBe(0);
     expect(c.actors[0].abilityCd).toBeGreaterThan(A.cooldown - 1);
   });
+  it('a held button online (the server sees a press every other step) does not drop it', () => {
+    const w = arena('aura', 3, { ally: false });
+    run(w, 60, (id, t) => (id === 0 ? { ability: t % 2 === 0 } : {}));
+    expect(w.actors[0].auraLeft).toBeGreaterThan(SUPERPOWERS.aura.ranks.common.seconds - 1.1);
+  });
   it('the zone still hurts it, and its steps are never quiet', () => {
     const w = arena('aura', 3, { ally: false });
     run(w, 1, press);

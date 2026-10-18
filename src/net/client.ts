@@ -7,9 +7,10 @@ import { applyFocus, createWorld, wrapAngle, type Actor, type ActorInput, type H
 import { WEAPONS } from '../config/weapons';
 import { TUNING } from '../config/tuning';
 import { LAB } from '../config/lab';
+import { ORB } from '../config/superpowers';
 import { Predictor } from './predict';
 import type { Box } from '../sim/geom';
-import { PROTOCOL, type Mode, type NetActor, type NetProfile, type PartyMember, type PlayerResult, type ServerMsg } from './protocol';
+import { PROTOCOL, type Mode, type NetActor, type NetBeam, type NetProfile, type PartyMember, type PlayerResult, type ServerMsg } from './protocol';
 import type { Circle } from '../sim/zone';
 import type { Team } from '../sim/world';
 
@@ -296,6 +297,8 @@ export class OnlineSession {
     }
   }
 
+  /** Hostile beams crossing you whose owner you are not shown (from the newest snapshot; view actor ids). */
+  beams: NetBeam[] = [];
   /** Teammates' sightings from the newest snapshot (view actor ids). */
   spotted: { id: number; x: number; y: number }[] = [];
 
@@ -329,6 +332,8 @@ export class OnlineSession {
       sounds: m.sounds.map((s) => ({ type: s.type as SoundType, x: s.x, y: s.y, radius: s.radius, sourceId: v(s.source), team: s.team, tick: m.tick, weapon: s.weapon, blocked: s.blocked, sig: s.sig, ...(s.est ? { est: s.est } : {}) })),
       hits: m.hits.map((h) => ({ target: v(h.target), by: v(h.by), x: h.x, y: h.y, fromX: h.fromX, fromY: h.fromY, hpDamage: 0, armorDamage: 0, killed: h.killed, downed: h.downed, grenade: h.grenade })),
     });
+    // A hostile beam you are not shown, crossing you: only its stretch of line near you (drawn as a warning).
+    this.beams = (m.bm ?? []).map((b) => ({ ...b, o: v(b.o) }));
     m.pickups.forEach((on, i) => { if (w.pickups[i]) w.pickups[i].active = on; });
     // Hostiles only a teammate sees: spots the server placed near them (fed to the contact intel, never drawn as bodies).
     this.spotted = (m.sp ?? []).map((s) => ({ id: v(s.id), x: s.x, y: s.y }));
@@ -348,7 +353,10 @@ export class OnlineSession {
     if (!mine.alive) { this.predictor.reset(); return; }
     const me = w.actors[0];
     this.predictor.reconcile(w.level, { x: mine.x, y: mine.y, vx: mine.vx, vy: mine.vy, hero: me.hero, slowLeft: mine.slowLeft ?? 0, slowMul: mine.slowMul ?? 1,
-      dashLeft: 0, dashX: 0, dashY: 0, downed: !!mine.downed }, m.ack, m.as ?? 0);
+      dashLeft: 0, dashX: 0, dashY: 0, downed: !!mine.downed,
+      // Superpowers on you: a charging or burning beam slows you, a cage holds you, goo drags and glues you.
+      chargeLeft: mine.cl ?? 0, beamLeft: mine.bl ?? 0, trapLeft: mine.tl ?? 0, trapX: mine.tx ?? 0, trapY: mine.ty ?? 0, trapR: mine.tr ?? 0,
+      pinLeft: mine.pl ?? 0, pinX: mine.px ?? 0, pinY: mine.py ?? 0 }, m.ack, m.as ?? 0);
   }
 
   /** Events from snapshots received since the last call, in order (feed them to the same handlers as solo). */
@@ -412,6 +420,11 @@ export class OnlineSession {
       const weapon = WEAPONS[x.weapon] ?? WEAPONS.rifle;
       return { x: x.x + x.dx * weapon.bulletSpeed * ahead, y: x.y + x.dy * weapon.bulletSpeed * ahead, dx: x.dx, dy: x.dy, ox: x.ox, oy: x.oy, life: 1, owner: this.toView.get(x.owner) ?? 1, weapon, alive: true };
     });
+    // Superpower globs: the newest server state, carried forward along their path to now.
+    w.orbs = (newest.msg.ob ?? []).map((o) => {
+      const owner = this.toView.get(o.owner) ?? 1, sp = ORB.speed[o.k];
+      return { id: o.id, kind: o.k, x: o.x + o.dx * sp * ahead, y: o.y + o.dy * sp * ahead, dx: o.dx, dy: o.dy, ox: o.x, oy: o.y, left: 1, owner, team: w.actors[owner]?.team ?? 'bravo', alive: true };
+    });
     // Grenades: the newest server state, rolled forward along their velocity to now (drawn with the fuse ring).
     w.grenades = (newest.msg.grenades ?? []).map((g) => {
       const owner = this.toView.get(g.owner) ?? 1;
@@ -438,5 +451,9 @@ function copy(act: Actor, s: NetActor): void {
   // Sent only when someone on your side marked it: in a two-side match that is the other side from it.
   act.markLeft = s.mk ? TUNING.perks.markerSeconds : 0;
   act.markTeam = s.mk ? (act.team === 'alpha' ? 'bravo' : 'alpha') : null;
+  act.chargeLeft = s.cl ?? 0; act.beamLeft = s.bl ?? 0; if (s.ba !== undefined) act.beamAng = s.ba;
+  act.trapLeft = s.tl ?? 0; act.trapX = s.tx ?? act.x; act.trapY = s.ty ?? act.y; act.trapR = s.tr ?? 0;
+  act.pinLeft = s.pl ?? 0; act.pinX = s.px ?? act.x; act.pinY = s.py ?? act.y;
+  act.auraLeft = s.al ?? 0;
   applyFocus(act);
 }

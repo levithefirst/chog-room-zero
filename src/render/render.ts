@@ -12,7 +12,7 @@ import { WALL, walkable, type Level } from '../sim/level';
 import { pointInPolygon } from '../sim/geom';
 import { canSee, visibilityPolygon } from '../sim/vision';
 import { createLightMesh, type LightMesh, type LightParams } from './lightmesh';
-import { lootTake, player, revealed, wants, type Actor, type World } from '../sim/world';
+import { beamEnd, beamNear, lootTake, player, revealed, wants, type Actor, type World } from '../sim/world';
 import type { Brain } from '../sim/bots';
 import { touchStick, AIM_DEADZONE, type Input } from '../input/input';
 import { bakeMap, type Baked } from './bake';
@@ -144,6 +144,9 @@ export interface DrawOpts {
   hud?: readonly Rect[];
   /** CF hub backdrop: the live room behind the menus, zoomed in this much on the operator, camera fixed on it. */
   menu?: number;
+  /** Online: hostile beams crossing you whose owner you are not shown (the server's stretch of line). Solo works it
+   * out from the world with the same rule (beamNear). */
+  beams?: readonly { k: 'laser' | 'xray'; x: number; y: number; a: number; len: number; c: number }[];
 }
 
 export interface Renderer {
@@ -161,6 +164,8 @@ export interface Renderer {
 }
 
 export const COVER_FLASH_SECONDS = 0.18;
+/** Each CHOG superpower's colour: its beam, glob, cage, goo or aura, and the pip by its owner's bar. */
+export const POWER_COLOR: Record<string, number> = { laser: 0xff3b2f, xray: 0xb57bff, bubble: 0xff7ac8, drool: 0x8bd450, aura: 0xffd166 };
 // Portrait camera: the same smoothing with a longer lead toward the aim (TUNING.render.portraitLookahead).
 const PORTRAIT_CAM = { ...TUNING.render, lookahead: TUNING.render.portraitLookahead };
 // The player's drawn radius plus its overhead bar, in u: how far from a HUD band the portrait camera keeps it.
@@ -525,7 +530,66 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
     for (; i < commsTexts.length; i++) commsTexts[i].visible = false;
   }
 
-  // Compact overhead bar for a visible actor: 34x4 px HP, 34x2 px armour (at ppu ~35).
+  /**
+   * CHOG superpowers (src/config/superpowers.ts), drawn for you, your team and hostiles you are shown: a thin charge
+   * line then the beam (red Laser, violet X-Ray), globs in flight, the cage, the goo strand to the wall, the aura. A
+   * hostile beam you are not shown is drawn only where it crosses you (the counter to X-Ray).
+   */
+  function drawPowers(w: World, p: Actor, opts: DrawOpts) {
+    const g = actors, t = w.tick;
+    const shown = (a: Actor) => a === p || a.team === p.team || shownHostiles.includes(a);
+    const beamCol = (k: string) => POWER_COLOR[k] ?? POWER_COLOR.laser;
+    for (const a of w.actors) {
+      if (!a.alive || a.x < -50) continue;
+      if (shown(a)) {
+        if (a.chargeLeft > 0 || a.beamLeft > 0) {
+          const e = beamEnd(w, a), col = beamCol(a.ability.kind);
+          if (a.beamLeft > 0) {
+            g.moveTo(a.x, a.y).lineTo(e.x, e.y).stroke({ width: 0.34, color: col, alpha: 0.25 });
+            g.moveTo(a.x, a.y).lineTo(e.x, e.y).stroke({ width: 0.12, color: 0xfff1e8, alpha: 0.95 });
+            circle(g, e.x, e.y, 0.18 + 0.05 * Math.sin(t), 10).fill({ color: col, alpha: 0.8 });
+          } else {
+            // Charge: a thin line along the aim that brightens as it fills (the telegraph).
+            const fill = 1 - a.chargeLeft / (a.ability.windup ?? 0.35);
+            g.moveTo(a.x, a.y).lineTo(e.x, e.y).stroke({ width: 0.04 + 0.04 * fill, color: col, alpha: 0.35 + 0.5 * fill });
+          }
+        }
+        if (a.trapLeft > 0) {
+          circle(g, a.trapX, a.trapY, a.trapR, 36).fill({ color: POWER_COLOR.bubble, alpha: 0.12 }).stroke({ width: 0.07, color: POWER_COLOR.bubble, alpha: 0.85 });
+          circle(g, a.trapX - a.trapR * 0.35, a.trapY - a.trapR * 0.4, a.trapR * 0.18, 10).fill({ color: 0xffffff, alpha: 0.35 });
+        }
+        if (a.pinLeft > 0) {
+          // Goo from the wall spot to the body, and a ring of glue while it holds.
+          g.moveTo(a.pinX, a.pinY).lineTo(a.x, a.y).stroke({ width: 0.09, color: POWER_COLOR.drool, alpha: 0.8 });
+          circle(g, a.x, a.y, 0.5, 18).stroke({ width: 0.1, color: POWER_COLOR.drool, alpha: 0.75 });
+        }
+        if (a.auraLeft > 0) {
+          const pulse = 0.5 + 0.5 * Math.sin(t / 5);
+          circle(g, a.x, a.y, 0.62 + 0.08 * pulse, 28).fill({ color: POWER_COLOR.aura, alpha: 0.14 }).stroke({ width: 0.09, color: POWER_COLOR.aura, alpha: 0.6 + 0.35 * pulse });
+        }
+      } else if (a.team !== p.team && !opts.beams) {
+        const n = beamNear(w, a, p);
+        if (n) warnBeam(a.ability.kind === 'xray' ? 'xray' : 'laser', n, a.chargeLeft);
+      }
+    }
+    for (const b of opts.beams ?? []) warnBeam(b.k, b, b.c);
+    for (const o of w.orbs) {
+      if (o.team !== p.team && Math.hypot(o.x - p.x, o.y - p.y) > 3 && !pointInPolygon(o.x, o.y, poly)) continue;
+      if (o.kind === 'bubble') circle(g, o.x, o.y, 0.35, 18).fill({ color: POWER_COLOR.bubble, alpha: 0.35 }).stroke({ width: 0.05, color: POWER_COLOR.bubble, alpha: 0.95 });
+      else {
+        g.moveTo(o.x - o.dx * 0.5, o.y - o.dy * 0.5).lineTo(o.x, o.y).stroke({ width: 0.08, color: POWER_COLOR.drool, alpha: 0.7 });
+        circle(g, o.x, o.y, 0.2, 10).fill({ color: POWER_COLOR.drool, alpha: 0.95 });
+      }
+    }
+  }
+  function warnBeam(k: string, n: { x: number; y: number; a: number; len: number }, charge: number) {
+    const col = POWER_COLOR[k] ?? POWER_COLOR.laser;
+    actors.moveTo(n.x, n.y).lineTo(n.x + Math.cos(n.a) * n.len, n.y + Math.sin(n.a) * n.len)
+      .stroke({ width: charge > 0 ? 0.06 : 0.16, color: col, alpha: charge > 0 ? 0.75 : 0.9 });
+  }
+
+  // Compact overhead bar for a visible actor: 34x4 px HP, 34x2 px armour (at ppu ~35). A Chog with a superpower wears
+  // its power's colour as a pip before the bar, so you can read "this one has X-Ray Eyes" (never anything you cannot see).
   function drawBar(a: Actor, hostile: boolean) {
     const W = 0.96, H = 0.11, x = a.x - W / 2, y = a.y - TUNING.movement.radius * R.actorScale - 0.42;
     bars.rect(x - 0.03, y - 0.03, W + 0.06, H + 0.1).fill({ color: KEYLINE, alpha: 0.75 });
@@ -538,6 +602,10 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
     // Overheal (a health pickup taken at full health): a cream extension past the bar's end, kept until damage takes it.
     if (a.hp > a.maxHp && !a.downed) bars.rect(x + W, y, W * Math.min(0.25, (a.hp - a.maxHp) / a.maxHp), H).fill(P.signal);
     if (a.maxArmor > 0 && a.armor > 0) bars.rect(x, y + H + 0.015, W * Math.min(1, a.armor / a.maxArmor), 0.05).fill(P.armor);
+    if (a.ability.power) {
+      const cx = x - 0.16, cy = y + H / 2;
+      bars.poly([cx, cy - 0.1, cx + 0.1, cy, cx, cy + 0.1, cx - 0.1, cy]).fill(POWER_COLOR[a.ability.power]).stroke({ width: 0.025, color: KEYLINE });
+    }
   }
 
   // ?debug: what each bot believes and why (docs/design/bots.md). Text objects pooled.
@@ -874,6 +942,7 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
         }
       }
       drawContacts(w, fx.intel, p);
+      drawPowers(w, p, opts);
       drawBody(actors, p, false, opts.marking, false);
       if (p.alive && !opts.menu) drawBar(p, false);
       drawComms(w, fx);
