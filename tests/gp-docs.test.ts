@@ -4,7 +4,7 @@ import { DOCS, docsHtml } from '../src/ui/docs';
 import { TUNING } from '../src/config/tuning';
 import { MEDALS } from '../src/ui/medals';
 
-const WANT = ['How to Play', 'Combat', 'Movement', 'Vision & Information', 'Sound', 'Squads', 'Revives', 'Enemy Teams', 'Pickups', 'Enemy Loot', 'Perks', 'Medals', 'Upgrades', 'Rewards', 'CHOG', 'Matchmaking', 'Leaderboards', 'Controls', 'Game Modes', 'FAQ'];
+const WANT = ['How to Play', 'Combat', 'Movement', 'Vision & Information', 'Sound', 'Squads', 'Revives', 'Enemy Teams', 'Pickups', 'Enemy Loot', 'Perks', 'CHOG Superpowers', 'Medals', 'Upgrades', 'Rewards', 'CHOG', 'Matchmaking', 'Leaderboards', 'Controls', 'Game Modes', 'FAQ'];
 
 describe('Game Docs', () => {
   it('has every section the owner asked for, in order, with unique ids and real content on both platforms', () => {
@@ -33,5 +33,18 @@ describe('Game Docs', () => {
   it('CHOG is explained only where it matters to play (never a sales pitch)', () => {
     const all = DOCS.map((d) => d.html(false)).join(' ').toLowerCase();
     for (const banned of [/\bbuy now\b/, /\bmint\b/, /\bfloor price\b/, /\bto the moon\b/, /\binvest(ment)?\b/]) expect(all).not.toMatch(banned);
+  });
+});
+
+describe('CHOG Superpowers doc (owner 2026-10-18)', () => {
+  it('names every power, its trait, its counter and every rank\'s numbers from the power table', async () => {
+    const { SUPERPOWERS, SUPERPOWER_IDS, RANKS, rankLine } = await import('../src/config/superpowers');
+    const h = DOCS.find((d) => d.id === 'superpowers')!.html(false);
+    for (const id of SUPERPOWER_IDS) {
+      expect(h).toContain(SUPERPOWERS[id].name);
+      for (const r of RANKS) expect(h).toContain(rankLine(id, r));
+    }
+    expect(h).toMatch(/never adds health, armour or weapon damage/);
+    expect(h).toMatch(/shows you nothing behind them/);
   });
 });

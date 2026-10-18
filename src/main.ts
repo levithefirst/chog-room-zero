@@ -42,9 +42,10 @@ import { createAutopilot, type Autopilot } from './debug/autopilot';
 import { createOnlineDriver } from './debug/onlineDriver';
 import * as account from './net/account';
 import { emptyAcct } from './ui/account';
-import { SUPERPOWERS } from './config/superpowers';
+import { RANKS, SUPERPOWERS, SUPERPOWER_IDS, superAbility, type Rank, type SuperpowerId } from './config/superpowers';
+import { createTraining, drillFor, stepTraining, trainingInput, trainingStatus, trainingSummary, type TrainingRun } from './sim/training';
 import { pointInPolygon } from './sim/geom';
-import { chogName, powerForToken, signatureFor, tierOfMetadataId, ONE_OF_ONE, TIER_DEFS, type Power } from './config/power';
+import { BASE_POWER, chogName, powerForToken, signatureFor, tierOfMetadataId, ONE_OF_ONE, TIER_DEFS, type Power } from './config/power';
 import { tierEffect } from './ui/account';
 import { LAB, applyLab } from './config/lab';
 import { OWN_NOISE, markKind } from './render/marks';
@@ -179,6 +180,8 @@ async function start() {
   let lastRun: { newBest: { time: boolean; kills: boolean }; earned: MedalDef[]; saved: 'account' | 'session' | 'saving' | 'failed'; reward?: RewardView | null } | null = null;
   // The signed start ticket of the current signed-in run (the site pays a run only with it).
   let practiceTicket: { ticket: string; runId: string; run: number } | null = null;
+  // CHOG Training (src/sim/training.ts): the drill being played, with the power it trains. Earns and records nothing.
+  let training: { id: SuperpowerId; power: Power; run: TrainingRun | null } | null = null;
   // Progression belongs to the account (master integration pass): records, medals, callsign, favourite and pins come
   // from the server for a signed-in player. A guest's live in this memory store for the session only. The browser
   // keeps preferences only (settings, tips, onboarding, last operator, last mode, demo pick).
@@ -451,6 +454,7 @@ async function start() {
     if (e === 'restart') product.retries++;
     if (e === 'quit' && (from === 'play' || from === 'pause')) { product.quits++; sendMatchReport('quit'); }
     phase = next;
+    if (next === 'title') training = null;
     if (next === 'results') {
       resultsAt = performance.now();
       summaryGate.open(resultsAt);
@@ -488,9 +492,16 @@ async function start() {
       }
       case 'pause': return showPause();
       case 'recap': return showRecap();
-      case 'results': return online ? showOnlineResults() : show(resultsHtml(ctx(), report()));
+      case 'results': return online ? showOnlineResults() : training?.run ? showTrainingResults(training.run) : show(resultsHtml(ctx(), report()));
       default: return;
     }
+  }
+
+  function showTrainingResults(run: TrainingRun) {
+    const s = trainingSummary(run);
+    card(`<div class="kicker">Training${training?.power.demo ? ' · <span class="demo">DEMO</span>' : ''}</div><h2 id="training-title">${esc(run.drill.name)}</h2>
+<p class="num" id="training-score">${s.lines.map(esc).join('<br>')}</p><p class="small dim">Training earns nothing and records nothing.</p>
+<div class="btns"><button class="btn primary" data-go="restart" id="training-again">Again</button><button class="btn" data-go="menu" id="training-back">Back</button></div>`);
   }
 
   function card(html: string, cls = 'layer') {
@@ -556,6 +567,9 @@ async function start() {
       <table class="traits"><tr><th>Trait</th><th>Effect</th><th>Counterplay</th></tr>${rows}</table>
       <p style="font-size:13px">On top of the tier, the token number picks a play-shape trait (hash of the number, mod 4) and a marking colour. Speed never changes.</p>
       <div class="btns">${picks}<button class="btn" data-demo="">Play as guest</button></div>
+      <h3>CHOG Training</h3><p class="democopy">Try any CHOG superpower at any rank in its drill. <span class="demo">DEMO</span>: nothing is recorded; in a real match only a verified Chog whose traits carry the power has it.</p>
+      <div class="btns"><select id="trainrank" aria-label="Rank">${RANKS.map((r) => `<option value="${r}">${esc(TIER_DEFS[r].label === '1:1' ? 'Legendary' : TIER_DEFS[r].label)}</option>`).join('')}</select>
+      ${SUPERPOWER_IDS.map((id) => `<button class="btn small" data-train="${id}">${esc(SUPERPOWERS[id].name)}</button>`).join('')}</div>
       <div class="btns"><button class="btn primary" data-act="demo-close">Back</button></div>`);
   }
 
@@ -710,6 +724,7 @@ async function start() {
         titleView = 'docs'; docsOpen = 'how-to-play'; break;
       case 'howto-close': closeHowto(); break;
       case 'play': hubPlay(); return;
+      case 'training': startTraining(soloPower()); return;
       case 'demo-online': if (identity.tokenId && tierOfMetadataId(Number(identity.tokenId))) setChoice({ demo: Number(identity.tokenId) }); break;
       case 'demo-online-off': setChoice(null); break;
       case 'online-cancel': net?.leave(); break;
@@ -842,6 +857,14 @@ async function start() {
     if (tk) { e.preventDefault(); setChoice(tk.dataset.token ? { tokenId: Number(tk.dataset.token) } : null); render(); return; }
     const sp = t.closest('[data-sp]') as HTMLElement | null;
     if (sp) { e.preventDefault(); setPower(sp.dataset.sp!); return; }
+    // DEMO Training: any power at any rank, labelled DEMO (never a real match's power).
+    const tr = t.closest('[data-train]') as HTMLElement | null;
+    if (tr) {
+      e.preventDefault();
+      const id = tr.dataset.train as SuperpowerId, rank = ((document.getElementById('trainrank') as HTMLSelectElement | null)?.value ?? 'common') as Rank;
+      if (SUPERPOWER_IDS.includes(id) && RANKS.includes(rank)) startTraining({ ...BASE_POWER, tier: rank, demo: true, superpower: superAbility(id, rank) });
+      return;
+    }
     const up = t.closest('[data-upgrade]') as HTMLElement | null;
     if (up) { e.preventDefault(); void buyUpgrade(up.dataset.upgrade!); return; }
     const fav = t.closest('[data-fav]') as HTMLElement | null;
@@ -1051,9 +1074,10 @@ async function start() {
   function beginWorld() {
     runIndex++;
     // The default game: you + 2 AI teammates (other operators than yours) against the five hostile bots.
-    world = createWorld({ seed: TUNING.seed + runIndex, hero: heroId, sidegrade: identity.sidegrade, zone: true, power: soloPower(), allies: squadmates() });
+    if (training) { const tr = createTraining(training.id, training.power, heroId); world = tr.world; training.run = tr.run; }
+    else world = createWorld({ seed: TUNING.seed + runIndex, hero: heroId, sidegrade: identity.sidegrade, zone: true, power: soloPower(), allies: squadmates() });
     practiceTicket = null;
-    if (signedIn() && !LAB_ON) {
+    if (signedIn() && !LAB_ON && !training) {
       const run = runIndex;
       void account.practiceStart().then((r) => { if (r?.ticket && r.runId && run === runIndex) practiceTicket = { ticket: r.ticket, runId: r.runId, run }; });
     }
@@ -1088,6 +1112,20 @@ async function start() {
       ? 'Left thumb: move · Right thumb: aim and fire · Grenade button: throw'
       : 'WASD move · Mouse aim · Click fire · Space ability · G grenade · R reload';
     showHint(hint.innerHTML, runIndex === 1 ? 6 : 0);
+    if (training?.run) {
+      const sp = world.actors[0].ability, d = training.run.drill;
+      $('hero').innerHTML = `${esc(h.name)} · Training · ${training.power.demo ? '<span class="demo">DEMO</span> ' : ''}${esc(sp.name)} (${esc(TIER_DEFS[sp.rank ?? 'common'].label)})`;
+      showHint(`${esc(d.name)}: ${esc(d.goal)} Cooldown shortened to ${sp.cooldown} s for the drill. Nothing is recorded.`, 7);
+    }
+  }
+  /** Start a CHOG Training drill for a power (your verified Chog's, or a labelled DEMO one). */
+  function startTraining(power: Power) {
+    const id = drillFor(power);
+    if (!id) return;
+    training = { id, power, run: null };
+    online = false;
+    go('start');
+    go('pick');
   }
 
   /** AI teammates for the default game: the two operators after yours in the roster, with their own names. */
@@ -1361,6 +1399,8 @@ async function start() {
   // Match end: the one place a practice run is saved. Signed in: the site stores it on the account and awards medals
   // there. Guest: this session's memory only. Never per frame, never to localStorage.
   function endRun(won: boolean) {
+    // Training keeps nothing anywhere: no report, no records, no medals, no rewards.
+    if (training) { lastRun = { newBest: { time: false, kills: false }, earned: [], saved: 'session' }; return; }
     sendMatchReport(won ? 'won' : 'lost');
     product.completed++;
     if (won) product.won++; else product.died++;
@@ -1641,7 +1681,7 @@ async function start() {
   }
   /** The match is over (won, lost, quit, dropped): one anonymous record, if the player shares stats. */
   function sendMatchReport(outcome: ReportOutcome) {
-    if (rep.sent || LAB_ON || !settings.shareStats) return;
+    if (rep.sent || LAB_ON || training || !settings.shareStats) return;
     rep.sent = true;
     const anon = anonId();
     if (!anon) return;
@@ -1830,6 +1870,8 @@ async function start() {
       view: () => titleView, runFacts: () => ({ pickups: runPickups, abilities: runAbilities }), stick: () => touchStick.radius,
       // SB telemetry (on the device only): this match, the session funnel, frame timing.
       telemetry: () => teleSummary(tele), product: () => ({ ...product }), perf: () => perfNow(),
+      // CHOG Training (tools/sp-training.mjs): the drill in play, or null.
+      training: () => training?.run ?? null,
       resolution: () => renderer.app.renderer.resolution, volume: () => audio.volume,
       // RC-8 online (tools/rc8-online.mjs): the session and whether the shown world is an online match. Test builds only.
       ...(__TEST_HOOKS__ ? { net: () => net, online: () => online } : {}) });
@@ -1903,7 +1945,8 @@ async function start() {
       const inp = r.steps > 0 ? input.read(ps.x, ps.y, renderer.toScreen(p.x + 1, p.y).x - ps.x) : null;
       if (inp) trackFire(inp.firing);
       for (let i = 0; inp && i < r.steps && world.outcome === 'playing'; i++) {
-        stepWorld(world, autopilot ? autopilot.next(world) : inp);
+        stepWorld(world, autopilot ? autopilot.next(world) : training?.run ? trainingInput(training.run, world, inp) : inp);
+        if (training?.run) { stepTraining(training.run, world); if (training.run.done && world.outcome === 'playing') world.outcome = 'won'; }
         inp.reload = false;
         inp.ability = false;
         inp.grenade = false;
@@ -2024,7 +2067,8 @@ async function start() {
         : p.trapLeft > 0 ? `Caged · ${p.trapLeft.toFixed(1)} s · you can still shoot`
         : p.auraLeft > 0 ? `Aura · untouchable ${p.auraLeft.toFixed(1)} s · press again to drop it`
         : p.slowLeft > 0 ? `Slowed ${Math.round((1 - p.slowMul) * 100)}% · ${p.slowLeft.toFixed(1)} s` : guard ? `${guard.name} covering you` : '';
-      if (st !== lastStatus) { lastStatus = st; $('status').textContent = st; }
+      const st2 = training?.run ? trainingStatus(training.run) : st;
+      if (st2 !== lastStatus) { lastStatus = st2; $('status').textContent = st2; }
       feed = feed.filter((f) => playTime - f.t < 6);
       const fh = feed.map((f) => `<li class="${f.mine ? 'mine' : ''}${f.down ? ' down' : ''}">${f.html}</li>`).join('');
       if (fh !== lastFeed) { lastFeed = fh; $('feed').innerHTML = fh; }
@@ -2068,6 +2112,13 @@ async function start() {
         zoneTickLeft -= dt;
         if (zoneTickLeft <= 0) { zoneTickLeft = 0.75; audio.play('hurt', 0, 0, 1, false, true); }
       } else zoneTickLeft = 0;
+    } else if (lastZone !== 'none') {
+      // No zone in this world (CHOG Training): no countdown that would never come.
+      lastZone = 'none';
+      $('zphase').textContent = training ? 'No zone' : '';
+      $('ztime').textContent = '';
+      $('zone').classList.remove('hot');
+      $('zoneedge').style.opacity = '0';
     }
     // CF damage ghost: hold the lost health 0.35 s, then drain it over ~0.5 s.
     if (p.hp >= hpGhost) { hpGhost = p.hp; ghostHold = 0.35; }

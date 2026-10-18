@@ -10,6 +10,8 @@ import { HEROES } from '../config/heroes';
 import { THREAT_RANGE } from './downed';
 import { PERKS, PERK_IDS } from '../config/perks';
 import { CHALLENGE_REWARDS } from '../config/challenges';
+import { RANKS, SUPERPOWERS, SUPERPOWER_IDS, rankLine } from '../config/superpowers';
+import { DRILLS } from '../sim/training';
 import { esc } from './screens';
 
 export interface DocSection { id: string; title: string; html: (touch: boolean) => string }
@@ -94,11 +96,20 @@ ${li([...PERK_IDS.map((k) => `<b>${PERKS[k].name}</b>: ${PERKS[k].text}`),
     `Already carrying one? Stand still on the bag for ${TUNING.perks.swapSeconds} s to swap: yours goes into the bag. Standing still in the open is the price.`,
     'AI teammates take a perk when their slot is empty, and never swap one they have.',
   ])}` },
+  { id: 'superpowers', title: 'CHOG Superpowers', html: () => `<p>A verified Chog whose real traits carry one of these gets it in its one ability slot, in place of the operator's ability. Its rarity is the power's rank: rarer lasts longer, reaches further or comes back sooner. It never adds health, armour or weapon damage. Free players keep everything else: the same map, weapons, pickups, upgrades and matches.</p>
+<table class="howto"><tr><th>Power</th><th>From the trait</th><th>Counter</th></tr>${SUPERPOWER_IDS.map((id) => { const d = SUPERPOWERS[id]; return `<tr><td><b>${esc(d.name)}</b> (${d.role})<br><small>${esc(d.text)}</small></td><td>${esc(d.trait)}</td><td>${esc(d.counter)}</td></tr>`; }).join('')}</table>
+<p>By rank (Common to Legendary):</p>${li(SUPERPOWER_IDS.map((id) => `<b>${esc(SUPERPOWERS[id].name)}</b>: ${RANKS.map((r) => esc(rankLine(id, r))).join(' · ')}`))}
+${li([
+    'Your enemy can read it: the match intro names each opponent\'s power, and a coloured diamond by their health bar shows it (red Laser, violet X-Ray, pink Bubble, green Drool, gold Aura). Nothing about a player you cannot see is shown.',
+    'X-Ray goes through walls but shows you nothing behind them. Its target sees the violet line cross them while it charges.',
+    'A Chog with several power traits picks one on the Class panel. A Chog with none plays its operator\'s ability.',
+    `CHOG Training (Class panel, or DEMO): one drill per power (${SUPERPOWER_IDS.map((id) => esc(DRILLS[id].name)).join(', ')}), its real numbers with a shorter cooldown. Training earns and records nothing.`,
+  ])}` },
   { id: 'medals', title: 'Medals', html: () => `<p>${MEDALS.length} medals: ${rarityCount('common')} common, ${rarityCount('uncommon')} uncommon, ${rarityCount('rare')} rare, ${rarityCount('epic')} epic.
 Commons come from playing; rare and epic ones need runs most players rarely have (a clear in under 30 seconds, a last stand, a run without a scratch).</p>
 ${li(['Signed in, medals are awarded and kept on your account (any device). As a guest they last for the session.', 'Online medals come from matches the server saved, never from the browser.',
     'Pin up to three on your player card.'])}` },
-  { id: 'upgrades', title: 'Upgrades', html: () => `<p>Shards buy upgrade ranks. Upgrades raise your free profile towards the lower Chog tiers; nothing is sold.</p>
+  { id: 'upgrades', title: 'Upgrades', html: () => `<p>Shards buy upgrade ranks. Free players and Chog holders buy the same upgrades at the same prices; nothing is sold.</p>
 ${li(UPGRADE_IDS.map((id) => `<b>${esc(UPGRADES[id].name)}</b>: ${esc(UPGRADES[id].text)}, ${UPGRADES[id].ranks} ranks, first rank ${UPGRADES[id].costs[0]} shards.`))}` },
   { id: 'rewards', title: 'Rewards', html: () => li([
     `Daily: three challenges a day (the same for everyone, new at 00:00 UTC), easy, medium and hard, paying ${CHALLENGE_REWARDS[1].shards}, ${CHALLENGE_REWARDS[2].shards} and ${CHALLENGE_REWARDS[3].shards} shards once each. They count your verified solo runs and online matches of the day (the hub card shows how far you are). Nothing carries over and nothing is lost if you skip a day.`,
@@ -109,13 +120,14 @@ ${li(UPGRADE_IDS.map((id) => `<b>${esc(UPGRADES[id].name)}</b>: ${esc(UPGRADES[i
   ]) },
   { id: 'chog', title: 'CHOG', html: () => li([
     'You never need a wallet or an NFT to play solo, 1v1 or 3v3.',
-    'Verified Chog Genesis holders start stronger by their Chog\'s rarity, and the ten 1:1 Chogs have their own signature ability. Ownership is checked on the server, on Monad, every time.',
+    'A verified Chog Genesis holder gets the superpower its Chog\'s real traits carry, in place of the operator\'s ability (see CHOG Superpowers). Rarity is the power\'s rank. No Chog changes health, armour or weapon damage.',
+    'The ten 1:1 Chogs have their own signature ability instead. Ownership is checked on the server, on Monad, every time.',
     '5v5 is for verified holders only. Your Chog keeps its own match history, separate from your account.',
     'There is nothing to buy: Chog power cannot be bought in the game, and $CHOG plays no part in a match.',
   ]) },
   { id: 'matchmaking', title: 'Matchmaking', html: () => li([
     'Online, the game server runs the match: movement, shots, damage, pickups, loot and revives are decided there.',
-    'You are matched by rating, and a Chog tier counts at its measured strength, so the sides stay even.',
+    'You are matched by rating. A Chog adds no health, armour or damage, so its tier does not change who you meet.',
     'A private code (squad) plays who you invite. Private rooms pay nothing and move no rating.',
     'Lost connection? You have a short time to come back to the same match; your operator stands still meanwhile.',
   ]) },
@@ -138,6 +150,7 @@ ${li(UPGRADE_IDS.map((id) => `<b>${esc(UPGRADES[id].name)}</b>: ${esc(UPGRADES[i
 <dt>Why did I slow down?</dt><dd>A Snare (the status under your health says so, for 2 s) or you were downed (the card at the top). A hit alone never slows you.</dd>
 <dt>Why is my health going down?</dt><dd>You are outside the danger zone (the HUD says Outside zone and the screen edge pulses red), or you are downed and bleeding out. Nothing else takes health without a hit.</dd>
 <dt>Why didn't my shot fire straight away?</dt><dd>You turned a long way: the shot waits until your body faces where you aim (a fraction of a second), so it goes where you meant.</dd>
+<dt>Why can't I move?</dt><dd>A Bubble caged you or Drool glued you to a wall (the status under your health says which and for how long). You can still aim and shoot.</dd>
 <dt>Can I play without a wallet?</dt><dd>Yes: solo, 1v1 and 3v3 never need one.</dd>
 <dt>Where is my rank?</dt><dd>Leaderboard, at the top: sign in and finish a run (Solo) or a match (Online).</dd>
 <dt>Do I lose my progress as a guest?</dt><dd>A guest's runs last for the session. Sign in (Google or wallet) to keep XP, shards, upgrades, medals and your rank.</dd>
