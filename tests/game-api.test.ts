@@ -118,6 +118,25 @@ describe('ownership (live chain read, fails closed)', () => {
     expect((await call('POST', 'ticket', { body: {}, origin: 'https://evil.example' })).status).toBe(403);
     expect((await call('POST', 'ticket-check', { body: { ticket: 'abc.def' }, origin: null })).status).toBe(401);
   });
+  it('CHOG superpower: the ticket carries only a power the verified token\'s own traits carry; free and NFT-off carry none', async () => {
+    // Token 36 here is Chog #36 (Uncommon): Laser Eyes and an Aura in the catalogue.
+    chain.owned[WALLET] = [...(chain.owned[WALLET] ?? []), 36]; chain.meta[36] = 36;
+    const pick = await call('POST', 'ticket', { cookie: await walletCookie(), body: { tokenId: 36, power: 'aura' } });
+    expect(pick.j.profile).toMatchObject({ holder: true, metadataId: 36, tier: 'uncommon', power: 'aura', powerName: 'Aura' });
+    expect((await call('POST', 'ticket-check', { body: { ticket: pick.j.ticket }, origin: null })).j.ticket.sp).toBe('aura');
+    // A power the token does not carry is dropped: the ticket plays its default (first) power.
+    const bad = await call('POST', 'ticket', { cookie: await walletCookie(), body: { tokenId: 36, power: 'bubble' } });
+    expect(bad.j.profile).toMatchObject({ power: 'laser' });
+    expect((await call('POST', 'ticket-check', { body: { ticket: bad.j.ticket }, origin: null })).j.ticket.sp).toBeUndefined();
+    const off = await call('POST', 'ticket', { cookie: await walletCookie(), body: { tokenId: 36, power: 'aura' } }, { NFT_COMBAT: '0' });
+    expect(off.j.profile).toMatchObject({ holder: true, tier: 'free', power: null });
+    const google = await call('POST', 'ticket', { cookie: await cookieFor([{ provider: 'google', subject: 'g', label: 'g' }]), body: { tokenId: 36, power: 'aura' } });
+    expect(google.j.profile).toMatchObject({ holder: false, tier: 'free', power: null });
+    const demo = await call('POST', 'ticket', { body: { demo: 36, power: 'aura' } });
+    expect(demo.j.profile).toMatchObject({ demo: true, power: 'aura' });
+    // A 1:1 keeps its signature: no superpower.
+    expect((await call('POST', 'ticket', { body: { demo: 53, power: 'laser' } })).j.profile).toMatchObject({ power: null, signature: 'Flashfire' });
+  });
   it('demo tickets: real catalogue tier, labelled, no account, never a holder', async () => {
     const t = await call('POST', 'ticket', { body: { demo: 1373 } });
     expect(t.j.profile).toMatchObject({ demo: true, holder: false, account: false, tier: 'legendary', signature: 'Gold Shell' });

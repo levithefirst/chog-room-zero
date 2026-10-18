@@ -94,7 +94,9 @@ describe('hub', () => {
     expect(h).not.toMatch(/CHOG HOLDERS ONLY/);
     expect(fiveLockReason(a)).toBeNull();
     expect(classOf(a)).toMatchObject({ source: 'token', tier: 'legendary', metadataId: 53 });
-    expect(classOf(a).power.hpMul).toBe(1.75);
+    // Owner 2026-10-18: no rarity health or damage; the 1:1 plays its signature in the ability slot.
+    expect(classOf(a).power.hpMul).toBe(1);
+    expect(classOf(a).power.signature?.name).toBe('Flashfire');
   });
   it('NFT combat switched off: the token still shows, power is free, and the hub says so', () => {
     const a = { ...holder(), config: { ...cfg, nftCombat: false } };
@@ -160,7 +162,7 @@ describe('sub-screens', () => {
   });
   it('tier effects come from the power table and say speed never changes', () => {
     expect(tierEffect('free')).toMatch(/upgrades/);
-    expect(tierEffect('common')).toBe('+15% health, +8 armour. Speed never changes.');
-    expect(tierEffect('legendary')).toMatch(/\+75% health, \+35 armour, \+12% damage, its own signature ability/);
+    expect(tierEffect('common')).toBe('Base stats. The Chog\'s superpower plays at Common rank. Speed never changes.');
+    expect(tierEffect('legendary')).toMatch(/Base stats and its own signature ability/);
   });
 });

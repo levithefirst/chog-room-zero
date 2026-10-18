@@ -368,7 +368,7 @@ export class Lobby {
   /** Power a player's ticket entitles them to. No ticket: base power. */
   static powerOf(t: GameTicket | null): Power {
     if (!t) return BASE_POWER;
-    return powerFor(t.tier, t.up, t.mid && t.tier === 'legendary' ? signatureFor(t.mid) : null, t.demo, t.mid);
+    return powerFor(t.tier, t.up, t.mid && t.tier === 'legendary' ? signatureFor(t.mid) : null, t.demo, t.mid, t.sp ?? null);
   }
 
   /**
@@ -479,6 +479,8 @@ export class Lobby {
         return {
           id: a.id, name: a.name, hero: a.hero.id, team: a.team, tier: a.power.tier as Tier, holder: !!t?.holder, demo: !!t?.demo, metadataId: t?.mid ?? null,
           ability: { kind: a.ability.kind, name: a.ability.name, cooldown: a.ability.cooldown, text: a.ability.text },
+          // The superpower in play (from the verified ticket), so every client builds the same ability and can name it.
+          ...(a.power.superpower?.power ? { sp: a.power.superpower.power } : {}),
         };
       }),
       startsIn: Math.max(0, (room.startTick - room.steps) * STEP), zone: w.zone?.plan ?? [], demo: room.demo,

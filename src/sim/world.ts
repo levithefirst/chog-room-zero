@@ -6,7 +6,7 @@ import { spawnPerk, type PerkId } from '../config/perks';
 import { heroById, type AbilityDef, type HeroDef } from '../config/heroes';
 import { BASE_POWER, type Power } from '../config/power';
 import { WEAPONS, damageAt, type WeaponDef } from '../config/weapons';
-import { angleDiff, cornerAssistDir, resolveCircle, segmentCircleT, type Box } from './geom';
+import { angleDiff, cornerAssistDir, resolveCircle, segmentBoxT, segmentCircleT, type Box } from './geom';
 import { WALL, blockedByCover, bulletBlockT, markDynamic, parseLevel, shotClear, sightClear, tileAt, walkable, type Level } from './level';
 import { stepVelocity, type Vec2 } from './sim';
 import { NO_SIDEGRADE, type Sidegrade } from './operators';
@@ -14,6 +14,7 @@ import type { ViewShape } from './vision';
 import { botThink, createBrain, type Brain, type PerceptionEvent } from './bots';
 import { outsideCircle, planZone, zoneAt, type ZoneState } from './zone';
 import { LAB } from '../config/lab';
+import { BEAM, ORB } from '../config/superpowers';
 
 const DEG = Math.PI / 180;
 
@@ -141,6 +142,43 @@ export interface Actor {
   markTeam: Team | null;
   /** V2: seconds standing still on a bag holding a different perk (swap at TUNING.perks.swapSeconds). */
   bagStill: number;
+  /** CHOG superpowers (src/config/superpowers.ts). Laser / X-Ray: charge seconds, then beam seconds, the beam's angle
+   * (it follows the aim at BEAM.turnDegPerSec), and time to its next damage pulse. */
+  chargeLeft: number;
+  beamLeft: number;
+  beamAng: number;
+  beamPulse: number;
+  /** Caged by a Bubble: seconds left and the cage (centre, radius). */
+  trapLeft: number;
+  trapX: number;
+  trapY: number;
+  trapR: number;
+  /** Glued by Drool: seconds left, and the wall spot the goo drags it to. */
+  pinLeft: number;
+  pinX: number;
+  pinY: number;
+  /** Aura: untouchable seconds left (cannot shoot or throw meanwhile). */
+  auraLeft: number;
+  /** Steps since the ability button was last down (Aura drops early on a fresh press after a real release: online,
+   * a held button reaches the server as a press every other step, so a gap shorter than ABILITY_RELEASE is no release). */
+  abilityOff: number;
+}
+
+/** A Bubble or Drool glob in flight: a slow, visible projectile that walls and cover stop. */
+export interface Orb {
+  id: number;
+  kind: 'bubble' | 'drool';
+  x: number;
+  y: number;
+  dx: number;
+  dy: number;
+  ox: number;
+  oy: number;
+  /** Seconds of flight left (its reach). */
+  left: number;
+  owner: number;
+  team: Team;
+  alive: boolean;
 }
 
 /** A thrown grenade: rolls to rest, bounces off walls, flies over waist-high cover, explodes when the fuse ends. */
@@ -174,7 +212,9 @@ export interface Bullet {
 
 export type SoundType =
   | 'step' | 'quietStep' | 'shot' | 'impact' | 'hit' | 'death' | 'reload' | 'pickup' | 'dash' | 'sonar' | 'barrier' | 'mend'
-  | 'windup' | 'burst' | 'scream' | 'shield' | 'frenzy' | 'downed' | 'revive' | 'throw' | 'bounce' | 'boom';
+  | 'windup' | 'burst' | 'scream' | 'shield' | 'frenzy' | 'downed' | 'revive' | 'throw' | 'bounce' | 'boom'
+  // CHOG superpowers: beam charge and fire, a bubble or goo launched, someone caged or glued, an aura raised.
+  | 'charge' | 'beam' | 'orb' | 'caged' | 'pinned' | 'aura';
 
 /** The one sound event bus: feeds audio, bot hearing, and the player's heard markers. */
 export interface SoundEvent {
@@ -303,6 +343,9 @@ export interface World {
   actors: Actor[];
   bullets: Bullet[];
   grenades: Grenade[];
+  /** CHOG superpower globs in flight, and the next orb id. */
+  orbs: Orb[];
+  orbSeq: number;
   /** Next grenade id (online clients match grenades across snapshots by it). */
   nadeSeq: number;
   sounds: SoundEvent[];
@@ -374,7 +417,8 @@ export function viewFor(hero: HeroDef, sg: Sidegrade): ViewShape {
 
 function makeActor(id: number, team: Team, name: string, hero: HeroDef, sg: Sidegrade, x: number, y: number, facing: number, power: Power = BASE_POWER): Actor {
   const weapon = weaponFor(hero, sg);
-  const ab = power.signature ?? hero.ability;
+  // One ability slot: a 1:1 signature, else a Chog superpower, else the hero's own ability.
+  const ab = power.signature ?? power.superpower ?? hero.ability;
   const maxHp = Math.round(hero.maxHp * power.hpMul);
   // Grenades: the tier's capacity (free 3 ... 1:1 13), never upgrades; hostile bots carry a fixed few (solo difficulty).
   const nades = team === 'bot' ? TUNING.grenade.botCount : power.grenades;
@@ -388,6 +432,7 @@ function makeActor(id: number, team: Team, name: string, hero: HeroDef, sg: Side
     downed: false, reviveProgress: 0, downInfo: null, firedLast: false,
     grenades: nades, maxGrenades: nades, nadeCd: 0, thrown: 0, volley: 0, volleyGap: 0, fireQueued: 0, revives: 0, revived: 0, loots: 0,
     perk: null, markLeft: 0, markTeam: null, bagStill: 0,
+    chargeLeft: 0, beamLeft: 0, beamAng: facing, beamPulse: 0, trapLeft: 0, trapX: 0, trapY: 0, trapR: 0, pinLeft: 0, pinX: 0, pinY: 0, auraLeft: 0, abilityOff: 0,
   };
 }
 
@@ -428,7 +473,7 @@ export function createWorld(opts: WorldOptions = {}): World {
       return { x: m.reduce((a, v) => a + v.x, 0) / Math.max(1, m.length), y: m.reduce((a, v) => a + v.y, 0) / Math.max(1, m.length) };
     });
     return {
-      tick: 0, rng: seed, level, actors, bullets: [], grenades: [], nadeSeq: 0, sounds: [], prevSounds: [], comms: [], prevComms: [], commsAt: -1e9, hits: [],
+      tick: 0, rng: seed, level, actors, bullets: [], grenades: [], orbs: [], orbSeq: 0, nadeSeq: 0, sounds: [], prevSounds: [], comms: [], prevComms: [], commsAt: -1e9, hits: [],
       ...initPickups(level, seed, opts), barriers: [], loot: [], lootSeq: 0, lootExpired: 0,
       brains, attackTokens: [], squadAI: false, squadPoints: [], perceptionLog: null, outcome: 'playing', playerKill: null,
       mode: 'versus', winner: null, friendlyFire: !!opts.friendlyFire,
@@ -455,7 +500,7 @@ export function createWorld(opts: WorldOptions = {}): World {
     brains.set(a.id, createBrain(b));
   });
   return {
-    tick: 0, rng: seed, level, actors, bullets: [], grenades: [], nadeSeq: 0, sounds: [], prevSounds: [], comms: [], prevComms: [], commsAt: -1e9, hits: [],
+    tick: 0, rng: seed, level, actors, bullets: [], grenades: [], orbs: [], orbSeq: 0, nadeSeq: 0, sounds: [], prevSounds: [], comms: [], prevComms: [], commsAt: -1e9, hits: [],
     ...initPickups(level, seed, opts), barriers: [], loot: [], lootSeq: 0, lootExpired: 0,
     brains, attackTokens: [], perceptionLog: opts.log ? [] : null, outcome: 'playing', playerKill: null,
     // The lab's 'before' (LAB.pacing off: the RC-8 map and bots) keeps the RC-8 patrols, so it stays a fixed baseline.
@@ -547,6 +592,12 @@ export function mitigate(armor: number, damage: number, armorPen: number): { hp:
   return { hp: damage - soak, armor: soak };
 }
 
+/** Steps the ability button must be up before a new press counts as a fresh one (about 67 ms). */
+const ABILITY_RELEASE = 4;
+
+/** Gold Shell, Shell or Aura: bullets, blasts, beams and globs do nothing, and it cannot shoot or throw. */
+export const untouchable = (a: Actor) => a.shieldLeft > 0 || a.auraLeft > 0;
+
 export const IDLE_INPUT: ActorInput = { moveX: 0, moveY: 0, quiet: false, aim: 0, firing: false, reload: false, ability: false, grenade: false };
 
 const vel: Vec2 = { x: 0, y: 0 };
@@ -621,7 +672,171 @@ function useAbility(w: World, a: Actor, inp: ActorInput): void {
       a.frenzyLeft = ab.seconds ?? 0;
       emitAbility(w, 'frenzy', a.x, a.y, TUNING.sound.ability, a);
       break;
+    case 'laser':
+    case 'xray':
+      // Telegraph first: the charge line is drawn for everyone it points at before any damage.
+      a.chargeLeft = ab.windup ?? 0.35;
+      // Starts where you aim (not where the body has turned to yet), then follows the body at BEAM.turnDegPerSec.
+      a.beamAng = inp.aim;
+      emitAbility(w, 'charge', a.x, a.y, TUNING.sound.ability, a);
+      break;
+    case 'bubble':
+    case 'drool': {
+      const dx = Math.cos(inp.aim), dy = Math.sin(inp.aim);
+      w.orbs.push({ id: w.orbSeq++, kind: ab.kind, x: a.x, y: a.y, dx, dy, ox: a.x, oy: a.y, left: (ab.radius ?? 8) / ORB.speed[ab.kind], owner: a.id, team: a.team, alive: true });
+      emitAbility(w, 'orb', a.x, a.y, TUNING.sound.ability, a);
+      break;
+    }
+    case 'aura':
+      a.auraLeft = ab.seconds ?? 0;
+      a.volley = 0;
+      emitAbility(w, 'aura', a.x, a.y, TUNING.sound.shot, a);
+      break;
   }
+}
+
+/**
+ * Where a's beam stops this step: its reach along beamAng, cut short by the first wall or cover (Laser; leaning over
+ * cover works as for bullets) and by the first body in the way. X-Ray passes walls and cover, never bodies. Shared by
+ * the sim and the renderer (both sides draw the same beam).
+ */
+export function beamEnd(w: World, a: Actor): { x: number; y: number; target: Actor | null } {
+  const reach = a.ability.radius ?? 9;
+  const dx = Math.cos(a.beamAng), dy = Math.sin(a.beamAng);
+  const ex = a.x + dx * reach, ey = a.y + dy * reach;
+  let best = 1;
+  if (a.ability.kind !== 'xray') {
+    const t = bulletBlockT(w.level, a.x, a.y, a.x, a.y, ex, ey, false, TUNING.combat.coverLean);
+    if (t >= 0 && t < best) best = t;
+  }
+  let target: Actor | null = null;
+  for (const o of w.actors) {
+    if (!o.alive || o === a || (o.team === a.team && !w.friendlyFire)) continue;
+    const t = segmentCircleT(a.x, a.y, ex, ey, o.x, o.y, TUNING.movement.radius + BEAM.width);
+    if (t >= 0 && t < best) { best = t; target = o; }
+  }
+  return { x: a.x + (ex - a.x) * best, y: a.y + (ey - a.y) * best, target };
+}
+
+/** Laser / X-Ray each step: the charge counts down, then the beam burns in pulses of BEAM.pulse s. */
+function stepBeam(w: World, a: Actor, dt: number): void {
+  const turn = BEAM.turnDegPerSec * DEG * dt;
+  a.beamAng = wrapAngle(a.beamAng + Math.max(-turn, Math.min(turn, angleDiff(a.beamAng, a.facing))));
+  if (a.chargeLeft > 0) {
+    a.chargeLeft = Math.max(0, a.chargeLeft - dt);
+    if (a.chargeLeft > 0) return;
+    a.beamLeft = a.ability.seconds ?? 0;
+    a.beamPulse = 0;
+    emitAbility(w, 'beam', a.x, a.y, TUNING.sound.shot, a);
+  }
+  a.beamLeft = Math.max(0, a.beamLeft - dt);
+  a.beamPulse -= dt;
+  if (a.beamPulse > 1e-9) return;
+  a.beamPulse += BEAM.pulse;
+  const end = beamEnd(w, a);
+  const t = end.target;
+  if (!t) return;
+  if (untouchable(t)) {
+    w.hits.push({ target: t.id, by: a.id, x: end.x, y: end.y, fromX: a.x, fromY: a.y, hpDamage: 0, armorDamage: 0, killed: false, downed: false });
+    return;
+  }
+  hurt(w, t, a, (a.ability.amount ?? 0) * BEAM.pulse, a.ability.armorPen ?? 0, end.x, end.y, a.ability.name);
+}
+
+/** Damage from a superpower or signature (no bullet): armour, health, the hit event, a down or a kill. */
+function hurt(w: World, t: Actor, by: Actor, raw: number, armorPen: number, hx: number, hy: number, name: string): void {
+  if (t.downed && t.downInfo?.tick === w.tick) return;
+  const m = mitigate(t.armor, raw, armorPen);
+  if (t.team !== by.team) by.damageDealt += lost(t, m);
+  t.armor -= m.armor;
+  t.hp -= m.hp;
+  t.hitFlash = TUNING.render.hitFlash;
+  t.lastHitTick = w.tick;
+  t.lastHitFrom = { x: by.x, y: by.y };
+  t.damageTaken += m.hp + m.armor;
+  const r = t.hp <= 0 ? drop(w, t, { cause: 'shot', killerId: by.id, weapon: name, fromX: by.x, fromY: by.y, toX: t.x, toY: t.y, tick: w.tick }) : null;
+  w.hits.push({ target: t.id, by: by.id, x: hx, y: hy, fromX: by.x, fromY: by.y, hpDamage: m.hp, armorDamage: m.armor, killed: r === 'out', downed: r === 'downed' });
+  emit(w, 'hit', hx, hy, TUNING.sound.impact, by);
+}
+
+/** Bubble and Drool globs: fly, stop on walls and cover, and catch the first standing hostile they touch. */
+function stepOrbs(w: World, dt: number): void {
+  const lean = TUNING.combat.coverLean;
+  for (const o of w.orbs) {
+    if (!o.alive) continue;
+    const sp = ORB.speed[o.kind];
+    const nx = o.x + o.dx * sp * dt, ny = o.y + o.dy * sp * dt;
+    const wallT = bulletBlockT(w.level, o.ox, o.oy, o.x, o.y, nx, ny, false, lean);
+    let best = wallT >= 0 ? wallT : 2;
+    let target: Actor | null = null;
+    for (const a of w.actors) {
+      if (!standing(a) || a.id === o.owner || (a.team === o.team && !w.friendlyFire)) continue;
+      const t = segmentCircleT(o.x, o.y, nx, ny, a.x, a.y, TUNING.movement.radius + ORB.radius[o.kind]);
+      if (t >= 0 && t < best) { best = t; target = a; }
+    }
+    if (best <= 1) {
+      o.alive = false;
+      o.x += (nx - o.x) * best;
+      o.y += (ny - o.y) * best;
+      const by = w.actors[o.owner];
+      if (target && !untouchable(target)) (o.kind === 'bubble' ? cage : glue)(w, target, by);
+      else emit(w, 'impact', o.x, o.y, TUNING.sound.impact, by);
+      continue;
+    }
+    o.x = nx;
+    o.y = ny;
+    o.left -= dt;
+    if (o.left <= 0) o.alive = false;
+  }
+  if (w.orbs.some((o) => !o.alive)) w.orbs = w.orbs.filter((o) => o.alive);
+}
+
+/** Bubble: t is caged where it stands for the bubble's seconds (it can still aim and shoot). */
+function cage(w: World, t: Actor, by: Actor): void {
+  t.trapLeft = by.ability.seconds ?? 2;
+  t.trapX = t.x;
+  t.trapY = t.y;
+  t.trapR = by.ability.length ?? 1.1;
+  t.dashLeft = 0;
+  t.vx = t.vy = 0;
+  t.lastHitTick = w.tick;
+  t.lastHitFrom = { x: by.x, y: by.y };
+  w.hits.push({ target: t.id, by: by.id, x: t.x, y: t.y, fromX: by.x, fromY: by.y, hpDamage: 0, armorDamage: 0, killed: false, downed: false });
+  emit(w, 'caged', t.x, t.y, TUNING.sound.ability, by);
+}
+
+/**
+ * Drool: the nearest wall within the goo's reach (16 directions), and the spot against it where a body fits; or
+ * where t stands when no wall is that close. Pure, so it is tested directly.
+ */
+export function wallSpot(l: Level, x: number, y: number, reach: number): { x: number; y: number; d: number } {
+  const r = TUNING.movement.radius;
+  let best = { x, y, d: 0 }, bestD = Infinity;
+  for (let i = 0; i < 16; i++) {
+    const ang = (i / 16) * Math.PI * 2, dx = Math.cos(ang), dy = Math.sin(ang);
+    const ex = x + dx * (reach + r), ey = y + dy * (reach + r);
+    let t = Infinity;
+    for (const b of l.wallBoxes) { const bt = segmentBoxT(x, y, ex, ey, b); if (bt >= 0 && bt < t) t = bt; }
+    if (t === Infinity) continue;
+    const d = Math.max(0, t * (reach + r) - r - 0.02);
+    if (d < bestD) { bestD = d; best = { x: x + dx * d, y: y + dy * d, d }; }
+  }
+  return best;
+}
+
+/** Drool: t is dragged to the nearest wall within reach and glued there (it can still aim and shoot). */
+function glue(w: World, t: Actor, by: Actor): void {
+  const spot = wallSpot(w.level, t.x, t.y, by.ability.length ?? 2.5);
+  t.pinX = spot.x;
+  t.pinY = spot.y;
+  // Glued time counts from when it reaches the wall.
+  t.pinLeft = (by.ability.seconds ?? 1.4) + spot.d / ORB.pullSpeed;
+  t.dashLeft = 0;
+  t.vx = t.vy = 0;
+  t.lastHitTick = w.tick;
+  t.lastHitFrom = { x: by.x, y: by.y };
+  w.hits.push({ target: t.id, by: by.id, x: t.x, y: t.y, fromX: by.x, fromY: by.y, hpDamage: 0, armorDamage: 0, killed: false, downed: false });
+  emit(w, 'pinned', t.x, t.y, TUNING.sound.ability, by);
 }
 
 /**
@@ -668,7 +883,7 @@ function hostilesInSight(w: World, a: Actor, r: number): Actor[] {
 function detonate(w: World, a: Actor): void {
   const ab = a.ability;
   for (const t of hostilesInSight(w, a, ab.radius ?? 0)) {
-    if (t.shieldLeft > 0) continue;
+    if (untouchable(t)) continue;
     const raw = (ab.amount ?? 0) * a.power.damageMul;
     const m = mitigate(t.armor, raw, ab.armorPen ?? 0);
     a.damageDealt += lost(t, m);
@@ -704,13 +919,18 @@ function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
   a.shieldLeft = Math.max(0, a.shieldLeft - dt);
   a.frenzyLeft = Math.max(0, a.frenzyLeft - dt);
   a.slowLeft = Math.max(0, a.slowLeft - dt);
+  a.auraLeft = Math.max(0, a.auraLeft - dt);
   if (a.burstLeft > 0) {
     a.burstLeft = Math.max(0, a.burstLeft - dt);
     if (a.burstLeft === 0) detonate(w, a);
   }
-  if (inp.ability && a.abilityCd === 0) useAbility(w, a, inp);
+  if (a.chargeLeft > 0 || a.beamLeft > 0) stepBeam(w, a, dt);
+  // Aura: a fresh press while it holds drops it early (the cooldown already runs from when it went up).
+  if (inp.ability && a.abilityOff >= ABILITY_RELEASE && a.auraLeft > 0) a.auraLeft = 0;
+  else if (inp.ability && a.abilityCd === 0) useAbility(w, a, inp);
+  a.abilityOff = inp.ability ? 0 : a.abilityOff + 1;
   a.nadeCd = Math.max(0, a.nadeCd - dt);
-  if (inp.grenade && a.grenades > 0 && a.nadeCd === 0 && a.shieldLeft === 0) throwGrenade(w, a, inp.throwAim ?? inp.aim, inp.throwDist);
+  if (inp.grenade && a.grenades > 0 && a.nadeCd === 0 && !untouchable(a)) throwGrenade(w, a, inp.throwAim ?? inp.aim, inp.throwDist);
 
   const speedMul = a.hero.speed * (a.slowLeft > 0 ? a.slowMul : 1);
   const ox = a.x, oy = a.y;
@@ -719,7 +939,9 @@ function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
   const speed = Math.hypot(a.vx, a.vy);
   if (a.stepAcc >= M.stepDistance) {
     a.stepAcc -= M.stepDistance;
-    const r = stepRadius(a.dashLeft > 0 ? 0 : speed / (M.maxSpeed * speedMul)) * (a.perk === 'soles' ? TUNING.perks.solesStepMul : 1);
+    let r = stepRadius(a.dashLeft > 0 ? 0 : speed / (M.maxSpeed * speedMul)) * (a.perk === 'soles' ? TUNING.perks.solesStepMul : 1);
+    // An aura hums: its steps are never quiet.
+    if (a.auraLeft > 0) r = Math.max(r, TUNING.sound.runStep);
     emit(w, r <= TUNING.sound.quietStep + 0.01 ? 'quietStep' : 'step', a.x, a.y, r, a);
   }
   // Steady rule (CF): standing still for a moment focuses the lamp; running widens and shortens it.
@@ -756,9 +978,9 @@ function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
   else a.fireQueued = Math.max(0, a.fireQueued - dt);
   if (a.volley > 0) {
     a.volleyGap -= dt;
-    if (a.volleyGap <= 0 && a.ammo > 0 && a.shieldLeft === 0) fireRound(w, a);
-    else if (a.ammo === 0 || a.shieldLeft > 0) { a.volley = 0; a.cooldown = W.fireInterval; }
-  } else if ((inp.firing || a.fireQueued > 0) && aligned && a.cooldown === 0 && a.ammo > 0 && a.shieldLeft === 0) {
+    if (a.volleyGap <= 0 && a.ammo > 0 && !untouchable(a)) fireRound(w, a);
+    else if (a.ammo === 0 || untouchable(a)) { a.volley = 0; a.cooldown = W.fireInterval; }
+  } else if ((inp.firing || a.fireQueued > 0) && aligned && a.cooldown === 0 && a.ammo > 0 && !untouchable(a)) {
     a.fireQueued = 0;
     a.shots++;
     a.volley = W.burst ?? 1;
@@ -774,7 +996,18 @@ function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
  */
 export function moveBody(level: Level, a: Actor, inp: ActorInput, dt: number): void {
   const M = TUNING.movement;
-  const speedMul = a.hero.speed * (a.slowLeft > 0 ? a.slowMul : 1);
+  // Drool: dragged to the wall spot, then glued (no walking, no dash, no push) until it lets go.
+  if (a.pinLeft > 0) {
+    a.pinLeft = Math.max(0, a.pinLeft - dt);
+    const dx = a.pinX - a.x, dy = a.pinY - a.y, d = Math.hypot(dx, dy);
+    const step = Math.min(d, ORB.pullSpeed * dt);
+    if (d > 1e-6) { a.x += (dx / d) * step; a.y += (dy / d) * step; }
+    a.vx = a.vy = 0;
+    a.dashLeft = 0;
+    resolveCircle(a, M.radius, level.solidBoxes);
+    return;
+  }
+  const speedMul = a.hero.speed * (a.slowLeft > 0 ? a.slowMul : 1) * (a.chargeLeft > 0 || a.beamLeft > 0 ? BEAM.moveMul : 1);
   if (a.dashLeft > 0) {
     a.dashLeft = Math.max(0, a.dashLeft - dt);
     a.vx = a.dashX * TUNING.abilities.dashSpeed;
@@ -790,6 +1023,18 @@ export function moveBody(level: Level, a: Actor, inp: ActorInput, dt: number): v
   a.x += a.vx * dt;
   a.y += a.vy * dt;
   resolveCircle(a, M.radius, level.solidBoxes);
+  if (a.trapLeft > 0) {
+    // Bubble: the body stays inside the cage; walking into its skin stops dead.
+    a.trapLeft = Math.max(0, a.trapLeft - dt);
+    const room = Math.max(0, a.trapR - M.radius), dx = a.x - a.trapX, dy = a.y - a.trapY, d = Math.hypot(dx, dy);
+    if (d > room) {
+      a.x = a.trapX + (dx / d) * room;
+      a.y = a.trapY + (dy / d) * room;
+      const out = (a.vx * dx + a.vy * dy) / d;
+      if (out > 0) { a.vx -= (out * dx) / d; a.vy -= (out * dy) / d; }
+    }
+    return;
+  }
   if (a.dashLeft <= 0) {
     // Corner assist: never stop dead on a crate/wall edge you are nearly past (CHOG-MAP-001).
     const t = cornerAssistDir(a.x, a.y, M.radius, inp.moveX, inp.moveY, level.solidBoxes, M.cornerAssist);
@@ -941,7 +1186,7 @@ function explode(w: World, g: Grenade): void {
     const d = Math.hypot(t.x - g.x, t.y - g.y);
     if (d > G.radius || !sightClear(w.level, g.x, g.y, t.x, t.y)) continue;
     const cover = shotClear(w.level, g.x, g.y, t.x, t.y, false, 0) ? 1 : G.coverMul;
-    const raw = t.shieldLeft > 0 ? 0 : (G.damage + (G.edgeDamage - G.damage) * (d / G.radius)) * cover * (by.ai ? TUNING.bots.damageMul : 1);
+    const raw = untouchable(t) ? 0 : (G.damage + (G.edgeDamage - G.damage) * (d / G.radius)) * cover * (by.ai ? TUNING.bots.damageMul : 1);
     const m = mitigate(t.armor, raw, G.armorPen);
     if (t.team !== by.team) by.damageDealt += lost(t, m);
     t.armor -= m.armor;
@@ -1012,7 +1257,7 @@ function damage(w: World, t: Actor, by: Actor, b: Bullet, hx: number, hy: number
   if (t.downed && t.downInfo?.tick === w.tick) return;
   // Gold Shell: the bullet stops on the shell and does nothing (the hit spark still shows where it landed): no push,
   // no counted hit, no reset of a revive.
-  if (t.shieldLeft > 0) {
+  if (untouchable(t)) {
     w.hits.push({ target: t.id, by: by.id, x: hx, y: hy, fromX: b.ox, fromY: b.oy, hpDamage: 0, armorDamage: 0, killed: false, downed: false });
     emit(w, 'hit', hx, hy, TUNING.sound.impact, by);
     return;
@@ -1061,6 +1306,7 @@ function drop(w: World, t: Actor, info: KillInfo): 'downed' | 'out' {
     t.reloadLeft = 0;
     t.burstLeft = 0;
     t.shieldLeft = t.frenzyLeft = 0;
+    t.chargeLeft = t.beamLeft = t.auraLeft = t.trapLeft = t.pinLeft = 0;
     t.volley = 0;
     t.dashLeft = 0;
     t.vx = t.vy = 0;
@@ -1357,6 +1603,7 @@ export function stepWorld(
     applyInput(w, a, inp, dt);
   }
   stepBullets(w, dt);
+  stepOrbs(w, dt);
   stepGrenades(w, dt);
   stepZone(w, dt);
   stepPickups(w, dt);

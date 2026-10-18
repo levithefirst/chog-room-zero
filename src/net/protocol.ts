@@ -4,6 +4,7 @@
 import type { ActorInput, Team } from '../sim/world';
 import type { AbilityKind } from '../config/heroes';
 import type { Tier } from '../config/power';
+import type { SuperpowerId } from '../config/superpowers';
 
 export const PROTOCOL = 1;
 export type Mode = '1v1' | '3v3' | '5v5';
@@ -52,6 +53,8 @@ export interface RosterEntry {
   id: number; name: string; hero: string; team: Team;
   tier: Tier; holder: boolean; demo: boolean; metadataId: number | null;
   ability: { kind: AbilityKind; name: string; cooldown: number; text: string };
+  /** CHOG superpower in this player's slot (the server's choice from the verified ticket), if any. */
+  sp?: SuperpowerId;
 }
 
 /** The server's view of this connection after checking its ticket. */

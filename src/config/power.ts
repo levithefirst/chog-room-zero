@@ -1,10 +1,12 @@
-// Class system (owner master build prompt 2026-10-13, master integration pass 2026-10-14): Chog holders get real
-// combat power by rarity tier, free players earn an upgrade path with shards that reaches the lower holder tiers, and
-// the ten 1:1 Chogs are the dominant top tier, each with its own named identity and signature ability.
-// Every number here is checked by measured duels (tests/power.test.ts, docs/design/power.md), not by feel.
+// Class system. Owner 2026-10-13/14 gave Chog holders health, armour and damage by rarity; owner 2026-10-18 ("CHOG
+// SUPERPOWER SYSTEM", rule 6: "Do not use NFT rarity for generic health/damage stat inflation") replaced that: every
+// tier now starts at base stats, and a verified Chog instead gets the superpower its real traits carry, ranked by its
+// tier (src/config/superpowers.ts). The ten 1:1s keep their named signatures. Free players and holders buy the same
+// shard upgrades. Grenade capacity by tier is unchanged (owner 2026-10-14). Duels: tests/power.test.ts.
 // Movement speed is never changed by tier or upgrade: positioning stays the skill.
 import { ONE_OF_ONE_IDS, TIER_TABLE } from '../nft/tier-table.js';
 import type { AbilityDef } from './heroes';
+import { pickPower, superAbility, type Rank } from './superpowers.js';
 
 export type Tier = 'free' | 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 export const TIERS: readonly Tier[] = ['free', 'common', 'uncommon', 'rare', 'epic', 'legendary'];
@@ -15,25 +17,21 @@ export interface TierDef {
   hpMul: number;
   /** Armour added to the hero's starting armour and to its armour cap. */
   armor: number;
-  /** Multiplies weapon damage. Only the 1:1 tier has one. */
+  /** Multiplies weapon damage. */
   damageMul: number;
 }
 
+// Every tier starts at base stats (owner 2026-10-18, rule 6). Rarity shows up as the rank of the Chog's superpower.
 export const TIER_DEFS: Record<Tier, TierDef> = {
-  // A free player: the base hero. Must stay a complete, winning design; upgrades take it past Uncommon starting power.
   free: { label: 'Free', hpMul: 1, armor: 0, damageMul: 1 },
-  // Each holder tier is a visible step: more health, more armour, and from Uncommon up a little more damage.
-  common: { label: 'Common', hpMul: 1.15, armor: 8, damageMul: 1 },
-  uncommon: { label: 'Uncommon', hpMul: 1.22, armor: 12, damageMul: 1.02 },
-  rare: { label: 'Rare', hpMul: 1.32, armor: 18, damageMul: 1.04 },
-  epic: { label: 'Epic', hpMul: 1.42, armor: 24, damageMul: 1.06 },
-  // The ten 1:1s: intentionally dominant. A fresh free player should lose almost every straight duel; a team, cover,
-  // the signature's counter and focus fire are how you beat one.
-  legendary: { label: '1:1', hpMul: 1.75, armor: 35, damageMul: 1.12 },
+  common: { label: 'Common', hpMul: 1, armor: 0, damageMul: 1 },
+  uncommon: { label: 'Uncommon', hpMul: 1, armor: 0, damageMul: 1 },
+  rare: { label: 'Rare', hpMul: 1, armor: 0, damageMul: 1 },
+  epic: { label: 'Epic', hpMul: 1, armor: 0, damageMul: 1 },
+  legendary: { label: '1:1', hpMul: 1, armor: 0, damageMul: 1 },
 };
 
-/** Shard upgrades. Free players and holders can buy them. A fully upgraded free profile starts stronger than an
- * Uncommon holder and close to a Rare one (tested), so a free player can climb past the lower tiers by playing. */
+/** Shard upgrades. Free players and holders buy the same ones, at the same prices, to the same caps. */
 export type UpgradeId = 'vitality' | 'plating' | 'firepower' | 'focus';
 export interface UpgradeDef { name: string; text: string; ranks: number; costs: readonly number[] }
 export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
@@ -65,6 +63,8 @@ export interface Power {
   cooldownMul: number;
   /** A 1:1 signature replaces the hero ability; otherwise null. */
   signature: AbilityDef | null;
+  /** A verified Chog's superpower (its real traits, ranked by its tier) replaces the hero ability; otherwise null. */
+  superpower: AbilityDef | null;
   /** Demo power is labelled everywhere and never earns rewards. */
   demo: boolean;
   /** The Chog behind this power (verified or demo), or null for a free profile. Picks a 1:1's own cues. */
@@ -73,7 +73,7 @@ export interface Power {
   grenades: number;
 }
 
-export const BASE_POWER: Power = { tier: 'free', hpMul: 1, armor: 0, damageMul: 1, cooldownMul: 1, signature: null, demo: false, metadataId: null, grenades: GRENADES.free };
+export const BASE_POWER: Power = { tier: 'free', hpMul: 1, armor: 0, damageMul: 1, cooldownMul: 1, signature: null, superpower: null, demo: false, metadataId: null, grenades: GRENADES.free };
 
 export function clampUpgrades(u: Partial<Upgrades> | null | undefined): Upgrades {
   const out = { ...NO_UPGRADES };
@@ -84,16 +84,25 @@ export function clampUpgrades(u: Partial<Upgrades> | null | undefined): Upgrades
   return out;
 }
 
-export function powerFor(tier: Tier, upgrades: Partial<Upgrades> | null = null, signature: AbilityDef | null = null, demo = false, metadataId: number | null = null): Power {
+/**
+ * Power for one player. `tier` is what the server grants (the verified token's tier, or 'free' when NFT power is off or
+ * there is no token), so a free tier never gets a superpower whatever the other arguments say. `choice`: which of the
+ * token's own powers the holder picked; anything the token's traits do not carry falls back to its first power.
+ */
+export function powerFor(tier: Tier, upgrades: Partial<Upgrades> | null = null, signature: AbilityDef | null = null, demo = false, metadataId: number | null = null, choice: string | null = null): Power {
   const t = TIER_DEFS[tier];
   const u = clampUpgrades(upgrades);
+  const sig = tier === 'legendary' ? signature : null;
+  const own = metadataId ? tierOfMetadataId(metadataId) : null;
+  const sp = tier !== 'free' && !sig && own && own !== 'free' ? pickPower(metadataId, choice) : null;
   return {
     tier,
     hpMul: Math.min(CAPS.hpMul, t.hpMul + u.vitality * UPGRADE_STEP.vitality),
     armor: Math.min(CAPS.armor, t.armor + u.plating * UPGRADE_STEP.plating),
     damageMul: Math.min(CAPS.damageMul, t.damageMul + u.firepower * UPGRADE_STEP.firepower),
     cooldownMul: Math.max(CAPS.cooldownMul, 1 - u.focus * UPGRADE_STEP.focus),
-    signature: tier === 'legendary' ? signature : null,
+    signature: sig,
+    superpower: sp ? superAbility(sp, own as Rank) : null,
     demo,
     metadataId,
     grenades: GRENADES[tier],
@@ -168,7 +177,7 @@ export function signatureFor(metadataId: number): AbilityDef | null {
 }
 
 /** Full power for a verified (or demo) token. */
-export function powerForToken(metadataId: number, upgrades: Partial<Upgrades> | null, demo: boolean): Power {
+export function powerForToken(metadataId: number, upgrades: Partial<Upgrades> | null, demo: boolean, choice: string | null = null): Power {
   const tier = tierOfMetadataId(metadataId) ?? 'free';
-  return powerFor(tier, upgrades, signatureFor(metadataId), demo, tierOfMetadataId(metadataId) ? metadataId : null);
+  return powerFor(tier, upgrades, signatureFor(metadataId), demo, tierOfMetadataId(metadataId) ? metadataId : null, choice);
 }

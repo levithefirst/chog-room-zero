@@ -306,7 +306,7 @@ export class OnlineSession {
     this.fromView = order.map((r) => r.id);
     this.world = createWorld({
       seed: m.seed, zone: false, friendlyFire: m.friendlyFire,
-      versus: order.map((r) => ({ name: r.name, hero: r.hero, team: r.team as 'alpha' | 'bravo', x: -100, y: -100, facing: 0, power: powerFor(r.tier ?? 'free', null, r.metadataId && r.tier === 'legendary' ? signatureFor(r.metadataId) : null, !!r.demo, r.metadataId) })),
+      versus: order.map((r) => ({ name: r.name, hero: r.hero, team: r.team as 'alpha' | 'bravo', x: -100, y: -100, facing: 0, power: powerFor(r.tier ?? 'free', null, r.metadataId && r.tier === 'legendary' ? signatureFor(r.metadataId) : null, !!r.demo, r.metadataId, r.sp ?? null) })),
     });
     // The server's ability slot (hero ability or 1:1 signature, with upgrades) so the HUD and telegraphs match it.
     order.forEach((r, i) => { const act = this.world!.actors[i]; if (r.ability) act.ability = { ...act.ability, ...r.ability, ...(r.metadataId && r.tier === 'legendary' ? signatureFor(r.metadataId) : {}), cooldown: r.ability.cooldown }; });

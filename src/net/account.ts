@@ -18,7 +18,7 @@ export interface OwnedToken {
   tokenId: number; metadataId: number; name: string; oneOfOne: string | null; tier: Tier; tierLabel: string;
   signature: { name: string; text: string; telegraph: string; counter: string } | null; history: { matches: number; wins: number; kills: number } | null;
 }
-export interface TicketProfile { account: boolean; name: string; tier: Tier; tierLabel: string; tokenId: number | null; metadataId: number | null; tokenTier: Tier | null; holder: boolean; demo: boolean; upgrades: Upgrades; signature: string | null; oneOfOne: string | null }
+export interface TicketProfile { account: boolean; name: string; tier: Tier; tierLabel: string; tokenId: number | null; metadataId: number | null; tokenTier: Tier | null; holder: boolean; demo: boolean; upgrades: Upgrades; signature: string | null; oneOfOne: string | null; power?: string | null; powerName?: string | null }
 export interface Reward { xp: number; shards: number; ratingBefore: number; ratingAfter: number; lines?: RewardLine[]; none?: NoReward }
 export interface PracticeReward { xp: number; shards: number; lines: RewardLine[]; none: NoReward }
 
@@ -62,7 +62,7 @@ export const settle = (matchId: string) => api<{ ok: boolean; already?: boolean;
 export const settleRetryable = (r: { ok?: boolean; error?: string } | null): boolean => !r || r.error === 'progression_offline' || r.error === 'game_server';
 
 /** A ticket for the game server: the chosen held token (verified by the site), or a demo token number. */
-export async function fetchTicket(choice: { tokenId?: number; demo?: number }, name: string): Promise<{ ticket: string; profile: TicketProfile; warning?: string | null } | null> {
+export async function fetchTicket(choice: { tokenId?: number; demo?: number; power?: string }, name: string): Promise<{ ticket: string; profile: TicketProfile; warning?: string | null } | null> {
   const r = await api<{ ticket?: string; profile?: TicketProfile; warning?: string | null }>('ticket', { ...choice, name });
   return r?.ticket && r.profile ? { ticket: r.ticket, profile: r.profile, warning: r.warning } : null;
 }

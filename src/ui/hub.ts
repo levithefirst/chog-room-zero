@@ -4,6 +4,7 @@
 // Plain HTML from plain data, like every other screen; every number comes from the account service, the game server
 // or the config files, never from the browser's own guess.
 import { HEROES, heroById } from '../config/heroes';
+import { SUPERPOWERS, powersOf, rankLine, type Rank } from '../config/superpowers';
 import { WEAPONS } from '../config/weapons';
 import { levelOf, type RewardBreakdown } from '../config/progression';
 import { rewardHtml } from './rewards';
@@ -81,12 +82,12 @@ export function classOf(a: AcctView): ClassView {
   const combat = a.config?.nftCombat ?? true;
   if (a.choice?.demo) {
     const t = tierOfMetadataId(a.choice.demo) ?? 'free';
-    return { source: 'demo', metadataId: a.choice.demo, tier: t, tokenTier: t, upgrades: up, power: powerFor(t, up, signatureFor(a.choice.demo), true, a.choice.demo) };
+    return { source: 'demo', metadataId: a.choice.demo, tier: t, tokenTier: t, upgrades: up, power: powerFor(t, up, signatureFor(a.choice.demo), true, a.choice.demo, a.power) };
   }
   const tk = a.choice?.tokenId ? a.tokens?.find((x) => x.tokenId === a.choice!.tokenId) : undefined;
   if (tk) {
     const t = combat ? tk.tier : 'free';
-    return { source: 'token', metadataId: tk.metadataId, tier: t, tokenTier: tk.tier, upgrades: up, power: powerFor(t, up, signatureFor(tk.metadataId), false, tk.metadataId) };
+    return { source: 'token', metadataId: tk.metadataId, tier: t, tokenTier: tk.tier, upgrades: up, power: powerFor(t, up, signatureFor(tk.metadataId), false, tk.metadataId, a.power) };
   }
   return { source: 'free', metadataId: null, tier: 'free', tokenTier: null, upgrades: up, power: powerFor('free', up) };
 }
@@ -152,11 +153,21 @@ function chogPanel(c: HubCtx): string {
   const sigBox = sig ? `<div class="sig" style="--sig:${accent}"><div class="sig-h"><b>${esc(sig.name)}</b><span class="num">${Math.round(sig.cooldown * k.power.cooldownMul)}s</span></div><p>${esc(sig.text)}</p>
 <p class="small"><em>Telegraph</em> ${esc(sig.telegraph ?? '')}</p><p class="small"><em>Counter</em> ${esc(sig.counter ?? '')}</p></div>` : '';
   const hist = k.source === 'token' ? a.tokens?.find((t) => t.metadataId === k.metadataId)?.history : null;
+  // CHOG superpower: the one the token's real traits carry (pick among them when it has several), its rank's numbers,
+  // and how both sides read and beat it. A Chog without a power trait plays its operator's ability.
+  const sp = k.power.superpower;
+  const owned = k.metadataId && !sig ? powersOf(k.metadataId) : [];
+  const spPick = owned.length > 1 ? `<div class="tokpick sppick">${owned.map((p) => `<button class="btn small${sp?.power === p ? ' on' : ''}" data-sp="${p}">${esc(SUPERPOWERS[p].name)}</button>`).join('')}</div>` : '';
+  const spBox = sp?.power && sp.rank ? `<div class="sig superpower" style="--sig:var(--chog-pink)" id="superpower"><div class="sig-h"><b>${esc(sp.name)}</b><span class="num">${Math.round(sp.cooldown * k.power.cooldownMul)}s</span></div>
+<p class="small num">${esc(TIER_DEFS[sp.rank].label)} · ${esc(rankLine(sp.power, sp.rank as Rank))}</p><p>${esc(sp.text)}</p>
+<p class="small"><em>Telegraph</em> ${esc(sp.telegraph ?? '')}</p><p class="small"><em>Counter</em> ${esc(sp.counter ?? '')}</p>${spPick}
+<button class="btn small" data-act="training" id="training-cta">Training</button></div>`
+    : k.metadataId && !sig && k.tier !== 'free' ? '<p class="note small" id="nopower">No superpower trait on this Chog: it plays your operator\'s ability.</p>' : '';
   return `<section class="hub-card chog${one ? ' oneofone' : ''}" style="--accent:${accent}" id="chogpanel">
 <div class="kicker">Class</div>
 <h3 id="chogname">${title}</h3>${tierLine}
 <div class="pwrows">${powerRows(k.power)}</div>
-${sigBox}${hist ? `<p class="hist num" title="This Chog's own record">${hist.matches}M · ${hist.wins}W · ${hist.kills}K</p>` : ''}
+${sigBox}${spBox}${hist ? `<p class="hist num" title="This Chog's own record">${hist.matches}M · ${hist.wins}W · ${hist.kills}K</p>` : ''}
 ${picks}${off}
 ${c.demoToken && tierOfMetadataId(Number(c.demoToken)) ? (a.choice?.demo ? '<button class="btn small" data-act="demo-online-off">Leave demo</button>' : `<button class="btn small" data-act="demo-online">Use <span class="demo">DEMO</span> #${esc(c.demoToken)}</button>`) : ''}
 </section>`;

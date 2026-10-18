@@ -3,10 +3,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  BASE_POWER, CAPS, MAX_UPGRADES, ONE_OF_ONE, SIGNATURES, chogName, TIERS, TIER_DEFS, UPGRADES, UPGRADE_IDS, clampUpgrades, powerFor, powerForToken, signatureFor, tierOfMetadataId,
+  BASE_POWER, CAPS, MAX_UPGRADES, ONE_OF_ONE, SIGNATURES, chogName, TIERS, TIER_DEFS, UPGRADES, UPGRADE_IDS, clampUpgrades, powerFor, powerForToken, signatureFor, tierOfMetadataId, type Power,
 } from '../src/config/power';
 import { ONE_OF_ONE_IDS, TIER_TABLE } from '../src/nft/tier-table';
 import { HEROES } from '../src/config/heroes';
+import { SUPERPOWER_IDS, superAbility } from '../src/config/superpowers';
 import { createWorld, stepWorld, IDLE_INPUT, type ActorInput, type World } from '../src/sim/world';
 import { HALL, share } from './helpers/duel';
 
@@ -38,14 +39,8 @@ describe('tier table matches the verified catalogue', () => {
 });
 
 describe('ladder and caps', () => {
-  it('each tier is at least as strong as the one below, and never changes speed', () => {
-    for (let i = 1; i < TIERS.length; i++) {
-      const a = TIER_DEFS[TIERS[i - 1]], b = TIER_DEFS[TIERS[i]];
-      expect(b.hpMul).toBeGreaterThanOrEqual(a.hpMul);
-      expect(b.armor).toBeGreaterThanOrEqual(a.armor);
-      expect(b.damageMul).toBeGreaterThanOrEqual(a.damageMul);
-      expect(b.hpMul + b.armor / 100).toBeGreaterThan(a.hpMul + a.armor / 100);
-    }
+  it('every tier starts at base stats (owner 2026-10-18 rule 6: no rarity health or damage), and never changes speed', () => {
+    for (const t of TIERS) expect([TIER_DEFS[t].hpMul, TIER_DEFS[t].armor, TIER_DEFS[t].damageMul], t).toEqual([1, 0, 1]);
     for (const t of Object.values(TIER_DEFS)) expect(Object.keys(t).some((k) => /speed/i.test(k))).toBe(false);
     const w = createWorld({ power: powerFor('legendary', MAX_U, SIGNATURES[1376]) });
     expect(w.actors[0].hero.speed).toBe(1);
@@ -61,18 +56,13 @@ describe('ladder and caps', () => {
     expect(clampUpgrades({ vitality: 99, plating: -4, focus: Infinity })).toEqual({ vitality: 8, plating: 0, firepower: 0, focus: 0 });
     for (const id of UPGRADE_IDS) expect(UPGRADES[id].costs.length).toBe(UPGRADES[id].ranks);
   });
-  it('a maxed free player starts past Uncommon and below Rare (the free upgrade path climbs past the lower tiers)', () => {
-    const f = powerFor('free', MAX_U), u = powerFor('uncommon'), r = powerFor('rare');
-    expect(f.hpMul).toBeGreaterThanOrEqual(u.hpMul);
-    expect(f.armor).toBeGreaterThanOrEqual(u.armor);
-    expect(f.damageMul).toBeGreaterThanOrEqual(u.damageMul);
-    expect(f.hpMul).toBeLessThan(r.hpMul);
-    expect(f.armor).toBeLessThan(r.armor);
+  it('a free player and a holder buy the same upgrades to the same numbers', () => {
+    for (const t of TIERS) {
+      const p = powerFor(t, MAX_U), f = powerFor('free', MAX_U);
+      expect([p.hpMul, p.armor, p.damageMul, p.cooldownMul], t).toEqual([f.hpMul, f.armor, f.damageMul, f.cooldownMul]);
+    }
   });
-  it('the 1:1 tier is the dominant one, and every 1:1 has its real name and its own colour', () => {
-    const l = TIER_DEFS.legendary, e = TIER_DEFS.epic;
-    expect(l.hpMul - e.hpMul).toBeGreaterThanOrEqual(0.3);
-    expect(l.damageMul).toBeGreaterThan(e.damageMul);
+  it('every 1:1 has its real name and its own colour', () => {
     expect(Object.keys(ONE_OF_ONE).map(Number).sort((a, b) => a - b)).toEqual([...ONE_OF_ONE_IDS]);
     expect(new Set(Object.values(ONE_OF_ONE).map((o) => o.color)).size).toBe(10);
     expect(Object.values(ONE_OF_ONE).map((o) => o.name).sort()).toEqual(['Blaze', 'Burning Skully', 'Chog Scream', 'Chogbomination', 'Frogger', 'Grim', 'Halo', 'Krown', 'Midas', 'Redd']);
@@ -81,14 +71,14 @@ describe('ladder and caps', () => {
     expect(chogName(812)).toBe('Chog #812');
     for (const sig of Object.values(SIGNATURES)) { expect(sig.telegraph, sig.name).toBeTruthy(); expect(sig.counter, sig.name).toBeTruthy(); }
   });
-  it('spawn applies the tier: health, armour, armour cap, ability cooldown', () => {
-    const p = powerFor('rare', { focus: 2 });
+  it('spawn applies upgrades, never the tier: health, armour, armour cap, ability cooldown', () => {
+    const p = powerFor('rare', { focus: 2, vitality: 2, plating: 3 });
     const a = createWorld({ hero: 'benja', power: p }).actors[0];
     const k = HEROES.find((h) => h.id === 'benja')!;
-    expect(a.maxHp).toBe(Math.round(k.maxHp * 1.32));
+    expect(a.maxHp).toBe(Math.round(k.maxHp * 1.06));
     expect(a.hp).toBe(a.maxHp);
-    expect(a.armor).toBe(k.maxArmor + 18);
-    expect(a.maxArmor).toBe(50 + 18);
+    expect(a.armor).toBe(k.maxArmor + 6);
+    expect(a.maxArmor).toBe(50 + 6);
     expect(a.ability.cooldown).toBeCloseTo(k.ability.cooldown * 0.9, 6);
     expect(createWorld({ hero: 'benja' }).actors[0].maxHp).toBe(k.maxHp);
   });
@@ -203,34 +193,26 @@ describe('1:1 signature abilities in the sim', () => {
 describe('measured duel bands', () => {
   const mean = (hero: string, a: ReturnType<typeof powerFor>, b: ReturnType<typeof powerFor>, n = 12, ability = false) =>
     [3, 6].reduce((s, d) => s + share(hero, a, hero, b, d, n, ability), 0) / 2;
-  it('Common beats a fresh free player about 7 in 10 (Benja, Tabsu): real, beatable; a 1:1 dominates (over 0.95)', () => {
-    for (const hero of ['benja', 'tabsu']) {
-      // 40 seeds, not 12 (CF): with the steady rule both strafing duellists spread more, and 12 seeds put the same
-      // matchup anywhere from 0.58 to 0.65 (measured 0.646 at 40). The band is unchanged.
-      const c = mean(hero, powerFor('common'), BASE_POWER, 40);
-      expect(c, hero).toBeGreaterThanOrEqual(0.6);
-      expect(c, hero).toBeLessThanOrEqual(0.85);
-      expect(mean(hero, powerFor('legendary'), BASE_POWER), hero).toBeGreaterThanOrEqual(0.95);
+  it('a holder and a free player with the same operator and upgrades are even (no rarity stat edge)', () => {
+    for (const hero of ['benja', 'tabsu']) for (const t of ['common', 'epic', 'legendary'] as const) {
+      const s = mean(hero, powerFor(t, MAX_U), powerFor('free', MAX_U));
+      expect(s, `${hero} ${t}`).toBeGreaterThanOrEqual(0.4);
+      expect(s, `${hero} ${t}`).toBeLessThanOrEqual(0.6);
     }
   }, 120000);
-  it('the ladder is monotonic (Kettle)', () => {
-    const s = TIERS.slice(1).map((t) => mean('benja', powerFor(t), BASE_POWER));
-    for (let i = 1; i < s.length; i++) expect(s[i]).toBeGreaterThanOrEqual(s[i - 1]);
-  }, 120000);
-  it('a maxed free player beats a Common holder, is even with Uncommon, and still loses to a 1:1', () => {
-    for (const hero of ['benja', 'tabsu']) {
-      expect(mean(hero, powerFor('free', MAX_U), powerFor('common')), hero).toBeGreaterThanOrEqual(0.6);
-      const u = mean(hero, powerFor('free', MAX_U), powerFor('uncommon'));
-      expect(u, hero).toBeGreaterThanOrEqual(0.4);
-      expect(u, hero).toBeLessThanOrEqual(0.6);
-      expect(mean(hero, powerFor('free', MAX_U), powerFor('legendary')), hero).toBeLessThanOrEqual(0.2);
-    }
-  }, 180000);
   it('no signature dominates a 1:1 with the plain hero ability (mean of 3 and 6 u within 0.3 to 0.85)', () => {
     for (const sig of Object.values(SIGNATURES)) {
       const s = mean('benja', powerFor('legendary', null, sig), powerFor('legendary'), 12, true);
       expect(s, sig.name).toBeGreaterThanOrEqual(0.3);
       expect(s, sig.name).toBeLessThanOrEqual(0.85);
+    }
+  }, 240000);
+  it('no superpower dominates the operator\'s own ability, at its lowest or highest rank (within 0.25 to 0.85)', () => {
+    for (const id of SUPERPOWER_IDS) for (const rank of ['common', 'legendary'] as const) {
+      const sp: Power = { ...BASE_POWER, tier: rank, superpower: superAbility(id, rank) };
+      const s = mean('benja', sp, BASE_POWER, 12, true);
+      expect(s, `${id} ${rank}`).toBeGreaterThanOrEqual(0.25);
+      expect(s, `${id} ${rank}`).toBeLessThanOrEqual(0.85);
     }
   }, 240000);
 });

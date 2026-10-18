@@ -362,7 +362,7 @@ function dodgeGrenades(w: World, a: Actor): void {
 function maybeThrow(w: World, a: Actor, br: Brain): void {
   const G = TUNING.grenade;
   const now = w.tick * TUNING.simStepSeconds;
-  if (a.grenades <= 0 || a.nadeCd > 0 || now < br.nadeAt || a.downed || a.shieldLeft > 0) return;
+  if (a.grenades <= 0 || a.nadeCd > 0 || now < br.nadeAt || a.downed || a.shieldLeft > 0 || a.auraLeft > 0) return;
   const seen = br.sawPlayer ? seenTarget(w, a) : null;
   const spot = seen ?? (br.lastKnown && br.suspicion > 0.55 && br.source !== 'memory' ? br.lastKnown : null);
   if (!spot) return;

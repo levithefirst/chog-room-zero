@@ -838,6 +838,8 @@ async function start() {
     if (md) { e.preventDefault(); setMode(md.dataset.mode as PlayMode); render(); return; }
     const tk = t.closest('[data-token]') as HTMLElement | null;
     if (tk) { e.preventDefault(); setChoice(tk.dataset.token ? { tokenId: Number(tk.dataset.token) } : null); render(); return; }
+    const sp = t.closest('[data-sp]') as HTMLElement | null;
+    if (sp) { e.preventDefault(); setPower(sp.dataset.sp!); return; }
     const up = t.closest('[data-upgrade]') as HTMLElement | null;
     if (up) { e.preventDefault(); void buyUpgrade(up.dataset.upgrade!); return; }
     const fav = t.closest('[data-fav]') as HTMLElement | null;
@@ -1096,12 +1098,20 @@ async function start() {
     // Each connection gets a fresh single-use ticket from the site; the game server checks it with the site.
     s.ticketSource = async () => {
       if (!acct.config || (!acct.signedIn && !acct.choice?.demo)) return null;
-      const r = await account.fetchTicket(acct.choice ?? {}, displayName(curProfile()));
+      const r = await account.fetchTicket({ ...(acct.choice ?? {}), ...(acct.power ? { power: acct.power } : {}) }, displayName(curProfile()));
       acct.ticket = r?.profile ?? null;
       acct.ticketWarning = r?.warning ?? null;
       return r?.ticket ?? null;
     };
     return s;
+  }
+  /** The superpower to play a multi-power Chog with: a preference, kept on this device. Next connection, like a token. */
+  const POWER_KEY = 'chog.power';
+  try { acct.power = localStorage.getItem(POWER_KEY); } catch { /* ignore */ }
+  function setPower(p: string) {
+    acct.power = p;
+    try { localStorage.setItem(POWER_KEY, p); } catch { /* ignore */ }
+    setChoice(acct.choice);
   }
   /** A new token or demo choice applies from the next connection (a ticket is fixed for its connection). */
   function setChoice(c: { tokenId?: number; demo?: number } | null) {
@@ -1200,7 +1210,7 @@ async function start() {
    */
   function soloPower(): Power {
     const n = Number(identity.tokenId);
-    if (identity.kind === 'bound' && tierOfMetadataId(n)) return powerForToken(n, acct.profile?.upgrades ?? null, true);
+    if (identity.kind === 'bound' && tierOfMetadataId(n)) return powerForToken(n, acct.profile?.upgrades ?? null, true, acct.power);
     return classOf(acct).power;
   }
 

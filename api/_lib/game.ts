@@ -13,6 +13,7 @@ import { b64url, sign, unsign, type Identity } from './auth.js';
 import { MAX_SUPPLY } from './chain.js';
 import { heroIdOf } from '../../src/config/heroes.js';
 import { NO_UPGRADES, TIERS, UPGRADES, UPGRADE_IDS, clampUpgrades, tierOfMetadataId, type Tier, type UpgradeId, type Upgrades } from '../../src/config/power.js';
+import type { SuperpowerId } from '../../src/config/superpowers.js';
 import { PRACTICE_REWARDS, RATING, levelOf, rewardBreakdown, ratingDelta, REWARDS, type RewardLine, type NoReward } from '../../src/config/progression.js';
 
 export const TICKET_SECONDS = 10 * 60;
@@ -31,6 +32,9 @@ export interface GameTicket {
   /** The token's own tier, shown on the card even while NFT combat power is off. */
   tokTier: Tier | null;
   own: string | null;
+  /** CHOG superpower the holder picked, only ever one the token's own traits carry (checked when the ticket is made);
+   * absent: the token's default power. */
+  sp?: SuperpowerId;
   holder: boolean;
   demo: boolean;
   name: string;

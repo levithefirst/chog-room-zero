@@ -51,26 +51,25 @@ describe('like meets like', () => {
     expect(smurf.matched() && fresh.matched()).toBe(true);
     expect(main.matched()).toBe(false);
   });
-  it("a holder's power counts at its measured duel worth: a 1:1 at 1000 is matched as 1600", () => {
-    expect(Lobby.strength({ ticket: { rating: 1000, played: 40, tier: 'legendary' } as GameTicket })).toBe(1000 + TUNING.match.tierStrength.legendary);
-    expect(TUNING.match.tierStrength.legendary).toBe(600);
+  it('a Chog tier adds nothing to matching strength (owner 2026-10-18: no rarity stats; a superpower is a sidegrade)', () => {
+    for (const t of ['common', 'uncommon', 'rare', 'epic', 'legendary'] as const) {
+      expect(Lobby.strength({ ticket: { rating: 1000, played: 40, tier: t } as GameTicket }), t).toBe(1000);
+      expect(TUNING.match.tierStrength[t], t).toBe(0);
+    }
     expect(Lobby.strength({ ticket: null })).toBe(1000);
   });
-  it('a fresh free player does not meet a 1:1 at once; a free player with a higher rating or another holder does', async () => {
+  it('a fresh free player meets a 1:1 of the same rating at once; a far higher rating still waits for the band', async () => {
     const { join, wait } = setup();
+    // Equal ratings meet at once whatever their Chog: rating decides, rarity does not.
     const one = await join('One', 1000, 50, 'legendary'), fresh = await join('Fresh', 1000);
     one.queue(); fresh.queue();
-    expect(one.matched() || fresh.matched()).toBe(false);
-    const epic = await join('Epic', 1100, 50, 'epic');
-    epic.queue();
-    // A 1:1 at 1600 and an Epic at 1500 are within the band: they meet; the fresh player waits for an even match.
-    expect(one.matched() && epic.matched()).toBe(true);
-    expect(fresh.matched()).toBe(false);
-    // Alone, a 1:1 and a fresh player still meet once the bar has dropped (a small queue is never stuck).
-    const two = await join('Two', 1000, 50, 'legendary');
-    two.queue();
+    expect(one.matched() && fresh.matched()).toBe(true);
+    // A 1600 player still waits for the band to widen before meeting a 1000 one, holder or not.
+    const top = await join('Top', 1600, 50, 'epic'), low = await join('Low', 1000, 50, 'common');
+    top.queue(); low.queue();
+    expect(top.matched() || low.matched()).toBe(false);
     wait((600 - TUNING.match.band) / TUNING.match.widenPerSec + 1);
-    expect(two.matched() && fresh.matched()).toBe(true);
+    expect(top.matched() && low.matched()).toBe(true);
   });
   it('3v3: the two sides are balanced, not the strong half against the weak half', async () => {
     const { join, lobby } = setup();

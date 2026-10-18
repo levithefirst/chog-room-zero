@@ -1,7 +1,8 @@
 // Characters. Adding one means adding an entry here: department, weapon, body, vision, one ability.
 // Bots use the same entries. The burst kind is used only by 1:1 signatures (src/config/power.ts); scream, shield and
-// frenzy are shared by free characters (smaller numbers) and 1:1 signatures.
-export type AbilityKind = 'dash' | 'sonar' | 'barrier' | 'mend' | 'burst' | 'scream' | 'shield' | 'frenzy';
+// frenzy are shared by free characters (smaller numbers) and 1:1 signatures. laser, xray, bubble, drool and aura are
+// the CHOG superpowers (src/config/superpowers.ts): only a verified Chog whose real traits carry one (or DEMO).
+export type AbilityKind = 'dash' | 'sonar' | 'barrier' | 'mend' | 'burst' | 'scream' | 'shield' | 'frenzy' | 'laser' | 'xray' | 'bubble' | 'drool' | 'aura';
 
 export interface AbilityDef {
   kind: AbilityKind;
@@ -21,6 +22,9 @@ export interface AbilityDef {
   /** 1:1 signatures: what both sides see and hear first, and how to beat it. */
   telegraph?: string;
   counter?: string;
+  /** CHOG superpower slot: which power and the rank it plays at (the token's verified tier). */
+  power?: 'laser' | 'xray' | 'bubble' | 'drool' | 'aura';
+  rank?: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 }
 
 /** Five combat departments (owner 2026-10-14): how a character fights, never a stat bonus on its own. */

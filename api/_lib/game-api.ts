@@ -23,7 +23,8 @@ import { validReport } from '../../src/sim/report.js';
 import { readOwnership, selfCheck, type Fetch, type Holding, type OwnershipResult, type SelfCheck } from './chain.js';
 import { BOARD_PAGE, setNftTier, accountFor, buyUpgrade, callsignOf, standingOf, checkTicket, issueTicket, leaderboard, settleMatch, ticketSecret, tokenHistory, upgradesOf, validRecord, type GameTicket } from './game.js';
 import { accountView, awardDue, challengesFor, practiceSecret, recordPractice, setCallsign, setPrefs, startPractice } from './career.js';
-import { NO_UPGRADES, ONE_OF_ONE, SIGNATURES, TIER_DEFS, TIERS, chogName, tierOfMetadataId, type Tier } from '../../src/config/power.js';
+import { NO_UPGRADES, ONE_OF_ONE, SIGNATURES, TIER_DEFS, TIERS, chogName, powerFor, tierOfMetadataId, type Tier } from '../../src/config/power.js';
+import { isSuperpower, powersOf, type SuperpowerId } from '../../src/config/superpowers.js';
 
 export interface GameEnv extends Env {
   NFT_COMBAT?: string;
@@ -205,7 +206,7 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
           const mid = Number(b.demo);
           const tier = tierOfMetadataId(mid);
           if (!tier) return json({ error: 'bad_demo_token' }, 400);
-          const t = await issueTicket({ acc: null, tier, up: NO_UPGRADES, tok: null, mid, tokTier: tier, own: null, holder: false, demo: true, name }, secret, d.now());
+          const t = await issueTicket({ acc: null, tier, up: NO_UPGRADES, tok: null, mid, tokTier: tier, own: null, holder: false, demo: true, name, ...spOf(mid, b.power) }, secret, d.now());
           log('ticket issued: demo');
           return json({ ticket: t.ticket, profile: publicTicket(t.data) });
         }
@@ -240,7 +241,7 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
           acc, up, name: own ?? name,
           tier: holding && nftCombatOn(e) ? tokTier! : 'free',
           tok: holding?.tokenId ?? null, mid: holding?.metadataId ?? null, tokTier, own: holding?.owner ?? null,
-          holder: !!holding, demo: false, ...(standing ? { rating: standing.rating, played: standing.played } : {}),
+          holder: !!holding, demo: false, ...spOf(holding?.metadataId ?? null, b.power), ...(standing ? { rating: standing.rating, played: standing.played } : {}),
         }, secret, d.now());
         log(`ticket issued: ${holding ? 'holder' : 'free'}${acc ? ' with account' : ''}${chain ? ` (${chain})` : ''}`);
         return json({ ticket: t.ticket, profile: publicTicket(t.data), nftCombat: nftCombatOn(e), warning: chain });
@@ -337,8 +338,14 @@ export async function handleGame(req: Request, action: string, d: Deps): Promise
 }
 
 /** What the browser may see of its ticket (the same data the game server will get). */
+/** The holder's pick of superpower, kept only when the token's own traits carry it (the browser cannot add one). */
+function spOf(mid: number | null, pick: unknown): { sp?: SuperpowerId } {
+  return isSuperpower(pick) && powersOf(mid).includes(pick) ? { sp: pick } : {};
+}
+
 function publicTicket(t: GameTicket) {
-  return { account: !!t.acc, name: t.name, tier: t.tier, tierLabel: TIER_DEFS[t.tier].label, tokenId: t.tok, metadataId: t.mid, tokenTier: t.tokTier, holder: t.holder, demo: t.demo, upgrades: t.up,
+  const sp = powerFor(t.tier, null, null, t.demo, t.mid, t.sp ?? null).superpower;
+  return { power: sp?.power ?? null, powerName: sp?.name ?? null, account: !!t.acc, name: t.name, tier: t.tier, tierLabel: TIER_DEFS[t.tier].label, tokenId: t.tok, metadataId: t.mid, tokenTier: t.tokTier, holder: t.holder, demo: t.demo, upgrades: t.up,
     signature: t.mid && t.tokTier === 'legendary' ? SIGNATURES[t.mid]?.name ?? null : null, oneOfOne: t.mid ? ONE_OF_ONE[t.mid]?.name ?? null : null };
 }
 
