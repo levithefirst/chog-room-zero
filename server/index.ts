@@ -34,7 +34,7 @@ const http = createServer((req, res) => {
   }
   res.writeHead(200, { 'content-type': 'text/plain', 'cache-control': 'no-store' });
   // /stats names the commit this server runs (Render sets RENDER_GIT_COMMIT), so a deploy can be matched to the client.
-  res.end(req.url === '/stats' ? JSON.stringify({ ...lobby.stats(), commit: env.RENDER_GIT_COMMIT ?? null }) : 'room-zero game server ok');
+  res.end(req.url === '/stats' ? JSON.stringify({ ...lobby.stats(), sockets: wss.clients.size, load: loadNow(), commit: env.RENDER_GIT_COMMIT ?? null }) : 'room-zero game server ok');
 });
 
 const wss = new WebSocketServer({
@@ -58,11 +58,32 @@ wss.on('connection', (ws: WebSocket) => {
 // Fixed step: catch up at most 5 steps per wake so a stall never fast-forwards a match.
 const step = TUNING.simStepSeconds;
 let last = performance.now() / 1000, acc = 0;
+// MP capacity: per 5 s window, how long one 60 Hz step takes (mean and worst) and the sim time dropped because the
+// process could not keep up (lostSimS: since start, 0 is healthy). /stats shows the last full window with CPU and memory.
+let win = { steps: 0, ms: 0, worst: 0, at: performance.now(), cpu: process.cpuUsage() };
+let lostS = 0;
+let shown = { stepMs: 0, worstStepMs: 0, lostSimS: 0, cpuPct: 0, rssMb: 0, heapMb: 0 };
+const loadNow = () => shown;
 setInterval(() => {
   const now = performance.now() / 1000;
-  acc = Math.min(acc + (now - last), step * 5);
+  const due = acc + (now - last);
+  if (due > step * 5) lostS += due - step * 5;
+  acc = Math.min(due, step * 5);
   last = now;
-  while (acc >= step) { lobby.tick(); acc -= step; }
+  while (acc >= step) {
+    const t0 = performance.now();
+    lobby.tick();
+    const ms = performance.now() - t0;
+    win.steps++; win.ms += ms; if (ms > win.worst) win.worst = ms;
+    acc -= step;
+  }
+  const el = performance.now() - win.at;
+  if (el >= 5000) {
+    const c = process.cpuUsage(win.cpu), m = process.memoryUsage();
+    shown = { stepMs: +(win.ms / Math.max(1, win.steps)).toFixed(3), worstStepMs: +win.worst.toFixed(2), lostSimS: +lostS.toFixed(2),
+      cpuPct: +(((c.user + c.system) / 1000 / el) * 100).toFixed(1), rssMb: Math.round(m.rss / 1048576), heapMb: Math.round(m.heapUsed / 1048576) };
+    win = { steps: 0, ms: 0, worst: 0, at: performance.now(), cpu: process.cpuUsage() };
+  }
 }, 4);
 
 http.listen(port, () => console.log(`room-zero game server on :${port} (ws path /ws)${origins.length ? `, origins ${origins.join(' ')}` : ', any origin'}`));
