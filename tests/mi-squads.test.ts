@@ -2,7 +2,7 @@
 // team, back together after the match; solo queue unchanged; 5v5 still needs every member verified.
 import { describe, expect, it } from 'vitest';
 import { Lobby } from '../server/room';
-import { parseClientMsg, PARTY_CODE, type ServerMsg } from '../src/net/protocol';
+import { PROTOCOL, parseClientMsg, PARTY_CODE, type ServerMsg } from '../src/net/protocol';
 import type { GameTicket } from '../api/_lib/game';
 
 class FakeConn {
@@ -19,7 +19,7 @@ function setup(tickets: Record<string, GameTicket> = {}) {
   const join = async (name: string, ticket?: string) => {
     const c = new FakeConn();
     const id = lobby.connect(c);
-    lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name, hero: 'kettle', ticket }));
+    lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name, hero: 'kettle', ticket }));
     await new Promise((r) => setTimeout(r, 0));
     return { c, id, say: (m: object) => lobby.message(id, JSON.stringify(m)) };
   };

@@ -11,6 +11,7 @@ import { heroById } from '../src/config/heroes';
 import { Predictor } from '../src/net/predict';
 import type { ServerMsg } from '../src/net/protocol';
 import type { ActorInput } from '../src/sim/world';
+import { PROTOCOL } from '../src/net/protocol';
 
 const STEP = TUNING.simStepSeconds;
 
@@ -27,7 +28,7 @@ function run(rttMs: number, predict: boolean, seconds = 12, jitterMs = 0) {
   const mk = (name: string) => {
     const mine = name === 'Me';
     const id = lobby.connect({ send: (m: ServerMsg) => { if (mine) down.push({ at: downAt(), m: JSON.parse(JSON.stringify(m)) as ServerMsg }); }, close: () => undefined });
-    lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name, hero: 'benja' }));
+    lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name, hero: 'benja' }));
     lobby.message(id, JSON.stringify({ t: 'queue', mode: '1v1' }));
     return id;
   };

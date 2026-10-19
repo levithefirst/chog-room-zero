@@ -5,6 +5,7 @@ import { Lobby } from '../server/room';
 import { TUNING } from '../src/config/tuning';
 import type { ServerMsg } from '../src/net/protocol';
 import type { GameTicket } from '../api/_lib/game';
+import { PROTOCOL } from '../src/net/protocol';
 
 function setup() {
   let t = 0;
@@ -16,7 +17,7 @@ function setup() {
     const key = `tk.${name}`;
     tickets.set(key, { tid: name, acc: rating === undefined ? null : `acc-${name}`, tier, up: { hp: 0, armor: 0, cooldown: 0 } as never, tok: null, mid: null, tokTier: null, own: null, holder: tier !== 'free', demo: false, name, exp: 1e12, ...(rating === undefined ? {} : { rating, played }) });
     const id = lobby.connect({ send: (m) => { const a = got.get(id) ?? []; a.push(m); got.set(id, a); }, close: () => undefined });
-    lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name, hero: 'benja', ticket: key }));
+    lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name, hero: 'benja', ticket: key }));
     ids.push(id);
     await new Promise((r) => setTimeout(r, 0));
     return { id, queue: (mode = '1v1', code?: string) => lobby.message(id, JSON.stringify({ t: 'queue', mode, ...(code ? { code } : {}) })), matched: () => (got.get(id) ?? []).some((m) => m.t === 'match') };

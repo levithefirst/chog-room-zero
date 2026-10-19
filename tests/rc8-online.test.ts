@@ -2,7 +2,7 @@
 // authoritative rules; the end-to-end check with independent real browsers is tools/rc8-online.mjs.
 import { describe, expect, it } from 'vitest';
 import { Lobby } from '../server/room';
-import { parseClientMsg, toActorInput, MAX_MESSAGE_BYTES, type ServerMsg } from '../src/net/protocol';
+import { PROTOCOL, parseClientMsg, toActorInput, MAX_MESSAGE_BYTES, type ServerMsg } from '../src/net/protocol';
 import { VERSUS_SPAWNS, ROOM_ZERO } from '../src/config/map';
 import { parseLevel, walkable } from '../src/sim/level';
 import { serverUrl } from '../src/net/client';
@@ -22,7 +22,7 @@ function setup(opts: Record<string, unknown> = {}) {
   const join = (name: string, hero = 'benja', ticket?: string) => {
     const c = new FakeConn();
     const id = lobby.connect(c);
-    lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name, hero, ticket }));
+    lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name, hero, ticket }));
     return { c, id, say: (m: object) => lobby.message(id, JSON.stringify(m)) };
   };
   const run = (seconds: number, each?: () => void) => { for (let i = 0; i < Math.round(seconds * 60); i++) { t += 1 / 60; each?.(); lobby.tick(); } };
@@ -209,6 +209,16 @@ describe('RC-8 connections: rate limit, timeouts, reconnect, leaving', () => {
     lobby.message(id, JSON.stringify({ t: 'queue', mode: '1v1' }));
     expect(c.last('error')!.code).toBe('hello-first');
   });
+  it('H34: a hello from an older build (another protocol) is told a new version is out, not "not understood"', () => {
+    const { lobby } = setup();
+    const c = new FakeConn();
+    const id = lobby.connect(c);
+    lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL - 1, name: 'Old', hero: 'benja' }));
+    expect(c.last('error')!.code).toBe('outdated');
+    expect(c.last('error')!.message).toMatch(/Reload/);
+    lobby.message(id, 'not json at all');
+    expect(c.last('error')!.code).toBe('bad-message');
+  });
   it('a dropped player can resume with their token within the grace period and keeps their operator', () => {
     const { lobby, join, run } = setup({ idleTimeoutSec: 999 });
     const a = join('A'), b = join('B');
@@ -221,7 +231,7 @@ describe('RC-8 connections: rate limit, timeouts, reconnect, leaving', () => {
     expect(w.actors[0].alive).toBe(true);
     const c = new FakeConn();
     const id = lobby.connect(c);
-    lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name: 'A', hero: 'benja', token }));
+    lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name: 'A', hero: 'benja', token }));
     expect(c.last('welcome')!.resumed).toBe(true);
     expect(c.last('match')!.you).toBe(0);
     run(0.2);

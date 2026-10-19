@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { createWorld, mitigate, player, stepWorld, IDLE_INPUT, type ActorInput, type World } from '../src/sim/world';
 import { GRENADES, MAX_UPGRADES, TIERS, powerFor, powerForToken } from '../src/config/power';
 import { TUNING } from '../src/config/tuning';
-import { parseClientMsg, toActorInput } from '../src/net/protocol';
+import { PROTOCOL, parseClientMsg, toActorInput } from '../src/net/protocol';
 import { Lobby } from '../server/room';
 import type { ServerMsg } from '../src/net/protocol';
 import type { GameTicket } from '../api/_lib/game';
@@ -218,7 +218,7 @@ describe('server authority', () => {
     const lobby = new Lobby({ now: () => now, seed: () => 3, checkTicket: async (s) => tickets[s] ?? null });
     const join = async (name: string, ticket: string) => {
       const c = new FakeConn(), id = lobby.connect(c);
-      lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name, hero: 'benja', ticket }));
+      lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name, hero: 'benja', ticket }));
       await new Promise((r) => setTimeout(r, 0));
       return { c, say: (m: object) => lobby.message(id, JSON.stringify(m)) };
     };

@@ -8,6 +8,7 @@ import type { ServerMsg } from '../src/net/protocol';
 import { canSee, muzzleFlashSeen } from '../src/sim/vision';
 import { revealed } from '../src/sim/world';
 import { TUNING } from '../src/config/tuning';
+import { PROTOCOL } from '../src/net/protocol';
 
 class FakeConn { got: ServerMsg[] = []; send(m: ServerMsg) { this.got.push(JSON.parse(JSON.stringify(m)) as ServerMsg); } close() { /* closed */ } }
 
@@ -16,7 +17,7 @@ function match3v3() {
   const lobby = new Lobby({ now: () => t, seed: () => 5, countdownSec: 0 });
   const conns = Array.from({ length: 6 }, () => new FakeConn());
   const ids = conns.map((c) => lobby.connect(c));
-  ids.forEach((id, i) => { lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name: `P${i}`, hero: 'benja' })); lobby.message(id, JSON.stringify({ t: 'queue', mode: '3v3' })); });
+  ids.forEach((id, i) => { lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name: `P${i}`, hero: 'benja' })); lobby.message(id, JSON.stringify({ t: 'queue', mode: '3v3' })); });
   const room = [...lobby.rooms.values()][0];
   const tick = (n = 1) => { for (let i = 0; i < n; i++) { t += 1 / 60; lobby.tick(); } };
   return { lobby, room, tick, w: room.world };

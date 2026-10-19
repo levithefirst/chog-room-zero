@@ -9,6 +9,7 @@ import { fieldAt, imbalance, walkField } from '../src/sim/pickups';
 import { TUNING } from '../src/config/tuning';
 import { Lobby } from '../server/room';
 import type { ServerMsg } from '../src/net/protocol';
+import { PROTOCOL } from '../src/net/protocol';
 
 const P = TUNING.pickups;
 const SEEDS = Array.from({ length: 60 }, (_, i) => i + 1);
@@ -172,7 +173,7 @@ describe('online: the server says where the pickups are', () => {
     const lobby = new Lobby({ now: () => t, seed: () => 9, countdownSec: 0 });
     const conns = [new FakeConn(), new FakeConn()];
     const ids = conns.map((c) => lobby.connect(c));
-    ids.forEach((id, i) => { lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name: `P${i}`, hero: 'benja' })); lobby.message(id, JSON.stringify({ t: 'queue', mode: '1v1' })); });
+    ids.forEach((id, i) => { lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name: `P${i}`, hero: 'benja' })); lobby.message(id, JSON.stringify({ t: 'queue', mode: '1v1' })); });
     const snaps = () => conns[0].got.filter((m): m is Extract<ServerMsg, { t: 'snap' }> => m.t === 'snap');
     for (let i = 0; i < 30; i++) { t += 1 / 60; lobby.tick(); }
     const room = [...lobby.rooms.values()][0];

@@ -7,6 +7,7 @@ import { TUNING } from '../src/config/tuning';
 import { HALL } from './helpers/duel';
 import { Lobby } from '../server/room';
 import type { ServerMsg } from '../src/net/protocol';
+import { PROTOCOL } from '../src/net/protocol';
 
 const R = TUNING.revive;
 const STEP = TUNING.simStepSeconds;
@@ -220,7 +221,7 @@ describe('online: disconnect and reconnect while downed', () => {
     let t = 0;
     const lobby = new Lobby({ now: () => t, seed: () => 5, countdownSec: 0, idleTimeoutSec: 999, reconnectGraceSec: 20 });
     const cs = Array.from({ length: 6 }, () => conn());
-    const ids = cs.map((c, i) => { const id = lobby.connect(c); lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name: `P${i}`, hero: 'benja' })); lobby.message(id, JSON.stringify({ t: 'queue', mode: '3v3' })); return id; });
+    const ids = cs.map((c, i) => { const id = lobby.connect(c); lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name: `P${i}`, hero: 'benja' })); lobby.message(id, JSON.stringify({ t: 'queue', mode: '3v3' })); return id; });
     const room = [...lobby.rooms.values()][0] as unknown as { world: World; members: { id: number }[] };
     const step = (s: number) => { for (let i = 0; i < secs(s); i++) { t += STEP; lobby.tick(); } };
     return { lobby, cs, ids, room, w: room.world, step };
@@ -239,7 +240,7 @@ describe('online: disconnect and reconnect while downed', () => {
     expect(me.downed).toBe(false);
     const back = conn();
     const id = lobby.connect(back);
-    lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name: 'P0', hero: 'benja', token }));
+    lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name: 'P0', hero: 'benja', token }));
     expect((back.got.find((m) => m.t === 'welcome') as Extract<ServerMsg, { t: 'welcome' }>).resumed).toBe(true);
     step(0.2);
     const snap = [...back.got].reverse().find((m) => m.t === 'snap') as Extract<ServerMsg, { t: 'snap' }>;
@@ -256,7 +257,7 @@ describe('online: disconnect and reconnect while downed', () => {
     step(3);
     const back = conn();
     const id = lobby.connect(back);
-    lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name: 'P0', hero: 'benja', token }));
+    lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name: 'P0', hero: 'benja', token }));
     step(0.2);
     const snap = [...back.got].reverse().find((m) => m.t === 'snap') as Extract<ServerMsg, { t: 'snap' }>;
     const mine = snap.actors.find((a) => a.id === me.id)!;

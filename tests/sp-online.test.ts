@@ -4,7 +4,7 @@
 // and an X-Ray hit through a wall without where the target is.
 import { describe, expect, it } from 'vitest';
 import { Lobby } from '../server/room';
-import { parseClientMsg, type ServerMsg } from '../src/net/protocol';
+import { PROTOCOL, parseClientMsg, type ServerMsg } from '../src/net/protocol';
 import { MAPS } from '../src/config/maps';
 import type { GameTicket } from '../api/_lib/game';
 import { powerFor, signatureFor } from '../src/config/power';
@@ -33,7 +33,7 @@ async function match(a: GameTicket | null, b: GameTicket | null, heroes = ['benj
   const lobby = new Lobby({ now: () => t, seed: () => 7, countdownSec: 0, checkTicket: async (s) => tickets[s] ?? null });
   const conns = [new FakeConn(), new FakeConn()];
   const ids = conns.map((c) => lobby.connect(c));
-  ids.forEach((id, i) => lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name: `P${i}`, hero: heroes[i], ticket: i ? 'b.t' : 'a.t' })));
+  ids.forEach((id, i) => lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name: `P${i}`, hero: heroes[i], ticket: i ? 'b.t' : 'a.t' })));
   await flush();
   ids.forEach((id) => lobby.message(id, JSON.stringify({ t: 'queue', mode: '1v1' })));
   const room = [...lobby.rooms.values()][0];
@@ -176,7 +176,7 @@ describe('locations online (owner 2026-10-18)', () => {
     const lobby = new Lobby({ now: () => t, seed: () => 7, countdownSec: 0, checkTicket: async (s) => (s === 'a.t' ? tickets[0] : tickets[1]) });
     const conns = [new FakeConn(), new FakeConn()];
     const ids = conns.map((c) => lobby.connect(c));
-    ids.forEach((id, i) => lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name: `P${i}`, hero: 'benja', ...(tickets[i] ? { ticket: i ? 'b.t' : 'a.t' } : {}) })));
+    ids.forEach((id, i) => lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name: `P${i}`, hero: 'benja', ...(tickets[i] ? { ticket: i ? 'b.t' : 'a.t' } : {}) })));
     await flush();
     ids.forEach((id) => lobby.message(id, JSON.stringify({ t: 'queue', mode: '1v1', ...(map ? { map } : {}) })));
     return { lobby, conns };
@@ -199,7 +199,7 @@ describe('locations online (owner 2026-10-18)', () => {
     const lobby = new Lobby({ now: () => t, seed: () => 7, countdownSec: 0, checkTicket: async (s) => (s === 'h.t' ? holder : null) });
     const c = [0, 1, 2, 3].map(() => new FakeConn());
     const ids = c.map((x) => lobby.connect(x));
-    ids.forEach((id, i) => lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name: `P${i}`, hero: 'benja', ...(i === 0 ? { ticket: 'h.t' } : {}) })));
+    ids.forEach((id, i) => lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name: `P${i}`, hero: 'benja', ...(i === 0 ? { ticket: 'h.t' } : {}) })));
     await flush();
     lobby.message(ids[0], JSON.stringify({ t: 'queue', mode: '1v1', map: 'office' }));
     lobby.message(ids[1], JSON.stringify({ t: 'queue', mode: '1v1', map: 'supermarket' }));

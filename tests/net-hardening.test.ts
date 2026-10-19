@@ -13,6 +13,7 @@ import { canSee } from '../src/sim/vision';
 import { WEAPONS } from '../src/config/weapons';
 import { TUNING } from '../src/config/tuning';
 import type { HitEvent, World } from '../src/sim/world';
+import { PROTOCOL } from '../src/net/protocol';
 
 class FakeConn {
   got: ServerMsg[] = [];
@@ -33,7 +34,7 @@ function setup(opts: Record<string, unknown> = {}) {
   const join = (name: string, ticket?: string, token?: string) => {
     const c = new FakeConn();
     const id = lobby.connect(c);
-    lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name, hero: 'benja', ...(ticket ? { ticket } : {}), ...(token ? { token } : {}) }));
+    lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name, hero: 'benja', ...(ticket ? { ticket } : {}), ...(token ? { token } : {}) }));
     return { c, id, say: (m: object) => lobby.message(id, JSON.stringify(m)) };
   };
   const run = (seconds: number, each?: () => void) => { for (let i = 0; i < Math.round(seconds * 60); i++) { t += 1 / 60; each?.(); lobby.tick(); } };
@@ -195,7 +196,7 @@ describe('P1-4 / P1-5 / P2-12b hello and resume', () => {
     lobby.disconnect(a.id);
     const c = join('C');
     c.say({ t: 'queue', mode: '1v1' });
-    c.say({ t: 'hello', v: 1, name: 'C', hero: 'benja', token });
+    c.say({ t: 'hello', v: PROTOCOL, name: 'C', hero: 'benja', token });
     expect(c.c.last('error')!.code).toBe('hello-again');
     expect(c.c.last('match')).toBeUndefined();
     expect(c.c.last('queued')).toBeDefined();

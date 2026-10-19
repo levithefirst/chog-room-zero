@@ -5,6 +5,7 @@ import { ammoCeiling, createWorld, down, lootTake, player, stepWorld, IDLE_INPUT
 import { TUNING } from '../src/config/tuning';
 import { Lobby } from '../server/room';
 import type { ServerMsg } from '../src/net/protocol';
+import { PROTOCOL } from '../src/net/protocol';
 
 const L = TUNING.loot;
 const STEP = TUNING.simStepSeconds;
@@ -174,7 +175,7 @@ describe('online (server-authoritative)', () => {
     const lobby = new Lobby({ now: () => t, seed: () => 5, countdownSec: 0, idleTimeoutSec: 999, reconnectGraceSec: 20 });
     const n = mode === '1v1' ? 2 : 6;
     const cs = Array.from({ length: n }, () => conn());
-    const ids = cs.map((c, i) => { const id = lobby.connect(c); lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name: `P${i}`, hero: 'benja' })); return id; });
+    const ids = cs.map((c, i) => { const id = lobby.connect(c); lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name: `P${i}`, hero: 'benja' })); return id; });
     ids.forEach((id) => lobby.message(id, JSON.stringify({ t: 'queue', mode, ...(priv ? { code: 'GPLOOT7' } : {}) })));
     const room = [...lobby.rooms.values()][0] as unknown as { world: World; members: { id: number }[] } | undefined;
     const step = (s: number) => { for (let i = 0; i < Math.round(s / STEP); i++) { t += STEP; lobby.tick(); } };
@@ -235,7 +236,7 @@ describe('online (server-authoritative)', () => {
     step(1);
     const back = conn();
     const id = lobby.connect(back);
-    lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name: 'P0', hero: 'benja', token }));
+    lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name: 'P0', hero: 'benja', token }));
     step(0.2);
     const knows = w.loot.filter((l) => l.known.includes(w.actors[0].team)).length;
     expect((lastSnap(back)!.lt ?? []).length).toBe(knows);

@@ -28,5 +28,7 @@ export function applyDevice(p: DeviceProfile, cls: DOMTokenList = document.body.
 
 export function currentDevice(): DeviceProfile {
   const mm = typeof matchMedia === 'function' ? (s: string) => matchMedia(s) : null;
-  return deviceProfile(screen?.width ?? innerWidth, screen?.height ?? innerHeight, mm, navigator.maxTouchPoints ?? 0);
+  const sc = typeof screen === 'undefined' ? null : screen;
+  const w = sc?.width ?? (typeof innerWidth === 'number' ? innerWidth : 1280), h = sc?.height ?? (typeof innerHeight === 'number' ? innerHeight : 720);
+  return deviceProfile(w, h, mm, typeof navigator === 'undefined' ? 0 : navigator.maxTouchPoints ?? 0);
 }

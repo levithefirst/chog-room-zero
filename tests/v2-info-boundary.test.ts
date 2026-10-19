@@ -8,6 +8,7 @@ import { Lobby } from '../server/room';
 import type { ServerMsg } from '../src/net/protocol';
 import { canSee } from '../src/sim/vision';
 import type { Level } from '../src/sim/level';
+import { PROTOCOL } from '../src/net/protocol';
 
 class FakeConn { got: ServerMsg[] = []; send(m: ServerMsg) { this.got.push(JSON.parse(JSON.stringify(m)) as ServerMsg); } close() { /* closed */ } }
 const input = (o: Record<string, unknown>) => JSON.stringify({ t: 'input', seq: 1, mx: 0, my: 0, aim: 0, fire: false, quiet: false, reload: false, ability: false, ...o });
@@ -17,8 +18,8 @@ function duel() {
   const lobby = new Lobby({ now: () => t, seed: () => 5, countdownSec: 0 });
   const conns = [new FakeConn(), new FakeConn()];
   const ids = conns.map((c) => lobby.connect(c));
-  lobby.message(ids[0], JSON.stringify({ t: 'hello', v: 1, name: 'Sniper', hero: 'ray' }));
-  lobby.message(ids[1], JSON.stringify({ t: 'hello', v: 1, name: 'Victim', hero: 'tonashiro' }));
+  lobby.message(ids[0], JSON.stringify({ t: 'hello', v: PROTOCOL, name: 'Sniper', hero: 'ray' }));
+  lobby.message(ids[1], JSON.stringify({ t: 'hello', v: PROTOCOL, name: 'Victim', hero: 'tonashiro' }));
   ids.forEach((id) => lobby.message(id, JSON.stringify({ t: 'queue', mode: '1v1' })));
   const room = [...lobby.rooms.values()][0];
   const tick = (n = 1) => { for (let i = 0; i < n; i++) { t += 1 / 60; lobby.tick(); } };

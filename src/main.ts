@@ -1155,8 +1155,9 @@ async function start() {
     if (trackerBg?.level !== l) {
       const img = document.createElement('canvas'); img.width = W; img.height = H;
       const g = img.getContext('2d')!;
-      g.fillStyle = 'rgba(190, 182, 220, 0.55)';
-      for (let y = 0; y < l.h; y++) for (let x = 0; x < l.w; x++) if (l.tiles[y * l.w + x] === 1) g.fillRect(ox + x * k, oy + y * k, Math.ceil(k), Math.ceil(k));
+      // Walls, and (H34) rails and decks: the tracker reads a track bed or a slab, not open floor.
+      const ink: Record<number, string> = { 1: 'rgba(190, 182, 220, 0.55)', 5: 'rgba(217, 201, 90, 0.35)', 6: 'rgba(139, 108, 196, 0.35)' };
+      for (let y = 0; y < l.h; y++) for (let x = 0; x < l.w; x++) { const c = ink[l.tiles[y * l.w + x]]; if (c) { g.fillStyle = c; g.fillRect(ox + x * k, oy + y * k, Math.ceil(k), Math.ceil(k)); } }
       trackerBg = { level: l, img };
     }
     const g = trackerEl.getContext('2d')!;

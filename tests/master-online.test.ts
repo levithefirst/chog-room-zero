@@ -5,6 +5,7 @@ import { Lobby } from '../server/room';
 import type { ServerMsg } from '../src/net/protocol';
 import type { GameTicket } from '../api/_lib/game';
 import { HEROES } from '../src/config/heroes';
+import { PROTOCOL } from '../src/net/protocol';
 
 class FakeConn {
   got: ServerMsg[] = [];
@@ -22,7 +23,7 @@ function setup(tickets: Record<string, GameTicket | null>) {
   const join = async (name: string, ticket?: string) => {
     const c = new FakeConn();
     const id = lobby.connect(c);
-    lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name, hero: 'benja', ticket }));
+    lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name, hero: 'benja', ticket }));
     await flush();
     return { c, id, say: (m: object) => lobby.message(id, JSON.stringify(m)) };
   };
@@ -54,7 +55,7 @@ describe('tickets on hello', () => {
     const lobby = new Lobby({ now: () => 0, seed: () => 7, checkTicket: () => new Promise(() => undefined) });
     const c = new FakeConn();
     const id = lobby.connect(c);
-    lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name: 'Slow', hero: 'benja', ticket: 'slow.t' }));
+    lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name: 'Slow', hero: 'benja', ticket: 'slow.t' }));
     expect(c.last('welcome')).toBeUndefined();
     await vi.advanceTimersByTimeAsync(5100);
     expect(c.last('welcome')!.profile).toMatchObject({ verified: false, tier: 'free' });

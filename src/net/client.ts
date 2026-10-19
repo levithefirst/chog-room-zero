@@ -290,7 +290,7 @@ export class OnlineSession {
         return;
       case 'error':
         this.message = m.message;
-        if (m.code === 'rate' || m.code === 'idle') this.state = 'error';
+        if (m.code === 'rate' || m.code === 'idle' || m.code === 'outdated') this.state = 'error';
         if (m.code === 'holders-only' || m.code === 'token-in-use' || m.code.startsWith('party-')) { if (this.state === 'queued' || this.state === 'connecting') this.state = 'idle'; this.queue = null; }
         // Voided before the start (a side left in the countdown): back to the lobby, the message says why.
         if (m.code === 'match-cancelled' && (this.state === 'match' || this.state === 'reconnecting')) { this.state = 'idle'; this.dropMatch(); }

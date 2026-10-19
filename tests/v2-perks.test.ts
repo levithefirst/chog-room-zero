@@ -7,6 +7,7 @@ import { PERKS, PERK_IDS, spawnPerk } from '../src/config/perks';
 import { TUNING } from '../src/config/tuning';
 import { Lobby } from '../server/room';
 import type { ServerMsg } from '../src/net/protocol';
+import { PROTOCOL } from '../src/net/protocol';
 
 const STEP = TUNING.simStepSeconds;
 const OPEN = ['##############################', ...Array.from({ length: 12 }, () => '#........................#...#'), '##############################'];
@@ -137,7 +138,7 @@ describe('online: the server decides, and tells only who knows', () => {
     let t = 0;
     const lobby = new Lobby({ now: () => t, seed: () => 5, countdownSec: 0 });
     const ids = [new FakeConn(), new FakeConn()].map((c) => lobby.connect(c));
-    ids.forEach((id, i) => { lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name: `P${i}`, hero: 'benja' })); lobby.message(id, JSON.stringify({ t: 'queue', mode: '1v1' })); });
+    ids.forEach((id, i) => { lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name: `P${i}`, hero: 'benja' })); lobby.message(id, JSON.stringify({ t: 'queue', mode: '1v1' })); });
     const room = [...lobby.rooms.values()][0];
     lobby.tick();
     return { lobby, room, w: room.world };

@@ -10,6 +10,7 @@ import { findPath } from '../src/sim/level';
 import { TACTICAL_POINTS } from '../src/config/map';
 import { Lobby } from '../server/room';
 import type { ServerMsg } from '../src/net/protocol';
+import { PROTOCOL } from '../src/net/protocol';
 
 const out = (...a: unknown[]) => (globalThis as { process?: { stdout: { write(s: string): void } } }).process?.stdout.write(`\nPERF ${a.join(' ')}`);
 
@@ -50,9 +51,9 @@ describe('game server cost', () => {
     const conns = Array.from({ length: 10 }, () => new Conn());
     const ids = conns.map((c) => lobby.connect(c));
     // 5v5 needs verified holders (tickets from the site), so the load is two 3v3 rooms: 12 players, more than one 5v5.
-    ids.forEach((id, i) => { lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name: `P${i}`, hero: HEROES[i % HEROES.length].id })); lobby.message(id, JSON.stringify({ t: 'queue', mode: '3v3' })); });
+    ids.forEach((id, i) => { lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name: `P${i}`, hero: HEROES[i % HEROES.length].id })); lobby.message(id, JSON.stringify({ t: 'queue', mode: '3v3' })); });
     const extra = [new Conn(), new Conn()];
-    extra.forEach((c, i) => { const id = lobby.connect(c); lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name: `X${i}`, hero: 'benja' })); lobby.message(id, JSON.stringify({ t: 'queue', mode: '3v3' })); });
+    extra.forEach((c, i) => { const id = lobby.connect(c); lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name: `X${i}`, hero: 'benja' })); lobby.message(id, JSON.stringify({ t: 'queue', mode: '3v3' })); });
     const all = [...conns, ...extra];
     const rooms = [...lobby.rooms.values()];
     expect(rooms.length).toBe(2);

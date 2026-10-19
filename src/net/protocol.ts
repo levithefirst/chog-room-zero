@@ -7,7 +7,9 @@ import type { Tier } from '../config/power';
 import type { SuperpowerId } from '../config/superpowers';
 import { isMapId, type MapId } from '../config/maps';
 
-export const PROTOCOL = 1;
+// 2 (H34): stairs slow the body in the shared movement rule, rails block it, lit areas change who is seen, and two new
+// location ids: an older client would predict and render a different game, so it is told to reload.
+export const PROTOCOL = 2;
 export type Mode = '1v1' | '3v3' | '5v5';
 export const MODE_SIZE: Record<Mode, number> = { '1v1': 2, '3v3': 6, '5v5': 10 };
 // A hello can carry a signed game ticket (about 500 characters).

@@ -7,6 +7,7 @@ import { TUNING } from '../src/config/tuning';
 import { leadTarget, stepCamera, createCamera } from '../src/render/camera';
 import { Lobby } from '../server/room';
 import type { ServerMsg } from '../src/net/protocol';
+import { PROTOCOL } from '../src/net/protocol';
 
 const DEG = Math.PI / 180;
 const STEP = TUNING.simStepSeconds;
@@ -138,7 +139,7 @@ describe('no phantom health loss', () => {
     const conn = () => ({ got: [] as ServerMsg[], send(m: ServerMsg) { this.got.push(m); }, close() { /* closed */ } });
     const a = conn(), b = conn();
     const ia = lobby.connect(a), ib = lobby.connect(b);
-    for (const [id, n] of [[ia, 'A'], [ib, 'B']] as const) { lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name: n, hero: 'benja' })); lobby.message(id, JSON.stringify({ t: 'queue', mode: '1v1' })); }
+    for (const [id, n] of [[ia, 'A'], [ib, 'B']] as const) { lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name: n, hero: 'benja' })); lobby.message(id, JSON.stringify({ t: 'queue', mode: '1v1' })); }
     const w = ([...lobby.rooms.values()][0] as unknown as { world: World }).world;
     const hp0 = w.actors.map((x) => x.hp);
     for (let i = 0; i < 20 * 60; i++) { t += 1 / 60; lobby.tick(); }

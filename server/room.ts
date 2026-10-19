@@ -174,7 +174,14 @@ export class Lobby {
     }
     p.bucket -= 1;
     const m = parseClientMsg(raw);
-    if (!m) { this.err(p, 'bad-message', 'Message not understood.'); return; }
+    if (!m) {
+      // A hello from an older build (another protocol): say so, so the page can ask for a reload, instead of a riddle.
+      let j: unknown = null;
+      try { j = JSON.parse(raw); } catch { /* not JSON */ }
+      const v = j && typeof j === 'object' ? (j as { t?: unknown; v?: unknown }) : null;
+      if (v && v.t === 'hello' && typeof v.v === 'number' && v.v !== PROTOCOL) { this.err(p, 'outdated', 'A new version of Room Zero is out. Reload the page to play online.'); return; }
+      this.err(p, 'bad-message', 'Message not understood.'); return;
+    }
     if (p.state === 'new' && m.t !== 'hello') { this.err(p, 'hello-first', 'Say hello first.'); return; }
     this.handle(p, m);
   }

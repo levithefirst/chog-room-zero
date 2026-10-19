@@ -11,6 +11,7 @@ import { PRACTICE_REWARDS, REWARDS, lossCeiling, rewardBreakdown, winFloor, type
 import { Lobby } from '../server/room';
 import type { ServerMsg } from '../src/net/protocol';
 import type { GameTicket } from '../api/_lib/game';
+import { PROTOCOL } from '../src/net/protocol';
 
 const SECRET = 'test-secret-'.padEnd(48, 'x');
 const HOST = 'chogroomzero.xyz';
@@ -219,7 +220,7 @@ describe('the game server record', () => {
     const join = async (name: string, ticket: string) => {
       const c = new FakeConn();
       const id = lobby.connect(c);
-      lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name, hero: 'benja', ticket }));
+      lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name, hero: 'benja', ticket }));
       await new Promise((r) => setTimeout(r, 0));
       return { c, say: (m: object) => lobby.message(id, JSON.stringify(m)) };
     };
