@@ -70,7 +70,7 @@ Measured on the tiles (`tests/h34-maps.test.ts` prints the table):
 | Rails / stairs (tiles) | 0 / 0 | 16 / 0 | 0 / 0 | 252 / 104 | 172 / 72 |
 | Lit share | 0 | 0.31 | 0.87 | 0.46 | 0.29 |
 | Fight distance, median / p90 (m) | 4.5 / 6.7 | 4.9 / 8.0 | 6.2 / 9.9 | 6.3 / 8.9 | 4.3 / 7.9 |
-| Pickups | 38 | 30 | 30 | 30 | 30 |
+| Pickups | 38 | 30 | 32 | 30 | 30 |
 
 The fight distances come from 8 autopilot default games per map. They are a proxy for play, not play.
 
