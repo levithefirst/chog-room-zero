@@ -1052,8 +1052,22 @@ function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
  * walls and crates, and the corner assist. The ONE movement rule: the sim runs it for everyone, and an online client
  * runs the same function on its own operator to predict it before the server's answer arrives (SB, src/net/client.ts).
  */
+/**
+ * The solid boxes an actor can touch during one moveBody call, in level order (the same order, so the same pushes, as
+ * the full list). MP P0: collision was a quarter of the game server's CPU, every actor scanning every box several times
+ * a step. One body moves well under half a metre a step (dash included), so radius + 1.5 m keeps every reachable box.
+ */
+const nearScratch: Box[] = [];
+function nearBoxes(level: Level, x: number, y: number, r: number): Box[] {
+  nearScratch.length = 0;
+  const x0 = x - r, x1 = x + r, y0 = y - r, y1 = y + r;
+  for (const b of level.solidBoxes) if (b.x1 >= x0 && b.x0 <= x1 && b.y1 >= y0 && b.y0 <= y1) nearScratch.push(b);
+  return nearScratch;
+}
+
 export function moveBody(level: Level, a: Actor, inp: ActorInput, dt: number): void {
   const M = TUNING.movement;
+  const solid = nearBoxes(level, a.x, a.y, M.radius + 1.5);
   // Drool: dragged to the wall spot, then glued (no walking, no dash, no push) until it lets go.
   if (a.pinLeft > 0) {
     a.pinLeft = Math.max(0, a.pinLeft - dt);
@@ -1062,7 +1076,7 @@ export function moveBody(level: Level, a: Actor, inp: ActorInput, dt: number): v
     if (d > 1e-6) { a.x += (dx / d) * step; a.y += (dy / d) * step; }
     a.vx = a.vy = 0;
     a.dashLeft = 0;
-    resolveCircle(a, M.radius, level.solidBoxes);
+    resolveCircle(a, M.radius, solid);
     return;
   }
   const speedMul = a.hero.speed * (a.slowLeft > 0 ? a.slowMul : 1) * (a.chargeLeft > 0 || a.beamLeft > 0 ? BEAM.moveMul : 1)
@@ -1081,7 +1095,7 @@ export function moveBody(level: Level, a: Actor, inp: ActorInput, dt: number): v
   }
   a.x += a.vx * dt;
   a.y += a.vy * dt;
-  resolveCircle(a, M.radius, level.solidBoxes);
+  resolveCircle(a, M.radius, solid);
   if (a.trapLeft > 0) {
     // Bubble: the body stays inside the cage; walking into its skin stops dead.
     a.trapLeft = Math.max(0, a.trapLeft - dt);
@@ -1096,12 +1110,12 @@ export function moveBody(level: Level, a: Actor, inp: ActorInput, dt: number): v
   }
   if (a.dashLeft <= 0) {
     // Corner assist: never stop dead on a crate/wall edge you are nearly past (CHOG-MAP-001).
-    const t = cornerAssistDir(a.x, a.y, M.radius, inp.moveX, inp.moveY, level.solidBoxes, M.cornerAssist);
+    const t = cornerAssistDir(a.x, a.y, M.radius, inp.moveX, inp.moveY, solid, M.cornerAssist);
     if (t.x !== 0 || t.y !== 0) {
       const sp = M.maxSpeed * speedMul * M.cornerAssistSpeed * (inp.quiet ? M.quietSpeedScale : 1) * dt;
       a.x += t.x * sp;
       a.y += t.y * sp;
-      resolveCircle(a, M.radius, level.solidBoxes);
+      resolveCircle(a, M.radius, solid);
     }
   }
 }

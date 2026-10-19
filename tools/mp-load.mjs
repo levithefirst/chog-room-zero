@@ -32,16 +32,19 @@ class Bot {
   open(resume = false) {
     const ws = new WebSocket(url);
     this.ws = ws;
+    this.welcomed = false;
     ws.onopen = () => setTimeout(() => this.send({ t: 'hello', v: PROTOCOL, name: this.name, hero: 'benja', ...(resume && this.token ? { token: this.token } : {}) }), this.slow && !resume ? 3000 + Math.random() * 5000 : 0);
     ws.onmessage = (e) => { const m = JSON.parse(String(e.data)); if (this.slow) setTimeout(() => this.on(m), 300); else this.on(m); };
     ws.onclose = () => { if (this.ws !== ws) return; this.stopInputs(); if (!this.done && this.state !== 'dropping') { R.closesByServer++; this.state = 'off'; } };
     ws.onerror = () => {};
   }
   send(m) { if (this.ws?.readyState === 1) this.ws.send(JSON.stringify(m)); }
-  queue() { this.state = 'queued'; this.qAt = now(); this.gotSnap = false; R.queued++; this.send({ t: 'queue', mode: this.mode, map: this.map }); }
+  // Like the real client: a queue is sent only on a socket that has been welcomed (else it waits for the welcome).
+  queue() { if (!this.welcomed) { this.state = 'off'; return; } this.state = 'queued'; this.qAt = now(); this.gotSnap = false; R.queued++; this.send({ t: 'queue', mode: this.mode, map: this.map }); }
   on(m) {
     switch (m.t) {
       case 'welcome':
+        this.welcomed = true;
         if (this.state === 'reconnecting') { if (m.resumed) R.resumed++; else { R.resumeFail++; this.state = 'idle'; if (SUSTAIN) this.queue(); } }
         this.token = m.token;
         if (this.state === 'off' || this.state === 'new') this.queue();
