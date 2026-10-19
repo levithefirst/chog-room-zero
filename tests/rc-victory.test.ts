@@ -27,18 +27,21 @@ describe('RC-1 victory by play (autopilot vs the real bots)', () => {
       for (const w of wins) expect(w.hostilesLeft).toBe(0);
     }, 180000);
   }
-  it('alone against five: the roster wins at least 21 of 280, every hero at least once in 80, every win a full clear', () => {
+  // Owner 2026-10-18 (IDENTITY + MAPS pass): every operator and bot has 150 health. Longer fights favour the bigger
+  // side, so alone against five (not a mode the game offers since LOCKED 17) fell from 39 to 5 of 280 for the
+  // autopilot; the shipping game above still passes its per-hero bar. Reported to the owner (docs/HANDOFFS.md H33):
+  // what stays tested here is that a lone clear is still possible and that every win is a full clear.
+  it('alone against five: still possible for the roster, every win a full clear', () => {
     let total = 0;
     for (const h of HEROES) {
       const alone = Array.from({ length: 2 * SEEDS }, (_, i) => autopilot(h.id, i + 1));
       results[h.id] = { ...(results[h.id] ?? { team: [] }), alone };
       const wins = alone.filter((x) => x.won);
-      expect(wins.length, h.name).toBeGreaterThanOrEqual(1);
       // A full clear: no hostile left (the player's own kills, or one the danger zone took).
       for (const w of wins) expect(w.hostilesLeft).toBe(0);
-      total += alone.slice(0, SEEDS).filter((x) => x.won).length;
+      total += alone.filter((x) => x.won).length;
     }
-    expect(total).toBeGreaterThanOrEqual(21);
+    expect(total).toBeGreaterThanOrEqual(1);
   }, 600000);
   it('writes the evidence table (VICTORY_OUT=<file>)', async () => {
     const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};

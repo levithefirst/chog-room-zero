@@ -21,7 +21,7 @@ try {
     await b.until(`__chog.view() === 'demo'`, 5000);
     const pick = await b.ev(`({ buttons: [...document.querySelectorAll('[data-train]')].map((x) => x.dataset.train), ranks: [...document.querySelectorAll('#trainrank option')].map((o) => o.value) })`);
     await b.shot('01-demo-training');
-    check(`${view.label}: DEMO screen offers a drill for each of the five powers at every rank`, pick.buttons.join() === 'laser,xray,bubble,drool,aura' && pick.ranks.length === 5, JSON.stringify(pick));
+    check(`${view.label}: DEMO screen offers a drill for each of the six powers at every rank`, pick.buttons.join() === 'laser,xray,visor,bubble,drool,aura' && pick.ranks.length === 5, JSON.stringify(pick));
     check(`${view.label}: DEMO screen layout (no page scroll, no off-screen buttons)`, (await b.ev(LAYOUT_PROBE) ?? []).length === 0, JSON.stringify(await b.ev(LAYOUT_PROBE)));
     await b.ev(`document.getElementById('trainrank').value = 'rare'`);
     await b.click('[data-train="aura"]');
@@ -32,8 +32,9 @@ try {
     await b.until(`/VOLLEY IN/i.test(document.getElementById('status').innerText)`, 15000);
     const st = await b.ev(`document.getElementById('status').innerText`);
     check(`${view.label}: the HUD counts the drill down and warns of the volley`, /Training · Hold the line · \d+ s/i.test(st) && /VOLLEY IN/i.test(st), st);
-    await b.ev(`(() => { const o = { key: ' ', code: 'Space', bubbles: true }; window.dispatchEvent(new KeyboardEvent('keydown', o)); setTimeout(() => window.dispatchEvent(new KeyboardEvent('keyup', o)), 120); })()`);
+    // One press only: a second, fresh press drops the aura early (the rule), so the phone taps and the desk keys.
     if (view.touch) await b.click('#ability');
+    else await b.ev(`(() => { const o = { key: ' ', code: 'Space', bubbles: true }; window.dispatchEvent(new KeyboardEvent('keydown', o)); setTimeout(() => window.dispatchEvent(new KeyboardEvent('keyup', o)), 120); })()`);
     await b.until(`__chog.world.actors[0].auraLeft > 0`, 3000);
     await b.shot('02-aura-drill');
     check(`${view.label}: the aura goes up from the ability control`, await b.ev(`__chog.world.actors[0].auraLeft > 0`));
@@ -56,20 +57,19 @@ try {
       await b.until(`__chog.view() === 'demo'`, 5000);
       await b.click('[data-train="laser"]');
       await b.until(`__chog.phase === 'play' && __chog.training()?.drill.id === 'laser'`, 20000);
-      await sleep(1500);
-      // The camera leads toward the cursor, so re-aim a few times until the cursor sits on the dummy.
-      for (let i = 0; i < 6; i++) {
-        const at = await b.ev(`(() => { const d = __chog.world.actors[1]; const s = __chog.renderer.toScreen(d.x, d.y); const c = document.querySelector('canvas').getBoundingClientRect(); return { x: c.x + s.x, y: c.y + s.y }; })()`);
-        await b.cmd('Input.dispatchMouseEvent', { type: 'mouseMoved', x: at.x, y: at.y });
-        await sleep(350);
-      }
+      // "Five coming": the first target walks in from the far side; wait until it is inside the beam's reach.
+      await b.until(`(() => { const p = __chog.world.actors[0], d = __chog.world.actors[1]; return d.alive && Math.hypot(d.x - p.x, d.y - p.y) < 8; })()`, 20000);
+      // The camera leads toward the cursor and the target walks, so keep the cursor on it.
+      const aim = () => b.ev(`(() => { const d = __chog.world.actors[1]; const s = __chog.renderer.toScreen(d.x, d.y); const c = document.querySelector('canvas').getBoundingClientRect(); return { x: c.x + s.x, y: c.y + s.y }; })()`)
+        .then((at) => b.cmd('Input.dispatchMouseEvent', { type: 'mouseMoved', x: at.x, y: at.y }));
+      for (let i = 0; i < 4; i++) { await aim(); await sleep(200); }
       await b.ev(`(() => { const o = { key: ' ', code: 'Space', bubbles: true }; window.dispatchEvent(new KeyboardEvent('keydown', o)); setTimeout(() => window.dispatchEvent(new KeyboardEvent('keyup', o)), 120); })()`);
+      for (let i = 0; i < 6; i++) { await aim(); await sleep(100); }
       await b.until(`__chog.world.actors[0].beamLeft > 0`, 3000);
-      await sleep(250);
       await b.shot('04-laser-beam');
-      await b.until(`__chog.training().damage > 0`, 3000);
+      for (let i = 0; i < 10 && !(await b.ev(`__chog.training().damage > 0`)); i++) { await aim(); await sleep(100); }
       const lz = await b.ev(`({ dmg: __chog.training().damage, status: document.getElementById('status').innerText })`);
-      check(`${view.label}: Laser drill: the beam aimed with the mouse burns a dummy`, lz.dmg > 0 && /Damage burnt/i.test(lz.status), JSON.stringify(lz));
+      check(`${view.label}: Laser drill: the beam aimed with the mouse burns a dummy`, lz.dmg > 0 && /Destroyed/i.test(lz.status), JSON.stringify(lz));
       await b.ev(`__chog.go('pause')`); await sleep(300); await b.ev(`__chog.go('quit')`); await b.hub();
     }
     check(`${view.label}: no script errors`, b.errors.length === 0, b.errors.join(' | '));

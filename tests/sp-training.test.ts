@@ -3,7 +3,8 @@
 import { describe, expect, it } from 'vitest';
 import { BASE_POWER, powerForToken, type Power } from '../src/config/power';
 import { SUPERPOWERS, SUPERPOWER_IDS, superAbility, type SuperpowerId } from '../src/config/superpowers';
-import { IDLE_INPUT, stepWorld, type ActorInput, type World } from '../src/sim/world';
+import { IDLE_INPUT, stepWorld, visorTracks, type ActorInput, type World } from '../src/sim/world';
+import { findPath, sightClear } from '../src/sim/level';
 import { DRILLS, VOLLEY, createTraining, drillFor, stepTraining, trainingInput, trainingSummary, volleyIn, type TrainingRun } from '../src/sim/training';
 
 const demo = (id: SuperpowerId): Power => ({ ...BASE_POWER, tier: 'common', demo: true, superpower: superAbility(id, 'common') });
@@ -19,8 +20,12 @@ function play(id: SuperpowerId, pilot: (w: World, run: TrainingRun) => Partial<A
 /** Aim at the nearest dummy (true position: a test pilot, not a player) and use the power whenever it is ready. */
 const sharp = (lead = 0) => (w: World) => {
   const me = w.actors[0];
-  const t = w.actors.slice(1).sort((a, b) => Math.hypot(a.x - me.x, a.y - me.y) - Math.hypot(b.x - me.x, b.y - me.y))[0];
-  return { aim: Math.atan2(t.y + t.vy * lead - me.y, t.x + t.vx * lead - me.x), ability: me.abilityCd === 0 };
+  const live = w.actors.slice(1).filter((a) => a.alive);
+  const t = live.sort((a, b) => Math.hypot(a.x - me.x, a.y - me.y) - Math.hypot(b.x - me.x, b.y - me.y))[0];
+  if (!t) return {};
+  // Use the power once the target is inside its reach (a beam fired at nothing wastes the cooldown).
+  const inReach = Math.hypot(t.x - me.x, t.y - me.y) <= (me.ability.radius ?? 99);
+  return { aim: Math.atan2(t.y + t.vy * lead - me.y, t.x + t.vx * lead - me.x), ability: me.abilityCd === 0 && inReach };
 };
 
 describe('CHOG Training drills', () => {
@@ -39,10 +44,30 @@ describe('CHOG Training drills', () => {
   it('doing nothing scores nothing', () => {
     for (const id of SUPERPOWER_IDS) expect(trainingSummary(play(id, () => ({})).run).score, id).toBe(0);
   });
-  it('Laser: a steady aim burns damage onto the targets', () => {
-    const { run } = play('laser', sharp());
-    expect(run.damage).toBeGreaterThan(200);
+  it('Laser ("destroy 5 moving targets before they reach you"): the beam only, a steady aim destroys most of them', () => {
+    const { run, world } = play('laser', sharp());
+    expect(world.actors[0].ammo + world.actors[0].reserve).toBe(0); // the gun is empty: the beam does it
+    expect(run.destroyed).toBeGreaterThanOrEqual(3);
+    expect(run.destroyed + run.reached).toBeLessThanOrEqual(5);
     expect(run.landed).toBeLessThanOrEqual(run.pulses);
+    const idle = play('laser', () => ({})).run;
+    expect(idle.destroyed).toBe(0);
+    expect(idle.reached).toBe(5); // nobody stops them
+  });
+  it('Hunter (Visor): the tracker leads to targets you cannot see; walking to them and shooting takes them down', () => {
+    const { run, world } = play('visor', (w) => {
+      const me = w.actors[0];
+      const seen = visorTracks(w, me);
+      expect(seen.length).toBeGreaterThan(0); // the whole small map is inside a Common tracker
+      const t = seen.sort((a, b) => Math.hypot(a.x - me.x, a.y - me.y) - Math.hypot(b.x - me.x, b.y - me.y))[0];
+      const path = findPath(w.level, me.x, me.y, t.x, t.y);
+      const n = path[0] ?? t;
+      const d = Math.hypot(n.x - me.x, n.y - me.y) || 1;
+      const clear = sightClear(w.level, me.x, me.y, t.x, t.y) && Math.hypot(t.x - me.x, t.y - me.y) < 7;
+      return { aim: Math.atan2(t.y - me.y, t.x - me.x), firing: clear, reload: me.ammo === 0, moveX: clear ? 0 : (n.x - me.x) / d, moveY: clear ? 0 : (n.y - me.y) / d };
+    });
+    expect(world.actors[0].ability.kind).toBe('visor');
+    expect(run.destroyed).toBeGreaterThanOrEqual(2);
   });
   it('X-Ray: hits land through the wall on dummies the player cannot see', () => {
     const { run } = play('xray', sharp());

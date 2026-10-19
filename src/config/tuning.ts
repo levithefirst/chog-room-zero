@@ -43,6 +43,9 @@ export const TUNING = {
   },
 
   combat: {
+    // Armour capacity (owner 2026-10-18 IDENTITY + MAPS pass: 65, was 50): every operator can carry up to 65; it starts
+    // with its own armour (0 to 55). Armour pickups overfill past it by TUNING.pickups.overArmor.
+    armorCap: 65,
     // Knockback on hit, 1.0 u/s: a readable nudge, not a shove.
     knockback: 1.0,
     // Extra spread at full run, degrees, before CF (LAB.steady off). With CF each weapon has its own moveSpreadDeg.
@@ -79,15 +82,17 @@ export const TUNING = {
     // grenades slower"): 30 pickups (4 more ammo, in the corner rooms) and faster comebacks; kills now also drop what
     // the fallen carried (TUNING.loot). Map-wide: health 8 x 40 / 25 s = 12.8 hp/s (was 10.7), armour 6 x 35 / 30 s =
     // 7.0/s (was 6.0), ammo 10 x 2 mags / 14 s = 1.4 mags/s (was 0.6), grenades unchanged.
-    // Health +40, back after 25 s: worth a detour, not a camping spot.
-    health: { amount: 40, respawn: 25 },
-    // Armour +35, back after 30 s.
-    armor: { amount: 35, respawn: 30 },
-    // Ammo: one magazine's worth x2 into reserve (never over the carry ceiling), back after 14 s.
-    ammo: { mags: 2, respawn: 14 },
-    // Grenade +1, never above the carrier's capacity (3 free, more by verified tier), back after 50 s. A refill for a
-    // key moment, never a stream.
-    grenade: { amount: 1, respawn: 50 },
+    // Owner 2026-10-18 (IDENTITY + MAPS pass): every pickup is back 4 s after it is taken (was health 25, armour 30,
+    // ammo 14, grenade 50), on another tile of its zone and never next to anyone standing (nearActor), and there are
+    // more of them (Room Zero 38 zones, was 30). The server alone decides when one is there.
+    // Health +40.
+    health: { amount: 40, respawn: 4 },
+    // Armour +35.
+    armor: { amount: 35, respawn: 4 },
+    // Ammo: one magazine's worth x2 into reserve (never over the carry ceiling).
+    ammo: { mags: 2, respawn: 4 },
+    // Grenade +1, never above the carrier's capacity (3 free, more by verified tier).
+    grenade: { amount: 1, respawn: 4 },
     // Placement (src/sim/pickups.ts): at least this far from every spawn on the map, from every other pickup, and
     // from anyone standing when it comes back. Each comeback moves it to another tile of its zone.
     spawnClear: 5,
@@ -96,6 +101,8 @@ export const TUNING = {
     // Even for both online sides: per kind, the average walk from the west spawns and from the east spawns to its
     // pickups (and to the nearest one) may differ by at most this many tiles; the layout tries this many seeded orders.
     balanceTolerance: 3,
+    // A comeback never lands where it leaves its kind more uneven than this (it waits a second instead).
+    balanceHard: 4.5,
     layoutTries: 48,
     // Collect on touch, no button, no second step: 0.7 u from the centre = the body (0.35 u) meeting the pickup
     // crate (0.3 u half-width) with 0.05 u to spare. RC-8 draws the body at its true 0.35 u (it was drawn 1.45x), so
@@ -484,11 +491,13 @@ export const TUNING = {
     // The big venue (68 x 42, owner 2026-10-17): 50 s of open play, then a first circle of 20 u (it holds the atrium
     // and both flank corridors), 9 u, 3.5 u. From the far corner of a spawn hall to the first circle is ~30 u, about
     // 7 s running: the warning (8 s) is enough if you move when it shows. The whole room still ends in ~105 s.
-    safeSeconds: 50,
+    // Owner 2026-10-18 (IDENTITY + MAPS pass): every interval of the schedule exactly 20% longer (was safe 50; warn
+    // 8 / 6 / 5; shrink 15 / 10 / 8). Radii and damage unchanged. The whole room now ends in ~126 s.
+    safeSeconds: 60,
     stages: [
-      { warn: 8, shrink: 15, radius: 20, dps: 4 },
-      { warn: 6, shrink: 10, radius: 9, dps: 8 },
-      { warn: 5, shrink: 8, radius: 3.5, dps: 14 },
+      { warn: 9.6, shrink: 18, radius: 20, dps: 4 },
+      { warn: 7.2, shrink: 12, radius: 9, dps: 8 },
+      { warn: 6, shrink: 9.6, radius: 3.5, dps: 14 },
     ],
     finalDps: 20,
     // The last circle's centre keeps this much open floor around it (no crate or wall to camp in it).

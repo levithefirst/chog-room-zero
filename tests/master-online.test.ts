@@ -102,8 +102,9 @@ describe('power from the ticket, visible to both sides, and the match record', (
     expect(b.c.last('match')!.roster[0].tier).toBe('legendary');
     const room = [...lobby.rooms.values()][0];
     const kettle = HEROES.find((h) => h.id === 'benja')!;
-    // The ticket's tier brings the 1:1's signature, never health (owner 2026-10-18); upgrades still count (actor 1).
-    expect(room.world.actors[0].maxHp).toBe(kettle.maxHp);
+    // The ticket's tier brings the 1:1's signature, never rarity health; a Chog without a mapped superpower (a 1:1 among
+    // them) has the CHOG baseline of 200 (owner 2026-10-18 IDENTITY pass); upgrades still count (actor 1).
+    expect(room.world.actors[0].maxHp).toBe(200);
     expect(room.world.actors[1].maxHp).toBe(Math.round(kettle.maxHp * 1.09));
     run(3.1); // past the countdown: a leave before the start voids the match (no record)
     b.say({ t: 'leave' });

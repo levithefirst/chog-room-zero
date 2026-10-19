@@ -1,6 +1,12 @@
 # CHOG superpowers
 
-Owner prompt 2026-10-18 "CHOG SUPERPOWER SYSTEM". A verified Chog's real traits give it one superpower, ranked by its rarity. Free players keep the whole game without one.
+Owner prompts 2026-10-18 "CHOG SUPERPOWER SYSTEM" and "CHOG IDENTITY + MAPS + COMBAT FEEL PASS". A verified Chog's real traits give it one superpower, ranked by its rarity. Free players keep the whole game without one.
+
+Health (owner, IDENTITY pass):
+- Every operator and every free player starts at 150 health.
+- A verified Chog whose traits carry no power (618 tokens, the ten 1:1s among them) starts at 200 health instead. That is its only edge: no armour, damage or other stat, and no invented power. `BASE_HP` in `src/config/power.ts`.
+- A Chog with a power plays at 150 with the power.
+- Armour capacity is 65 for everyone (`TUNING.combat.armorCap`).
 
 Code:
 - `src/config/superpowers.ts`: every number, plus the text, telegraph and counter of each power.
@@ -45,7 +51,8 @@ VERDICT      KEEP. Owner-approved list. Numbers are PROPOSALS until the Core Fee
 | Trait (exact metadata) | Power | Rarities present (tokens) | Role |
 |---|---|---|---|
 | Eyes: Purple laser, fire laser, Green laser, cyan laser; Head: Blue Laser | Laser Eyes | C 194, U 68, R 15, E 1 (the Blue Laser head) | offensive |
-| Eyes: Gradient visor, Sunset visor, Plasma visor | X-Ray Eyes | C 157 | offensive |
+| Eyes: Gradient visor, Sunset visor, Plasma visor | Visor (hostile tracker) | C 157 | utility (information) |
+| none (see below) | X-Ray Eyes | 0 in the collection: DEMO and Training only | offensive |
 | Mouth: Bubblegum | Bubble | C 112, U 56 | utility |
 | Mouth: Drooling | Drool Web | C 116, U 68 | utility |
 | Aura: any of its 22 values | Aura | C 605, U 279, R 60, E 30 | defensive |
@@ -60,6 +67,7 @@ Coverage:
 | Power | Common | Uncommon | Rare | Epic | Legendary | Counter |
 |---|---|---|---|---|---|---|
 | Laser Eyes: beam s / reach m / cooldown s (55 dmg/s, charge 0.35 s) | 0.8 / 9 / 15 | 0.9 / 10 / 14 | 1.0 / 11 / 13 | 1.1 / 12 / 12 | 1.2 / 13 / 11 | Step off the charge line; it turns at 45 deg/s, so strafe across it; cover stops it |
+| Visor: tracker radius m (always on, no cooldown) | 16 | 19 | 22 | 25 | 28 | It shows position only: stay outside the radius; you see TRACKED while inside it |
 | X-Ray Eyes: beam s / reach m / cooldown s (50 dmg/s, charge 0.7 s, passes walls) | 0.6 / 9 / 16 | 0.65 / 10 / 15 | 0.7 / 11 / 14 | 0.75 / 12 / 13 | 0.8 / 13 / 12 | The violet line crosses you through the wall: move off it during the long charge |
 | Bubble: caged s / reach m / cooldown s (cage radius 1.1 m) | 2.0 / 9 / 16 | 2.6 / 10 / 15 | 3.2 / 11 / 14 | 3.8 / 12 / 13 | 4.5 / 13 / 12 | Slow (6 u/s) and glowing: sidestep; caged, you still shoot |
 | Drool Web: glued s / drag m / reach m / cooldown s | 1.4 / 2.5 / 8 / 15 | 1.7 / 3 / 9 / 14 | 2.0 / 3.5 / 10 / 13 | 2.3 / 4 / 11 / 12 | 2.7 / 4.5 / 12 / 11 | Strafe the glob; stay away from walls; glued, you still shoot |
@@ -86,17 +94,21 @@ Rules shared by all:
    - Online: only a ticket whose tier is not free, holding a verified token id. With `NFT_COMBAT=0` the tier is free, so no power.
    - Solo: the same class the hub shows, or a labelled DEMO token's own traits.
    - DEMO Training can try any power at any rank, labelled, and records nothing.
-5. **X-Ray is not vision.**
+5. **Visor and X-Ray are different powers** (owner, IDENTITY pass: "Do NOT map Visor Eyes to X-Ray").
+   - Visor tells you where; X-Ray hits through the wall.
+   - Visor is passive information: hostiles inside its radius are dots on the holder's tracker (HUD, beside the health bar), through walls. Position only, never health, weapon, power or facing. It deals no damage and reveals nothing else. Online the server sends the dots (snapshot `vt`) only to the Visor holder, and tells the tracked player TRACKED (`tk`).
+   - X-Ray is an attack: a laser through walls, with no tracking and no reveal.
+6. **X-Ray is not vision.**
    - It reveals no one.
    - Online, its owner's hit report on an unseen target is blurred like a spotted report.
    - Solo, no hit mark is drawn outside your light.
    - The target is sent only the stretch of line near it (from 5 u before it, never nearer the owner than halfway), so it learns the direction, not the spot.
-6. **Beams are not hitscan bullets.**
+7. **Beams are not hitscan bullets.**
    - LOCKED 6 forbids hitscan for bullets. The owner approved a beam ("an actual combat beam").
    - It is telegraphed by a charge line both sides see, turns at a capped rate, burns in 0.1 s pulses, and stops on walls and cover (Laser).
-7. **Readability.**
+8. **Readability.**
    - The match intro names each opponent's power.
-   - A coloured diamond by a visible player's health bar shows it: red Laser, violet X-Ray, pink Bubble, green Drool, gold Aura.
+   - A coloured diamond by a visible player's health bar shows it: red Laser, violet X-Ray, cyan Visor, pink Bubble, green Drool, gold Aura.
    - Each power has its own sound (`src/audio/audio.ts`).
 
 ## Measurements (EVIDENCE: this container, perfect-aim scripted duels `tests/helpers/duel.ts`, 20 seeds x 2 slot orders)
@@ -120,11 +132,12 @@ What this shows:
 
 ## Training (`src/sim/training.ts`)
 
-One drill per power in a small room, 45 s, with scripted dummies. The cooldown is shortened (3 s, or Aura's seconds + 4) so a drill gives enough tries. The screen says so. Everything else is the rank's real number. Nothing is recorded (no practice, report or settle call: `tools/sp-training.mjs`).
+One drill per power in a small room, 45 to 60 s, with scripted dummies. Verified holders only (or a labelled DEMO token, which records nothing). The YOUR CHOG card, shown once a session after a verified wallet signs in, names the token, its real traits, its ability and the trait it comes from, with TRAINING going straight into the drill. The cooldown is shortened (3 s, or Aura's seconds + 4) so a drill gives enough tries. The screen says so. Everything else is the rank's real number. Nothing is recorded (no practice, report or settle call: `tools/sp-training.mjs`).
 
 | Drill | Power | What it trains | Score |
 |---|---|---|---|
-| Burn | Laser | Accuracy, a strafing target, one that peeks from cover | Damage burnt, beam pulses on target |
+| Five coming | Laser | Five targets (40 health) walk at you one by one; your gun is empty | Destroyed before they reach you |
+| Hunter | Visor | Five targets hide in dark rooms; the tracker shows where (60 s) | Found and taken down |
 | Through the wall | X-Ray | Dummies walking behind a wall, found by their steps | Damage through walls |
 | Cage runners | Bubble | Leading runners across lanes | Cages per bubble |
 | Pin them | Drool | Choosing the target near a wall | Glued against a wall |
@@ -133,8 +146,9 @@ One drill per power in a small room, 45 s, with scripted dummies. The cooldown i
 ## Open (UNKNOWN or owner decision)
 
 - **Approved powers #5 and #6** ("the previously approved power #5 and #6"): not found in any doc, commit or this session's transcript. Not invented. The system is data-driven: adding a power is one entry in `superpowers.ts`, one trait family in `build-powers.ts`, and a sim case.
-- **X-Ray mapped to the visor Eyes.** There is no "X-ray" trait in the collection. The visor is the closest reading (INFERRED). The owner should confirm or name another trait.
+- **X-Ray has no trait.** There is no literal X-Ray trait in the catalogue, and the owner ruled the visor out. Candidates for the owner to name (EVIDENCE, catalogue): Head "3rd Eye" (4 tokens, Epic), Eyes "Modern VR" (26: 24 Uncommon, 2 Rare), Eyes "Classic VR" (25: 24 Uncommon, 1 Rare), Body "Boner" (2, Epic). Until then X-Ray maps to no token and lives in DEMO and Training only. Mapping one is a line in `tools/nft/build-powers.ts` and a regenerate.
+- **Squad / Breach drill** (three holders) is not built: it needs three verified holders together online.
 - **Grenade capacity by tier** (3 to 13) is a rarity combat resource. Rule 6 names health and damage only, so it is kept. The owner should confirm.
 - **Aura durations** follow the owner's example (Uncommon 10 s, Legendary 30 s), with Common 8 s, Rare 15 s and Epic 20 s chosen. Every number needs the Core Feel Gate playtest.
-- **The 618 tokens without a power trait** play their operator's ability. Should they get anything?
+- **The 618 tokens without a power trait** play their operator's ability at 200 health (owner, IDENTITY pass).
 - Human feel of every power, readability on real phones, audio by ear: UNKNOWN until people play.

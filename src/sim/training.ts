@@ -4,7 +4,7 @@
 import type { SuperpowerId } from '../config/superpowers';
 import type { Power } from '../config/power';
 import { TUNING } from '../config/tuning';
-import { IDLE_INPUT, createWorld, type Actor, type ActorInput, type World } from './world';
+import { IDLE_INPUT, createWorld, down, type Actor, type ActorInput, type World } from './world';
 import { WALL, sightClear, tileAt } from './level';
 
 export interface DrillDef {
@@ -49,6 +49,31 @@ const SPLIT = [
   '##########################',
 ];
 
+// Hunter (Visor): small dark rooms; the dummies wait in them and shift between two spots. Find them with the tracker.
+const HUNT = [
+  '################################',
+  '#..............#...............#',
+  '#..............#...............#',
+  '#....####..........####........#',
+  '#....#..............#..........#',
+  '#....#....######....#....###...#',
+  '#.........#....#.........#.....#',
+  '#.........#.........######.....#',
+  '######.####....#...............#',
+  '#..............#####....#......#',
+  '#.....#...........#.....#......#',
+  '#.....#....###....#.....####.###',
+  '#.....#....#......#............#',
+  '#..........#...........#.......#',
+  '#####...####....#####..#.......#',
+  '#...............#..............#',
+  '################################',
+];
+/** Laser drill: the five targets and when each starts walking at you (s). */
+const LASER_WAVE = [{ y: 3.5, at: 1 }, { y: 9.5, at: 6 }, { y: 6.5, at: 11 }, { y: 2.5, at: 16 }, { y: 10.5, at: 21 }];
+/** Hunter drill: where each dummy hides (two spots it shifts between, on one open line). */
+const HIDES: [number, number, number, number][] = [[12, 6, 14, 6], [29, 2, 29, 5], [8, 12, 9, 15], [27, 13, 30, 13], [22, 9, 22, 12]];
+
 /** Walk toward (x, y) at full speed, looking at the player; stand when there. */
 function walkTo(w: World, a: Actor, x: number, y: number): ActorInput {
   const dx = x - a.x, dy = y - a.y, d = Math.hypot(dx, dy), p = w.actors[0];
@@ -59,16 +84,30 @@ function walkTo(w: World, a: Actor, x: number, y: number): ActorInput {
 const pingPong = (t: number, period: number, phase: number) => { const u = ((t / period + phase) % 1 + 1) % 1; return u < 0.5 ? u * 2 : 2 - u * 2; };
 
 export const DRILLS: Record<SuperpowerId, DrillDef> = {
+  // Owner 2026-10-18: "Laser Drill: destroy 5 moving targets before they reach you". Your gun is empty: the beam only.
   laser: {
-    id: 'laser', name: 'Burn', seconds: 45, map: ROOM,
-    goal: 'Keep the beam on target: one stands, one strafes, one peeks from the pillar.',
-    player: { x: 4.5, y: 6.5, facing: 0 },
-    dummies: [{ x: 11.5, y: 6.5, facing: Math.PI, hero: 'benja' }, { x: 13.5, y: 3.5, facing: Math.PI, hero: 'tabsu' }, { x: 18.5, y: 4.2, facing: Math.PI, hero: 'benja' }],
+    id: 'laser', name: 'Five coming', seconds: 45, map: ROOM,
+    goal: 'Five targets walk at you one by one. Burn each down with the beam before it reaches you. Your gun is empty.',
+    player: { x: 3.5, y: 6.5, facing: 0 },
+    dummies: LASER_WAVE.map((d) => ({ x: 23.5, y: d.y, facing: Math.PI, hero: 'benja' })),
     cooldown: () => 3,
-    move: (w, a, i, t) => i === 0 ? walkTo(w, a, 11.5, 6.5)
-      : i === 1 ? walkTo(w, a, 13.5, 2.5 + 8 * pingPong(t, 4, 0))
-        // Out of the pillar's shadow for about a second in every three.
-        : walkTo(w, a, 18.5, t % 3 < 1.2 ? 6.4 : 4.2),
+    // Each waits for its turn, then creeps straight at you, weaving a little so the beam has to follow.
+    move: (w, a, i, t) => {
+      if (t < LASER_WAVE[i].at) return { ...IDLE_INPUT, aim: Math.PI };
+      const p = w.actors[0];
+      const step = walkTo(w, a, p.x, p.y + Math.sin((t - LASER_WAVE[i].at) * 1.3) * 2);
+      return { ...step, quiet: true };
+    },
+  },
+  // Owner 2026-10-18: "Hunter/vision Drill: locate targets using the CHOG's perception ability". Visor only knows where
+  // they are; you still have to get there and win the shot.
+  visor: {
+    id: 'visor', name: 'Hunter', seconds: 60, map: HUNT,
+    goal: 'Five targets hide in the dark rooms. Your tracker shows where. Find them and take them down.',
+    player: { x: 2.5, y: 1.5, facing: 0 },
+    dummies: HIDES.map(([x, y]) => ({ x: x + 0.5, y: y + 0.5, facing: Math.PI, hero: 'benja' })),
+    cooldown: (real) => real,
+    move: (w, a, i, t) => { const [x0, y0, x1, y1] = HIDES[i]; const u = pingPong(t, 7, i * 0.2) < 0.5; return walkTo(w, a, (u ? x0 : x1) + 0.5, (u ? y0 : y1) + 0.5); },
   },
   xray: {
     id: 'xray', name: 'Through the wall', seconds: 45, map: SPLIT,
@@ -132,6 +171,9 @@ export interface TrainingRun {
   lastPulse: number;
   lastCharge: number;
   special: number;
+  /** Laser and Hunter: targets taken down; Laser: targets that reached you. */
+  destroyed: number;
+  reached: number;
   /** Aura drill: volleys fired, volleys you took nothing from, and damage taken. */
   volleys: number;
   blocked: number;
@@ -155,7 +197,10 @@ export function createTraining(id: SuperpowerId, power: Power, hero: string): { 
   // Dummies soak a whole drill; in the aura drill you can take a few volleys too.
   for (const a of world.actors.slice(1)) { a.maxHp = a.hp = 5000; a.armor = 0; }
   if (id === 'aura') { me.maxHp = me.hp = 600; }
-  return { world, run: { drill: d, t: 0, done: false, uses: 0, landed: 0, damage: 0, pulses: 0, lastPulse: 0, lastCharge: 0, special: 0, volleys: 0, blocked: 0, judged: 0, taken: 0, volleyHurt: false } };
+  // Laser: a target one full Common beam (44) takes down, and no gun. Hunter: targets your gun takes down quickly.
+  if (id === 'laser') { for (const a of world.actors.slice(1)) a.maxHp = a.hp = 40; me.ammo = me.reserve = 0; }
+  if (id === 'visor') for (const a of world.actors.slice(1)) a.maxHp = a.hp = 40;
+  return { world, run: { drill: d, t: 0, done: false, uses: 0, landed: 0, damage: 0, destroyed: 0, reached: 0, pulses: 0, lastPulse: 0, lastCharge: 0, special: 0, volleys: 0, blocked: 0, judged: 0, taken: 0, volleyHurt: false } };
 }
 
 /** Inputs for one step: yours for actor 0, the script for the dummies. */
@@ -195,6 +240,21 @@ export function stepTraining(run: TrainingRun, w: World, dt: number = TUNING.sim
     const ph = run.t - VOLLEY.first;
     if (ph >= 0 && run.judged < run.volleys && ph % VOLLEY.every >= VOLLEY.length + 0.6) { run.judged++; if (!run.volleyHurt) run.blocked++; }
   }
+  // Laser and Hunter: a target down is out of the drill (no rescue), and a laser target that reaches you is out too.
+  if (run.drill.id === 'laser' || run.drill.id === 'visor') {
+    for (const a of w.actors.slice(1)) {
+      if (!a.alive) continue;
+      if (a.downed) { down(w, a, a.downInfo!); run.destroyed++; continue; }
+      if (run.drill.id === 'laser' && Math.hypot(a.x - me.x, a.y - me.y) < 1.6) {
+        run.reached++;
+        down(w, a, { cause: 'shot', killerId: -1, weapon: 'Reached you', fromX: a.x, fromY: a.y, toX: a.x, toY: a.y, tick: w.tick });
+      }
+    }
+    // The last target of a team goes straight out (no teammate to be downed for), so count those too.
+    const out = w.actors.slice(1).filter((a) => !a.alive).length;
+    if (out > run.destroyed + run.reached) run.destroyed = out - run.reached;
+    if (out === w.actors.length - 1) run.done = true;
+  }
   if (run.t >= run.drill.seconds - 1e-9 || !me.alive) run.done = true;
 }
 
@@ -208,7 +268,8 @@ export function againstWall(w: World, x: number, y: number): boolean {
 export function trainingSummary(run: TrainingRun): { score: number; lines: string[] } {
   const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
   switch (run.drill.id) {
-    case 'laser': return { score: Math.round(run.damage), lines: [`Damage burnt: ${Math.round(run.damage)}`, `Beam on target: ${pct(run.landed, run.pulses)}% of ${run.pulses} pulses`, `Beams fired: ${run.uses}`] };
+    case 'laser': return { score: run.destroyed, lines: [`Destroyed: ${run.destroyed} of 5`, `Reached you: ${run.reached}`, `Beam on target: ${pct(run.landed, run.pulses)}% of ${run.pulses} pulses`] };
+    case 'visor': return { score: run.destroyed, lines: [`Found and taken down: ${run.destroyed} of 5`, `Time: ${Math.round(run.t)} s`] };
     case 'xray': return { score: Math.round(run.damage), lines: [`Damage through walls: ${Math.round(run.damage)}`, `Pulses landed through a wall: ${run.special}`, `Beams fired: ${run.uses}`] };
     case 'bubble': return { score: run.landed, lines: [`Caged: ${run.landed} of ${run.uses} bubbles (${pct(run.landed, run.uses)}%)`] };
     case 'drool': return { score: run.special, lines: [`Glued to a wall: ${run.special}`, `Glued in the open: ${run.landed - run.special}`, `Globs spat: ${run.uses}`] };

@@ -4,10 +4,11 @@
 // and an X-Ray hit through a wall without where the target is.
 import { describe, expect, it } from 'vitest';
 import { Lobby } from '../server/room';
-import type { ServerMsg } from '../src/net/protocol';
+import { parseClientMsg, type ServerMsg } from '../src/net/protocol';
+import { MAPS } from '../src/config/maps';
 import type { GameTicket } from '../api/_lib/game';
 import { powerFor, signatureFor } from '../src/config/power';
-import { SUPERPOWERS } from '../src/config/superpowers';
+import { SUPERPOWERS, superAbility } from '../src/config/superpowers';
 import { Predictor } from '../src/net/predict';
 import { IDLE_INPUT } from '../src/sim/world';
 import { WALL, type Level } from '../src/sim/level';
@@ -23,6 +24,8 @@ const T = (o: Partial<GameTicket>): GameTicket => ({ tid: Math.random().toString
 const flush = () => new Promise((r) => setTimeout(r, 0));
 // Chog #36 (Uncommon): Laser Eyes and an Aura. #11: X-Ray (visor) only, Common. Checked against the catalogue below.
 const LASER_AURA = 36;
+// Chog #VISOR_TOKEN: Visor Eyes only (the Visor tracker).
+const VISOR_TOKEN = 11;
 
 async function match(a: GameTicket | null, b: GameTicket | null, heroes = ['benja', 'benja']) {
   let t = 0;
@@ -103,8 +106,10 @@ describe('snapshots: what each side may know', () => {
     expect(Math.hypot(d.x - v.x, d.y - v.y)).toBeLessThanOrEqual(1.1 - TUNING.movement.radius + 1e-6);
   });
   it('an X-Ray through a wall: the target sees only the stretch of line near it, and the shooter is not told where it hit', async () => {
-    const t = T({ acc: 'A', holder: true, tok: 1, mid: 11, tokTier: 'common', tier: 'common' });
-    const { lobby, room, w, tick } = await match(t, null);
+    // No collection trait carries X-Ray yet (owner 2026-10-18), so its holder is given the ability on the server's own
+    // world; the rules tested are the server's snapshot rules.
+    const { lobby, room, w, tick } = await match(null, null);
+    w.actors[0].ability = superAbility('xray', 'common');
     expect(w.actors[0].ability.kind).toBe('xray');
     const s = acrossWall(w.level);
     const [shooter, target] = w.actors;
@@ -143,5 +148,70 @@ describe('snapshots: what each side may know', () => {
     expect(lobby.snapshot(room, room.members[0]).ob?.map((o) => o.id)).toEqual([9]);
     const far = Math.hypot(w.actors[1].x - w.actors[0].x, w.actors[1].y - w.actors[0].y) > 12;
     if (far) expect(lobby.snapshot(room, room.members[1]).ob).toBeUndefined();
+  });
+});
+
+describe('Visor online: the tracker comes from the server, the tracked are told', () => {
+  it('a Visor holder is sent every hidden hostile inside its radius (spot only); the hostile is told it is tracked', async () => {
+    const t = T({ acc: 'A', holder: true, tok: 1, mid: VISOR_TOKEN, tokTier: 'common', tier: 'common' });
+    const { lobby, room, w } = await match(t, null);
+    expect(w.actors[0].ability.kind).toBe('visor');
+    const s = acrossWall(w.level);
+    w.actors[0].x = s.x0; w.actors[0].y = s.y; w.actors[1].x = s.x1; w.actors[1].y = s.y; w.actors[1].facing = 0;
+    const mine = lobby.snapshot(room, room.members[0]);
+    expect(mine.actors.some((a) => a.id === 1)).toBe(false); // not shown as a body
+    expect(mine.vt).toEqual([{ id: 1, x: w.actors[1].x, y: w.actors[1].y }]);
+    expect(lobby.snapshot(room, room.members[1]).actors.find((a) => a.id === 1)?.tk).toBe(1);
+    // Outside the radius: nothing.
+    w.actors[1].x = w.actors[0].x + 30;
+    expect(lobby.snapshot(room, room.members[0]).vt).toBeUndefined();
+    // A free player with no Visor is never sent a tracker list.
+    expect(lobby.snapshot(room, room.members[1]).vt).toBeUndefined();
+  });
+});
+
+describe('locations online (owner 2026-10-18)', () => {
+  async function queueOn(map: string | undefined, tickets: (GameTicket | null)[] = [null, null]) {
+    let t = 0;
+    const lobby = new Lobby({ now: () => t, seed: () => 7, countdownSec: 0, checkTicket: async (s) => (s === 'a.t' ? tickets[0] : tickets[1]) });
+    const conns = [new FakeConn(), new FakeConn()];
+    const ids = conns.map((c) => lobby.connect(c));
+    ids.forEach((id, i) => lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name: `P${i}`, hero: 'benja', ...(tickets[i] ? { ticket: i ? 'b.t' : 'a.t' } : {}) })));
+    await flush();
+    ids.forEach((id) => lobby.message(id, JSON.stringify({ t: 'queue', mode: '1v1', ...(map ? { map } : {}) })));
+    return { lobby, conns };
+  }
+  it('the match is built on the chosen map and every client is told which; no map means Room Zero', async () => {
+    for (const map of ['office', 'supermarket', 'room-zero'] as const) {
+      const { lobby, conns } = await queueOn(map);
+      const room = [...lobby.rooms.values()][0];
+      expect(room.world.mapId).toBe(map);
+      for (const c of conns) expect(c.last('match')!.map).toBe(map);
+      // Spawns are the map's own.
+      expect(room.world.actors[0].x).toBe(MAPS[map].versusSpawns.alpha[0].x);
+    }
+    const { lobby } = await queueOn(undefined);
+    expect([...lobby.rooms.values()][0].world.mapId).toBe('room-zero');
+  });
+  it('players on different maps never meet; free players and holders pick any map', async () => {
+    let t = 0;
+    const holder = T({ acc: 'H', holder: true, tok: 1, mid: LASER_AURA, tokTier: 'uncommon', tier: 'uncommon' });
+    const lobby = new Lobby({ now: () => t, seed: () => 7, countdownSec: 0, checkTicket: async (s) => (s === 'h.t' ? holder : null) });
+    const c = [0, 1, 2, 3].map(() => new FakeConn());
+    const ids = c.map((x) => lobby.connect(x));
+    ids.forEach((id, i) => lobby.message(id, JSON.stringify({ t: 'hello', v: 1, name: `P${i}`, hero: 'benja', ...(i === 0 ? { ticket: 'h.t' } : {}) })));
+    await flush();
+    lobby.message(ids[0], JSON.stringify({ t: 'queue', mode: '1v1', map: 'office' }));
+    lobby.message(ids[1], JSON.stringify({ t: 'queue', mode: '1v1', map: 'supermarket' }));
+    expect(lobby.rooms.size).toBe(0);
+    lobby.message(ids[2], JSON.stringify({ t: 'queue', mode: '1v1', map: 'office' }));
+    lobby.message(ids[3], JSON.stringify({ t: 'queue', mode: '1v1', map: 'supermarket' }));
+    const maps = [...lobby.rooms.values()].map((r) => r.world.mapId).sort();
+    expect(maps).toEqual(['office', 'supermarket']);
+    void t;
+  });
+  it('an unknown map id is refused by the protocol', () => {
+    expect(parseClientMsg(JSON.stringify({ t: 'queue', mode: '1v1', map: 'moon' }))).toBeNull();
+    expect(parseClientMsg(JSON.stringify({ t: 'queue', mode: '1v1', map: 'office' }))).toMatchObject({ map: 'office' });
   });
 });

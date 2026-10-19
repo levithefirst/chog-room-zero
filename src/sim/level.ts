@@ -18,6 +18,8 @@ export interface Level {
   // Outline of full walls, for the visibility polygon.
   segments: Segment[];
   playerSpawn: { x: number; y: number };
+  /** Floor materials of a location (drawn only; src/config/maps.ts). Absent: Room Zero's. */
+  materials?: readonly { x0: number; y0: number; x1: number; y1: number; mat: 'tile' | 'concrete' | 'metal' | 'dock' }[];
   // Floor tiles next to a wall or cover piece: candidate spots for bots to hold or hide.
   coverSpots: { x: number; y: number }[];
   pickupSpawns: { kind: 'health' | 'armor' | 'ammo' | 'grenade'; x: number; y: number }[];

@@ -143,7 +143,13 @@ export function respawnSpot(cands: Spot[], seed: number, zone: number, moves: nu
   const P = TUNING.pickups;
   const ok = (c: Spot) => others.every((p) => Math.hypot(p.x - c.x, p.y - c.y) >= P.minSeparation) && standing.every((a) => Math.hypot(a.x - c.x, a.y - c.y) >= P.nearActor);
   const kin = others.filter((o) => o.kind === kind);
-  const even = (c: Spot) => imbalance([...kin.map(() => kind), kind], [...kin, c], alpha, bravo) <= P.balanceTolerance;
+  const gap = (c: Spot) => imbalance([...kin.map(() => kind), kind], [...kin, c], alpha, bravo);
   const list = ordered(cands, seed, zone, moves).filter((c) => (c.x !== here.x || c.y !== here.y) && ok(c));
-  return list.find(even) ?? list[0] ?? (ok(here) ? here : null);
+  // The first even spot in seeded order; when none is within tolerance, the most even of the legal ones, but never one
+  // that leaves the sides more than balanceHard apart (then it waits a second and tries again).
+  const even = list.find((c) => gap(c) <= P.balanceTolerance);
+  if (even) return even;
+  let best: Spot | null = null, bestGap = Infinity;
+  for (const c of [...list, ...(ok(here) ? [here] : [])]) { const g = gap(c); if (g < bestGap) { best = c; bestGap = g; } }
+  return best && bestGap <= P.balanceHard ? best : null;
 }

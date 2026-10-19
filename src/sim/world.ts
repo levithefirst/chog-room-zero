@@ -1,6 +1,6 @@
 // The match simulation. Deterministic: fixed step, seeded random, no wall-clock time, no rendering.
 import { TUNING } from '../config/tuning';
-import { BOT_SPAWNS, BOT_SPAWNS_RC8, PICKUP_ZONES, ROOM_ZERO, ROOM_ZERO_RC8, TACTICAL_POINTS, VERSUS_SPAWNS, ZONE_CENTRES, type BotSpawn } from '../config/map';
+import { BOT_SPAWNS, BOT_SPAWNS_RC8, ROOM_ZERO_RC8, VERSUS_SPAWNS, ZONE_CENTRES, type BotSpawn } from '../config/map';
 import { layoutPickups, respawnSpot, walkField, zoneSpots, type Field, type PickupZone, type Spot } from './pickups';
 import { spawnPerk, type PerkId } from '../config/perks';
 import { heroById, type AbilityDef, type HeroDef } from '../config/heroes';
@@ -14,6 +14,7 @@ import type { ViewShape } from './vision';
 import { botThink, createBrain, type Brain, type PerceptionEvent } from './bots';
 import { outsideCircle, planZone, zoneAt, type ZoneState } from './zone';
 import { LAB } from '../config/lab';
+import { MAPS, type MapDef, type MapId } from '../config/maps';
 import { BEAM, ORB } from '../config/superpowers';
 
 const DEG = Math.PI / 180;
@@ -390,6 +391,8 @@ export interface World {
   friendlyFire: boolean;
   /** Shrinking danger zone, or null when off (unit tests that isolate other rules). */
   zone: ZoneState | null;
+  /** The location (src/config/maps.ts), or null for a test's own map. */
+  mapId: MapId | null;
 }
 
 /** Mulberry32. Returns [0,1) and advances world.rng. */
@@ -421,13 +424,14 @@ function makeActor(id: number, team: Team, name: string, hero: HeroDef, sg: Side
   const weapon = weaponFor(hero, sg);
   // One ability slot: a 1:1 signature, else a Chog superpower, else the hero's own ability.
   const ab = power.signature ?? power.superpower ?? hero.ability;
-  const maxHp = Math.round(hero.maxHp * power.hpMul);
+  // 150 for everyone (BASE_HP.free), 200 for a verified Chog without a superpower; Vitality upgrades on top.
+  const maxHp = Math.round((power.baseHp ?? hero.maxHp) * power.hpMul);
   // Grenades: the tier's capacity (free 3 ... 1:1 13), never upgrades; hostile bots carry a fixed few (solo difficulty).
   const nades = team === 'bot' ? TUNING.grenade.botCount : power.grenades;
   return {
     id, team, ai: team === 'bot', name, hero, ability: { ...ab, cooldown: ab.cooldown * power.cooldownMul }, power, weapon, view: viewFor(hero, sg), baseView: viewFor(hero, sg),
     focus: 0, stillFor: 0, aimLag: 0, x, y, vx: 0, vy: 0, facing,
-    hp: maxHp, maxHp, armor: hero.maxArmor + power.armor, maxArmor: Math.max(hero.maxArmor, 50) + power.armor, alive: true,
+    hp: maxHp, maxHp, armor: hero.maxArmor + power.armor, maxArmor: Math.max(hero.maxArmor, TUNING.combat.armorCap) + power.armor, alive: true,
     ammo: weapon.magazine, reserve: weapon.reserve, cooldown: 0, reloadLeft: 0, abilityCd: 0, dashLeft: 0, dashX: 0, dashY: 0,
     revealLeft: 0, shieldLeft: 0, frenzyLeft: 0, slowLeft: 0, slowMul: 1, burstLeft: 0, stepAcc: 0, hitFlash: 0, muzzle: 0, deadFor: 0, lastSpread: weapon.spreadDeg, lastHitTick: -999, lastHitFrom: null,
     shots: 0, bullets: 0, hits: 0, kills: 0, damageDealt: 0, damageTaken: 0, death: null, zoneTick: -999,
@@ -461,10 +465,23 @@ export interface WorldOptions {
   /** V2 perks at spawn: solo hostiles (default on unless the test gives its own bots); versus every player (default off;
    * the game server turns it on). */
   perks?: boolean;
+  /** Which location (src/config/maps.ts): its tiles, pickups, hostile squad, zone centres and online spawns. Default:
+   * Room Zero. Ignored when a test passes its own `map` rows. */
+  mapId?: MapId;
+}
+
+/** The location a world is built on, or null for a test's own map (or the lab's RC-8 baseline). */
+function mapDefOf(opts: WorldOptions): MapDef | null {
+  if (opts.map !== undefined) return null;
+  if (opts.mapId) return MAPS[opts.mapId];
+  return LAB.pacing ? MAPS['room-zero'] : null;
 }
 
 export function createWorld(opts: WorldOptions = {}): World {
-  const level = parseLevel(opts.map ?? (LAB.pacing ? ROOM_ZERO : ROOM_ZERO_RC8));
+  const def = mapDefOf(opts);
+  const level = parseLevel(opts.map ?? def?.rows ?? ROOM_ZERO_RC8);
+  if (def) level.materials = def.materials;
+  const mapId = def?.id ?? null;
   const seed = (opts.seed ?? TUNING.seed) | 0;
   const brains = new Map<number, Brain>();
   if (opts.versus) {
@@ -479,7 +496,8 @@ export function createWorld(opts: WorldOptions = {}): World {
       ...initPickups(level, seed, opts), barriers: [], loot: [], lootSeq: 0, lootExpired: 0,
       brains, attackTokens: [], squadAI: false, squadPoints: [], perceptionLog: null, outcome: 'playing', playerKill: null,
       mode: 'versus', winner: null, friendlyFire: !!opts.friendlyFire,
-      zone: opts.zone === false ? null : planZone(level, seed, ZONE_CENTRES, TUNING.zone, spawns),
+      zone: opts.zone === false ? null : planZone(level, seed, def?.zoneCentres ?? ZONE_CENTRES, TUNING.zone, spawns),
+      mapId,
     };
   }
   const actors: Actor[] = [makeActor(0, 'player', 'You', heroById(opts.hero ?? 'benja'), opts.sidegrade ?? NO_SIDEGRADE, level.playerSpawn.x, level.playerSpawn.y, 0, opts.power)];
@@ -494,7 +512,7 @@ export function createWorld(opts: WorldOptions = {}): World {
     actors.push(a);
     brains.set(a.id, createBrain({ name: m.name, hero: m.hero, patrol: [[Math.floor(q.x), Math.floor(q.y)]], flanker: a.hero.dept === 'flanker' }));
   });
-  (opts.bots ?? (LAB.pacing ? BOT_SPAWNS : BOT_SPAWNS_RC8)).forEach((b) => {
+  (opts.bots ?? def?.botSpawns ?? (LAB.pacing ? BOT_SPAWNS : BOT_SPAWNS_RC8)).forEach((b) => {
     const [tx, ty] = b.patrol[0];
     const a = makeActor(actors.length, 'bot', b.name, heroById(b.hero), NO_SIDEGRADE, tx + 0.5, ty + 0.5, Math.PI);
     if (opts.perks ?? opts.bots === undefined) a.perk = spawnPerk(seed, a.id);
@@ -507,9 +525,10 @@ export function createWorld(opts: WorldOptions = {}): World {
     brains, attackTokens: [], perceptionLog: opts.log ? [] : null, outcome: 'playing', playerKill: null,
     // The lab's 'before' (LAB.pacing off: the RC-8 map and bots) keeps the RC-8 patrols, so it stays a fixed baseline.
     squadAI: opts.squadAI ?? (opts.bots === undefined && LAB.pacing),
-    squadPoints: opts.map === undefined && LAB.pacing ? TACTICAL_POINTS : derivePoints(level),
+    squadPoints: def?.tacticalPoints ? [...def.tacticalPoints] : derivePoints(level),
     mode: 'solo', winner: null, friendlyFire: !!opts.friendlyFire,
-    zone: opts.zone ? planZone(level, seed, ZONE_CENTRES) : null,
+    zone: opts.zone ? planZone(level, seed, def?.zoneCentres ?? ZONE_CENTRES) : null,
+    mapId,
   };
 }
 
@@ -531,12 +550,14 @@ function derivePoints(level: Level): { x: number; y: number }[] {
  */
 function initPickups(level: Level, seed: number, opts: WorldOptions): Pick<World, 'pickups' | 'pickupSpots' | 'pickupSeed' | 'pickupRev' | 'pickupFields'> {
   const fixed: Pickup[] = level.pickupSpawns.map((p) => ({ ...p, active: true, respawnLeft: 0, zone: -1, moves: 0 }));
-  const zones: PickupZone[] = opts.pickupZones ?? (opts.map === undefined && LAB.pacing ? PICKUP_ZONES : []);
+  const def = mapDefOf(opts);
+  const zones: PickupZone[] = opts.pickupZones ?? (def ? [...def.pickupZones] : []);
   if (!zones.length) return { pickups: fixed, pickupSpots: [], pickupSeed: seed, pickupRev: 0, pickupFields: null };
   // Online: both sides' spawns. Solo: yours (your teammates start beside you) and every bot's.
-  const spawns: Spot[] = opts.versus ? [...VERSUS_SPAWNS.alpha, ...VERSUS_SPAWNS.bravo]
-    : [level.playerSpawn, ...(opts.bots ?? (LAB.pacing ? BOT_SPAWNS : BOT_SPAWNS_RC8)).map((b) => ({ x: b.patrol[0][0] + 0.5, y: b.patrol[0][1] + 0.5 }))];
-  const fields = { alpha: walkField(level, VERSUS_SPAWNS.alpha), bravo: walkField(level, VERSUS_SPAWNS.bravo) };
+  const vs = def?.versusSpawns ?? VERSUS_SPAWNS;
+  const spawns: Spot[] = opts.versus ? [...vs.alpha, ...vs.bravo]
+    : [level.playerSpawn, ...(opts.bots ?? def?.botSpawns ?? (LAB.pacing ? BOT_SPAWNS : BOT_SPAWNS_RC8)).map((b) => ({ x: b.patrol[0][0] + 0.5, y: b.patrol[0][1] + 0.5 }))];
+  const fields = { alpha: walkField(level, [...vs.alpha]), bravo: walkField(level, [...vs.bravo]) };
   // A zone with no tile left on this map (a foreign map) is skipped, never a crash.
   const all = zoneSpots(level, zones, spawns, fields);
   const keep = zones.map((_, i) => i).filter((i) => all[i].length > 0);
@@ -617,6 +638,8 @@ function startReload(w: World, a: Actor): void {
 function useAbility(w: World, a: Actor, inp: ActorInput): void {
   const A = TUNING.abilities;
   const ab = a.ability;
+  // Visor is passive (always on): the button does nothing and costs nothing.
+  if (ab.kind === 'visor') return;
   const slab = ab.kind === 'barrier' ? slabBox(w, a) : null;
   // A slab that does not fit (facing a wall, or across someone) is not placed and costs nothing.
   if (ab.kind === 'barrier' && !slab) return;
@@ -719,6 +742,19 @@ export function beamEnd(w: World, a: Actor): { x: number; y: number; target: Act
   }
   return { x: a.x + (ex - a.x) * best, y: a.y + (ey - a.y) * best, target };
 }
+
+/**
+ * Visor (owner 2026-10-18 "VISOR -> HOSTILE TRACKER"): the hostiles within the holder's tracker radius, through walls,
+ * while the holder is standing. Their positions only: the tracker shows dots, never bodies, health or what they carry.
+ */
+export function visorTracks(w: World, a: Actor): Actor[] {
+  if (a.ability.kind !== 'visor' || !a.alive || a.downed) return [];
+  const r = a.ability.radius ?? 16;
+  return w.actors.filter((t) => t.alive && t.team !== a.team && Math.hypot(t.x - a.x, t.y - a.y) <= r);
+}
+
+/** Visor counterplay: a hostile Visor has t on its tracker right now (t is told). */
+export const trackedBy = (w: World, t: Actor): boolean => w.actors.some((v) => v.team !== t.team && v.ability.kind === 'visor' && visorTracks(w, v).includes(t));
 
 /**
  * The stretch of a hostile beam that a player is warned of when its owner is not shown to them: from 5 u before them

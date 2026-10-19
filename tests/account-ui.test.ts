@@ -19,7 +19,7 @@ const ctx = (acct: AcctView, o: Partial<HubCtx> = {}): HubCtx => ({
   touch: false, profile: { id: 'GUEST123', nickname: acct.profile?.callsign ?? null, favourite: null, pinned: [], linked: [] }, settings: DEFAULT_SETTINGS,
   records: acct.profile?.practice ?? { overall: prof().practice.overall, heroes: {} }, medals: acct.profile?.medals ?? {}, heroId: 'benja', demoChip: 'Guest', marking: null,
   muted: false, canFs: false, canVibrate: false, build: 'test', auth: { config: null, session: [], wallets: [], busy: false, message: '' },
-  acct, netProfile: null, demoToken: null, mode: 'solo',
+  acct, netProfile: null, demoToken: null, mode: 'solo', map: 'room-zero',
   net: { url: 'ws://x/ws', state: 'offline', message: '', queue: null, rtt: 0, party: null, follower: false }, ...o,
 });
 const guest = (): AcctView => ({ ...emptyAcct(), config: cfg, board: [] });

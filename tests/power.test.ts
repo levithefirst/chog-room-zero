@@ -7,6 +7,7 @@ import {
 } from '../src/config/power';
 import { ONE_OF_ONE_IDS, TIER_TABLE } from '../src/nft/tier-table';
 import { HEROES } from '../src/config/heroes';
+import { TUNING } from '../src/config/tuning';
 import { SUPERPOWER_IDS, superAbility } from '../src/config/superpowers';
 import { createWorld, stepWorld, IDLE_INPUT, type ActorInput, type World } from '../src/sim/world';
 import { HALL, share } from './helpers/duel';
@@ -78,7 +79,7 @@ describe('ladder and caps', () => {
     expect(a.maxHp).toBe(Math.round(k.maxHp * 1.06));
     expect(a.hp).toBe(a.maxHp);
     expect(a.armor).toBe(k.maxArmor + 6);
-    expect(a.maxArmor).toBe(50 + 6);
+    expect(a.maxArmor).toBe(TUNING.combat.armorCap + 6);
     expect(a.ability.cooldown).toBeCloseTo(k.ability.cooldown * 0.9, 6);
     expect(createWorld({ hero: 'benja' }).actors[0].maxHp).toBe(k.maxHp);
   });

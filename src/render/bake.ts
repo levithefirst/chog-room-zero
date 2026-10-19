@@ -35,9 +35,9 @@ function mulberry(seed: number) {
   };
 }
 
-export function materialAt(x: number, y: number): Material {
+export function materialAt(x: number, y: number, zones: Level['materials'] = ZONES): Material {
   let m: Material = 'concrete';
-  for (const z of ZONES) if (x >= z.x0 && x <= z.x1 && y >= z.y0 && y <= z.y1) m = z.mat;
+  for (const z of zones ?? ZONES) if (x >= z.x0 && x <= z.x1 && y >= z.y0 && y <= z.y1) m = z.mat;
   return m;
 }
 
@@ -51,8 +51,8 @@ function drawMap(g: Graphics, l: Level): void {
     for (let x = 0; x < w; x++) {
       const t = tiles[y * w + x];
       if (t === WALL) continue;
-      const m = MAT[materialAt(x, y)];
-      const mat = materialAt(x, y);
+      const m = MAT[materialAt(x, y, l.materials)];
+      const mat = materialAt(x, y, l.materials);
       g.rect(x, y, 1, 1).fill(((x + y) & 1) === 0 ? m.base : m.alt);
       if (mat === 'tile') {
         for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
@@ -83,10 +83,10 @@ function drawMap(g: Graphics, l: Level): void {
 
   // 2. Painted markings: hazard band where the dock meets the concourse, lane lines on the concourse.
   for (let x = 1; x < w - 1; x++) {
-    if (materialAt(x, 23) === 'dock' && walkable(at(x, 23))) {
+    if (materialAt(x, 23, l.materials) === 'dock' && walkable(at(x, 23))) {
       for (let k = 0; k < 4; k++) g.poly([x + k * 0.25, 23, x + k * 0.25 + 0.12, 23, x + k * 0.25 + 0.02, 23.22, x + k * 0.25 - 0.1, 23.22]).fill({ color: MAT.stripe, alpha: 0.75 });
     }
-    if (walkable(at(x, 10)) && walkable(at(x, 8)) && materialAt(x, 10) === 'concrete' && x % 2 === 0) g.rect(x, 10.47, 0.6, 0.06).fill({ color: 0xc9bf9e, alpha: 0.22 });
+    if (walkable(at(x, 10)) && walkable(at(x, 8)) && materialAt(x, 10, l.materials) === 'concrete' && x % 2 === 0) g.rect(x, 10.47, 0.6, 0.06).fill({ color: 0xc9bf9e, alpha: 0.22 });
   }
 
   // 3. Grime: dark blobs, denser along walls; a few cracks and oil stains.

@@ -5,11 +5,13 @@
 // or the config files, never from the browser's own guess.
 import { HEROES, heroById } from '../config/heroes';
 import { SUPERPOWERS, powersOf, rankLine, type Rank } from '../config/superpowers';
+import { MAPS, MAP_IDS, type MapId } from '../config/maps';
+import { powerTraitOf, traitsOf } from '../nft/chog-traits';
 import { WEAPONS } from '../config/weapons';
 import { levelOf, type RewardBreakdown } from '../config/progression';
 import { rewardHtml } from './rewards';
 import {
-  CAPS, ONE_OF_ONE, TIER_DEFS, UPGRADES, UPGRADE_IDS, powerFor, signatureFor, tierOfMetadataId, type Power, type Tier, type Upgrades,
+  BASE_HP, CAPS, ONE_OF_ONE, TIER_DEFS, UPGRADES, UPGRADE_IDS, powerFor, signatureFor, tierOfMetadataId, type Power, type Tier, type Upgrades,
 } from '../config/power';
 import type { BoardRow, Reward } from '../net/account';
 import type { PartyMember } from '../net/protocol';
@@ -37,6 +39,8 @@ export interface NetView {
 
 export interface HubCtx extends ScreenCtx {
   mode: PlayMode;
+  /** The location picked for the next match (owner 2026-10-18: chosen before the match, open to everyone). */
+  map: MapId;
   net: NetView;
 }
 
@@ -139,13 +143,13 @@ ${chog}
 }
 
 // ---- left: the Chog / class panel ----
-function chogPanel(c: HubCtx): string {
+export function chogPanel(c: HubCtx): string {
   const a = c.acct;
   const k = classOf(a);
   const one = k.metadataId ? ONE_OF_ONE[k.metadataId] : undefined;
   const sig = k.metadataId ? signatureFor(k.metadataId) : null;
   const accent = one ? hexColor(one.color) : 'var(--line)';
-  const title = k.metadataId ? (one ? esc(one.name) : `Chog #${k.metadataId}`) : 'Free';
+  const title = k.metadataId ? (one ? esc(one.name) : `CHOG #${k.metadataId}`) : 'Free';
   const tierLine = k.source === 'free' ? '' : `<div class="tierline">${tierBadge(k.tokenTier ?? k.tier, k.source === 'demo')}${k.source === 'token' ? ' <span class="verified">✓ Monad</span>' : ''}${one ? ` <span class="num dim">#${k.metadataId}</span>` : ''}</div>`;
   const off = k.source === 'token' && a.config && !a.config.nftCombat ? '<p class="note warn small">NFT power off on this server</p>' : '';
   const picks = a.tokens && a.tokens.length > 1
@@ -162,11 +166,20 @@ function chogPanel(c: HubCtx): string {
 <p class="small num">${esc(TIER_DEFS[sp.rank].label)} · ${esc(rankLine(sp.power, sp.rank as Rank))}</p><p>${esc(sp.text)}</p>
 <p class="small"><em>Telegraph</em> ${esc(sp.telegraph ?? '')}</p><p class="small"><em>Counter</em> ${esc(sp.counter ?? '')}</p>${spPick}
 <button class="btn small" data-act="training" id="training-cta">Training</button></div>`
-    : k.metadataId && !sig && k.tier !== 'free' ? '<p class="note small" id="nopower">No superpower trait on this Chog: it plays your operator\'s ability.</p>' : '';
+    : k.metadataId && !sig && k.tier !== 'free' ? '<p class="note small" id="nopower">No mapped superpower trait on this Chog: it plays your operator\'s ability with the CHOG baseline of 200 health.</p>' : '';
+  // YOUR CHOG (owner 2026-10-18): the token's real traits, the ability they give, the trait it comes from, and a
+  // button straight into its drill. Health is the CHOG rule: 200 without a mapped power, otherwise 150 like everyone.
+  const traits = k.metadataId ? traitsOf(k.metadataId) : [];
+  const from = sp?.power && k.metadataId ? powerTraitOf(k.metadataId, sp.power) : null;
+  const ability = sig ? `${esc(sig.name)} <small>(1:1 signature)</small>` : sp?.power ? `${esc(sp.name)} <small>(${esc(TIER_DEFS[sp.rank ?? 'common'].label)})</small>` : 'Your operator\'s own';
+  const ident = k.metadataId ? `<ul class="traits" id="chogtraits">${traits.map((t) => `<li><em>${esc(t.category)}</em> ${esc(t.value)}</li>`).join('')}</ul>
+<p class="abil" id="chogability"><em>Ability</em> <b>${ability}</b></p>
+${from ? `<p class="abil" id="chogtrait"><em>Trait</em> ${esc(from.category)} · ${esc(from.value)}</p>` : ''}
+<p class="abil num" id="choghp"><em>Health</em> ${Math.round(k.power.baseHp * k.power.hpMul)}${k.power.baseHp > BASE_HP.free ? ' <small>(CHOG baseline: no mapped power)</small>' : ''}</p>` : '';
   return `<section class="hub-card chog${one ? ' oneofone' : ''}" style="--accent:${accent}" id="chogpanel">
-<div class="kicker">Class</div>
+<div class="kicker">Your Chog</div>
 <h3 id="chogname">${title}</h3>${tierLine}
-<div class="pwrows">${powerRows(k.power)}</div>
+${ident}
 ${sigBox}${spBox}${hist ? `<p class="hist num" title="This Chog's own record">${hist.matches}M · ${hist.wins}W · ${hist.kills}K</p>` : ''}
 ${picks}${off}
 ${c.demoToken && tierOfMetadataId(Number(c.demoToken)) ? (a.choice?.demo ? '<button class="btn small" data-act="demo-online-off">Leave demo</button>' : `<button class="btn small" data-act="demo-online">Use <span class="demo">DEMO</span> #${esc(c.demoToken)}</button>`) : ''}
@@ -243,8 +256,10 @@ function playBar(c: HubCtx): string {
   else if (v.message && !status) status = `<p class="status warn">${esc(v.message)}</p>`;
   const warn = c.acct.ticketWarning ? TICKET_WARN[c.acct.ticketWarning] ?? c.acct.ticketWarning : c.netProfile?.note ?? '';
   if (warn) status += `<p class="status warn small">${esc(warn)}</p>`;
-  return `<div class="modes4" role="group" aria-label="Mode">${modes}</div>
-<div class="play-wrap"><button class="play-cta${state}" ${playAttr}${disabled ? ' disabled' : ''} id="playbtn"><span class="pl">${esc(playLabel)}</span><small>${busy ? '' : esc(`${MODE_INFO[sel].label} · ${MODE_INFO[sel].sub}`)}</small></button>${status}</div>`;
+  const maps = MAP_IDS.map((id) => `<button class="mode-btn map-btn${c.map === id ? ' on' : ''}" data-map="${id}"${busy ? ' disabled' : ''} aria-pressed="${c.map === id}" title="${esc(MAPS[id].blurb)}"><b>${esc(MAPS[id].name)}</b></button>`).join('');
+  return `<div class="pickers"><div class="maps3" role="group" aria-label="Location">${maps}</div>
+<div class="modes4" role="group" aria-label="Mode">${modes}</div></div>
+<div class="play-wrap"><button class="play-cta${state}" ${playAttr}${disabled ? ' disabled' : ''} id="playbtn"><span class="pl">${esc(playLabel)}</span><small>${busy ? '' : esc(`${MAPS[c.map].name} · ${MODE_INFO[sel].label} · ${MODE_INFO[sel].sub}`)}</small></button>${status}</div>`;
 }
 
 // ---- right: leaderboard preview + squad ----

@@ -165,7 +165,7 @@ export interface Renderer {
 
 export const COVER_FLASH_SECONDS = 0.18;
 /** Each CHOG superpower's colour: its beam, glob, cage, goo or aura, and the pip by its owner's bar. */
-export const POWER_COLOR: Record<string, number> = { laser: 0xff3b2f, xray: 0xb57bff, bubble: 0xff7ac8, drool: 0x8bd450, aura: 0xffd166 };
+export const POWER_COLOR: Record<string, number> = { laser: 0xff3b2f, xray: 0xb57bff, visor: 0x4fd6e8, bubble: 0xff7ac8, drool: 0x8bd450, aura: 0xffd166 };
 // Portrait camera: the same smoothing with a longer lead toward the aim (TUNING.render.portraitLookahead).
 const PORTRAIT_CAM = { ...TUNING.render, lookahead: TUNING.render.portraitLookahead };
 // The player's drawn radius plus its overhead bar, in u: how far from a HUD band the portrait camera keeps it.

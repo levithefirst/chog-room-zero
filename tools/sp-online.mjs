@@ -1,6 +1,6 @@
 // CHOG superpowers online, end to end in two separate headless Chrome processes against the local full stack
 // (tools/local-api.ts serving the built game, the real game server checking tickets with it): two labelled DEMO Chogs
-// (#36: Laser Eyes and an Aura; #11: X-Ray) queue 1v1, the server builds each power from its signed ticket, both
+// (#36: Laser Eyes and an Aura; #11: Visor) queue 1v1, the server builds each power from its signed ticket, both
 // rosters name both powers, the intro tells each player what it faces, and a beam fired on one client is drawn on the
 // other. Emulated desktop input, loopback network: NOT phones, NOT the internet.
 // Usage: node tools/sp-online.mjs http://localhost:8790 [shotDir]
@@ -12,7 +12,7 @@ const open = [];
 
 try {
   const clients = [];
-  for (const [label, token] of [['laser', '36'], ['xray', '11']]) {
+  for (const [label, token] of [['laser', '36'], ['visor', '11']]) {
     const b = await browser(`spo-${label}`, { base, shotDir, w: 1280, h: 720 });
     open.push(b);
     await b.go('/?debug'); await b.ev(`localStorage.setItem('chog.onboarded','1')`);
@@ -24,9 +24,9 @@ try {
   check('both DEMO Chogs are matched in one online 1v1', inMatch.every(Boolean));
   const view = await Promise.all(clients.map((b) => b.ev(`({ roster: __chog.net().match.roster.map((r) => ({ name: r.name, sp: r.sp ?? null, kind: r.ability.kind, demo: !!r.demo })), me: __chog.world.actors[0].ability.kind, hint: document.getElementById('hint')?.innerText ?? '' })`)));
   const sps = view.map((v) => v.roster.map((r) => r.sp).sort().join());
-  check('the server built each power from its signed ticket, and both rosters name both', sps.every((s) => s === 'laser,xray'), JSON.stringify(view.map((v) => v.roster)));
-  check('each client plays its own power in its slot', view[0].me === 'laser' && view[1].me === 'xray', JSON.stringify(view.map((v) => v.me)));
-  check('the intro names what you face', /X-Ray Eyes/i.test(view[0].hint) && /Laser Eyes/i.test(view[1].hint), JSON.stringify(view.map((v) => v.hint)));
+  check('the server built each power from its signed ticket, and both rosters name both', sps.every((s) => s === 'laser,visor'), JSON.stringify(view.map((v) => v.roster)));
+  check('each client plays its own power in its slot', view[0].me === 'laser' && view[1].me === 'visor', JSON.stringify(view.map((v) => v.me)));
+  check('the intro names what you face', /Visor/i.test(view[0].hint) && /Laser Eyes/i.test(view[1].hint), JSON.stringify(view.map((v) => v.hint)));
   // The laser client fires its beam (Space); the server runs it and the other client is told (its body, or the line).
   await sleep(3500); // past the countdown
   await clients[0].ev(`(() => { const o = { key: ' ', code: 'Space', bubbles: true }; window.dispatchEvent(new KeyboardEvent('keydown', o)); setTimeout(() => window.dispatchEvent(new KeyboardEvent('keyup', o)), 150); })()`);

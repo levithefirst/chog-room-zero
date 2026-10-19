@@ -3,7 +3,8 @@
 // describes. One searchable list of short sections; each opens in place (details/summary: keyboard and screen reader
 // friendly, no script needed to read it). Pure: tests/gp-docs.test.ts.
 import { TUNING } from '../config/tuning';
-import { GRENADES, UPGRADES, UPGRADE_IDS } from '../config/power';
+import { BASE_HP, GRENADES, UPGRADES, UPGRADE_IDS } from '../config/power';
+import { MAPS, MAP_IDS } from '../config/maps';
 import { PRACTICE_REWARDS, REWARDS } from '../config/progression';
 import { MEDALS } from './medals';
 import { HEROES } from '../config/heroes';
@@ -23,7 +24,8 @@ const rarityCount = (r: string) => MEDALS.filter((m) => m.rarity === r).length;
 export const DOCS: DocSection[] = [
   { id: 'how-to-play', title: 'How to Play', html: () => `<p>Room Zero is a dark, top-down room where every bullet travels and every wall blocks sight and shots.
 In the default game it is <b>you and 2 AI teammates against 5 hostiles</b>. Your side wins when all five are down. You lose when you are out.</p>
-${li([`About ${Z.safeSeconds} s in, a danger zone starts closing. Outside it you lose health every second, and the HUD says <b>Outside zone</b>.`,
+${li([`Everyone has ${BASE_HP.free} health and up to ${TUNING.combat.armorCap} armour (a verified Chog without a mapped superpower: ${BASE_HP.chog} health).`,
+    `About ${Z.safeSeconds} s in, a danger zone starts closing. Outside it you lose health every second, and the HUD says <b>Outside zone</b>. Its stages warn for ${Z.stages.map((s) => s.warn).join(' / ')} s and close over ${Z.stages.map((s) => s.shrink).join(' / ')} s (every interval 20% longer than before 2026-10-18).`,
     'Light is information: you only see what your lamp and the room let you see. Sound tells you the rest.',
     'Pickups and fallen hostiles\' kit keep you going. Your teammates use them too.'])}` },
   { id: 'combat', title: 'Combat', html: () => li([
@@ -78,7 +80,7 @@ ${li([`About ${Z.safeSeconds} s in, a danger zone starts closing. Outside it you
     'Hit by someone you could not see (behind you, or online a longer sight than yours): the red arc points at them, shows how far they are ("9 m"), and their muzzle flash rings them for a moment.',
   ]) },
   { id: 'pickups', title: 'Pickups', html: () => li([
-    `Health +${P.health.amount} (back after ${P.health.respawn} s), armour +${P.armor.amount} (${P.armor.respawn} s), ammo: two magazines (${P.ammo.respawn} s), a grenade (${P.grenade.respawn} s).`,
+    `Health +${P.health.amount}, armour +${P.armor.amount}, ammo: two magazines, a grenade. Each is back ${P.health.respawn} s after it is taken, on another spot of its area, never next to anyone.`,
     'Walk over one to take it: no button. If you are full, it stays for someone else, and the HUD says FULL.',
     `At full health a health pickup still adds up to +${Math.round(P.overhealShare * 100)}% (overheal); armour can go ${P.overArmor} over. The extra stays until damage takes it.`,
     'Each pickup comes back somewhere else in its area, so the safe routes and the contested middle both pay.',
@@ -96,15 +98,20 @@ ${li([...PERK_IDS.map((k) => `<b>${PERKS[k].name}</b>: ${PERKS[k].text}`),
     `Already carrying one? Stand still on the bag for ${TUNING.perks.swapSeconds} s to swap: yours goes into the bag. Standing still in the open is the price.`,
     'AI teammates take a perk when their slot is empty, and never swap one they have.',
   ])}` },
-  { id: 'superpowers', title: 'CHOG Superpowers', html: () => `<p>A verified Chog whose real traits carry one of these gets it in its one ability slot, in place of the operator's ability. Its rarity is the power's rank: rarer lasts longer, reaches further or comes back sooner. It never adds health, armour or weapon damage. Free players keep everything else: the same map, weapons, pickups, upgrades and matches.</p>
+  { id: 'superpowers', title: 'CHOG Superpowers', html: () => `<p>A verified Chog whose real traits carry one of these gets it in its one ability slot, in place of the operator's ability. Its rarity is the power's rank: rarer lasts longer, reaches further or comes back sooner. It never adds health, armour or weapon damage. Free players keep everything else: the same maps, weapons, pickups, upgrades and matches, at ${BASE_HP.free} health.</p>
+<p>A verified Chog that carries none of these traits (the ten 1:1s among them) plays its operator's ability (a 1:1 its signature) and has the CHOG baseline: <b>${BASE_HP.chog} health</b> instead of ${BASE_HP.free}. That is the only CHOG health rule, and it does not depend on rarity.</p>
 <table class="howto"><tr><th>Power</th><th>From the trait</th><th>Counter</th></tr>${SUPERPOWER_IDS.map((id) => { const d = SUPERPOWERS[id]; return `<tr><td><b>${esc(d.name)}</b> (${d.role})<br><small>${esc(d.text)}</small></td><td>${esc(d.trait)}</td><td>${esc(d.counter)}</td></tr>`; }).join('')}</table>
 <p>By rank (Common to Legendary):</p>${li(SUPERPOWER_IDS.map((id) => `<b>${esc(SUPERPOWERS[id].name)}</b>: ${RANKS.map((r) => esc(rankLine(id, r))).join(' · ')}`))}
 ${li([
     'Your enemy can read it: the match intro names each opponent\'s power, and a coloured diamond by their health bar shows it (red Laser, violet X-Ray, pink Bubble, green Drool, gold Aura). Nothing about a player you cannot see is shown.',
-    'X-Ray goes through walls but shows you nothing behind them. Its target sees the violet line cross them while it charges.',
+    `<b>Visor</b> (Visor Eyes) is information: always on, it puts every hostile within its radius (${SUPERPOWERS.visor.ranks.common.range} m at Common) on a small map under your health, through walls. It never shows their body, health or what they carry, and it does no damage. A hostile on your tracker sees TRACKED under its health.`,
+    '<b>X-Ray</b> is an attack: a beam that crosses walls after a long charge. It shows you nothing behind the wall, and its target sees the violet line cross them. No collection trait carries X-Ray yet: it is in DEMO and Training only.',
+    'Visor tells you where; X-Ray hits through the wall. They are different powers from different traits.',
     'A Chog with several power traits picks one on the Class panel. A Chog with none plays its operator\'s ability.',
-    `CHOG Training (Class panel, or DEMO): one drill per power (${SUPERPOWER_IDS.map((id) => esc(DRILLS[id].name)).join(', ')}), its real numbers with a shorter cooldown. Training earns and records nothing.`,
+    `CHOG Training (the TRAINING button on YOUR CHOG, for a verified Chog with a power; or DEMO, labelled): one drill per power (${SUPERPOWER_IDS.map((id) => `${esc(SUPERPOWERS[id].name)}: ${esc(DRILLS[id].name)}, ${DRILLS[id].seconds} s`).join('; ')}), its real numbers with a shorter cooldown. Training earns and records nothing.`,
   ])}` },
+  { id: 'locations', title: 'Locations', html: () => `<p>Pick the location on the hub before you press Play, for the default game and for 1v1, 3v3 and 5v5. Every location is open to everyone; online you only meet players who picked the same one.</p>
+${li(MAP_IDS.map((id) => `<b>${esc(MAPS[id].name)}</b>: ${esc(MAPS[id].blurb)}`))}` },
   { id: 'medals', title: 'Medals', html: () => `<p>${MEDALS.length} medals: ${rarityCount('common')} common, ${rarityCount('uncommon')} uncommon, ${rarityCount('rare')} rare, ${rarityCount('epic')} epic.
 Commons come from playing; rare and epic ones need runs most players rarely have (a clear in under 30 seconds, a last stand, a run without a scratch).</p>
 ${li(['Signed in, medals are awarded and kept on your account (any device). As a guest they last for the session.', 'Online medals come from matches the server saved, never from the browser.',

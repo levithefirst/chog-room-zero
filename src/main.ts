@@ -3,7 +3,7 @@ import { createInput, touchStick } from './input/input';
 import { createSummaryGate, overlayInputAllowed } from './input/gate';
 import { createAudio } from './audio/audio';
 import { fixedSteps } from './sim/sim';
-import { createWorld, hears, wallFactorOf, matchSeconds, player, stepWorld, touchingFull, wants, IDLE_INPUT, type Pickup, type PickupKind, type World } from './sim/world';
+import { createWorld, hears, wallFactorOf, matchSeconds, player, stepWorld, touchingFull, trackedBy, visorTracks, wants, IDLE_INPUT, type Pickup, type PickupKind, type World } from './sim/world';
 import { outsideCircle, zoneAt } from './sim/zone';
 import { OnlineSession, serverUrl } from './net/client';
 import { MODE_SIZE, type Mode } from './net/protocol';
@@ -34,7 +34,7 @@ import { DEFAULT_SETTINGS, QUALITY_DPR, SETTINGS_KEY, STICK_PX, displayName, loa
 import { MEDALS, awardMedals, loadMedals, type MedalDef, type Unlocked } from './ui/medals';
 import { TIPS_KEY, loadShownTips, nextTip, saveShownTips, tipText, type TipId } from './ui/tips';
 import { esc, howtoHtml, medalCard, nickHtml, resultsHtml, selectHtml, settingsHtml, type AuthView } from './ui/screens';
-import { authHtml, chogHtml, boardScreenHtml, careerHtml, classOf, hubHtml, medalsScreenHtml, onlineResultsHtml, topbar, upgradesHtml, upgradesReady, type HubCtx, type NetView, type PlayMode } from './ui/hub';
+import { authHtml, chogHtml, chogPanel, boardScreenHtml, careerHtml, classOf, hubHtml, medalsScreenHtml, onlineResultsHtml, topbar, upgradesHtml, upgradesReady, type HubCtx, type NetView, type PlayMode } from './ui/hub';
 import { docsHtml, filterDocs } from './ui/docs';
 import { CHOG_ERRORS, chogConnect, chogEligibility, chogNetwork, chogPickAccount, chogSign, discoverWallets, fetchAuthConfig, fetchSession, googleSignIn, isMobileBrowser, signOut, walletSignIn, watchWallet, MONAD_CHAIN_HEX, type ChogStep } from './ui/auth';
 import { SIDEGRADES } from './sim/operators';
@@ -45,6 +45,7 @@ import { emptyAcct } from './ui/account';
 import { RANKS, SUPERPOWERS, SUPERPOWER_IDS, superAbility, type Rank, type SuperpowerId } from './config/superpowers';
 import { createTraining, drillFor, stepTraining, trainingInput, trainingStatus, trainingSummary, type TrainingRun } from './sim/training';
 import { pointInPolygon } from './sim/geom';
+import { MAPS, isMapId, type MapId } from './config/maps';
 import { BASE_POWER, chogName, powerForToken, signatureFor, tierOfMetadataId, ONE_OF_ONE, TIER_DEFS, type Power } from './config/power';
 import { tierEffect } from './ui/account';
 import { LAB, applyLab } from './config/lab';
@@ -166,7 +167,9 @@ async function start() {
     : 'Guest';
   // Onboarding: shown once on first launch, re-openable from the title.
   const ONBOARD_KEY = 'chog.onboarded';
-  type TitleView = 'main' | 'howto' | 'docs' | 'demo' | 'settings' | 'nick' | 'upgrades' | 'ranks' | 'career' | 'medals' | 'auth' | 'chog';
+  const YOURCHOG_KEY = 'chog.yourchog';
+  let yourChogDue = false;
+  type TitleView = 'main' | 'howto' | 'docs' | 'demo' | 'settings' | 'nick' | 'upgrades' | 'ranks' | 'career' | 'medals' | 'auth' | 'chog' | 'yourchog';
   // GP Game Docs: the section opened when the screen is shown (the search box filters the rest live).
   let docsOpen: string | null = null;
   document.addEventListener('input', (e) => {
@@ -194,6 +197,9 @@ async function start() {
   let shownTips = loadShownTips(localStorage);
   const MODE_KEY = 'chog.mode';
   let playMode: PlayMode = (() => { try { const m = localStorage.getItem(MODE_KEY); return m === '1v1' || m === '3v3' || m === '5v5' || m === 'solo' ? m : 'solo'; } catch { return 'solo'; } })();
+  // The location for the next match (a preference on this device; owner 2026-10-18: chosen before the match).
+  const MAP_KEY = 'chog.map';
+  let mapId: MapId = (() => { try { const m = localStorage.getItem(MAP_KEY); return isMapId(m) ? m : 'room-zero'; } catch { return 'room-zero'; } })();
   let confirmReset = false;
   let nickError = '';
   let nickSaved = false;
@@ -524,7 +530,7 @@ async function start() {
       touch: input.mode === 'touch', profile: curProfile(), settings, records: curRecords(), medals: curMedals(), heroId, demoChip: demoChip(), marking: identity.marking,
       muted: audio.muted, canFs: canFs && !isFullscreen(), canVibrate, build: __BUILD_SHA__, auth,
       acct, netProfile: net?.profile ?? null, demoToken: identity.kind === 'bound' ? identity.tokenId : null,
-      mode: playMode, net: nv,
+      mode: playMode, map: mapId, net: nv,
     };
   }
 
@@ -534,11 +540,17 @@ async function start() {
   }
 
   function showTitle() {
+    if (yourChogDue && (titleView === 'main' || titleView === 'chog')) {
+      yourChogDue = false;
+      try { sessionStorage.setItem(YOURCHOG_KEY, '1'); } catch { /* ignore */ }
+      titleView = 'yourchog';
+    }
     const c = ctx();
     switch (titleView) {
       case 'howto': return show(howtoHtml(c));
       case 'docs': return show(docsHtml(input.mode === 'touch', docsOpen, topbar('Game Docs')));
       case 'demo': return showDemo();
+      case 'yourchog': return show(`<div class="screen yourchog"><div class="yc-in">${chogPanel(c)}<div class="btns"><button class="btn" data-act="back" id="yourchog-close">Continue</button></div></div></div>`);
       case 'settings': return show(settingsHtml(c, confirmReset));
       case 'upgrades': return show(upgradesHtml(c));
       case 'ranks': return show(boardScreenHtml(c));
@@ -589,7 +601,9 @@ async function start() {
     const h = heroById(heroId);
     const m = online ? `Online ${onlineMode}` : 'Vs bots · You + 2 AI vs 5';
     const tip = BOOT_TIPS[(runIndex + 3) % BOOT_TIPS.length];
-    show(`<div class="screen deploy"><div class="deploy-in"><div class="kicker">${esc(m)}</div><h2>Room Zero</h2>
+    // The location the match is on: the server's word online, your pick solo, the drill room in Training.
+    const where = training ? 'CHOG Training' : MAPS[online && isMapId(net?.match?.map) ? net!.match!.map! : mapId].name;
+    show(`<div class="screen deploy"><div class="deploy-in"><div class="kicker">${esc(m)}</div><h2 id="deploy-map">${esc(where)}</h2>
 <div class="deploy-op">${portraitSvg(h, 'dep', identity.marking)}<span><b>${esc(h.name)}</b><small>${esc(h.role)} · ${esc(WEAPONS[h.weapon].name)}</small></span></div>
 <div class="loadbar"><i></i></div><p class="deploy-tip">${esc(tip)}</p></div></div>`);
     // Build the world (and bake the map if needed) after the loading card has painted.
@@ -706,6 +720,10 @@ async function start() {
   function setMode(m: PlayMode) {
     playMode = m;
     try { localStorage.setItem(MODE_KEY, m); } catch { /* ignore */ }
+  }
+  function setMap(m: MapId) {
+    mapId = m;
+    try { localStorage.setItem(MAP_KEY, m); } catch { /* ignore */ }
   }
 
   /** The hub's PLAY button: practice starts at once; online modes queue (a squad leader queues the squad). */
@@ -853,6 +871,8 @@ async function start() {
     }
     const md = t.closest('[data-mode]') as HTMLElement | null;
     if (md) { e.preventDefault(); setMode(md.dataset.mode as PlayMode); render(); return; }
+    const mp = t.closest('[data-map]') as HTMLElement | null;
+    if (mp) { e.preventDefault(); if (isMapId(mp.dataset.map)) setMap(mp.dataset.map); render(); return; }
     const tk = t.closest('[data-token]') as HTMLElement | null;
     if (tk) { e.preventDefault(); setChoice(tk.dataset.token ? { tokenId: Number(tk.dataset.token) } : null); render(); return; }
     const sp = t.closest('[data-sp]') as HTMLElement | null;
@@ -1075,7 +1095,7 @@ async function start() {
     runIndex++;
     // The default game: you + 2 AI teammates (other operators than yours) against the five hostile bots.
     if (training) { const tr = createTraining(training.id, training.power, heroId); world = tr.world; training.run = tr.run; }
-    else world = createWorld({ seed: TUNING.seed + runIndex, hero: heroId, sidegrade: identity.sidegrade, zone: true, power: soloPower(), allies: squadmates() });
+    else world = createWorld({ seed: TUNING.seed + runIndex, hero: heroId, sidegrade: identity.sidegrade, zone: true, power: soloPower(), allies: squadmates(), mapId });
     practiceTicket = null;
     if (signedIn() && !LAB_ON && !training) {
       const run = runIndex;
@@ -1115,15 +1135,50 @@ async function start() {
     if (training?.run) {
       const sp = world.actors[0].ability, d = training.run.drill;
       $('hero').innerHTML = `${esc(h.name)} · Training · ${training.power.demo ? '<span class="demo">DEMO</span> ' : ''}${esc(sp.name)} (${esc(TIER_DEFS[sp.rank ?? 'common'].label)})`;
-      showHint(`${esc(d.name)}: ${esc(d.goal)} Cooldown shortened to ${sp.cooldown} s for the drill. Nothing is recorded.`, 7);
+      showHint(`${esc(d.name)}: ${esc(d.goal)} ${sp.cooldown > 0 ? `Cooldown shortened to ${sp.cooldown} s for the drill. ` : ''}Nothing is recorded.`, 7);
     }
   }
+  /**
+   * Visor tracker (HUD): the map's walls, your spot and radius, and every hostile within it as a red dot, through walls
+   * (solo from the world, online the server's list plus the hostiles you are shown). Only for a Visor holder.
+   */
+  const trackerEl = $('tracker') as HTMLCanvasElement;
+  let trackerBg: { level: unknown; img: HTMLCanvasElement } | null = null;
+  function drawTracker(p: ReturnType<typeof player>) {
+    const on = p.ability.kind === 'visor' && (phase === 'play' || phase === 'pause');
+    if (trackerEl.hidden === on) trackerEl.hidden = !on;
+    if (!on) return;
+    const l = world.level, W = trackerEl.width, H = trackerEl.height, k = Math.min(W / l.w, H / l.h);
+    const ox = (W - l.w * k) / 2, oy = (H - l.h * k) / 2;
+    if (trackerBg?.level !== l) {
+      const img = document.createElement('canvas'); img.width = W; img.height = H;
+      const g = img.getContext('2d')!;
+      g.fillStyle = 'rgba(190, 182, 220, 0.55)';
+      for (let y = 0; y < l.h; y++) for (let x = 0; x < l.w; x++) if (l.tiles[y * l.w + x] === 1) g.fillRect(ox + x * k, oy + y * k, Math.ceil(k), Math.ceil(k));
+      trackerBg = { level: l, img };
+    }
+    const g = trackerEl.getContext('2d')!;
+    g.clearRect(0, 0, W, H);
+    g.drawImage(trackerBg.img, 0, 0);
+    const r = p.ability.radius ?? 16;
+    g.strokeStyle = 'rgba(181, 123, 255, 0.7)'; g.lineWidth = 1;
+    g.beginPath(); g.arc(ox + p.x * k, oy + p.y * k, r * k, 0, Math.PI * 2); g.stroke();
+    const dots = online && net
+      ? [...net.tracks, ...world.actors.filter((a) => a.team !== p.team && a.alive && a.x > -50 && Math.hypot(a.x - p.x, a.y - p.y) <= r)]
+      : visorTracks(world, p);
+    g.fillStyle = '#ff3b4a';
+    for (const d of dots) { g.beginPath(); g.arc(ox + d.x * k, oy + d.y * k, 2.6, 0, Math.PI * 2); g.fill(); }
+    g.fillStyle = '#4ee08a';
+    g.beginPath(); g.arc(ox + p.x * k, oy + p.y * k, 2.8, 0, Math.PI * 2); g.fill();
+  }
+
   /** Start a CHOG Training drill for a power (your verified Chog's, or a labelled DEMO one). */
   function startTraining(power: Power) {
     const id = drillFor(power);
     if (!id) return;
     training = { id, power, run: null };
     online = false;
+    titleView = 'main';
     go('start');
     go('pick');
   }
@@ -1219,6 +1274,11 @@ async function start() {
         acct.tokensError = t && t.ok === false ? t.error ?? 'chain_unavailable' : t ? null : 'chain_unavailable';
         // Default to the strongest held Chog the first time (the server re-verifies it on every ticket).
         if (!acct.choice && acct.tokens.length) acct.choice = { tokenId: acct.tokens[0].tokenId };
+        // YOUR CHOG (owner 2026-10-18): the first time this session a wallet's Chogs are verified, show what it does.
+        // The sign-in sheet may still be open here, so the hub opens it the next time it is shown.
+        let seen = true;
+        try { seen = sessionStorage.getItem(YOURCHOG_KEY) === '1'; } catch { /* ignore */ }
+        if (acct.tokens.length && !seen) yourChogDue = true;
       }
     } finally {
       if (phase === 'title' && titleView !== 'nick' && titleView !== 'howto') render();
@@ -1262,7 +1322,7 @@ async function start() {
     onlineMode = mode;
     net ??= newSession();
     const code = invite.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    net.joinQueue(mode, code.length >= 4 ? code.slice(0, 8) : undefined);
+    net.joinQueue(mode, code.length >= 4 ? code.slice(0, 8) : undefined, mapId);
     render();
   }
 
@@ -1948,7 +2008,9 @@ async function start() {
         stepWorld(world, autopilot ? autopilot.next(world) : training?.run ? trainingInput(training.run, world, inp) : inp);
         if (training?.run) { stepTraining(training.run, world); if (training.run.done && world.outcome === 'playing') world.outcome = 'won'; }
         inp.reload = false;
-        inp.ability = false;
+        // A held key stays held for every step of a long frame: dropping it for the rest of the frame read as a
+        // release, so the next frame's held key was a fresh press that dropped an Aura (seen on a 5-step frame).
+        inp.ability = input.abilityHeld();
         inp.grenade = false;
         // A tap fires exactly once: after the first step, firing follows the real button state.
         if (!input.fireHeld()) inp.firing = false;
@@ -2067,7 +2129,10 @@ async function start() {
         : p.trapLeft > 0 ? `Caged · ${p.trapLeft.toFixed(1)} s · you can still shoot`
         : p.auraLeft > 0 ? `Aura · untouchable ${p.auraLeft.toFixed(1)} s · press again to drop it`
         : p.slowLeft > 0 ? `Slowed ${Math.round((1 - p.slowMul) * 100)}% · ${p.slowLeft.toFixed(1)} s` : guard ? `${guard.name} covering you` : '';
-      const st2 = training?.run ? trainingStatus(training.run) : st;
+      // Visor counterplay: you are on a hostile Visor's tracker (it knows where you are).
+      const trackedNow = p.alive && (online ? !!net?.tracked : trackedBy(world, p));
+      const st2 = training?.run ? trainingStatus(training.run) : trackedNow && !st ? 'TRACKED · a hostile Visor knows where you are' : st;
+      drawTracker(p);
       if (st2 !== lastStatus) { lastStatus = st2; $('status').textContent = st2; }
       feed = feed.filter((f) => playTime - f.t < 6);
       const fh = feed.map((f) => `<li class="${f.mine ? 'mine' : ''}${f.down ? ' down' : ''}">${f.html}</li>`).join('');

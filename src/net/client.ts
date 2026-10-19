@@ -8,6 +8,7 @@ import { WEAPONS } from '../config/weapons';
 import { TUNING } from '../config/tuning';
 import { LAB } from '../config/lab';
 import { ORB } from '../config/superpowers';
+import { isMapId, type MapId } from '../config/maps';
 import { Predictor } from './predict';
 import type { Box } from '../sim/geom';
 import { PROTOCOL, type Mode, type NetActor, type NetBeam, type NetProfile, type PartyMember, type PlayerResult, type ServerMsg } from './protocol';
@@ -155,20 +156,20 @@ export class OnlineSession {
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(m));
   }
 
-  joinQueue(mode: Mode, code?: string): void {
+  joinQueue(mode: Mode, code?: string, map: MapId = 'room-zero'): void {
     this.over = null;
     this.queuedAt = performance.now();
     this.queueS = null;
     this.queue = { mode, have: 0, need: 0, code: code ?? null };
-    this.pendingQueue = { mode, code };
+    this.pendingQueue = { mode, code, map };
     // After a match the server already has this player back in its lobby: queue straight away.
     if (this.state === 'idle' || this.state === 'over') { this.state = 'idle'; this.sendQueue(); }
     else this.connect();
   }
-  private pendingQueue: { mode: Mode; code?: string } | null = null;
+  private pendingQueue: { mode: Mode; code?: string; map: MapId } | null = null;
   private sendQueue(): void {
     if (!this.pendingQueue) return;
-    this.send({ t: 'queue', mode: this.pendingQueue.mode, ...(this.pendingQueue.code ? { code: this.pendingQueue.code } : {}) });
+    this.send({ t: 'queue', mode: this.pendingQueue.mode, map: this.pendingQueue.map, ...(this.pendingQueue.code ? { code: this.pendingQueue.code } : {}) });
     this.pendingQueue = null;
   }
 
@@ -299,6 +300,9 @@ export class OnlineSession {
 
   /** Hostile beams crossing you whose owner you are not shown (from the newest snapshot; view actor ids). */
   beams: NetBeam[] = [];
+  /** Visor: hostiles on your tracker you are not shown, and whether a hostile Visor has you on its tracker. */
+  tracks: { id: number; x: number; y: number }[] = [];
+  tracked = false;
   /** Teammates' sightings from the newest snapshot (view actor ids). */
   spotted: { id: number; x: number; y: number }[] = [];
 
@@ -308,7 +312,7 @@ export class OnlineSession {
     this.toView = new Map(order.map((r, i) => [r.id, i]));
     this.fromView = order.map((r) => r.id);
     this.world = createWorld({
-      seed: m.seed, zone: false, friendlyFire: m.friendlyFire,
+      seed: m.seed, zone: false, friendlyFire: m.friendlyFire, mapId: isMapId(m.map) ? m.map : 'room-zero',
       versus: order.map((r) => ({ name: r.name, hero: r.hero, team: r.team as 'alpha' | 'bravo', x: -100, y: -100, facing: 0, power: powerFor(r.tier ?? 'free', null, r.metadataId && r.tier === 'legendary' ? signatureFor(r.metadataId) : null, !!r.demo, r.metadataId, r.sp ?? null) })),
     });
     // The server's ability slot (hero ability or 1:1 signature, with upgrades) so the HUD and telegraphs match it.
@@ -334,6 +338,9 @@ export class OnlineSession {
     });
     // A hostile beam you are not shown, crossing you: only its stretch of line near you (drawn as a warning).
     this.beams = (m.bm ?? []).map((b) => ({ ...b, o: v(b.o) }));
+    // Visor: hostiles on your tracker that you are not shown (their spot only).
+    this.tracks = (m.vt ?? []).map((t) => ({ id: v(t.id), x: t.x, y: t.y }));
+    this.tracked = !!m.actors.find((a) => a.id === this.fromView[0])?.tk;
     m.pickups.forEach((on, i) => { if (w.pickups[i]) w.pickups[i].active = on; });
     // Hostiles only a teammate sees: spots the server placed near them (fed to the contact intel, never drawn as bodies).
     this.spotted = (m.sp ?? []).map((s) => ({ id: v(s.id), x: s.x, y: s.y }));

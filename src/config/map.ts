@@ -97,6 +97,15 @@ export const PICKUP_ZONES: { kind: 'health' | 'armor' | 'ammo' | 'grenade'; x0: 
   { kind: 'ammo', x0: 56, y0: 1, x1: 66, y1: 8, name: 'north-east offices', side: 'east' },
   { kind: 'ammo', x0: 1, y0: 33, x1: 11, y1: 40, name: 'south-west storage', side: 'west' },
   { kind: 'ammo', x0: 56, y0: 33, x1: 66, y1: 40, name: 'south-east storage', side: 'east' },
+  // Owner 2026-10-18 (IDENTITY + MAPS pass: "encounter perks/resources more frequently"): eight more, paired.
+  { kind: 'health', x0: 9, y0: 30, x1: 19, y1: 31, name: 'south corridor west', side: 'west' },
+  { kind: 'health', x0: 48, y0: 30, x1: 58, y1: 31, name: 'south corridor east', side: 'east' },
+  { kind: 'armor', x0: 13, y0: 1, x1: 24, y1: 7, name: 'gallery west', side: 'west' },
+  { kind: 'armor', x0: 43, y0: 1, x1: 54, y1: 7, name: 'gallery east', side: 'east' },
+  { kind: 'grenade', x0: 9, y0: 22, x1: 18, y1: 28, name: 'west side room south', side: 'west' },
+  { kind: 'grenade', x0: 49, y0: 22, x1: 58, y1: 28, name: 'east side room south', side: 'east' },
+  { kind: 'ammo', x0: 9, y0: 13, x1: 18, y1: 19, name: 'west side room north', side: 'west' },
+  { kind: 'ammo', x0: 49, y0: 13, x1: 58, y1: 19, name: 'east side room north', side: 'east' },
 ];
 
 /** The RC-8 layout (LAB.pacing off), kept so the lab can measure the old map against the new one. */

@@ -54,9 +54,18 @@ export const CAPS = { hpMul: 2, armor: 52, damageMul: 1.15, cooldownMul: 0.8 } a
  * never change it; online the server sets it from the verified ticket. */
 export const GRENADES: Record<Tier, number> = { free: 3, common: 5, uncommon: 7, rare: 9, epic: 11, legendary: 13 };
 
+/**
+ * Max health before upgrades (owner 2026-10-18 IDENTITY + MAPS pass): 150 for everyone, 200 for a verified Chog that
+ * carries no mapped superpower (the 618 tokens, the ten 1:1s among them). It is the one CHOG health edge, and it never
+ * depends on rarity.
+ */
+export const BASE_HP = { free: 150, chog: 200 } as const;
+
 /** What the sim applies to one actor. */
 export interface Power {
   tier: Tier;
+  /** Max health before upgrades: BASE_HP.free, or BASE_HP.chog for a Chog without a superpower. */
+  baseHp: number;
   hpMul: number;
   armor: number;
   damageMul: number;
@@ -73,7 +82,7 @@ export interface Power {
   grenades: number;
 }
 
-export const BASE_POWER: Power = { tier: 'free', hpMul: 1, armor: 0, damageMul: 1, cooldownMul: 1, signature: null, superpower: null, demo: false, metadataId: null, grenades: GRENADES.free };
+export const BASE_POWER: Power = { tier: 'free', baseHp: BASE_HP.free, hpMul: 1, armor: 0, damageMul: 1, cooldownMul: 1, signature: null, superpower: null, demo: false, metadataId: null, grenades: GRENADES.free };
 
 export function clampUpgrades(u: Partial<Upgrades> | null | undefined): Upgrades {
   const out = { ...NO_UPGRADES };
@@ -97,6 +106,7 @@ export function powerFor(tier: Tier, upgrades: Partial<Upgrades> | null = null, 
   const sp = tier !== 'free' && !sig && own && own !== 'free' ? pickPower(metadataId, choice) : null;
   return {
     tier,
+    baseHp: tier !== 'free' && own && !sp ? BASE_HP.chog : BASE_HP.free,
     hpMul: Math.min(CAPS.hpMul, t.hpMul + u.vitality * UPGRADE_STEP.vitality),
     armor: Math.min(CAPS.armor, t.armor + u.plating * UPGRADE_STEP.plating),
     damageMul: Math.min(CAPS.damageMul, t.damageMul + u.firepower * UPGRADE_STEP.firepower),

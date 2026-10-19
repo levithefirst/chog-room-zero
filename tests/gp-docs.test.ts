@@ -4,7 +4,7 @@ import { DOCS, docsHtml } from '../src/ui/docs';
 import { TUNING } from '../src/config/tuning';
 import { MEDALS } from '../src/ui/medals';
 
-const WANT = ['How to Play', 'Combat', 'Movement', 'Vision & Information', 'Sound', 'Squads', 'Revives', 'Enemy Teams', 'Pickups', 'Enemy Loot', 'Perks', 'CHOG Superpowers', 'Medals', 'Upgrades', 'Rewards', 'CHOG', 'Matchmaking', 'Leaderboards', 'Controls', 'Game Modes', 'FAQ'];
+const WANT = ['How to Play', 'Combat', 'Movement', 'Vision & Information', 'Sound', 'Squads', 'Revives', 'Enemy Teams', 'Pickups', 'Enemy Loot', 'Perks', 'CHOG Superpowers', 'Locations', 'Medals', 'Upgrades', 'Rewards', 'CHOG', 'Matchmaking', 'Leaderboards', 'Controls', 'Game Modes', 'FAQ'];
 
 describe('Game Docs', () => {
   it('has every section the owner asked for, in order, with unique ids and real content on both platforms', () => {
@@ -45,6 +45,18 @@ describe('CHOG Superpowers doc (owner 2026-10-18)', () => {
       for (const r of RANKS) expect(h).toContain(rankLine(id, r));
     }
     expect(h).toMatch(/never adds health, armour or weapon damage/);
-    expect(h).toMatch(/shows you nothing behind them/);
+    expect(h).toMatch(/shows you nothing behind the wall/);
+  });
+});
+
+describe('IDENTITY + MAPS docs (owner 2026-10-18)', () => {
+  it('state the real numbers: 150 / 200 health, armour 65, pickups back in 4 s, the zone 20% slower; Visor vs X-Ray; every location', async () => {
+    const all = DOCS.map((d) => d.html(false)).join(' ');
+    expect(all).toContain('Everyone has 150 health and up to 65 armour');
+    expect(all).toContain('200 health');
+    expect(all).toContain('back 4 s after it is taken');
+    expect(all).toContain('20% longer');
+    expect(all).toMatch(/Visor tells you where; X-Ray hits through the wall/);
+    for (const n of ['Room Zero', 'Office', 'Supermarket']) expect(DOCS.find((d) => d.id === 'locations')!.html(false)).toContain(n);
   });
 });

@@ -97,11 +97,18 @@ try {
   await H.until(`__chog.view() === 'main' && !!__chog.acct().profile`, 20000);
   await H.until(`!!__chog.acct().tokens`, 15000); await sleep(800);
   const h = await acct(H);
+  // Owner 2026-10-18: the first time a wallet's Chogs are verified, YOUR CHOG opens: the token, its real traits, its
+  // ability and the CHOG health rule (a 1:1 has no mapped superpower: 200), then Continue to the hub.
+  const yc = await H.until(`__chog.view() === 'yourchog' && !!document.getElementById('chogtraits')`, 8000);
+  const ycText = yc ? await H.ev(`document.getElementById('chogpanel').innerText`) : '';
+  await H.shot('03-your-chog');
+  check('wallet: YOUR CHOG opens with the verified Chog, its real traits, its ability and its health', !!yc && /YOUR CHOG/i.test(ycText) && /Blaze/i.test(ycText) && /Flashfire/i.test(ycText) && /HEALTH\s*200/i.test(ycText) && /BASE/i.test(ycText), ycText.replace(/\n/g, ' | '));
+  await H.click('#yourchog-close'); await H.hub();
   const hp = await H.ev(`({ chog: document.getElementById('chogpanel').innerText, five: document.querySelector('[data-mode="5v5"]').innerText })`);
   await H.shot('03-holder-hub');
   check('wallet: guest -> Continue with Wallet -> signed in (real signature check) and back in the hub', h.signedIn && h.ids.includes('wallet'), JSON.stringify(h));
-  // Owner 2026-10-18: rarity adds no health (the panel's health row shows upgrades only); the 1:1 keeps its signature.
-  check('wallet: Chog detected on Monad (fake RPC), class Blaze 1:1 with its signature and counter, no rarity health', /Blaze/i.test(hp.chog) && /1:1/.test(hp.chog) && /HEALTH\s*\+0%/i.test(hp.chog) && /Flashfire/i.test(hp.chog) && /Counter/i.test(hp.chog), hp.chog.replace(/\n/g, ' | '));
+  // Owner 2026-10-18: rarity adds no health; the 1:1 keeps its signature (and the CHOG baseline of 200 health).
+  check('wallet: Chog detected on Monad (fake RPC), class Blaze 1:1 with its signature and counter, no rarity health', /Blaze/i.test(hp.chog) && /1:1/.test(hp.chog) && /HEALTH\s*200/i.test(hp.chog) && /Flashfire/i.test(hp.chog) && /Counter/i.test(hp.chog), hp.chog.replace(/\n/g, ' | '));
   check('wallet: 5v5 open for the holder', !/Holders only/i.test(hp.five), hp.five);
 
   // ---- 3. Squad + online 3v3: A leads a squad with B; four solo players fill the room; A and B on one team ----

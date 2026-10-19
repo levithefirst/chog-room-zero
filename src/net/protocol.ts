@@ -5,6 +5,7 @@ import type { ActorInput, Team } from '../sim/world';
 import type { AbilityKind } from '../config/heroes';
 import type { Tier } from '../config/power';
 import type { SuperpowerId } from '../config/superpowers';
+import { isMapId, type MapId } from '../config/maps';
 
 export const PROTOCOL = 1;
 export type Mode = '1v1' | '3v3' | '5v5';
@@ -15,7 +16,8 @@ export const MAX_TICKET = 900;
 
 export type ClientMsg =
   | { t: 'hello'; v: number; name: string; hero: string; token?: string; ticket?: string }
-  | { t: 'queue'; mode: Mode; code?: string }
+  /** map: the location (src/config/maps.ts); absent: Room Zero. */
+  | { t: 'queue'; mode: Mode; code?: string; map?: MapId }
   | { t: 'leave' }
   /** Squads (master integration pass): create one, join one by its code, or leave it. The leader queues the squad. */
   | { t: 'party'; op: 'create' | 'leave' }
@@ -52,6 +54,8 @@ export interface NetActor {
   tl?: number; tx?: number; ty?: number; tr?: number;
   pl?: number; px?: number; py?: number;
   al?: number;
+  /** Visor counterplay: a hostile Visor has you on its tracker (sent on your own actor only). */
+  tk?: 1;
 }
 
 /** A Bubble or Drool glob in flight (your team's, or one you can see or that is close to you on a clear line). */
@@ -94,10 +98,11 @@ export type ServerMsg =
   | { t: 'welcome'; v: number; token: string; name: string; resumed: boolean; profile?: NetProfile }
   | { t: 'queued'; mode: Mode; have: number; need: number; code: string | null }
   | { t: 'queueTimeout' }
-  | { t: 'match'; room: string; mode: Mode; you: number; team: Team; seed: number; friendlyFire: boolean; roster: RosterEntry[]; startsIn: number; demo?: boolean; zone: { x: number; y: number; r: number }[] }
+  | { t: 'match'; room: string; mode: Mode; map?: MapId; you: number; team: Team; seed: number; friendlyFire: boolean; roster: RosterEntry[]; startsIn: number; demo?: boolean; zone: { x: number; y: number; r: number }[] }
   /** ack/as (SB): the newest input seq the server had from you when it took this snapshot, and how many sim steps it has
    * applied it so far (your movement prediction replays the rest). Optional: an older server sends neither. */
-  | { t: 'snap'; tick: number; actors: NetActor[]; bullets: NetBullet[]; grenades?: NetGrenade[]; ob?: NetOrb[]; bm?: NetBeam[]; pickups: boolean[]; pk?: number[]; lt?: NetLoot[]; sp?: { id: number; x: number; y: number }[]; sounds: NetSound[]; hits: NetHit[]; barriers: { x0: number; y0: number; x1: number; y1: number; left: number }[]; ack?: number; as?: number }
+  /** vt: hostiles on YOUR Visor tracker that you are not shown: where they are, nothing else. */
+  | { t: 'snap'; tick: number; actors: NetActor[]; bullets: NetBullet[]; grenades?: NetGrenade[]; ob?: NetOrb[]; bm?: NetBeam[]; vt?: { id: number; x: number; y: number }[]; pickups: boolean[]; pk?: number[]; lt?: NetLoot[]; sp?: { id: number; x: number; y: number }[]; sounds: NetSound[]; hits: NetHit[]; barriers: { x0: number; y0: number; x1: number; y1: number; left: number }[]; ack?: number; as?: number }
   | { t: 'over'; winner: Team | null; reason: 'eliminated' | 'time'; results: PlayerResult[]; matchId?: string; settle?: boolean }
   | { t: 'pong'; at: number; tick: number }
   | { t: 'party'; code: string | null; members: PartyMember[] }
@@ -122,7 +127,8 @@ export function parseClientMsg(raw: string): ClientMsg | null {
     case 'queue':
       if (typeof m.mode !== 'string' || !MODES.includes(m.mode)) return null;
       if (m.code !== undefined && (typeof m.code !== 'string' || !/^[A-Z0-9]{4,8}$/.test(m.code))) return null;
-      return { t: 'queue', mode: m.mode as Mode, code: m.code as string | undefined };
+      if (m.map !== undefined && !isMapId(m.map)) return null;
+      return { t: 'queue', mode: m.mode as Mode, code: m.code as string | undefined, ...(m.map ? { map: m.map as MapId } : {}) };
     case 'leave':
       return { t: 'leave' };
     case 'party':

@@ -22,7 +22,7 @@ try {
     await b.until(`__chog.view() === 'docs'`, 5000);
     const docs = await b.ev(`({ n: document.querySelectorAll('details.doc').length, open: [...document.querySelectorAll('details.doc[open]')].map((d) => d.dataset.doc) })`);
     await b.shot('01-docs');
-    check(`${view.label}: Game Docs has 21 sections (V2: Perks, SP: CHOG Superpowers), How to Play open`, docs.n === 21 && docs.open.includes('how-to-play'), JSON.stringify(docs));
+    check(`${view.label}: Game Docs has 22 sections (V2: Perks, SP: CHOG Superpowers, ID: Locations), How to Play open`, docs.n === 22 && docs.open.includes('how-to-play'), JSON.stringify(docs));
     await b.ev(`(() => { const q = document.getElementById('docsq'); q.value = 'revive'; q.dispatchEvent(new Event('input', { bubbles: true })); })()`);
     const found = await b.ev(`({ shown: [...document.querySelectorAll('details.doc')].filter((d) => !d.hidden).map((d) => d.dataset.doc), none: document.getElementById('docsnone').hidden })`);
     check(`${view.label}: docs search "revive" keeps the Revives section and drops unrelated ones`, found.shown.includes('revives') && found.shown.length < 19 && found.none, JSON.stringify(found));

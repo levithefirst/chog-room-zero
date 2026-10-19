@@ -8,7 +8,7 @@ import { ONE_OF_ONE_IDS } from '../src/nft/tier-table';
 import { POWER_TRAITS } from '../src/nft/power-table';
 import { BEAM, RANKS, SUPERPOWERS, SUPERPOWER_IDS, pickPower, powersOf, superAbility, type Rank, type SuperpowerId } from '../src/config/superpowers';
 import { HEROES } from '../src/config/heroes';
-import { createWorld, stepWorld, IDLE_INPUT, revealed, wallSpot, type ActorInput, type World } from '../src/sim/world';
+import { createWorld, stepWorld, IDLE_INPUT, revealed, trackedBy, visorTracks, wallSpot, type ActorInput, type World } from '../src/sim/world';
 import { TUNING } from '../src/config/tuning';
 import { HALL } from './helpers/duel';
 
@@ -39,7 +39,9 @@ describe('trait -> power table matches the verified catalogue', () => {
       count[p][t] = (count[p][t] ?? 0) + 1;
     }
     expect(count.laser).toEqual({ common: 194, uncommon: 68, rare: 15, epic: 1 });
-    expect(count.xray).toEqual({ common: 157 });
+    // Owner 2026-10-18: Visor Eyes are the Visor tracker, never X-Ray; no collection trait carries X-Ray yet.
+    expect(count.xray).toBeUndefined();
+    expect(count.visor).toEqual({ common: 157 });
     expect(count.bubble).toEqual({ common: 112, uncommon: 56 });
     expect(count.drool).toEqual({ common: 116, uncommon: 68 });
     expect(count.aura).toEqual({ common: 605, uncommon: 279, rare: 60, epic: 30 });
@@ -99,10 +101,13 @@ describe('rank scaling: rarer is stronger, never more health or damage', () => {
   it('every tier starts at base stats (rule 6: no rarity health/damage inflation)', () => {
     for (const t of TIERS) expect([TIER_DEFS[t].hpMul, TIER_DEFS[t].armor, TIER_DEFS[t].damageMul], t).toEqual([1, 0, 1]);
     const k = HEROES.find((h) => h.id === 'benja')!;
-    for (const id of [tokenWith(['aura'], 'epic')!, tokenWith(['laser'], 'rare')!, ONE_OF_ONE_IDS[0]]) {
+    for (const id of [tokenWith(['aura'], 'epic')!, tokenWith(['laser'], 'rare')!]) {
       const a = createWorld({ hero: 'benja', power: powerForToken(id, null, false) }).actors[0];
-      expect([a.maxHp, a.armor, a.power.damageMul]).toEqual([k.maxHp, k.maxArmor, 1]);
+      expect([a.maxHp, a.armor, a.power.damageMul]).toEqual([150, k.maxArmor, 1]);
     }
+    // The 1:1: no rarity stats either; it has no mapped superpower, so the CHOG baseline (200) applies.
+    const one = createWorld({ hero: 'benja', power: powerForToken(ONE_OF_ONE_IDS[0], null, false) }).actors[0];
+    expect([one.maxHp, one.armor, one.power.damageMul]).toEqual([200, k.maxArmor, 1]);
   });
   it('each rank is at least as good as the one below on every number and better on one; beam damage per second is flat', () => {
     for (const id of SUPERPOWER_IDS) {
@@ -359,5 +364,59 @@ describe('cooldowns and determinism', () => {
       return JSON.stringify(w.actors.map((a) => [a.x, a.y, a.hp, a.armor, a.trapLeft, a.pinLeft, a.auraLeft, a.beamLeft])) + JSON.stringify(w.orbs);
     };
     expect(play()).toBe(play());
+  });
+});
+
+describe('Visor (owner 2026-10-18: VISOR -> HOSTILE TRACKER, not X-Ray)', () => {
+  const visorTok = tokenWith(['visor'], 'common')!;
+  it('a visor token carries Visor and never X-Ray; X-Ray stays a different power (DEMO and Training only)', () => {
+    expect(powersOf(visorTok)).toEqual(['visor']);
+    expect(powerForToken(visorTok, null, false).superpower?.kind).toBe('visor');
+    for (const r of records) expect(powersOf(r.metadataId)).not.toContain('xray');
+    expect(SUPERPOWERS.visor.name).not.toBe(SUPERPOWERS.xray.name);
+    expect(superAbility('xray', 'common').kind).toBe('xray');
+  });
+  it('tracks every hostile inside its radius through walls, nobody outside it, and only while its holder stands', () => {
+    const w = arena('visor', 3, { map: WALLED, ally: false });
+    expect(visorTracks(w, w.actors[0]).map((a) => a.id)).toEqual([1]); // behind the wall, 3 u away
+    w.actors[1].x = 10 + SUPERPOWERS.visor.ranks.common.range + 0.5;
+    expect(visorTracks(w, w.actors[0])).toEqual([]);
+    w.actors[1].x = 13;
+    w.actors[0].downed = true;
+    expect(visorTracks(w, w.actors[0])).toEqual([]);
+  });
+  it('is passive: the button does nothing and costs nothing; the tracked side is told (its counter)', () => {
+    const w = arena('visor', 3, { ally: false });
+    run(w, 5, () => ({ ability: true }));
+    expect(w.actors[0].abilityCd).toBe(0);
+    expect(trackedBy(w, w.actors[1])).toBe(true);
+    expect(trackedBy(w, w.actors[0])).toBe(false);
+    expect(w.actors[1].hp).toBe(w.actors[1].maxHp); // no damage of its own
+  });
+  it('rarer visors reach further', () => {
+    for (let i = 1; i < RANKS.length; i++) expect(SUPERPOWERS.visor.ranks[RANKS[i]].range).toBeGreaterThan(SUPERPOWERS.visor.ranks[RANKS[i - 1]].range);
+  });
+});
+
+describe('health and armour (owner 2026-10-18 IDENTITY pass)', () => {
+  const none = tokenWith([], 'common')!;
+  it('free players 150; a verified Chog with a mapped superpower 150; a verified Chog without one 200', () => {
+    const hp = (p: Power) => createWorld({ hero: 'toad', power: p }).actors[0].maxHp;
+    expect(hp(BASE_POWER)).toBe(150);
+    expect(hp(powerForToken(tokenWith(['laser'], 'rare')!, null, false))).toBe(150);
+    expect(hp(powerForToken(none, null, false))).toBe(200);
+    for (const id of ONE_OF_ONE_IDS) expect(hp(powerForToken(id, null, false))).toBe(200);
+  });
+  it('the 200 never comes from rarity, and never without a verified token: NFT power off, no token, or a bad id play 150', () => {
+    expect(powerFor('epic').baseHp).toBe(150); // a tier with no token id
+    expect(powerFor('free', null, null, false, none).baseHp).toBe(150); // NFT power off: the server grants tier free
+    expect(powerFor('common', null, null, false, 99999).baseHp).toBe(150); // not a collection id
+    const c = powerForToken(none, null, false), e = powerForToken(tokenWith([], 'epic') ?? none, null, false);
+    expect(c.baseHp).toBe(e.baseHp);
+  });
+  it('every operator and every bot has 150 health; armour capacity is 65 for everyone', () => {
+    for (const h of HEROES) expect(h.maxHp).toBe(150);
+    const w = createWorld({ seed: 2, zone: false });
+    for (const a of w.actors) { expect(a.maxHp, a.name).toBe(150); expect(a.maxArmor, a.name).toBe(65); }
   });
 });

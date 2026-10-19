@@ -62,6 +62,8 @@ export interface Input {
   /** Escape / P pressed since last call. */
   /** Is fire physically held right now (vs a latched tap)? */
   fireHeld(): boolean;
+  /** Is the ability key physically held right now (Space or Q)? The touch button is a tap. */
+  abilityHeld(): boolean;
   takePause(): boolean;
   /**
    * Entering play from a menu (Resume, Deploy, Again): drop any fire in progress and ignore fire until the
@@ -185,6 +187,9 @@ export function createInput(el: HTMLElement): Input {
       }
       if (nadeHeld && inp.mode === 'pc') return { ang: Math.atan2(inp.mouseY - ay, inp.mouseX - ax), dist: Math.max(G.minThrow, Math.min(G.maxThrow, Math.hypot(inp.mouseX - ax, inp.mouseY - ay) / ppu)) };
       return null;
+    },
+    abilityHeld() {
+      return held.has('Space') || held.has('KeyQ');
     },
     fireHeld() {
       if (inp.mode === 'pc') return firing;

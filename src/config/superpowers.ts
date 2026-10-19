@@ -7,12 +7,12 @@ import { POWER_TABLE } from '../nft/power-table.js';
 import type { AbilityDef } from './heroes';
 import type { Tier } from './power';
 
-export type SuperpowerId = 'laser' | 'xray' | 'bubble' | 'drool' | 'aura';
+export type SuperpowerId = 'laser' | 'xray' | 'visor' | 'bubble' | 'drool' | 'aura';
 export type Rank = Exclude<Tier, 'free'>;
 export const RANKS: readonly Rank[] = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
 /** Bit of each power in POWER_TABLE, and the order a token with several powers defaults to (the holder can pick). */
-export const POWER_BITS: Record<SuperpowerId, number> = { laser: 1, xray: 2, bubble: 4, drool: 8, aura: 16 };
-export const SUPERPOWER_IDS: readonly SuperpowerId[] = ['laser', 'xray', 'bubble', 'drool', 'aura'];
+export const POWER_BITS: Record<SuperpowerId, number> = { laser: 1, xray: 2, visor: 32, bubble: 4, drool: 8, aura: 16 };
+export const SUPERPOWER_IDS: readonly SuperpowerId[] = ['laser', 'xray', 'visor', 'bubble', 'drool', 'aura'];
 
 /** Numbers of one power at one rank. Unused fields are 0. */
 export interface RankNumbers {
@@ -61,10 +61,11 @@ export const SUPERPOWERS: Record<SuperpowerId, SuperpowerDef> = {
       legendary: r(11, 1.2, 13, 55, 0.35, 0),
     },
   },
-  // The visor beam passes through walls. It is NOT vision: you see nothing new, so you aim it from sound and what your
+  // The X-Ray beam passes through walls. It is NOT vision: you see nothing new, so you aim it from sound and what your
   // team knows. Longer charge, short weak beam, and the charge line shows through walls to the people it points at.
+  // No collection trait carries it yet (owner 2026-10-18: Visor Eyes are NOT X-Ray); DEMO and Training only.
   xray: {
-    id: 'xray', name: 'X-Ray Eyes', trait: 'Visor Eyes (Gradient, Sunset, Plasma)', role: 'offensive',
+    id: 'xray', name: 'X-Ray Eyes', trait: 'no collection trait yet (DEMO and Training only)', role: 'offensive',
     text: 'A long charge, then a short beam that goes through walls. Shows you nothing behind them.',
     telegraph: 'A violet line through the walls along your aim while it charges: anyone it points at sees it.',
     counter: 'When a violet line crosses you, move off it: the charge is long and the beam is short.',
@@ -74,6 +75,23 @@ export const SUPERPOWERS: Record<SuperpowerId, SuperpowerDef> = {
       rare: r(14, 0.7, 11, 50, 0.7, 0),
       epic: r(13, 0.75, 12, 50, 0.7, 0),
       legendary: r(12, 0.8, 13, 50, 0.7, 0),
+    },
+  },
+  // Visor Eyes (owner 2026-10-18: "VISOR -> HOSTILE TRACKER"): passive, always on. Every hostile within its radius shows
+  // as a dot on your tracker (the HUD map), where it is now, through walls. Nothing else: not its health, facing, power
+  // or anything it carries, and never a body in your view. Hostiles on your tracker are told they are tracked. Rank
+  // widens the radius. No button: the slot is taken by the tracker.
+  visor: {
+    id: 'visor', name: 'Visor', trait: 'Visor Eyes (Gradient, Sunset, Plasma)', role: 'utility',
+    text: 'Always on: hostiles within its radius are dots on your tracker, through walls. No damage.',
+    telegraph: 'A tracked hostile sees TRACKED under its health while it is inside the radius.',
+    counter: 'It only knows where you are, not what you do: stay outside its radius, or make it come to you where it cannot see.',
+    ranks: {
+      common: r(0, 0, 16, 0, 0, 0),
+      uncommon: r(0, 0, 19, 0, 0, 0),
+      rare: r(0, 0, 22, 0, 0, 0),
+      epic: r(0, 0, 25, 0, 0, 0),
+      legendary: r(0, 0, 28, 0, 0, 0),
     },
   },
   // A slow, glowing gum bubble. The first hostile it touches is caged in a small circle: it can still aim and shoot,
@@ -146,7 +164,7 @@ export const ORB = {
   pullSpeed: 9,
 } as const;
 
-const DIGITS = '0123456789abcdefghijklmnopqrstuv';
+const DIGITS = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_';
 
 /** The powers a token's real traits carry, in default order, or [] (out of range, or no power trait). */
 export function powersOf(metadataId: number | null | undefined): SuperpowerId[] {
@@ -186,5 +204,6 @@ export function rankLine(id: SuperpowerId, rank: Rank): string {
     case 'bubble': return `${n.range} m reach, caged ${n.seconds} s, cooldown ${n.cooldown} s`;
     case 'drool': return `${n.range} m reach, dragged up to ${n.area} m, glued ${n.seconds} s, cooldown ${n.cooldown} s`;
     case 'aura': return `immune ${n.seconds} s, cooldown ${n.cooldown} s`;
+    case 'visor': return `tracks hostiles within ${n.range} m, always on`;
   }
 }

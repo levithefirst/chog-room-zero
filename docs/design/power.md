@@ -2,6 +2,8 @@
 
 **Owner 2026-10-18 ("CHOG SUPERPOWER SYSTEM", rule 6: "Do not use NFT rarity for generic health/damage stat inflation") replaced the tier stat power below.** Every tier now starts at base health, armour and damage, the 1:1s included. A verified Chog's rarity is the rank of the superpower its real traits carry (`docs/design/superpowers.md`). The ten 1:1s keep their signatures. Upgrades, caps and grenade capacity are unchanged. The tier table and duel table that follow are kept as the record of what shipped before (H31 and earlier).
 
+**Owner 2026-10-18 (IDENTITY + MAPS pass), base health and armour:** every operator and every free player starts at 150 health. A verified Chog with no mapped power (618 tokens, the 1:1s among them) starts at 200 health and nothing else; a Chog with a power plays at 150 with the power. Armour capacity is 65 for everyone. `BASE_HP` in `src/config/power.ts`, `TUNING.combat.armorCap`. Upgrades multiply that base inside the caps below.
+
 Status: the direction is LOCKED (owner 2026-10-13 master build prompt; owner 2026-10-14 master integration pass: "NFT holders start with power, free players start lower and catch up. This is not cosmetic", the ten 1:1s are "legendary, God-tier and intentionally dominant", a fully progressed free player must be competitive with the lower NFT tiers). The numbers below are PROPOSALS chosen from measured duels; a person must judge them (playtest questions at the end).
 
 Code: `src/config/power.ts` (every number), `src/nft/tier-table.ts` (generated from the verified catalogue), `src/sim/world.ts` (applies them). Tests: `tests/power.test.ts`.

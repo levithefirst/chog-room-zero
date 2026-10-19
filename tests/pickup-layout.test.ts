@@ -24,10 +24,10 @@ const tile = (w: World, x: number, y: number) => w.level.tiles[Math.floor(y) * w
 const reach = (w: World) => walkField(w.level, [w.level.playerSpawn]);
 
 describe('the layout', () => {
-  it('30 pickups: 8 health, 6 armour, 6 grenades, 10 ammo (GP: 4 more ammo), every zone with room to move (4+ tiles), solo and online', () => {
+  it('38 pickups (owner 2026-10-18: more, was 30): 10 health, 8 armour, 8 grenades, 12 ammo, every zone with room to move (4+ tiles), solo and online', () => {
     for (const w of [solo(1), online(1, 1), online(1, 3), online(1, 5)]) {
       const n = (k: string) => w.pickups.filter((p) => p.kind === k).length;
-      expect([n('health'), n('armor'), n('grenade'), n('ammo')]).toEqual([8, 6, 6, 10]);
+      expect([n('health'), n('armor'), n('grenade'), n('ammo')]).toEqual([10, 8, 8, 12]);
       for (const [i, s] of w.pickupSpots.entries()) expect(s.length, PICKUP_ZONES[i].name).toBeGreaterThanOrEqual(4);
     }
   });
@@ -108,18 +108,11 @@ describe('comebacks', () => {
     expect(back).toBeGreaterThan(90);
     expect(worst).toBeLessThanOrEqual(P.balanceTolerance + 1.5);
   });
-  it('substantially more on the map than before, but no more per tile of floor (a resource space, not a vending machine)', () => {
-    // FS: 26 pickups on 1,950 floor tiles (GP: 30, faster comebacks; the per-tile bars below still hold). Before (FP): 4 health at 40/25 s, 4 armour at 35/30 s, 3 grenades at 40 s, on 676 tiles.
-    const w = solo(1);
-    const floor = Array.from(w.level.tiles).filter((t) => t === FLOOR || t === 4).length;
-    const n = (k: string) => w.pickups.filter((p) => p.kind === k).length;
-    const hp = (n('health') * P.health.amount) / P.health.respawn, ar = (n('armor') * P.armor.amount) / P.armor.respawn, gr = (n('grenade') * 60) / P.grenade.respawn;
-    expect(hp).toBeGreaterThanOrEqual((4 * 40) / 25 * 1.5);
-    expect(ar).toBeGreaterThan((4 * 35) / 30);
-    expect(gr).toBeGreaterThan(4.5);
-    expect(hp / floor).toBeLessThanOrEqual((4 * 40) / 25 / 676);
-    expect(ar / floor).toBeLessThanOrEqual((4 * 35) / 30 / 676);
-    expect(gr).toBeLessThanOrEqual(8); // grenades: a refill for a key moment, never a stream
+  it('owner 2026-10-18: every pickup is back 4 s after it is taken, and there are more of them than in GP (30)', () => {
+    // Was (GP): health 25 s, armour 30 s, ammo 14 s, grenade 50 s, 30 pickups, with a per-tile ceiling on the rate. The
+    // owner asked for resources encountered "more frequently" with a 4 s respawn; spacing and spawn rules still hold.
+    for (const k of ['health', 'armor', 'ammo', 'grenade'] as const) expect(P[k].respawn, k).toBe(4);
+    expect(solo(1).pickups.length).toBe(38);
   });
   it('reachable from everywhere: from any floor tile a health pickup is at most a short walk, for 60 seeds', () => {
     // No corner of the 68 x 42 venue is far from health: the walk to the nearest health pickup never exceeds 40

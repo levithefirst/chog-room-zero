@@ -5,10 +5,14 @@ Code: `src/sim/zone.ts` (pure, a function of match time and a plan), tuning `TUN
 
 | Phase | Time (default) | What the player sees | Damage outside |
 |---|---|---|---|
-| Safe | 0-45 s | HUD "Zone in 0:45", faint red outside the start circle (which covers the whole floor) | none |
-| Warning (per stage) | 8 / 6 / 5 s | "Closes in 0:08", the next circle as a cream dashed ring | the previous stage's rate |
-| Shrinking (per stage) | 15 / 10 / 8 s | "Closing 0:12", the red edge moves in | 4 / 8 / 14 per s |
-| Final | from 97 s | "Final zone", radius 3.5 u | 20 per s |
+| Safe | 0-60 s | HUD "Zone in 1:00", faint red outside the start circle (which covers the whole floor) | none |
+| Warning (per stage) | 9.6 / 7.2 / 6 s | "Closes in 0:10", the next circle as a cream dashed ring | the previous stage's rate |
+| Shrinking (per stage) | 18 / 12 / 9.6 s | "Closing 0:18", the red edge moves in | 4 / 8 / 14 per s |
+| Final | from 122.4 s | "Final zone", radius 3.5 u | 20 per s |
+
+Owner 2026-10-18 (IDENTITY + MAPS pass): every interval exactly 20% longer than before (was safe 50 s, warn 8 / 6 / 5,
+shrink 15 / 10 / 8, final from 102 s). Radii and damage unchanged. Each location (`src/config/maps.ts`) has its own
+candidate centres. The 45 s evidence below is the history of the safe phase.
 
 Outside the circle: "Outside zone" badge, red screen edge, a chevron pointing the shortest way in, a hurt tick every
 0.75 s. Zone damage hits health directly (armour does not soak it), the same for the player, bots and online players.

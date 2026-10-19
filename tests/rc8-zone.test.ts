@@ -31,8 +31,8 @@ describe('RC-8 zone phases and countdown', () => {
       expect(s.left).toBeCloseTo(Z.stages[k].shrink - 0.01, 6);
     }
     expect(zoneAt(z, FINAL_AT)).toMatchObject({ phase: 'final', left: Infinity, dps: Z.finalDps, next: null });
-    expect(FINAL_AT).toBeGreaterThan(80); // a ~90 s room, not a sprint
-    expect(FINAL_AT).toBeLessThan(110);
+    // Owner 2026-10-18: every interval exactly 20% longer than before (50 s safe, warn 8/6/5, shrink 15/10/8 = 102 s).
+    expect(FINAL_AT).toBeCloseTo((50 + 8 + 15 + 6 + 10 + 5 + 8) * 1.2, 6);
   });
   it('the circle only ever shrinks, smoothly (no jump bigger than one step of the shrink)', () => {
     let prev = zoneAt(z, 0).circle;

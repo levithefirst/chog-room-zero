@@ -89,8 +89,10 @@ export const WEAPONS: Record<string, WeaponDef> = {
   // (still one-shots the 85 hp heroes). Now no shell kills from full health (81 max, the lowest hero has 85); the
   // second shell is the kill, 0.25 s later, and the tighter fan makes both land when Bill picks the corner: 8 of 40
   // wins (Benja 8), best duel 78%, average 27% (tests/gr-roster.test.ts). Strafing in the open, a shotgun loses.
+  // Owner 2026-10-18 (150 health for everyone): damage 9 -> 10, so Bill keeps a matchup he wins (best duel 0.59 at 9,
+  // bar 0.6; tests/gr-roster.test.ts). One shell (90) still never kills a full-health operator.
   sawnoff: {
-    id: 'sawnoff', name: 'Sawn-off', damage: 9, pellets: 9, falloffStart: 3.5, falloffEnd: 6.5, minDamageMul: 0.2,
+    id: 'sawnoff', name: 'Sawn-off', damage: 10, pellets: 9, falloffStart: 3.5, falloffEnd: 6.5, minDamageMul: 0.2,
     fireInterval: 0.25, spreadDeg: 5.5, moveSpreadDeg: 2, magazine: 2, reserve: 18, reloadSeconds: 1.5,
     bulletSpeed: 26, bulletLife: 0.32, armorPen: 0, piercesCover: false, sound: 'shotgun', barrel: 0.45, tracer: 0.05,
   },

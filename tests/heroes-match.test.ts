@@ -32,10 +32,11 @@ describe('hero data', () => {
       expect(w.reloadSeconds).toBeGreaterThan(0);
     }
   });
-  it('no hero beats another on health, armour, speed, and sight at once', () => {
+  it('no hero beats another on health, armour, speed, and sight (reach and width) at once', () => {
     for (const a of HEROES) for (const b of HEROES) {
       if (a === b) continue;
-      const better = a.maxHp >= b.maxHp && a.maxArmor >= b.maxArmor && a.speed >= b.speed && a.vision.range >= b.vision.range;
+      // Owner 2026-10-18: everyone has 150 health, so health never separates two operators; sight is reach and width.
+      const better = a.maxHp >= b.maxHp && a.maxArmor >= b.maxArmor && a.speed >= b.speed && a.vision.range >= b.vision.range && a.vision.coneDeg >= b.vision.coneDeg;
       expect(better, `${a.id} vs ${b.id}`).toBe(false);
     }
   });

@@ -30,7 +30,7 @@ describe('Room Zero map', () => {
     for (const b of BOT_SPAWNS) for (const [x, y] of b.patrol) expect(walkable(tileAt(l, x + 0.5, y + 0.5)), `${b.name} ${x},${y}`).toBe(true);
     // Pickups are laid out by zone (tests/pickup-layout.test.ts covers the rules); the map itself has no fixed ones. GP: 4 more ammo.
     const pk = createWorld().pickups;
-    for (const [k, n] of [['health', 8], ['armor', 6], ['ammo', 10], ['grenade', 6]] as const) expect(pk.filter((p) => p.kind === k).length).toBe(n);
+    for (const [k, n] of [['health', 10], ['armor', 8], ['ammo', 12], ['grenade', 8]] as const) expect(pk.filter((p) => p.kind === k).length).toBe(n);
   });
   it('every walkable tile and every pickup is reachable from the player spawn', () => {
     const seen = new Uint8Array(l.w * l.h);

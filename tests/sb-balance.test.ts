@@ -27,8 +27,8 @@ describe('no trigger pull takes a full-health hero to zero, except where measure
       expect(r.hp, `${w} vs ${h.id}`).toBeLessThan(r.maxHp);
     }
   });
-  it('the pump shotgun one-shots only the three lightest heroes (Bill, Ray, Tabsu), and only with all eight pellets at point blank (flagged for the owner)', () => {
+  it('the pump shotgun one-shots nobody since every operator has 150 health (owner 2026-10-18; it one-shot Bill, Ray and Tabsu before)', () => {
     const killed = HEROES.filter((h) => { const r = onePull('shotgun', h.id); return r.hp >= r.maxHp; }).map((h) => h.id).sort();
-    expect(killed).toEqual(['bill', 'ray', 'tabsu']);
+    expect(killed).toEqual([]);
   });
 });

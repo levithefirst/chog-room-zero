@@ -13,7 +13,7 @@ A dark top-down tactical shooter in the browser, for PC and phones. One basement
 
 Online: 1v1 and 3v3 for everyone, 5v5 for verified Chog holders, on an authoritative server (the server decides every hit). A persistent, account-based leaderboard ranks players by opponents killed in saved matches; owning a Chog never moves anyone up it.
 
-What is new (2026-10-18): your Chog's real traits are its superpower. Laser eyes fire a beam, visor eyes an X-Ray beam through walls, a Bubblegum mouth cages, a Drooling mouth glues to a wall, an Aura makes you untouchable. Rarity ranks the power (longer, further, sooner), never health or damage. The ten 1:1 Chogs each carry their own signature ability, and 5v5 is for holders only. Every power has a drill in CHOG Training.
+What is new (2026-10-18): your Chog's real traits are its superpower. Laser eyes fire a beam, visor eyes put every hostile near you on a tracker (information, never damage), a Bubblegum mouth cages, a Drooling mouth glues to a wall, an Aura makes you untouchable. Rarity ranks the power (longer, further, sooner), never damage. A Chog with no power trait starts at 200 health instead of 150, and nothing else. The ten 1:1 Chogs each carry their own signature ability, and 5v5 is for holders only. Every power has a drill in CHOG Training, and connecting a wallet shows YOUR CHOG: its traits, its ability and the trait it comes from. Three locations (Room Zero, Office, Supermarket) are open to everyone.
 
 ## 03 Why Chog matters
 Built and tested (2026-10-14, see `docs/design/power.md` and `docs/HANDOFFS.md`):

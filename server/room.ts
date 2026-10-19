@@ -4,13 +4,13 @@
 // The server owns the match: it steps the same deterministic sim as solo play (src/sim/world.ts) with each player's
 // latest controls. Clients never send positions, hits, damage or results, only controls.
 import { randomBytes } from 'node:crypto';
-import { beamNear, createWorld, down, IDLE_INPUT, matchSeconds, revealed, standing, stepWorld, type Actor, type ActorInput, type HitEvent, type SoundEvent, type Team, type World } from '../src/sim/world';
+import { beamNear, createWorld, down, trackedBy, visorTracks, IDLE_INPUT, matchSeconds, revealed, standing, stepWorld, type Actor, type ActorInput, type HitEvent, type SoundEvent, type Team, type World } from '../src/sim/world';
 import { canSee, muzzleFlashSeen } from '../src/sim/vision';
 import { hears, wallFactorOf } from '../src/sim/world';
 import { hearReport, locatesSource, noise3, type Salt } from '../src/sim/intel';
 import { sightClear } from '../src/sim/level';
 import { heroIdOf } from '../src/config/heroes';
-import { VERSUS_SPAWNS } from '../src/config/map';
+import { MAPS, isMapId, type MapId } from '../src/config/maps';
 import { TUNING } from '../src/config/tuning';
 import { validateNickname } from '../src/ui/profile';
 import { MODE_SIZE, PROTOCOL, parseClientMsg, toActorInput, type ClientMsg, type Mode, type NetActor, type NetBeam, type NetBullet, type NetGrenade, type NetHit, type NetLoot, type NetOrb, type NetProfile, type NetSound, type PlayerResult, type ServerMsg } from '../src/net/protocol';
@@ -123,6 +123,13 @@ const STEP = TUNING.simStepSeconds;
 const saltWords = (): Salt => { const b = randomBytes(16); return [0, 4, 8, 12].map((o) => b.readInt32LE(o)); };
 const PARTY_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 
+/** A queue key is `mode:map:code[|demo]` (one mode on one map, a private code or none, demo rooms apart). */
+function keyParts(key: string): { mode: Mode; map: MapId; code: string | null } {
+  const [mode, map, ...rest] = key.split(':');
+  const code = rest.join(':').replace('|demo', '');
+  return { mode: mode as Mode, map: isMapId(map) ? map : 'room-zero', code: code || null };
+}
+
 export class Lobby {
   readonly opts: LobbyOptions;
   private players = new Map<number, Player>();
@@ -199,9 +206,8 @@ export class Lobby {
     if (now - this.lastRetry >= 1) {
       this.lastRetry = now;
       for (const key of [...this.queues.keys()]) {
-        const [mode, rest] = [key.slice(0, key.indexOf(':')), key.slice(key.indexOf(':') + 1)];
-        const code = rest.replace('|demo', '');
-        this.tryMatch(key, mode as Mode, code || null);
+        const k = keyParts(key);
+        this.tryMatch(key, k.mode, k.code);
       }
     }
     for (const room of [...this.rooms.values()]) this.stepRoom(room, now);
@@ -307,7 +313,8 @@ export class Lobby {
           return;
         }
         for (const x of group) if (x.state === 'queued') this.unqueue(x);
-        const key = `${m.mode}:${m.code ?? ''}${demo ? '|demo' : ''}`;
+        // Owner 2026-10-18: players pick the location before the match; a queue is one mode on one map.
+        const key = `${m.mode}:${m.map ?? 'room-zero'}:${m.code ?? ''}${demo ? '|demo' : ''}`;
         const q = this.queues.get(key) ?? [];
         q.push({ players: [...group], at: this.opts.now() });
         this.queues.set(key, q);
@@ -431,7 +438,7 @@ export class Lobby {
       const used = new Set([...alpha, ...bravo]);
       const rest = q.filter((g) => !used.has(g));
       if (rest.length) this.queues.set(key, rest); else this.queues.delete(key);
-      this.startRoom(mode, alpha.flatMap((g) => g.players), bravo.flatMap((g) => g.players), !!code);
+      this.startRoom(mode, alpha.flatMap((g) => g.players), bravo.flatMap((g) => g.players), !!code, keyParts(key).map);
       if (rest.length) this.tryMatch(key, mode, code);
       return;
     }
@@ -439,17 +446,17 @@ export class Lobby {
     for (const g of q) for (const o of g.players) o.conn?.send({ t: 'queued', mode, have, need: MODE_SIZE[mode], code });
   }
 
-  private startRoom(mode: Mode, alphaTeam: Player[], bravoTeam: Player[], priv = false): void {
+  private startRoom(mode: Mode, alphaTeam: Player[], bravoTeam: Player[], priv = false, mapId: MapId = 'room-zero'): void {
     const id = randomBytes(8).toString('hex');
     // Squads stay on one side; spawns west (alpha) and east (bravo).
     const members = [...alphaTeam, ...bravoTeam];
     const used = { alpha: 0, bravo: 0 };
     const versus = members.map((p, i) => {
       const team: 'alpha' | 'bravo' = i < alphaTeam.length ? 'alpha' : 'bravo';
-      const s = VERSUS_SPAWNS[team][used[team]++];
+      const s = MAPS[mapId].versusSpawns[team][used[team]++];
       return { name: p.name, hero: p.hero, team, x: s.x, y: s.y, facing: team === 'alpha' ? 0 : Math.PI, power: Lobby.powerOf(p.ticket) };
     });
-    const world = createWorld({ seed: this.opts.seed(), versus, zone: true, perks: true, friendlyFire: this.opts.friendlyFire });
+    const world = createWorld({ seed: this.opts.seed(), versus, zone: true, perks: true, friendlyFire: this.opts.friendlyFire, mapId });
     const room: Room = {
       id, mode, world, members, inputs: members.map(() => ({ ...IDLE_INPUT })), acks: members.map(() => 0), ackSteps: members.map(() => 0), fireLatch: members.map(() => false),
       startTick: Math.round(this.opts.countdownSec / STEP), steps: 0, lastShot: members.map(() => -1e9), left: members.map(() => false), quit: members.map(() => false),
@@ -473,7 +480,7 @@ export class Lobby {
   private sendMatch(room: Room, p: Player): void {
     const w = room.world;
     p.conn?.send({
-      t: 'match', room: room.id, mode: room.mode, you: p.actorId, team: w.actors[p.actorId].team, seed: w.rng, friendlyFire: w.friendlyFire,
+      t: 'match', room: room.id, mode: room.mode, map: room.world.mapId ?? 'room-zero', you: p.actorId, team: w.actors[p.actorId].team, seed: w.rng, friendlyFire: w.friendlyFire,
       roster: w.actors.map((a) => {
         const t = room.members[a.id].ticket;
         return {
@@ -583,7 +590,10 @@ export class Lobby {
       ...(a.trapLeft > 0 ? { tl: r3(a.trapLeft), tx: r3(a.trapX), ty: r3(a.trapY), tr: r3(a.trapR) } : {}),
       ...(a.pinLeft > 0 ? { pl: r3(a.pinLeft), px: r3(a.pinX), py: r3(a.pinY) } : {}),
       ...(a.auraLeft > 0 ? { al: r3(a.auraLeft) } : {}),
+      ...(a === me && trackedBy(w, me) ? { tk: 1 as const } : {}),
     }));
+    // Visor: the hostiles on this player's own tracker that it is not already shown (positions only).
+    const vt = visorTracks(w, me).filter((t) => !visible(t)).map((t) => ({ id: t.id, x: r3(t.x), y: r3(t.y) }));
     // Grenades: your team's always; a hostile one when you can see it or it is close to you on a clear line (you hear
     // it land and see the ring), so you can read the danger you are in. Never one behind a wall.
     const near = (x: number, y: number, r: number) => Math.hypot(me.x - x, me.y - y) <= r && sightClear(w.level, me.x, me.y, x, y);
@@ -634,7 +644,7 @@ export class Lobby {
     const lt: NetLoot[] = w.loot.filter((l) => l.known.includes(me.team)).map((l) => ({ id: l.id, x: r3(l.x), y: r3(l.y), left: r3(l.left),
       k: (l.health >= 1 ? 1 : 0) | (l.armor >= 1 ? 2 : 0) | (l.mags >= 0.05 ? 4 : 0) | (l.grenades > 0 ? 8 : 0), ...(l.perk ? { p: l.perk } : {}) }));
     return {
-      t: 'snap', tick: w.tick, actors, bullets, grenades, ...(ob.length ? { ob } : {}), ...(bm.length ? { bm } : {}), pickups: w.pickups.map((k) => k.active), ...(pk ? { pk } : {}), ...(lt.length ? { lt } : {}), ...(sp.length ? { sp } : {}), sounds: heard, hits: netHits,
+      t: 'snap', tick: w.tick, actors, bullets, grenades, ...(ob.length ? { ob } : {}), ...(bm.length ? { bm } : {}), ...(vt.length ? { vt } : {}), pickups: w.pickups.map((k) => k.active), ...(pk ? { pk } : {}), ...(lt.length ? { lt } : {}), ...(sp.length ? { sp } : {}), sounds: heard, hits: netHits,
       barriers: w.barriers.map((b) => ({ ...b.box, left: r3(b.left) })), ack: room.acks[p.actorId], as: room.ackSteps[p.actorId],
     };
   }
@@ -720,10 +730,9 @@ export class Lobby {
       }
       if (!q.length) this.queues.delete(key);
       else {
-        const [mode, rest] = key.split(':');
-        const code = rest.replace('|demo', '');
+        const { mode, code } = keyParts(key);
         const have = q.reduce((a, x) => a + x.players.length, 0);
-        for (const x of q) for (const o of x.players) o.conn?.send({ t: 'queued', mode: mode as Mode, have, need: MODE_SIZE[mode as Mode], code: code || null });
+        for (const x of q) for (const o of x.players) o.conn?.send({ t: 'queued', mode, have, need: MODE_SIZE[mode], code });
       }
     }
     p.queueKey = null;
