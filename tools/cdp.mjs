@@ -2,12 +2,21 @@
 import { spawn } from 'node:child_process'; import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path';
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Every Chrome this process started, by its own process group (spawned detached). A tool that crashes, exits early or is
+// killed takes its browsers with it: nothing is ever killed by name or command line.
+const live = new Set();
+const killGroup = (proc) => { try { process.kill(-proc.pid, 'SIGKILL'); } catch { try { proc.kill('SIGKILL'); } catch { /* gone */ } } };
+process.on('exit', () => { for (const proc of live) killGroup(proc); });
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => process.exit(130));
+
 export async function browser(label, { base, shotDir, w = 1280, h = 720, mobile = false, touch = false } = {}) {
   const port = 9100 + Math.floor(Math.random() * 800);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), `rz-${label}-`));
   const proc = spawn(process.env.CHROME_BIN ?? 'google-chrome', ['--headless=new', '--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required',
     '--disable-background-timer-throttling', '--disable-renderer-backgrounding', `--user-data-dir=${dir}`, `--remote-debugging-port=${port}`, 'about:blank'], { stdio: 'ignore', detached: true });
+  live.add(proc);
   let t; for (let i = 0; i < 80 && !t; i++) { await sleep(200); try { t = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find((x) => x.type === 'page'); } catch {} }
+  if (!t) { killGroup(proc); live.delete(proc); fs.rmSync(dir, { recursive: true, force: true }); throw new Error(`${label}: Chrome did not open its debugging port`); }
   const ws = new WebSocket(t.webSocketDebuggerUrl); await new Promise((r) => (ws.onopen = r));
   let id = 0; const P = new Map(); const errors = []; const handlers = [];
   ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.id && P.has(m.id)) { P.get(m.id)(m.result ?? m.error); P.delete(m.id); }
@@ -22,7 +31,7 @@ export async function browser(label, { base, shotDir, w = 1280, h = 720, mobile 
   const b = {
     label, cmd, ev, errors, on: (fn) => handlers.push(fn),
     // Chrome's renderer and GPU children outlive a killed parent: kill its whole process group (spawned detached).
-    close: async () => { try { process.kill(-proc.pid, 'SIGKILL'); } catch { proc.kill('SIGKILL'); } await sleep(300); fs.rmSync(dir, { recursive: true, force: true }); },
+    close: async () => { killGroup(proc); live.delete(proc); await sleep(300); fs.rmSync(dir, { recursive: true, force: true }); },
     go: async (u) => { await cmd('Page.navigate', { url: base + u }); await sleep(300); },
     shot: async (name) => { if (!shotDir) return; const r = await cmd('Page.captureScreenshot', { format: 'png' }); fs.mkdirSync(shotDir, { recursive: true }); fs.writeFileSync(path.join(shotDir, `${label}-${name}.png`), Buffer.from(r.data, 'base64')); },
     click: async (sel) => { const r = await ev(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); if (!el || el.disabled) return null; el.scrollIntoView({ block: 'nearest' }); const q = el.getBoundingClientRect(); return { x: q.x + q.width / 2, y: q.y + q.height / 2 }; })()`);
