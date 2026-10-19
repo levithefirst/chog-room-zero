@@ -138,7 +138,8 @@ async function bootDone() {
   if (bootTipTimer) clearInterval(bootTipTimer);
   b.classList.add('done');
   document.body.classList.add('hub-in');
-  setTimeout(() => { b.remove(); document.body.classList.remove('hub-in'); }, 700);
+  // The hub that faded in keeps still: dropping hub-in would swap its animation to the screens' rise and replay it.
+  setTimeout(() => { b.remove(); document.querySelector<HTMLElement>('#overlay > .screen.hub')?.style.setProperty('animation', 'none'); document.body.classList.remove('hub-in'); }, 700);
 }
 
 async function start() {
@@ -514,10 +515,15 @@ async function start() {
     overlay.className = cls;
     overlay.innerHTML = `<div class="card">${html}</div>`;
   }
-  // Full-overlay screens (menu, select, profile, settings) bring their own layout.
+  // Full-overlay screens (menu, select, profile, settings) bring their own layout. Redrawing the screen that is up with
+  // the same content keeps its DOM: a rebuild replays the entry animation (a blink) and drops focus, scroll and input.
+  let shownHtml = '', shownEl: Element | null = null;
   function show(html: string) {
     overlay.className = 'layer';
+    if (html === shownHtml && shownEl && overlay.firstElementChild === shownEl) return;
     overlay.innerHTML = html;
+    shownHtml = html;
+    shownEl = overlay.firstElementChild;
   }
 
   // Everything a screen may show, read fresh each render.
@@ -1427,7 +1433,8 @@ async function start() {
       const nl = `${phase} fps${Math.round(hook.fps)} | ${net.log.slice(-14).join(' | ')}`;
       if (document.body.dataset.netlog !== nl && now - lastPing > 500) { lastPing = now; document.body.dataset.netlog = nl; }
     }
-    const key = `${net.state}|${net.queue?.have}|${net.message}|${Math.round(net.rtt / 50)}|${JSON.stringify(net.party)}`;
+    // Only what the hub shows. Never the ping time: on a real link it flips every 2 s ping and rebuilt the hub (a blink).
+    const key = `${net.state}|${net.queue?.have}|${net.message}|${JSON.stringify(net.party)}`;
     if (key !== netKey) {
       netKey = key;
       if (phase === 'title' && titleView === 'main') render();
