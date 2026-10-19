@@ -16,6 +16,9 @@ export const TUNING = {
     cornerAssistSpeed: 0.7,
     // Base run speed (heroes scale it). 4.2 u/s: brisk tactical jog. (P0-2, unchanged.)
     maxSpeed: 4.2,
+    // H34 stairs (Metro, Construction): 65% speed while on a stair tile, so climbing onto a deck takes about a second
+    // longer than the same walk on the flat: long enough to be caught on the stairs, short enough not to be a chore.
+    stairsMul: 0.65,
     // Full speed in ~80 ms, stop in ~60 ms, reversals 1.5x: snappy, planted, deliberate. (P0-2, unchanged.)
     acceleration: 52.5,
     deceleration: 70,
@@ -187,6 +190,10 @@ export const TUNING = {
   vision: {
     // Near circle: nothing right next to you is ever invisible.
     nearRadius: 1.6,
+    // H34 lit areas (each location's lights, src/config/maps.ts): someone standing in one is seen this far off, inside
+    // your cone and with a clear line. 22 u = the auto rifle's reach (32 u/s x 0.7 s): a lit aisle is a real firing
+    // lane, a dark tunnel stays a lamp-length knife fight. Room Zero has none (the dark baseline).
+    litRange: 22,
     // Ray step through the cone in degrees.
     rayStepDeg: 1.5,
     // Soft edge: a second, wider cone at lower brightness.
@@ -209,6 +216,10 @@ export const TUNING = {
     reload: 4,
     pickup: 5,
     ability: 6,
+    // H34 footstep surfaces (src/sim/level.ts stepSurface): carpet muffles a run to 5.6 u, so the Office rewards
+    // creeping room to room; a deck or a stair rings out to 10.4 u, so the high ground is never taken quietly; a Metro
+    // service tunnel echoes to 10.4 u, so its ambushes are heard coming both ways.
+    surface: { carpet: 0.7, deck: 1.3, tunnel: 1.3 },
     // A wall in between shrinks the radius to this share: muffled, not silenced. CF-D: 0.6 -> 0.8 (tests/cf-lab.test.ts
     // D: contacts heard or spotted before they are seen 40% -> 70%; at 0.6 the CF map's pillars left it at 47%). The same
     // rule for bots, so they hear you through a wall sooner too.
@@ -507,6 +518,9 @@ export const TUNING = {
   },
 
   render: {
+    // H34: how much of the lit look a lit area keeps when it is out of your lamp (0 dark, 1 fully lit). 0.55 reads as
+    // "lit room over there" without looking like your own light.
+    litGlow: 0.55,
     // Bodies are drawn at this many times the sim radius. RC-8: 1, the drawn operator IS the hitbox (was 1.45, which
     // the owner read as an oversized circle that bullets missed). ~27 px across at 844x390, ~46 px at 1440x900.
     actorScale: 1,

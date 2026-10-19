@@ -138,7 +138,9 @@ export const ROOM_ZERO_RC8 = [
   '############################################',
 ];
 
-export type Material = 'tile' | 'concrete' | 'metal' | 'dock';
+// H34: 'carpet' (Office floors: footsteps carry 0.7x), 'tunnel' (Metro service tunnels: they echo, 1.3x), 'ballast'
+// (track beds under the rails; never walked on). TUNING.sound.surface.
+export type Material = 'tile' | 'concrete' | 'metal' | 'dock' | 'carpet' | 'tunnel' | 'ballast';
 
 // Floor material zones, painted in order (later wins). Anything not covered is concrete.
 export const ZONES: { x0: number; y0: number; x1: number; y1: number; mat: Material }[] = [

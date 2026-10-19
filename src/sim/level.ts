@@ -2,24 +2,33 @@
 import type { Box, Segment } from './geom';
 import { segmentBoxT } from './geom';
 import { coverStops } from './cover';
+import type { Material } from '../config/map';
+import { TUNING } from '../config/tuning';
 
 export interface Level {
   w: number;
   h: number;
-  // 0 floor, 1 wall, 2 crate, 3 barrier, 4 doorway (floor)
+  // 0 floor, 1 wall, 2 crate, 3 barrier, 4 doorway (floor), 5 rail, 6 deck (raised floor), 7 stairs (floor)
   tiles: Uint8Array;
   // Full walls only: block sight and bullets.
   wallBoxes: Box[];
-  // Full walls plus cover: block movement and bullets.
+  // Full walls, cover and rails: block movement (only walls and cover block bullets).
   solidBoxes: Box[];
   coverBoxes: Box[];
+  /** Rails (H34): railings, track edges, open window frames. Block movement only: sight, bullets and grenades pass. */
+  railBoxes: Box[];
   /** Dynamic obstacles (e.g. Brick's slab) per tile, counted; A* treats >0 as blocked. */
   dyn: Uint8Array;
   // Outline of full walls, for the visibility polygon.
   segments: Segment[];
   playerSpawn: { x: number; y: number };
+  /**
+   * H34 lit areas of a location (src/config/maps.ts): a body standing in one is seen from up to TUNING.vision.litRange
+   * by anyone facing it with a clear line, lamp or no lamp (src/sim/vision.ts canSee). Absent: all dark (Room Zero).
+   */
+  lights?: readonly Box[];
   /** Floor materials of a location (drawn only; src/config/maps.ts). Absent: Room Zero's. */
-  materials?: readonly { x0: number; y0: number; x1: number; y1: number; mat: 'tile' | 'concrete' | 'metal' | 'dock' }[];
+  materials?: readonly { x0: number; y0: number; x1: number; y1: number; mat: Material }[];
   // Floor tiles next to a wall or cover piece: candidate spots for bots to hold or hide.
   coverSpots: { x: number; y: number }[];
   pickupSpawns: { kind: 'health' | 'armor' | 'ammo' | 'grenade'; x: number; y: number }[];
@@ -30,8 +39,18 @@ export const WALL = 1;
 export const COVER = 2;
 export const BARRIER = 3;
 export const DOOR = 4;
+/**
+ * H34 map vocabulary (owner 2026-10-19: maps must differ in "the actual collision/topology, not merely visuals").
+ * RAIL: you see and shoot across it, you cannot walk through it (balcony railings, track edges, open window frames).
+ * DECK: raised floor (scaffolding, a mezzanine, a platform edge). A shot fired from a deck clears every crate and
+ * barrier below it: high ground beats half cover, and a deck has no cover of its own.
+ * STAIRS: floor that slows you (TUNING.movement.stairsMul); the only way onto a deck, so the choke point to it.
+ */
+export const RAIL = 5;
+export const DECK = 6;
+export const STAIRS = 7;
 
-export const walkable = (t: number) => t === FLOOR || t === DOOR;
+export const walkable = (t: number) => t === FLOOR || t === DOOR || t === DECK || t === STAIRS;
 export const isCover = (t: number) => t === COVER || t === BARRIER;
 
 function mergeRuns(tiles: Uint8Array, w: number, h: number, kind: number): Box[] {
@@ -93,27 +112,43 @@ export function parseLevel(rows: readonly string[]): Level {
     if (rows[y].length !== w) throw new Error(`Map row ${y} has length ${rows[y].length}, expected ${w}`);
     for (let x = 0; x < w; x++) {
       const ch = rows[y][x];
-      tiles[y * w + x] = ch === '#' ? WALL : ch === 'c' ? COVER : ch === 'b' ? BARRIER : ch === 'd' ? DOOR : FLOOR;
+      tiles[y * w + x] = ch === '#' ? WALL : ch === 'c' ? COVER : ch === 'b' ? BARRIER : ch === 'd' ? DOOR
+        : ch === 'r' ? RAIL : ch === 'u' ? DECK : ch === 's' ? STAIRS : FLOOR;
       if (ch === 'P') playerSpawn = { x: x + 0.5, y: y + 0.5 };
       if (ch === 'h' || ch === 'a' || ch === 'm' || ch === 'g') pickupSpawns.push({ kind: ch === 'h' ? 'health' : ch === 'a' ? 'armor' : ch === 'g' ? 'grenade' : 'ammo', x: x + 0.5, y: y + 0.5 });
     }
   }
   const wallBoxes = mergeRuns(tiles, w, h, WALL);
   const coverBoxes = [...mergeRuns(tiles, w, h, COVER), ...mergeRuns(tiles, w, h, BARRIER)];
+  const railBoxes = mergeRuns(tiles, w, h, RAIL);
   const coverSpots: { x: number; y: number }[] = [];
   for (let y = 1; y < h - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
       if (tiles[y * w + x] !== FLOOR) continue;
       const n = [tiles[y * w + x - 1], tiles[y * w + x + 1], tiles[(y - 1) * w + x], tiles[(y + 1) * w + x]];
-      if (n.some((t) => !walkable(t))) coverSpots.push({ x: x + 0.5, y: y + 0.5 });
+      // A rail is not cover (it stops nobody's bullets), so it never makes a spot worth holding.
+      if (n.some((t) => !walkable(t) && t !== RAIL)) coverSpots.push({ x: x + 0.5, y: y + 0.5 });
     }
   }
   return {
-    w, h, tiles, wallBoxes, coverBoxes, dyn: new Uint8Array(w * h),
-    solidBoxes: [...wallBoxes, ...coverBoxes],
+    w, h, tiles, wallBoxes, coverBoxes, railBoxes, dyn: new Uint8Array(w * h),
+    solidBoxes: [...wallBoxes, ...coverBoxes, ...railBoxes],
     segments: outline(tiles, w, h),
     playerSpawn, coverSpots, pickupSpawns,
   };
+}
+
+/**
+ * How far a footstep carries on this spot, as a share of the usual radius (H34, TUNING.sound.surface): decks and stairs
+ * ring like metal, carpet muffles, tunnels echo. Locations without those floors (Room Zero) are 1 everywhere.
+ */
+export function stepSurface(l: Level, x: number, y: number): number {
+  const S = TUNING.sound.surface, t = tileAt(l, x, y);
+  if (t === DECK || t === STAIRS) return S.deck;
+  let m: Material | null = null;
+  const tx = Math.floor(x), ty = Math.floor(y);
+  for (const z of l.materials ?? []) if (tx >= z.x0 && tx <= z.x1 && ty >= z.y0 && ty <= z.y1) m = z.mat;
+  return m === 'carpet' ? S.carpet : m === 'tunnel' ? S.tunnel : 1;
 }
 
 export function tileAt(l: Level, x: number, y: number): number {
@@ -139,7 +174,8 @@ function boxDist(x: number, y: number, b: Box): number {
 
 /**
  * Half-cover RULE: a crate or barrier stops a bullet unless the bullet was fired from within `lean` u of that
- * box (the shooter is leaning over it), or the weapon pierces cover. Walls always stop bullets.
+ * box (the shooter is leaning over it), from a deck (high ground, H34), or the weapon pierces cover. Walls always
+ * stop bullets; rails never do.
  * Returns the first blocking t in [0,1] for the segment, or -1.
  */
 /** Set by bulletBlockT: was the returned block a cover box (crate/slab) rather than a wall? */
@@ -154,6 +190,7 @@ export function bulletBlockT(
     if (t >= 0 && (best < 0 || t < best)) best = t;
   }
   blockedByCover = false;
+  if (tileAt(l, ox, oy) === DECK) return best;
   for (const b of l.coverBoxes) {
     // Crates (static) and slabs (Brick barriers, pushed at runtime) share one rule: cover.ts.
     if (!coverStops('crate', pierce, boxDist(ox, oy, b) <= lean ? 0 : Infinity)) continue;

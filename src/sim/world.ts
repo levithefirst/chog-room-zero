@@ -7,7 +7,7 @@ import { heroById, type AbilityDef, type HeroDef } from '../config/heroes';
 import { BASE_POWER, type Power } from '../config/power';
 import { WEAPONS, damageAt, type WeaponDef } from '../config/weapons';
 import { angleDiff, cornerAssistDir, resolveCircle, segmentBoxT, segmentCircleT, type Box } from './geom';
-import { WALL, blockedByCover, bulletBlockT, markDynamic, parseLevel, shotClear, sightClear, tileAt, walkable, type Level } from './level';
+import { STAIRS, WALL, blockedByCover, stepSurface, bulletBlockT, markDynamic, parseLevel, shotClear, sightClear, tileAt, walkable, type Level } from './level';
 import { stepVelocity, type Vec2 } from './sim';
 import { NO_SIDEGRADE, type Sidegrade } from './operators';
 import type { ViewShape } from './vision';
@@ -480,7 +480,7 @@ function mapDefOf(opts: WorldOptions): MapDef | null {
 export function createWorld(opts: WorldOptions = {}): World {
   const def = mapDefOf(opts);
   const level = parseLevel(opts.map ?? def?.rows ?? ROOM_ZERO_RC8);
-  if (def) level.materials = def.materials;
+  if (def) { level.materials = def.materials; level.lights = def.lights; }
   const mapId = def?.id ?? null;
   const seed = (opts.seed ?? TUNING.seed) | 0;
   const brains = new Map<number, Brain>();
@@ -992,7 +992,7 @@ function applyInput(w: World, a: Actor, inp: ActorInput, dt: number): void {
   const speed = Math.hypot(a.vx, a.vy);
   if (a.stepAcc >= M.stepDistance) {
     a.stepAcc -= M.stepDistance;
-    let r = stepRadius(a.dashLeft > 0 ? 0 : speed / (M.maxSpeed * speedMul)) * (a.perk === 'soles' ? TUNING.perks.solesStepMul : 1);
+    let r = stepRadius(a.dashLeft > 0 ? 0 : speed / (M.maxSpeed * speedMul)) * (a.perk === 'soles' ? TUNING.perks.solesStepMul : 1) * stepSurface(w.level, a.x, a.y);
     // An aura hums: its steps are never quiet.
     if (a.auraLeft > 0) r = Math.max(r, TUNING.sound.runStep);
     emit(w, r <= TUNING.sound.quietStep + 0.01 ? 'quietStep' : 'step', a.x, a.y, r, a);
@@ -1060,7 +1060,8 @@ export function moveBody(level: Level, a: Actor, inp: ActorInput, dt: number): v
     resolveCircle(a, M.radius, level.solidBoxes);
     return;
   }
-  const speedMul = a.hero.speed * (a.slowLeft > 0 ? a.slowMul : 1) * (a.chargeLeft > 0 || a.beamLeft > 0 ? BEAM.moveMul : 1);
+  const speedMul = a.hero.speed * (a.slowLeft > 0 ? a.slowMul : 1) * (a.chargeLeft > 0 || a.beamLeft > 0 ? BEAM.moveMul : 1)
+    * (tileAt(level, a.x, a.y) === STAIRS ? M.stairsMul : 1);
   if (a.dashLeft > 0) {
     a.dashLeft = Math.max(0, a.dashLeft - dt);
     a.vx = a.dashX * TUNING.abilities.dashSpeed;

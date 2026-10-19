@@ -3,7 +3,7 @@
 import { Container, Graphics, RenderTexture, Texture, type Renderer as PixiRenderer } from 'pixi.js';
 import { TUNING } from '../config/tuning';
 import { ZONES, type Material } from '../config/map';
-import { BARRIER, COVER, DOOR, WALL, walkable, type Level } from '../sim/level';
+import { BARRIER, COVER, DECK, DOOR, RAIL, STAIRS, WALL, walkable, type Level } from '../sim/level';
 import { coverDrawBox } from './footprint';
 import { LAB } from '../config/lab';
 
@@ -13,6 +13,16 @@ export const MAT = {
   concrete: { base: 0x6a655c, alt: 0x635e55, grout: 0x4a463f },
   metal: { base: 0x50575a, alt: 0x4a5154, grout: 0x33393b },
   dock: { base: 0x5e5848, alt: 0x585242, grout: 0x403b30 },
+  // H34: Office carpet (blue-grey tiles), Metro tunnel concrete (cold, stained), track ballast (dark gravel).
+  carpet: { base: 0x4a5560, alt: 0x47525d, grout: 0x3a434c },
+  tunnel: { base: 0x4c4f4c, alt: 0x484b48, grout: 0x363936 },
+  ballast: { base: 0x2f2d29, alt: 0x2b2925, grout: 0x1d1c19 },
+  deck: 0x7d6a4c,
+  deckEdge: 0x2a2116,
+  rail: 0xb8b0a0,
+  railPost: 0x6e685d,
+  steel: 0x9aa3a8,
+  sleeper: 0x4a3a28,
   wallTop: 0x2c2c2f,
   wallFace: 0x18181a,
   wallRim: 0x8e887b,
@@ -74,6 +84,18 @@ function drawMap(g: Graphics, l: Level): void {
         for (let k = 0; k < 7; k++) g.rect(x + rnd(), y + rnd(), 0.04, 0.04).fill({ color: rnd() < 0.5 ? 0xffffff : 0x000000, alpha: 0.08 });
         if (x % 3 === 0) g.rect(x, y, 0.02, 1).fill({ color: m.grout, alpha: 0.6 });
         if (y % 3 === 0) g.rect(x, y, 1, 0.02).fill({ color: m.grout, alpha: 0.6 });
+      } else if (mat === 'carpet') {
+        // Carpet tiles: a soft weave, every other tile turned.
+        const turn = ((x >> 1) + (y >> 1)) & 1;
+        for (let k = 0; k < 4; k++) g.rect(turn ? x + k * 0.25 + 0.05 : x, turn ? y : y + k * 0.25 + 0.05, turn ? 0.03 : 1, turn ? 1 : 0.03).fill({ color: 0xffffff, alpha: 0.03 });
+        if (x % 2 === 0) g.rect(x, y, 0.02, 1).fill({ color: m.grout, alpha: 0.5 });
+        if (y % 2 === 0) g.rect(x, y, 1, 0.02).fill({ color: m.grout, alpha: 0.5 });
+      } else if (mat === 'ballast') {
+        for (let k = 0; k < 9; k++) g.circle(x + rnd(), y + rnd(), 0.04 + rnd() * 0.04).fill({ color: rnd() < 0.5 ? 0x5a5650 : 0x161512, alpha: 0.6 });
+      } else if (mat === 'tunnel') {
+        for (let k = 0; k < 6; k++) g.rect(x + rnd(), y + rnd(), 0.05, 0.05).fill({ color: 0x000000, alpha: 0.12 });
+        if (x % 4 === 0) g.rect(x, y, 0.03, 1).fill({ color: m.grout, alpha: 0.7 });
+        if (rnd() < 0.08) g.ellipse(x + rnd(), y + rnd(), 0.4, 0.2).fill({ color: 0x1d2a1d, alpha: 0.18 });
       } else {
         for (let k = 0; k < 5; k++) g.rect(x + rnd(), y + rnd(), 0.05, 0.03).fill({ color: 0x000000, alpha: 0.1 });
         if (y % 2 === 0) g.rect(x, y, 1, 0.025).fill({ color: m.grout, alpha: 0.7 });
@@ -152,6 +174,49 @@ function drawMap(g: Graphics, l: Level): void {
     }
   }
 
+  // 6b. H34: decks (raised plank floor that throws a shadow onto the floor below), stairs (treads across the climb)
+  // and rails (posts and a top bar; over a track bed: sleepers and two steel rails instead).
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const t = tiles[y * w + x];
+      if (t === DECK) {
+        g.rect(x, y, 1, 1).fill(MAT.deck);
+        for (let k = 0; k < 4; k++) g.rect(x, y + k * 0.25, 1, 0.02).fill({ color: MAT.deckEdge, alpha: 0.55 });
+        if ((x + y) % 3 === 0) g.circle(x + 0.15, y + 0.12, 0.03).fill({ color: 0x000000, alpha: 0.4 });
+        const low = (u: number) => u !== DECK && u !== STAIRS && u !== WALL;
+        if (low(at(x, y + 1))) g.rect(x, y + 1, 1, 0.35).fill({ color: 0x000000, alpha: 0.42 }).rect(x, y + 0.92, 1, 0.08).fill(MAT.deckEdge);
+        if (low(at(x + 1, y))) g.rect(x + 1, y + 0.05, 0.3, 1).fill({ color: 0x000000, alpha: 0.36 }).rect(x + 0.92, y, 0.08, 1).fill(MAT.deckEdge);
+        if (low(at(x, y - 1))) g.rect(x, y, 1, 0.05).fill({ color: 0xffffff, alpha: 0.12 });
+        if (low(at(x - 1, y))) g.rect(x, y, 0.05, 1).fill({ color: 0xffffff, alpha: 0.1 });
+      } else if (t === STAIRS) {
+        const run = at(x, y - 1) === STAIRS || at(x, y + 1) === STAIRS;
+        g.rect(x, y, 1, 1).fill({ color: 0x000000, alpha: 0.12 });
+        for (let k = 0; k < 4; k++) {
+          if (run) g.rect(x, y + k * 0.25, 1, 0.1).fill({ color: 0xd6cdb8, alpha: 0.22 }).rect(x, y + k * 0.25 + 0.1, 1, 0.03).fill({ color: 0x000000, alpha: 0.35 });
+          else g.rect(x + k * 0.25, y, 0.1, 1).fill({ color: 0xd6cdb8, alpha: 0.22 }).rect(x + k * 0.25 + 0.1, y, 0.03, 1).fill({ color: 0x000000, alpha: 0.35 });
+        }
+      } else if (t === RAIL) {
+        if (materialAt(x, y, l.materials) === 'ballast') {
+          // Track bed: a pit you cannot walk in, sleepers across, two rails along it.
+          g.rect(x, y, 1, 1).fill({ color: 0x000000, alpha: 0.28 });
+          const along = at(x - 1, y) === RAIL || at(x + 1, y) === RAIL;
+          for (let k = 0; k < 3; k++) {
+            if (along) g.rect(x + k * 0.33 + 0.05, y + 0.08, 0.14, 0.84).fill({ color: MAT.sleeper, alpha: 0.85 });
+            else g.rect(x + 0.08, y + k * 0.33 + 0.05, 0.84, 0.14).fill({ color: MAT.sleeper, alpha: 0.85 });
+          }
+          if (along) g.rect(x, y + 0.28, 1, 0.06).fill(MAT.steel).rect(x, y + 0.66, 1, 0.06).fill(MAT.steel);
+          else g.rect(x + 0.28, y, 0.06, 1).fill(MAT.steel).rect(x + 0.66, y, 0.06, 1).fill(MAT.steel);
+        } else {
+          // Railing: a thin bar on posts, see-through and shoot-through.
+          const along = at(x - 1, y) === RAIL || at(x + 1, y) === RAIL || at(x - 1, y) === WALL || at(x + 1, y) === WALL;
+          g.rect(x, y, 1, 1).fill({ color: 0x000000, alpha: 0.1 });
+          if (along) g.rect(x, y + 0.44, 1, 0.12).fill(MAT.rail).rect(x + 0.42, y + 0.36, 0.16, 0.28).fill(MAT.railPost);
+          else g.rect(x + 0.44, y, 0.12, 1).fill(MAT.rail).rect(x + 0.36, y + 0.42, 0.28, 0.16).fill(MAT.railPost);
+        }
+      }
+    }
+  }
+
   // 7. Cover: crates (wood, lid, braces) and barriers (concrete, hazard stripes).
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
@@ -204,12 +269,27 @@ export function bakeMap(renderer: PixiRenderer, l: Level): Baked {
   // doors, not the floor detail. LAB.dark off: the RC-8 values (0.5 over 14, 20, 26).
   const k = LAB.dark ? TUNING.render.dimStructure : 0.5, keep = 0.3;
   const [ar, ag, ab] = LAB.dark ? TUNING.render.dimAmbient : [14, 20, 26];
+  // H34 lit areas: the location's lights keep their floors bright out of your lamp too (dim blended back toward the
+  // lit bake, a little warm), so you can read from afar where a body would be exposed. Only the floor is lit: who is
+  // standing there is still drawn only when canSee says so.
+  const litTile = new Uint8Array(l.w * l.h);
+  for (const b of l.lights ?? []) for (let y = Math.max(0, Math.floor(b.y0)); y < Math.min(l.h, Math.ceil(b.y1)); y++) for (let x = Math.max(0, Math.floor(b.x0)); x < Math.min(l.w, Math.ceil(b.x1)); x++) litTile[y * l.w + x] = 1;
+  const glow = TUNING.render.litGlow, cw = canvas.width;
   for (let i = 0; i < d.length; i += 4) {
-    const L = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    const r0 = d[i], g0 = d[i + 1], b0 = d[i + 2];
+    const L = 0.299 * r0 + 0.587 * g0 + 0.114 * b0;
     // Ambient floor + scaled, cooled structure.
-    d[i] = Math.min(255, ar + k * 0.86 * (keep * d[i] + (1 - keep) * L));
-    d[i + 1] = Math.min(255, ag + k * 0.97 * (keep * d[i + 1] + (1 - keep) * L));
-    d[i + 2] = Math.min(255, ab + k * 1.12 * (keep * d[i + 2] + (1 - keep) * L));
+    d[i] = Math.min(255, ar + k * 0.86 * (keep * r0 + (1 - keep) * L));
+    d[i + 1] = Math.min(255, ag + k * 0.97 * (keep * g0 + (1 - keep) * L));
+    d[i + 2] = Math.min(255, ab + k * 1.12 * (keep * b0 + (1 - keep) * L));
+    if (l.lights?.length) {
+      const px = (i >> 2) % cw, py = ((i >> 2) / cw) | 0;
+      if (litTile[Math.floor(py / ppu) * l.w + Math.floor(px / ppu)]) {
+        d[i] = Math.min(255, d[i] * (1 - glow) + r0 * glow * 1.04);
+        d[i + 1] = Math.min(255, d[i + 1] * (1 - glow) + g0 * glow);
+        d[i + 2] = Math.min(255, d[i + 2] * (1 - glow) + b0 * glow * 0.9);
+      }
+    }
   }
   ctx.putImageData(img, 0, 0);
   if (LAB.dark) {

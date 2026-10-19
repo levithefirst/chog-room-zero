@@ -10,7 +10,7 @@
 // Fairness: for every kind, the walk from the west (alpha) spawns to its pickups and from the east (bravo) spawns must
 // come out about even (balanceTolerance), both for the opening layout and after every move.
 import { TUNING } from '../config/tuning';
-import { COVER, BARRIER, FLOOR, WALL, walkable, type Level } from './level';
+import { COVER, BARRIER, DECK, FLOOR, WALL, walkable, type Level } from './level';
 import type { PickupKind } from './world';
 
 /** side: west and east zones of a kind pair up in list order; 'mid' is contested (about as far from both sides). */
@@ -81,7 +81,7 @@ function openSpots(level: Level, zones: PickupZone[], spawns: Spot[]): Spot[][] 
   return zones.map((z) => {
     const out: Spot[] = [];
     for (let y = z.y0; y <= z.y1; y++) for (let x = z.x0; x <= z.x1; x++) {
-      if (x < 1 || y < 1 || x >= level.w - 1 || y >= level.h - 1 || at(x, y) !== FLOOR || reach.d[y * level.w + x] === Infinity) continue;
+      if (x < 1 || y < 1 || x >= level.w - 1 || y >= level.h - 1 || (at(x, y) !== FLOOR && at(x, y) !== DECK) || reach.d[y * level.w + x] === Infinity) continue;
       let open = true;
       for (let dy = -1; dy <= 1 && open; dy++) for (let dx = -1; dx <= 1; dx++) { const t = at(x + dx, y + dy); if (t === COVER || t === BARRIER) { open = false; break; } }
       open &&= [at(x + 1, y), at(x - 1, y), at(x, y + 1), at(x, y - 1)].filter((t) => t === WALL).length <= 2;

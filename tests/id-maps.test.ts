@@ -23,11 +23,11 @@ function reach(l: Level, from: { x: number; y: number }): Set<number> {
 }
 
 describe('the location registry', () => {
-  it('keeps Room Zero and adds Office and Supermarket, each a different layout', () => {
-    expect(MAP_IDS).toEqual(['room-zero', 'office', 'supermarket']);
+  it('keeps Room Zero and adds Office, Supermarket, Metro Station and Construction Site (H34), each a different layout', () => {
+    expect(MAP_IDS).toEqual(['room-zero', 'office', 'supermarket', 'metro', 'construction']);
     expect(MAPS['room-zero'].rows).toBe(ROOM_ZERO);
     const keys = MAP_IDS.map((id) => MAPS[id].rows.join(''));
-    expect(new Set(keys).size).toBe(3);
+    expect(new Set(keys).size).toBe(5);
     expect(isMapId('office')).toBe(true);
     expect(isMapId('moon')).toBe(false);
   });
