@@ -34,7 +34,7 @@ import { DEFAULT_SETTINGS, QUALITY_DPR, SETTINGS_KEY, STICK_PX, displayName, loa
 import { MEDALS, awardMedals, loadMedals, type MedalDef, type Unlocked } from './ui/medals';
 import { TIPS_KEY, loadShownTips, nextTip, saveShownTips, tipText, type TipId } from './ui/tips';
 import { esc, howtoHtml, medalCard, nickHtml, resultsHtml, selectHtml, settingsHtml, type AuthView } from './ui/screens';
-import { authHtml, chogHtml, chogPanel, boardScreenHtml, careerHtml, classOf, hubHtml, medalsScreenHtml, onlineResultsHtml, topbar, upgradesHtml, upgradesReady, type HubCtx, type NetView, type PlayMode } from './ui/hub';
+import { authHtml, chogHtml, chogPanel, boardScreenHtml, careerHtml, classOf, hubHtml, mapsSheetHtml, medalsScreenHtml, onlineResultsHtml, topbar, upgradesHtml, upgradesReady, type HubCtx, type NetView, type PlayMode } from './ui/hub';
 import { docsHtml, filterDocs } from './ui/docs';
 import { CHOG_ERRORS, chogConnect, chogEligibility, chogNetwork, chogPickAccount, chogSign, discoverWallets, fetchAuthConfig, fetchSession, googleSignIn, isMobileBrowser, signOut, walletSignIn, watchWallet, MONAD_CHAIN_HEX, type ChogStep } from './ui/auth';
 import { SIDEGRADES } from './sim/operators';
@@ -169,7 +169,7 @@ async function start() {
   const ONBOARD_KEY = 'chog.onboarded';
   const YOURCHOG_KEY = 'chog.yourchog';
   let yourChogDue = false;
-  type TitleView = 'main' | 'howto' | 'docs' | 'demo' | 'settings' | 'nick' | 'upgrades' | 'ranks' | 'career' | 'medals' | 'auth' | 'chog' | 'yourchog';
+  type TitleView = 'main' | 'howto' | 'docs' | 'demo' | 'settings' | 'nick' | 'upgrades' | 'ranks' | 'career' | 'medals' | 'auth' | 'chog' | 'yourchog' | 'maps';
   // GP Game Docs: the section opened when the screen is shown (the search box filters the rest live).
   let docsOpen: string | null = null;
   document.addEventListener('input', (e) => {
@@ -554,6 +554,7 @@ async function start() {
       case 'settings': return show(settingsHtml(c, confirmReset));
       case 'upgrades': return show(upgradesHtml(c));
       case 'ranks': return show(boardScreenHtml(c));
+      case 'maps': return show(mapsSheetHtml({ ...c, map: mapId }));
       case 'career': return show(careerHtml(c));
       case 'medals': return show(medalsScreenHtml(c, (m) => medalCard(m, c)));
       case 'auth': return show(authHtml({ config: auth.config, session: auth.session, wallets: auth.wallets, busy: auth.busy, message: auth.message, pickWallet, mobile: isMobileBrowser(), pageUrl: walletPageUrl() }, location.host));
@@ -779,6 +780,7 @@ async function start() {
       case 'board-hide': if (acct.boardMe) void account.setPrefs({ hidden: !acct.boardMe.hidden }).then(() => loadBoard()); break;
       case 'career': titleView = 'career'; void refreshAccount(); break;
       case 'medals': titleView = 'medals'; break;
+      case 'maps': titleView = 'maps'; break;
       case 'settings': titleView = 'settings'; confirmReset = false; refreshAuth(); break;
       case 'nick': nickReturn = titleView === 'nick' ? nickReturn : titleView; titleView = 'nick'; nickError = ''; nickSaved = false; break;
       case 'back': if (titleView === 'chog') chogStop(); titleView = titleView === 'nick' ? nickReturn : titleView === 'auth' ? authReturn : 'main'; confirmReset = false; acct.message = ''; break;
@@ -872,7 +874,7 @@ async function start() {
     const md = t.closest('[data-mode]') as HTMLElement | null;
     if (md) { e.preventDefault(); setMode(md.dataset.mode as PlayMode); render(); return; }
     const mp = t.closest('[data-map]') as HTMLElement | null;
-    if (mp) { e.preventDefault(); if (isMapId(mp.dataset.map)) setMap(mp.dataset.map); render(); return; }
+    if (mp) { e.preventDefault(); if (isMapId(mp.dataset.map)) setMap(mp.dataset.map); if (titleView === 'maps') titleView = 'main'; render(); return; }
     const tk = t.closest('[data-token]') as HTMLElement | null;
     if (tk) { e.preventDefault(); setChoice(tk.dataset.token ? { tokenId: Number(tk.dataset.token) } : null); render(); return; }
     const sp = t.closest('[data-sp]') as HTMLElement | null;

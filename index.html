@@ -500,7 +500,7 @@
       .mode-btn b { font-size: 19px; letter-spacing: .08em; display: inline-flex; gap: 4px; align-items: center; text-transform: uppercase; } .mode-btn small { font-size: 10px; letter-spacing: .06em; color: var(--dim); text-transform: uppercase; }
       .mode-btn.on { border-color: var(--signal); background: var(--bg-elevated); box-shadow: inset 0 -3px 0 var(--signal); }
       .mode-btn.locked small { color: var(--ammo); font-weight: 700; } .mode-btn.locked b { color: var(--dim); }
-      .maps3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 6px; } .map-btn { min-height: 34px; } .map-btn b { font-size: 14px; }
+      .maps5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 6px; } .map-btn { min-height: 34px; } .map-btn b { font-size: 14px; }
       .hub-play .btn.play { width: min(100%, 480px); min-height: 60px; font-size: 30px; letter-spacing: .22em; box-shadow: 0 8px 26px -8px rgba(139,92,246,.9); }
       .status { margin: 2px 0; font-size: 14px; } .status.warn { color: var(--signal); } .status.small { font-size: 12px; }
       table.mini-board { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -721,9 +721,32 @@
       /* Location above mode: one bar each, the location bar slimmer (owner 2026-10-18: PLAY, map, mode). */
       .hub.cf .pickers { display: grid; gap: 4px; justify-items: stretch; margin-bottom: 4px; }
       .hub.cf .pickers .modes4 { margin-bottom: 0; }
-      .hub.cf .maps3 { display: flex; gap: 0; margin: 0; background: rgba(26, 18, 40, 0.75); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
-      .hub.cf .maps3 .map-btn { flex: 1 1 0; min-width: 0; min-height: 32px; padding: 2px 8px; }
-      .hub.cf .maps3 .map-btn b { font-size: 13px; white-space: nowrap; }
+      .hub.cf .maps5 { display: flex; gap: 0; margin: 0; background: rgba(26, 18, 40, 0.75); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+      .hub.cf .maps5 .map-btn { flex: 1 0 auto; min-width: 0; min-height: 40px; padding: 3px 10px; display: grid; gap: 1px; align-content: center; }
+      .hub.cf .maps5 .map-btn b { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .hub.cf .maps5 .map-btn small { font-size: 9px; letter-spacing: .08em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; }
+      /* H34 phone: one LOCATION button opens the sheet with all five (never five tiny buttons). */
+      .map-pick { display: none; }
+      .hub.cf .map-pick { align-items: center; gap: 2px 8px; grid-template-columns: auto 1fr auto; min-height: 40px; padding: 3px 12px; background: rgba(26, 18, 40, 0.75); border: 1px solid var(--line); border-radius: 6px; color: var(--ink); text-align: left; }
+      .hub.cf .map-pick small { grid-row: 1 / 3; font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); writing-mode: horizontal-tb; }
+      .hub.cf .map-pick b { font-size: 15px; letter-spacing: .08em; text-transform: uppercase; } .hub.cf .map-pick i { grid-column: 2; font-style: normal; font-size: 10px; color: var(--dim); letter-spacing: .06em; text-transform: uppercase; }
+      .hub.cf .map-pick .chev { grid-column: 3; grid-row: 1 / 3; color: var(--chog-pink); }
+      /* H34 location sheet: five cards, each with a plan of its own tiles; one column on a narrow stage. */
+      .maps-sheet .map-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr)); gap: 10px; padding: 4px 2px 12px; overflow-y: auto; max-height: calc(var(--vh, 1vh) * 100 - 80px); }
+      .map-card { display: grid; grid-template-columns: 120px 1fr; gap: 10px; align-items: center; text-align: left; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-elevated); color: var(--ink); min-height: 88px; }
+      .map-card.on { border-color: var(--chog-pink); box-shadow: inset 0 0 0 1px var(--chog-pink); }
+      .map-card .plan { width: 120px; height: 76px; border-radius: 4px; display: block; }
+      .map-card .mc-txt { display: grid; gap: 2px; min-width: 0; } .map-card b { font-size: 16px; letter-spacing: .08em; text-transform: uppercase; }
+      .map-card i { font-style: normal; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--chog-pink); } .map-card small { font-size: 12px; color: var(--dim); line-height: 1.3; }
+      body.compact .map-card { grid-template-columns: 96px 1fr; min-height: 70px; padding: 6px; } body.compact .map-card .plan { width: 96px; height: 60px; } body.compact .map-card small { display: none; }
+      /* H34 hub leaderboard: the card where TODAY was, bigger: tabs, your rank, the top eight. */
+      .hub.cf .hub-card.board.big { padding: 10px 12px; }
+      .hub.cf .board.big .tabs.mini { justify-content: flex-start; margin: 2px 0 4px; gap: 2px; } .hub.cf .board.big .tabs.mini .tab { font-size: 12px; padding: 4px 12px; min-height: 32px; min-width: 56px; }
+      .myrank-mini { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin: 2px 0 6px; font-size: 12px; color: var(--dim); }
+      .myrank-mini b { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; } .myrank-mini .big { font-size: 20px; color: var(--ink); } .myrank-mini.me .big { color: var(--chog-pink); }
+      .hub.cf .board.big table.mini-board td.nm { display: flex; align-items: center; gap: 5px; max-width: none; } .hub.cf .board.big table.mini-board td.nm span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 130px; }
+      .hub.cf .board.big .av, .hub.cf .board.big .av svg { width: 16px; height: 16px; } .hub.cf .board.big td.rk { color: var(--dim); width: 1.6em; }
+      .hub.cf .board.big .board-wrap.loading { opacity: .55; } .hub.cf .board.big .rankrule { margin: 4px 0 0; text-transform: uppercase; letter-spacing: .12em; font-size: 9px; }
       .hub.cf .play-wrap { display: grid; justify-items: end; gap: 4px; }
       .hub.cf .play-wrap .status { margin: 0; font-size: 13px; max-width: 320px; text-align: right; }
       /* PLAY: a game button. Angled, lit from inside, presses down; disabled goes grey; loading pulses its edge. */
@@ -744,7 +767,8 @@
       body.compact .hub.cf .hub-right { top: 50px; bottom: 78px; }
       body.compact .hub.cf .navbtn { min-height: 30px; font-size: 12px; }
       body.compact .hub.cf .mode-btn { min-height: 44px; min-width: 64px; padding: 2px 6px; } body.compact .hub.cf .mode-btn b { font-size: 15px; }
-      body.compact .hub.cf .maps3 .map-btn { min-height: 28px; } body.compact .hub.cf .maps3 .map-btn b { font-size: 12px; }
+      body.compact .hub.cf .maps5 { display: none; } body.compact .hub.cf .map-pick { display: grid; }
+      body.compact .hub.cf .board.big table.mini-board tr:nth-child(n+7) { display: none; } body.compact .hub.cf .hub-card.board.big { padding: 6px 8px; }
       body.compact .hub.cf .player-chip > svg { width: 32px; height: 32px; } body.compact .hub.cf .pc-txt > b { font-size: 15px; max-width: 120px; }
       body.compact .chog-cta { min-height: 34px; font-size: 12px; padding: 0 14px; }
       body.compact .hub.cf .hub-right .hub-card { padding: 5px 8px; }

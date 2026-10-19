@@ -256,32 +256,42 @@ function playBar(c: HubCtx): string {
   else if (v.message && !status) status = `<p class="status warn">${esc(v.message)}</p>`;
   const warn = c.acct.ticketWarning ? TICKET_WARN[c.acct.ticketWarning] ?? c.acct.ticketWarning : c.netProfile?.note ?? '';
   if (warn) status += `<p class="status warn small">${esc(warn)}</p>`;
-  const maps = MAP_IDS.map((id) => `<button class="mode-btn map-btn${c.map === id ? ' on' : ''}" data-map="${id}"${busy ? ' disabled' : ''} aria-pressed="${c.map === id}" title="${esc(MAPS[id].blurb)}"><b>${esc(MAPS[id].name)}</b></button>`).join('');
-  return `<div class="pickers"><div class="maps3" role="group" aria-label="Location">${maps}</div>
+  // Five locations (H34): name and tactical tag on each card; on a phone (compact) one LOCATION button that opens the
+  // sheet with all five (src/main.ts 'maps' view), so nothing is squeezed into tiny buttons.
+  const maps = MAP_IDS.map((id) => `<button class="mode-btn map-btn${c.map === id ? ' on' : ''}" data-map="${id}"${busy ? ' disabled' : ''} aria-pressed="${c.map === id}" title="${esc(MAPS[id].blurb)}"><b>${esc(MAPS[id].name)}</b><small>${esc(MAPS[id].tag)}</small></button>`).join('');
+  const pick = `<button class="map-pick" data-act="maps"${busy ? ' disabled' : ''} aria-haspopup="dialog"><small>Location</small><b>${esc(MAPS[c.map].name)}</b><i>${esc(MAPS[c.map].tag)}</i><span class="chev" aria-hidden="true">▴</span></button>`;
+  return `<div class="pickers"><div class="maps5" role="group" aria-label="Location">${maps}</div>${pick}
 <div class="modes4" role="group" aria-label="Mode">${modes}</div></div>
 <div class="play-wrap"><button class="play-cta${state}" ${playAttr}${disabled ? ' disabled' : ''} id="playbtn"><span class="pl">${esc(playLabel)}</span><small>${busy ? '' : esc(`${MAPS[c.map].name} · ${MODE_INFO[sel].label} · ${MODE_INFO[sel].sub}`)}</small></button>${status}</div>`;
 }
 
-// ---- right: leaderboard preview + squad ----
-const boardRow = (r: BoardRow) => `<tr class="${r.you ? 'me' : ''}"><td class="num">${r.rank}</td><td class="nm">${esc(r.name)}</td><td class="num"><b>${r.kills}</b></td><td>${r.nftTier ? tierBadge(r.nftTier) : ''}</td></tr>`;
+// ---- right: the leaderboard (owner H34: "Remove that entire block ... Replace that space with LEADERBOARD. Make the
+// leaderboard significantly more prominent"), then the squad ----
+const boardRow = (r: BoardRow) => `<tr class="${r.you ? 'me' : ''}"><td class="num rk">${r.rank}</td><td class="nm">${avatar(r.hero)}<span>${esc(r.name)}</span>${r.nftTier ? ` ${tierBadge(r.nftTier)}` : ''}</td><td class="num"><b>${r.kills}</b></td></tr>`;
 
 function boardPreview(c: HubCtx): string {
-  const a = c.acct;
+  const a = c.acct, solo = a.boardTab === 'solo';
   let body: string;
-  if (!a.config?.db) body = '<p class="note">Offline</p>';
-  else if (a.boardError) body = '<p class="note">Could not load</p>';
-  else if (a.board === null) body = '<p class="note">…</p>';
-  else if (!a.board.length) body = '<p class="note">No ranks yet</p>';
+  if (!a.config?.db) body = '<p class="note">Offline: the leaderboard needs the server.</p>';
+  else if (a.boardError) body = '<p class="note">Could not load the leaderboard.</p><button class="btn small" data-act="board-retry">Retry</button>';
+  else if (a.board === null) body = '<p class="note">Loading…</p>';
+  else if (!a.board.length) body = `<p class="note">No one on the ${solo ? 'Solo' : 'Online'} board yet.</p>`;
   else {
-    const top = a.board.slice(0, 5);
-    const me = a.boardMe ?? a.board.find((r) => r.you) ?? null;
-    body = `<table class="mini-board"><tr><th>#</th><th>Player</th><th>Kills</th><th></th></tr>${top.map(boardRow).join('')}${me && !top.some((r) => r.you) ? `<tr class="gap"><td colspan="4">…</td></tr>${boardRow(me)}` : ''}</table>`;
+    const top = a.boardOffset === 0 ? a.board.slice(0, 8) : [];
+    body = `<table class="mini-board"><tr><th>#</th><th>Player</th><th>Kills</th></tr>${top.map(boardRow).join('')}</table>`;
   }
-  return `<section class="hub-card board" id="boardpreview"><div class="card-head"><h3>Leaderboard <small class="note">${a.boardTab === 'solo' ? 'Solo' : 'Online'}</small></h3><button class="btn small" data-act="ranks">All</button></div>${body}</section>`;
+  const me = a.boardMe;
+  const mine = !a.config?.db ? '' : !a.signedIn ? '<p class="myrank-mini"><b>My rank</b> <button class="btn small" data-act="signin">Sign in to rank</button></p>'
+    : me ? `<p class="myrank-mini me"><b>My rank</b> <span class="num big">#${me.rank}</span> <span class="num">${me.kills} kills</span>${a.boardTotal ? ` <small class="num">of ${a.boardTotal}</small>` : ''}</p>`
+    : `<p class="myrank-mini"><b>My rank</b> <small>${solo ? 'Finish a solo run to rank.' : 'Finish an online match to rank.'}</small></p>`;
+  const tabs = `<div class="tabs mini" role="tablist">${(['solo', 'online'] as const).map((t) => `<button class="tab${t === a.boardTab ? ' on' : ''}" role="tab" aria-selected="${t === a.boardTab}" data-act="board-${t}">${t === 'solo' ? 'Solo' : 'Online'}</button>`).join('')}</div>`;
+  return `<section class="hub-card board big" id="boardpreview"><div class="card-head"><h3>Leaderboard</h3><button class="btn small" data-act="ranks">All</button></div>
+${tabs}${mine}<div class="board-wrap${a.boardLoading ? ' loading' : ''}">${body}</div><p class="note small rankrule">Ranked by kills</p></section>`;
 }
 
-/** V2 daily challenges: three a day, the same for everyone; done ones are paid once by the site. */
-function dailyPanel(c: HubCtx): string {
+/** V2 daily challenges: three a day, the same for everyone; done ones are paid once by the site. Shown on the Career
+ * screen since H34 (the owner moved them off the hub; the system and its payouts are unchanged). */
+function dailyPanel(c: { acct: HubCtx['acct'] }): string {
   const d = c.acct.daily;
   if (!c.acct.config?.db || !d?.length) return '';
   const rows = d.map((x) => `<li class="${x.done ? 'done' : ''}"><span>${esc(x.text)}</span><span class="num">${c.acct.signedIn ? (x.done ? '✓' : `${x.progress}/${x.goal}`) : ''} <small>+${x.shards}</small></span></li>`).join('');
@@ -303,6 +313,37 @@ function squadPanel(c: HubCtx): string {
 <ul class="squad-list">${rows}</ul><p class="note small num">${p.members.length}/5</p></section>`;
 }
 
+// ---- Location sheet (H34): the five locations as cards with a plan drawn from their own tiles ----
+const planCache = new Map<MapId, string>();
+/** A small plan of a location from its tiles: walls, rails, decks, stairs, and its lit areas. */
+export function mapPlanSvg(id: MapId): string {
+  const hit = planCache.get(id);
+  if (hit) return hit;
+  const m = MAPS[id], rows = m.rows, h = rows.length, w = rows[0].length;
+  const fill: Record<string, string> = { '#': '#15121c', r: '#d9c95a', u: '#8b6cc4', s: '#5f9fd0' };
+  const parts: string[] = [];
+  for (const b of m.lights) parts.push(`<rect x="${b.x0}" y="${b.y0}" width="${b.x1 - b.x0}" height="${b.y1 - b.y0}" fill="#f6e8b8" opacity=".16"/>`);
+  for (let y = 0; y < h; y++) {
+    let x = 0;
+    while (x < w) {
+      const ch = rows[y][x], f = fill[ch];
+      let e = x + 1;
+      while (e < w && rows[y][e] === ch) e++;
+      if (f) parts.push(`<rect x="${x}" y="${y}" width="${e - x}" height="1" fill="${f}"/>`);
+      x = e;
+    }
+  }
+  const svg = `<svg class="plan" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><rect width="${w}" height="${h}" fill="#6b6878"/>${parts.join('')}</svg>`;
+  planCache.set(id, svg);
+  return svg;
+}
+
+export function mapsSheetHtml(c: ScreenCtx & { map: MapId }): string {
+  const cards = MAP_IDS.map((id) => `<button class="map-card${c.map === id ? ' on' : ''}" data-map="${id}" aria-pressed="${c.map === id}">${mapPlanSvg(id)}
+<span class="mc-txt"><b>${esc(MAPS[id].name)}</b><i>${esc(MAPS[id].tag)}</i><small>${esc(MAPS[id].blurb)}</small></span></button>`).join('');
+  return `<div class="screen maps-sheet">${topbar('Location')}<div class="map-cards" role="group" aria-label="Location">${cards}</div></div>`;
+}
+
 // ---- the hub (CF): the live room is the background; the operator stands in it; one PLAY ----
 export function hubHtml(c: HubCtx): string {
   const ready = upgradesReady(c.acct);
@@ -318,7 +359,7 @@ export function hubHtml(c: HubCtx): string {
   <button class="navbtn" data-act="docs">${ICON.help}<span>Game Docs</span></button>
   <button class="navbtn demo-link" data-act="demo"><span class="demo">DEMO</span></button>
 </nav>
-<aside class="hub-right">${classOf(c.acct).source !== 'free' ? chogPanel(c) : ''}${squadPanel(c)}${dailyPanel(c)}${boardPreview(c)}</aside>
+<aside class="hub-right">${classOf(c.acct).source !== 'free' ? chogPanel(c) : ''}${boardPreview(c)}${squadPanel(c)}</aside>
 <footer class="hub-bottom">${playBar(c)}</footer>
 </div>`;
 }
@@ -410,6 +451,7 @@ export function careerHtml(c: ScreenCtx): string {
 <div class="pcard-art">${portraitSvg(show, 'car', null)}<span class="pcard-op">${fav ? 'Favourite' : 'Current'}: ${esc(show.name)}</span></div>
 <div class="pins">${pins}</div><div class="links">${linked || '<span class="linkchip dim">Guest: nothing is saved</span>'}</div></aside>
 <div class="scroll-body">
+${dailyPanel(c)}
 <section class="hub-card"><h3>Online</h3>
 ${a.signedIn && a.profile ? rows([
     ['Level', `${a.profile.level} (${a.profile.xp} XP)`], ['Matches', String(a.profile.matches)], ['Wins', `${a.profile.wins} (${pct(a.profile.wins, a.profile.matches)})`],

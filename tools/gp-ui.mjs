@@ -72,7 +72,7 @@ try {
     await b.click('[data-act="medals"]'); await b.until(`__chog.view() === 'medals'`, 5000);
     const md = await b.ev(`({ cards: document.querySelectorAll('.medals .medal').length, groups: [...document.querySelectorAll('.medal-group')].map((g) => g.innerText.split(' ')[0]) })`);
     await b.shot('04-medals');
-    check(`${view.label}: medals screen: 36 medals in common, uncommon, rare, epic groups`, md.cards === 36 && md.groups.join().toLowerCase() === 'common,uncommon,rare,epic', JSON.stringify(md));
+    check(`${view.label}: medals screen: 40 medals in common, uncommon, rare, epic groups`, md.cards === 40 && md.groups.join().toLowerCase() === 'common,uncommon,rare,epic', JSON.stringify(md));
     check(`${view.label}: medals layout`, (await layout(b)).length === 0, JSON.stringify(await layout(b)));
     await b.click('[data-act="back"]'); await b.hub();
     await b.close(); open.splice(open.indexOf(b), 1);

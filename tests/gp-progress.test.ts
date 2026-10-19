@@ -1,4 +1,4 @@
-// GP medals and leaderboards (owner 2026-10-17): 36 medals with rarities that mean something, awarded on the server
+// GP medals and leaderboards (owner 2026-10-17; H34 2026-10-19: 40 medals, ~30% harder): rarities that mean something, awarded on the server
 // from stored runs and settled matches only; real boards where the signed-in player always sees their own rank, test
 // accounts and hidden players left out, paged. Real Postgres engine (PGlite) behind the real API handler.
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -42,35 +42,41 @@ const emptyRec = () => ({ overall: { bestWinSeconds: null, mostKills: 0, runs: 0
 beforeEach(async () => { db = await memoryDb(); await migrate(db); clock = Date.now(); });
 
 describe('the medal roster', () => {
-  it('36 medals, unique ids: 18 common, 10 uncommon, 6 rare, 2 epic; every RC-7 id is still there', () => {
-    expect(MEDALS.length).toBeGreaterThanOrEqual(30);
-    expect(MEDALS).toHaveLength(36);
-    expect(new Set(MEDALS.map((m) => m.id)).size).toBe(36);
+  it('40 medals (H34), unique ids: 19 common, 12 uncommon, 7 rare, 2 epic; every RC-7 and GP id is still there', () => {
+    expect(MEDALS).toHaveLength(40);
+    expect(new Set(MEDALS.map((m) => m.id)).size).toBe(40);
     const by = (r: string) => MEDALS.filter((m) => m.rarity === r).length;
-    expect([by('common'), by('uncommon'), by('rare'), by('epic')]).toEqual([18, 10, 6, 2]);
+    expect([by('common'), by('uncommon'), by('rare'), by('epic')]).toEqual([19, 12, 7, 2]);
+    for (const id of ['grenadier', 'pack-rat', 'online-hunter', 'iron-wall']) expect(MEDALS.some((m) => m.id === id), id).toBe(true);
+    // About 30% harder: every career count that can grow did (old -> new).
+    const goal = (id: string) => MEDALS.find((m) => m.id === id)!.goal;
+    for (const [id, was] of [['regular', 10], ['committed', 25], ['veteran', 100], ['ten-down', 10], ['exterminator', 25], ['centurion', 100], ['lifeline', 5], ['guardian', 25], ['picker', 15], ['pin-puller', 10], ['heavy-hitter', 2000], ['online-regular', 10], ['online-ace', 10], ['ten-clears', 10], ['survivor', 90], ['scavenger', 3], ['toolkit', 3], ['hoarder', 6]] as const)
+      expect(goal(id) / was, id).toBeGreaterThanOrEqual(1.25);
     for (const id of ['first-blood', 'cleared', 'regular', 'scavenger', 'toolkit', 'exterminator', 'survivor', 'in-and-out', 'steady-hand', 'close-call', 'untouched', 'full-squad'])
       expect(MEDALS.some((m) => m.id === id), id).toBe(true);
   });
-  it('rare and epic need hard things: a fast clear, a full roster, 100 downs, a last stand, 25 revives, 10 online wins, no damage, all five yourself', () => {
+  it('rare and epic need hard things: a fast clear, a full roster, 130 downs, a last stand, 33 revives, 13 online wins, a near-clean clear, no damage, all five yourself', () => {
     const due = (f: Partial<RunFacts>, rec = emptyRec(), online = NO_ONLINE) => medalsDue({}, rec, facts(f), online).filter((m) => m.rarity === 'rare' || m.rarity === 'epic').map((m) => m.id).sort();
     // An ordinary good win: nothing rare.
     expect(due({ won: true, seconds: 85, kills: 2, damageTaken: 40, hpLeft: 60 })).toEqual([]);
-    expect(due({ won: true, seconds: 29, kills: 2, damageTaken: 40 })).toEqual(['in-and-out']);
-    expect(due({ won: true, seconds: 30, kills: 2, damageTaken: 40 })).toEqual([]);
-    expect(due({ won: true, seconds: 80, kills: 3, alliesLost: 2, damageTaken: 40 })).toEqual(['last-stand']);
-    expect(due({ won: true, seconds: 80, kills: 2, alliesLost: 2, damageTaken: 40 })).toEqual([]);
-    expect(due({ won: true, seconds: 80, kills: 1, damageTaken: 0 })).toEqual(['untouched']);
+    expect(due({ won: true, seconds: 24, kills: 2, damageTaken: 40 })).toEqual(['in-and-out']);
+    expect(due({ won: true, seconds: 25, kills: 2, damageTaken: 40 })).toEqual([]);
+    expect(due({ won: true, seconds: 80, kills: 4, alliesLost: 2, damageTaken: 40 })).toEqual(['last-stand']);
+    expect(due({ won: true, seconds: 80, kills: 3, alliesLost: 2, damageTaken: 40 })).toEqual([]);
+    expect(due({ won: true, seconds: 80, kills: 1, damageTaken: 0 })).toEqual(['iron-wall', 'untouched']);
+    expect(due({ won: true, seconds: 80, kills: 1, damageTaken: 30 })).toEqual(['iron-wall']);
+    expect(due({ won: true, seconds: 80, kills: 1, damageTaken: 30, alliesLost: 1 })).toEqual([]);
     expect(due({ won: false, seconds: 80, kills: 5, damageTaken: 0 })).toEqual([]);
-    expect(due({ won: true, seconds: 80, kills: 5, damageTaken: 30 })).toEqual(['ace']);
-    expect(due({ won: true, seconds: 80, kills: 5, damageTaken: 30, revived: 1 })).toEqual([]);
-    expect(due({ won: true, seconds: 80, kills: 5, damageTaken: 30, alliesLost: 1 })).toEqual([]);
+    expect(due({ won: true, seconds: 80, kills: 5, damageTaken: 40 })).toEqual(['ace']);
+    expect(due({ won: true, seconds: 80, kills: 5, damageTaken: 40, revived: 1 })).toEqual([]);
+    expect(due({ won: true, seconds: 80, kills: 5, damageTaken: 40, alliesLost: 1 })).toEqual([]);
     const rec = emptyRec();
-    rec.overall.kills = 99; rec.overall.revives = 24;
+    rec.overall.kills = 129; rec.overall.revives = 32;
     expect(due({}, rec)).toEqual([]);
-    rec.overall.kills = 100; rec.overall.revives = 25;
+    rec.overall.kills = 130; rec.overall.revives = 33;
     expect(due({}, rec)).toEqual(['centurion', 'guardian']);
-    expect(due({}, emptyRec(), { matches: 12, finished: 12, wins: 9, kills: 30 })).toEqual([]);
-    expect(due({}, emptyRec(), { matches: 12, finished: 12, wins: 10, kills: 30 })).toEqual(['online-ace']);
+    expect(due({}, emptyRec(), { matches: 14, finished: 14, wins: 12, kills: 30 })).toEqual([]);
+    expect(due({}, emptyRec(), { matches: 14, finished: 14, wins: 13, kills: 30 })).toEqual(['online-ace']);
   });
   it('not handed out casually: over 84 real default-game runs (autopilot), each epic in at most 1, each rare one-run medal in under 10%', () => {
     const hits = new Map<string, number>();
@@ -95,19 +101,19 @@ describe('the medal roster', () => {
     const share = (id: string) => (hits.get(id) ?? 0) / runs;
     (globalThis as { process?: { stdout: { write(s: string): void } } }).process?.stdout.write(`\nGP_MEDALS runs ${runs} ${JSON.stringify(Object.fromEntries(hits))}\n`);
     for (const m of MEDALS.filter((x) => x.rarity === 'epic')) expect(hits.get(m.id) ?? 0, m.id).toBeLessThanOrEqual(1);
-    for (const id of ['in-and-out', 'last-stand']) expect(share(id), id).toBeLessThan(0.1);
+    for (const id of ['in-and-out', 'last-stand', 'iron-wall']) expect(share(id), id).toBeLessThan(0.1);
     // And the commons do come: most runs earn something ordinary.
     expect(share('hat-trick')).toBeGreaterThan(0.3);
     expect(share('scavenger')).toBeGreaterThan(0.3);
   }, 300000);
-  it('the medals screen: 36 cards in four groups; locked ones are disabled and show progress, earned ones can be pinned', () => {
+  it('the medals screen: 40 cards in four groups; locked ones are disabled and show progress, earned ones can be pinned', () => {
     const c = { medals: { 'first-blood': '2026-10-17T00:00:00.000Z' }, records: emptyRec(), profile: { pinned: [] as string[] }, acct: emptyAcct() } as unknown as Parameters<typeof medalCard>[1];
     const html = medalsScreenHtml(c as never, (m) => medalCard(m, c));
-    expect((html.match(/class="medal[ "]/g) ?? []).length).toBe(36);
+    expect((html.match(/class="medal[ "]/g) ?? []).length).toBe(40);
     expect((html.match(/class="medal-group/g) ?? []).length).toBe(4);
     expect(html).toContain('data-pin="first-blood"');
-    expect((html.match(/ disabled aria-label/g) ?? []).length).toBe(35);
-    expect(html).toMatch(/Medals <span class="num">1\/36/);
+    expect((html.match(/ disabled aria-label/g) ?? []).length).toBe(39);
+    expect(html).toMatch(/Medals <span class="num">1\/40/);
   });
 });
 

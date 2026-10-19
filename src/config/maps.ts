@@ -75,7 +75,7 @@ export const MAPS: Record<MapId, MapDef> = {
   // walk in by its two doors) and reception on its south face, the exposed middle. South lane: the service corridor
   // behind the server room, the print room and the kitchen: the flank. Short sightlines, many doors.
   office: {
-    id: 'office', name: 'Office', tag: 'Rooms, corridors, mid range',
+    id: 'office', name: 'Office', tag: 'Rooms & corridors',
     blurb: 'An office floor round a solid core: private offices, open plan, a glass boardroom, a service corridor.',
     rows: OFFICE,
     pickupZones: zones(64, [
@@ -114,7 +114,7 @@ export const MAPS: Record<MapId, MapDef> = {
   // and the stockroom. Produce (west) and the deli (east) on the side walls; behind the back cases the stockroom and
   // receiving dock (swing doors): the hidden loop. The longest lanes of any location.
   supermarket: {
-    id: 'supermarket', name: 'Supermarket', tag: 'Long aisles, crossings',
+    id: 'supermarket', name: 'Supermarket', tag: 'Long aisles',
     blurb: 'Aisles that cut across your path, a checkout comb up front, a stockroom loop out back.',
     rows: SUPERMARKET,
     pickupZones: zones(72, [
@@ -150,7 +150,7 @@ export const MAPS: Record<MapId, MapDef> = {
   // cannot be crossed except by two staff crossings (stairs, in the open). Beyond it the service walkway, the station
   // rooms and the service tunnel from each spawn to the middle: doglegs, refuges, and footsteps that echo (1.3x).
   metro: {
-    id: 'metro', name: 'Metro Station', tag: 'Chokepoints, platform, tunnels',
+    id: 'metro', name: 'Metro Station', tag: 'Chokepoints & tunnels',
     blurb: 'Fare gates, stairs down to a long platform, a stalled train, and service tunnels that echo.',
     rows: METRO,
     pickupZones: zones(80, [
@@ -189,7 +189,7 @@ export const MAPS: Record<MapId, MapDef> = {
   // clears every crate and barrier below, so the high ground rules, and has no cover of its own but its columns.
   // Long open strips outside the scaffolds: the fast and exposed way across.
   construction: {
-    id: 'construction', name: 'Construction Site', tag: 'High ground, exposure',
+    id: 'construction', name: 'Construction Site', tag: 'High ground',
     blurb: 'Scaffolding and a raised slab over an open site: take the high ground, or stay under cover.',
     rows: CONSTRUCTION,
     pickupZones: zones(68, [

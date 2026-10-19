@@ -86,23 +86,40 @@ describe('RC-7 medals', () => {
   });
   it('one-run medals check the run that just ended', () => {
     const s = mem();
-    const r = finish(s, run({ won: true, kills: 5, seconds: 25, bullets: 20, hits: 12, damageTaken: 0, hpLeft: 100, pickups: 3, abilities: 3 }));
-    // GP: 36 medals; this run also makes Hat Trick, Brawler and Ace (all five yours, nobody lost).
-    expect(r.earned.map((m) => m.id).sort()).toEqual(['ace', 'brawler', 'cleared', 'first-blood', 'hat-trick', 'in-and-out', 'scavenger', 'steady-hand', 'toolkit', 'untouched'].sort());
+    const r = finish(s, run({ won: true, kills: 5, seconds: 24, bullets: 20, hits: 12, damageTaken: 0, hpLeft: 100, pickups: 4, abilities: 4, thrown: 3 }));
+    // H34: 40 medals; this run also makes Hat Trick (never down), Brawler (a clear), Grenadier, Iron Wall and Ace.
+    expect(r.earned.map((m) => m.id).sort()).toEqual(['ace', 'brawler', 'cleared', 'first-blood', 'grenadier', 'hat-trick', 'in-and-out', 'iron-wall', 'scavenger', 'steady-hand', 'toolkit', 'untouched'].sort());
     expect(r.unlocked['close-call']).toBeUndefined();
     expect(r.unlocked.survivor).toBeUndefined();
   });
-  it('boundaries: 30 s is not under 30 (GP: was 60), 49% is not 50%, 9 bullets is too few, 16 health is not 15', () => {
+  it('H34 boundaries: 25 s is not under 25 (GP: 30), 59% is not 60%, 12 bullets is too few, 11 health is not 10, 31 damage is not 30', () => {
     const s = mem();
-    const r = finish(s, run({ won: true, kills: 5, seconds: 30, bullets: 100, hits: 49, damageTaken: 1, hpLeft: 16 }));
-    for (const id of ['in-and-out', 'steady-hand', 'close-call', 'untouched']) expect(r.unlocked[id]).toBeUndefined();
-    const t = finish(mem(), run({ won: true, kills: 5, seconds: 29, bullets: 9, hits: 9, hpLeft: 15 }));
+    const r = finish(s, run({ won: true, kills: 5, seconds: 25, bullets: 100, hits: 59, damageTaken: 31, hpLeft: 11 }));
+    for (const id of ['in-and-out', 'steady-hand', 'close-call', 'untouched', 'iron-wall']) expect(r.unlocked[id]).toBeUndefined();
+    const t = finish(mem(), run({ won: true, kills: 5, seconds: 24, bullets: 12, hits: 12, damageTaken: 30, hpLeft: 10 }));
     expect(t.unlocked['in-and-out']).toBeDefined();
     expect(t.unlocked['steady-hand']).toBeUndefined();
     expect(t.unlocked['close-call']).toBeDefined();
+    expect(t.unlocked['iron-wall']).toBeDefined();
+    // The old bars no longer pass: 29 s, 50% of 10, 15 health, 3 pickups, 3 abilities, 90 s alive.
+    const old = finish(mem(), run({ won: true, kills: 5, seconds: 29, bullets: 10, hits: 5, damageTaken: 40, hpLeft: 15, pickups: 3, abilities: 3 }));
+    for (const id of ['in-and-out', 'steady-hand', 'close-call', 'scavenger', 'toolkit']) expect(old.unlocked[id], id).toBeUndefined();
+    expect(finish(mem(), run({ seconds: 119 })).unlocked.survivor).toBeUndefined();
+    expect(finish(mem(), run({ seconds: 120 })).unlocked.survivor).toBeDefined();
+  });
+  it('H34 conditions: Hat Trick never down, Brawler only on a clear, Second Wind needs two downs of your own', () => {
+    expect(finish(mem(), run({ kills: 3, revived: 1, hpLeft: 50 })).unlocked['hat-trick']).toBeUndefined();
+    expect(finish(mem(), run({ kills: 3, hpLeft: 0 })).unlocked['hat-trick']).toBeUndefined();
+    expect(finish(mem(), run({ kills: 3, hpLeft: 40 })).unlocked['hat-trick']).toBeDefined();
+    expect(finish(mem(), run({ kills: 4, won: false })).unlocked.brawler).toBeUndefined();
+    expect(finish(mem(), run({ kills: 4, won: true })).unlocked.brawler).toBeDefined();
+    expect(finish(mem(), run({ won: true, kills: 1, revived: 1 })).unlocked['second-wind']).toBeUndefined();
+    expect(finish(mem(), run({ won: true, kills: 2, revived: 1 })).unlocked['second-wind']).toBeDefined();
+    expect(finish(mem(), run({ pickups: 11 })).unlocked['pack-rat']).toBeUndefined();
+    expect(finish(mem(), run({ pickups: 12 })).unlocked['pack-rat']).toBeDefined();
   });
   it('a loss never awards a clear medal; Survivor counts time alive even in a loss', () => {
-    const r = finish(mem(), run({ won: false, seconds: 95, damageTaken: 0, hpLeft: 0 }));
+    const r = finish(mem(), run({ won: false, seconds: 125, damageTaken: 0, hpLeft: 0 }));
     expect(r.unlocked.untouched).toBeUndefined();
     expect(r.unlocked.cleared).toBeUndefined();
     expect(r.unlocked.survivor).toBeDefined();
@@ -114,7 +131,8 @@ describe('RC-7 medals', () => {
     const recs = loadRecords(s);
     const squad = MEDALS.find((m) => m.id === 'full-squad')!;
     expect(medalProgress(squad, recs, loadMedals(s))).toBe(6);
-    expect(medalProgress(MEDALS.find((m) => m.id === 'exterminator')!, recs, loadMedals(s))).toBe(25); // 30 kills, capped at the goal
+    expect(medalProgress(MEDALS.find((m) => m.id === 'exterminator')!, recs, loadMedals(s))).toBe(30); // 30 kills of 33 (H34)
+    expect(medalProgress(MEDALS.find((m) => m.id === 'ten-down')!, recs, loadMedals(s))).toBe(13); // capped at the goal
     expect(loadMedals(s)['full-squad']).toBeUndefined();
     const r = finish(s, run({ hero: ids[6], won: true, kills: 5 }));
     expect(r.earned.map((m) => m.id)).toContain('full-squad');
