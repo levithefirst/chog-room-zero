@@ -132,6 +132,14 @@ export class OnlineSession {
         this.message = 'Connection lost. Reconnecting...';
         if (performance.now() < this.retryUntil) setTimeout(() => this.connect(), 1500);
         else { this.state = 'error'; this.message = 'Could not reconnect. The match went on without you.'; }
+      } else if (this.state === 'queued' && this.lastQueue) {
+        // MP: dropped while waiting for a match (a phone switched apps, a network blip): the server already took this
+        // player out of its queue, so reconnect and queue again for the same match instead of stopping with an error.
+        this.state = 'connecting';
+        this.pendingQueue = this.lastQueue;
+        this.wakeUntil = performance.now() + 20000;
+        this.message = 'Connection lost. Rejoining the queue…';
+        setTimeout(() => { if (this.state === 'connecting') this.connect(); }, 1500);
       } else if (this.state === 'connecting' && performance.now() < this.wakeUntil) {
         this.message = 'Waking the game server (free hosting, up to a minute)...';
         setTimeout(() => { if (this.state === 'connecting') this.connect(); }, 3000);
@@ -162,11 +170,14 @@ export class OnlineSession {
     this.queueS = null;
     this.queue = { mode, have: 0, need: 0, code: code ?? null };
     this.pendingQueue = { mode, code, map };
+    this.lastQueue = this.pendingQueue;
     // After a match the server already has this player back in its lobby: queue straight away.
     if (this.state === 'idle' || this.state === 'over') { this.state = 'idle'; this.sendQueue(); }
     else this.connect();
   }
   private pendingQueue: { mode: Mode; code?: string; map: MapId } | null = null;
+  /** The queue this player asked for last, to rejoin it after a dropped connection (cleared on leave and on a match). */
+  private lastQueue: { mode: Mode; code?: string; map: MapId } | null = null;
   private sendQueue(): void {
     if (!this.pendingQueue) return;
     this.send({ t: 'queue', mode: this.pendingQueue.mode, map: this.pendingQueue.map, ...(this.pendingQueue.code ? { code: this.pendingQueue.code } : {}) });
@@ -175,6 +186,7 @@ export class OnlineSession {
 
   leave(): void {
     this.pendingQueue = null;
+    this.lastQueue = null;
     this.send({ t: 'leave' });
     if (this.state === 'queued') this.state = 'idle';
     // Out of a match (the server frees this player at once): back in the lobby with nothing of the match left, so the
@@ -265,11 +277,13 @@ export class OnlineSession {
         return;
       case 'queueTimeout':
         this.state = 'idle';
+        this.lastQueue = null;
         this.queue = null;
         this.message = this.party && this.party.members.length > 1 ? 'Your squad left the queue.' : 'Nobody else is looking for this match right now. Try again, or play solo against bots.';
         return;
       case 'match':
         this.state = 'match';
+        this.lastQueue = null;
         if (this.queuedAt !== null) { this.queueS = Math.round((performance.now() - this.queuedAt) / 1000); this.queuedAt = null; }
         this.message = '';
         this.queue = null;

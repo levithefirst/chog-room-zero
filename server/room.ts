@@ -10,7 +10,7 @@ import { hears, wallFactorOf } from '../src/sim/world';
 import { hearReport, locatesSource, noise3, type Salt } from '../src/sim/intel';
 import { sightClear } from '../src/sim/level';
 import { heroIdOf } from '../src/config/heroes';
-import { MAPS, isMapId, type MapId } from '../src/config/maps';
+import { MAPS, type MapId } from '../src/config/maps';
 import { TUNING } from '../src/config/tuning';
 import { validateNickname } from '../src/ui/profile';
 import { MODE_SIZE, PROTOCOL, parseClientMsg, toActorInput, type ClientMsg, type Mode, type NetActor, type NetBeam, type NetBullet, type NetGrenade, type NetHit, type NetLoot, type NetOrb, type NetProfile, type NetSound, type PlayerResult, type ServerMsg } from '../src/net/protocol';
@@ -84,7 +84,7 @@ interface Player {
 interface Party { code: string; members: Player[] }
 
 /** A queue entry: one player, or a whole squad. Groups are never split across teams. */
-interface Group { players: Player[]; at: number }
+interface Group { players: Player[]; at: number; map: MapId }
 
 interface Room {
   id: string;
@@ -123,11 +123,12 @@ const STEP = TUNING.simStepSeconds;
 const saltWords = (): Salt => { const b = randomBytes(16); return [0, 4, 8, 12].map((o) => b.readInt32LE(o)); };
 const PARTY_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 
-/** A queue key is `mode:map:code[|demo]` (one mode on one map, a private code or none, demo rooms apart). */
-function keyParts(key: string): { mode: Mode; map: MapId; code: string | null } {
-  const [mode, map, ...rest] = key.split(':');
+/** A queue key is `mode::code[|demo]` (one mode, a private code or none, demo rooms apart). Each group carries the
+ *  location it picked; tryMatch prefers it (TUNING.match.anyMapAfterSec). The empty middle field keeps old keys' shape. */
+function keyParts(key: string): { mode: Mode; code: string | null } {
+  const [mode, , ...rest] = key.split(':');
   const code = rest.join(':').replace('|demo', '');
-  return { mode: mode as Mode, map: isMapId(map) ? map : 'room-zero', code: code || null };
+  return { mode: mode as Mode, code: code || null };
 }
 
 export class Lobby {
@@ -320,10 +321,11 @@ export class Lobby {
           return;
         }
         for (const x of group) if (x.state === 'queued') this.unqueue(x);
-        // Owner 2026-10-18: players pick the location before the match; a queue is one mode on one map.
-        const key = `${m.mode}:${m.map ?? 'room-zero'}:${m.code ?? ''}${demo ? '|demo' : ''}`;
+        // Owner 2026-10-18: players pick the location before the match. MP: one queue per mode; the pick is a preference
+        // tried first (tryMatch), so two friends with different saved locations still meet.
+        const key = `${m.mode}::${m.code ?? ''}${demo ? '|demo' : ''}`;
         const q = this.queues.get(key) ?? [];
-        q.push({ players: [...group], at: this.opts.now() });
+        q.push({ players: [...group], at: this.opts.now(), map: m.map ?? 'room-zero' });
         this.queues.set(key, q);
         for (const x of group) { x.state = 'queued'; x.queueKey = key; x.queuedAt = this.opts.now(); }
         this.tryMatch(key, m.mode, m.code ?? null);
@@ -390,8 +392,30 @@ export class Lobby {
    * squad of three meets three solo players in 3v3. Starts the room when both teams are full.
    */
   private tryMatch(key: string, mode: Mode, code: string | null): void {
-    const q = this.queues.get(key);
-    if (!q) return;
+    const all = this.queues.get(key);
+    if (!all) return;
+    const M = TUNING.match, now = this.opts.now();
+    // Only groups whose every socket spoke recently: a dead connection is never seated in a room.
+    const live = all.filter((g) => g.players.every((p) => p.conn && now - p.lastMsgAt <= M.liveWithinSec));
+    // Locations to try, the longest-waiting group's first. Once the longest waiter on a location has waited
+    // anyMapAfterSec, everyone in the mode may join it there (a private code at once: friends picked each other, not a
+    // map). So a match is on its oldest player's pick, never dragged to a newcomer's.
+    const maps = [...new Set(live.map((g) => g.map))];
+    for (const map of maps) {
+      const oldest = live.find((g) => g.map === map)!;
+      const open = code !== null || now - oldest.at >= M.anyMapAfterSec;
+      const q = open ? live : live.filter((g) => g.map === map);
+      if (this.fillRoom(key, all, q, mode, code, map)) {
+        if (this.queues.has(key)) this.tryMatch(key, mode, code);
+        return;
+      }
+    }
+    const have = all.reduce((a, g) => a + g.players.length, 0);
+    for (const g of all) for (const o of g.players) o.conn?.send({ t: 'queued', mode, have, need: MODE_SIZE[mode], code });
+  }
+
+  /** Tries to fill both teams from `q` (a subset of the key's queue `all`); on success starts the room on `map`. */
+  private fillRoom(key: string, all: Group[], q: Group[], mode: Mode, code: string | null, map: MapId): boolean {
     const half = MODE_SIZE[mode] / 2;
     // Small search (queues hold at most a few groups per key): each group goes to alpha, bravo or waits, oldest first,
     // so the earliest players are matched whenever any split of the queue fills both teams exactly. The pool takes the
@@ -408,6 +432,7 @@ export class Lobby {
     // SB fairness: a split counts only if everyone in it is within the band (widened by the oldest group's wait) and the
     // teams' average strengths are close. Private codes skip it (friends play who they invite).
     const M = TUNING.match, now = this.opts.now();
+    if (!pool.length) return false;
     const band = code ? Infinity : M.band + M.widenPerSec * Math.max(0, now - Math.min(...pool.map((g) => g.at)));
     const str = pool.map((g) => g.players.reduce((a, p) => a + Lobby.strength(p), 0) / g.players.length);
     const fair = (): boolean => {
@@ -441,16 +466,12 @@ export class Lobby {
     const alpha = ok ? pool.filter((_, i) => pick[i] === 0) : [];
     const bravo = ok ? pool.filter((_, i) => pick[i] === 1) : [];
     const na = alpha.reduce((a, g) => a + g.players.length, 0), nb = bravo.reduce((a, g) => a + g.players.length, 0);
-    if (na === half && nb === half) {
-      const used = new Set([...alpha, ...bravo]);
-      const rest = q.filter((g) => !used.has(g));
-      if (rest.length) this.queues.set(key, rest); else this.queues.delete(key);
-      this.startRoom(mode, alpha.flatMap((g) => g.players), bravo.flatMap((g) => g.players), !!code, keyParts(key).map);
-      if (rest.length) this.tryMatch(key, mode, code);
-      return;
-    }
-    const have = q.reduce((a, g) => a + g.players.length, 0);
-    for (const g of q) for (const o of g.players) o.conn?.send({ t: 'queued', mode, have, need: MODE_SIZE[mode], code });
+    if (na !== half || nb !== half) return false;
+    const used = new Set([...alpha, ...bravo]);
+    const rest = all.filter((g) => !used.has(g));
+    if (rest.length) this.queues.set(key, rest); else this.queues.delete(key);
+    this.startRoom(mode, alpha.flatMap((g) => g.players), bravo.flatMap((g) => g.players), !!code, map);
+    return true;
   }
 
   private startRoom(mode: Mode, alphaTeam: Player[], bravoTeam: Player[], priv = false, mapId: MapId = 'room-zero'): void {

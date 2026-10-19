@@ -193,22 +193,74 @@ describe('locations online (owner 2026-10-18)', () => {
     const { lobby } = await queueOn(undefined);
     expect([...lobby.rooms.values()][0].world.mapId).toBe('room-zero');
   });
-  it('players on different maps never meet; free players and holders pick any map', async () => {
+  // MP P0 (2026-10-19): a real 1v1 never started because two friends had different saved locations (one queue per
+  // location). Now the pick is tried first and, after TUNING.match.anyMapAfterSec, anyone in the mode meets.
+  function lobbyAt() {
+    const clock = { t: 0 };
+    const lobby = new Lobby({ now: () => clock.t, seed: () => 7, countdownSec: 0 });
+    const join = (map: string, name: string) => {
+      const c = new FakeConn();
+      const id = lobby.connect(c);
+      lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name, hero: 'benja' }));
+      lobby.message(id, JSON.stringify({ t: 'queue', mode: '1v1', map }));
+      return { c, id };
+    };
+    // Sockets keep talking (the client pings every 2 s), so the lobby counts them as live.
+    const wait = (sec: number, live: number[] = []) => { for (let i = 0; i < sec * 60; i++) { clock.t += 1 / 60; if (i % 60 === 0) live.forEach((id) => lobby.message(id, JSON.stringify({ t: 'ping', at: 0 }))); lobby.tick(); } };
+    return { lobby, clock, join, wait };
+  }
+  it('two players on different locations meet after the wait, on the location of whoever waited longest', () => {
+    const { lobby, join, wait } = lobbyAt();
+    const a = join('office', 'A');
+    wait(1, [a.id]);
+    const b = join('room-zero', 'B');
+    wait(TUNING.match.anyMapAfterSec - 2, [a.id, b.id]);
+    expect(lobby.rooms.size).toBe(0);
+    wait(3, [a.id, b.id]);
+    expect(lobby.rooms.size).toBe(1);
+    expect([...lobby.rooms.values()][0].world.mapId).toBe('office');
+    expect(a.c.last('match')!.map).toBe('office');
+    expect(b.c.last('match')!.map).toBe('office');
+  });
+  it('the same location still meets at once and is preferred over a longer-waiting player on another', () => {
+    const { lobby, join, wait } = lobbyAt();
+    const a = join('supermarket', 'A');
+    wait(2, [a.id]);
+    const b = join('office', 'B');
+    const c = join('office', 'C');
+    expect(lobby.rooms.size).toBe(1);
+    expect([...lobby.rooms.values()][0].world.mapId).toBe('office');
+    expect(b.c.last('match')).toBeTruthy();
+    expect(c.c.last('match')).toBeTruthy();
+    expect(a.c.last('match')).toBeUndefined();
+  });
+  it('a private code meets at once whatever each picked, on its creator\'s location; free players and holders mix', async () => {
     let t = 0;
     const holder = T({ acc: 'H', holder: true, tok: 1, mid: LASER_AURA, tokTier: 'uncommon', tier: 'uncommon' });
     const lobby = new Lobby({ now: () => t, seed: () => 7, countdownSec: 0, checkTicket: async (s) => (s === 'h.t' ? holder : null) });
-    const c = [0, 1, 2, 3].map(() => new FakeConn());
+    const c = [0, 1].map(() => new FakeConn());
     const ids = c.map((x) => lobby.connect(x));
     ids.forEach((id, i) => lobby.message(id, JSON.stringify({ t: 'hello', v: PROTOCOL, name: `P${i}`, hero: 'benja', ...(i === 0 ? { ticket: 'h.t' } : {}) })));
     await flush();
-    lobby.message(ids[0], JSON.stringify({ t: 'queue', mode: '1v1', map: 'office' }));
-    lobby.message(ids[1], JSON.stringify({ t: 'queue', mode: '1v1', map: 'supermarket' }));
-    expect(lobby.rooms.size).toBe(0);
-    lobby.message(ids[2], JSON.stringify({ t: 'queue', mode: '1v1', map: 'office' }));
-    lobby.message(ids[3], JSON.stringify({ t: 'queue', mode: '1v1', map: 'supermarket' }));
-    const maps = [...lobby.rooms.values()].map((r) => r.world.mapId).sort();
-    expect(maps).toEqual(['office', 'supermarket']);
+    lobby.message(ids[0], JSON.stringify({ t: 'queue', mode: '1v1', map: 'metro', code: 'FRIEND' }));
+    lobby.message(ids[1], JSON.stringify({ t: 'queue', mode: '1v1', map: 'construction', code: 'FRIEND' }));
+    expect(lobby.rooms.size).toBe(1);
+    expect([...lobby.rooms.values()][0].world.mapId).toBe('metro');
     void t;
+  });
+  it('a socket that went silent is never seated in a room; the live one waits for a live opponent', () => {
+    const { lobby, join, wait } = lobbyAt();
+    const a = join('room-zero', 'A');
+    // A's phone goes into a tunnel: no message for longer than liveWithinSec (the socket still looks open).
+    wait(TUNING.match.liveWithinSec + 1, []);
+    const b = join('room-zero', 'B');
+    wait(1, [b.id]);
+    expect(lobby.rooms.size).toBe(0);
+    const c = join('room-zero', 'C');
+    expect(lobby.rooms.size).toBe(1);
+    expect(b.c.last('match')).toBeTruthy();
+    expect(c.c.last('match')).toBeTruthy();
+    expect(a.c.last('match')).toBeUndefined();
   });
   it('an unknown map id is refused by the protocol', () => {
     expect(parseClientMsg(JSON.stringify({ t: 'queue', mode: '1v1', map: 'moon' }))).toBeNull();

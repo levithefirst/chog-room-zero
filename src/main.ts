@@ -521,9 +521,12 @@ async function start() {
   function show(html: string) {
     overlay.className = 'layer';
     if (html === shownHtml && shownEl && overlay.firstElementChild === shownEl) return;
+    const was = shownEl && overlay.firstElementChild === shownEl ? shownEl.className : null;
     overlay.innerHTML = html;
     shownHtml = html;
     shownEl = overlay.firstElementChild;
+    // The same screen with new content (a queue count, a message) updates in place: its entry animation is for arriving.
+    if (was !== null && shownEl?.className === was) (shownEl as HTMLElement).style.animation = 'none';
   }
 
   // Everything a screen may show, read fresh each render.

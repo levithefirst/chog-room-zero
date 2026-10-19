@@ -253,6 +253,13 @@ export const TUNING = {
     // health, armour and damage, so every tier is worth 0: a superpower replaces the hero ability (a sidegrade,
     // measured in tests/sp-superpowers.test.ts), it adds no stats. Before: Common 115 ... 1:1 600 (measured duels).
     tierStrength: { free: 0, common: 0, uncommon: 0, rare: 0, epic: 0, legendary: 0 } as Record<string, number>,
+    // MP (P0, a real 1v1 never met: two friends had different saved locations): your location is tried first; after
+    // this long (s) you also meet players who picked another one, on the location of whoever waited longest. Should feel
+    // like "my pick if anyone is on it, a game either way". Infinity = strict per-location queues.
+    anyMapAfterSec: 10,
+    // A queued player is only matched if their socket said something this recently (pings every 2 s): a phone that
+    // went into a tunnel is never seated in a room it cannot play.
+    liveWithinSec: 6,
   },
 
   // SB online own-movement prediction (src/net/predict.ts).

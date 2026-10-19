@@ -251,7 +251,7 @@ function playBar(c: HubCtx): string {
     state = ' loading';
     status = v.state === 'connecting'
       ? `<p class="status" id="queuestatus">${esc(v.message || 'Connecting…')}</p>`
-      : `<p class="status num" id="queuestatus">Finding players · ${esc(v.queue?.mode ?? sel)} · ${v.queue?.have ?? 0}/${v.queue?.need ?? 0}</p>`;
+      : `<p class="status num" id="queuestatus">Finding players · ${esc(v.queue?.mode ?? sel)} · ${v.queue?.have ?? 0}/${v.queue?.need ?? 0}</p><p class="status small" id="queuemap">${esc(MAPS[c.map].name)} first, then any location</p>`;
   } else if (v.state === 'match') { status = '<p class="status good">Match found</p>'; state = ' found'; }
   else if (v.message && !status) status = `<p class="status warn">${esc(v.message)}</p>`;
   const warn = c.acct.ticketWarning ? TICKET_WARN[c.acct.ticketWarning] ?? c.acct.ticketWarning : c.netProfile?.note ?? '';
