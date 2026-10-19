@@ -212,3 +212,51 @@ SCOPE        Changes LOCKED 11/12 (owner, RC-8). Cuts: no ranked play, accounts,
 QUALITY BAR  Fake "online" with bots, or results the browser decides, would be worse than none. Neither exists here.
 VERDICT      MODIFY: built and tested locally; deploy after the owner picks a host.
 ```
+
+## Reliability and capacity (MP P0, 2026-10-19)
+
+A real human 1v1 failed on production while the scripted 1v1/3v3 checks passed.
+
+**Root cause.** The server kept one queue per mode *and location* (`mode:map:code`, since H33). The location pick is
+saved per device, so two friends whose saved picks differed (one had tried Office) sat in two queues, each seeing
+"1/2", until the 90 s timeout. Reproduced with two independent Chrome processes (`tools/mp-human.mjs office room-zero`:
+2 queued, 0 rooms). The scripted checks always used the same location for both clients.
+
+**Fixes (server/room.ts, src/net/client.ts).**
+- One queue per mode; each group carries its location as a preference. The same location meets at once; once the
+  longest waiter on a location has waited `TUNING.match.anyMapAfterSec` (10 s), anyone in the mode meets on that
+  location. Private codes meet at once on the creator's pick. Demo/real, holders-only 5v5 and codes stay apart.
+  `anyMapAfterSec: Infinity` restores strict per-location queues.
+- A group is matched only if every socket spoke within `liveWithinSec` (6 s): a silent phone is never seated.
+- A client whose socket drops while queued reconnects and queues again (server restart test: both rejoined and met).
+- A ping before the hello is answered (a slow ticket fetch showed "Say hello first." on the hub).
+- One room's failure (a throw in its step) cancels that room only, its players told; a failing message costs that
+  socket an error. Before, either took the whole process and every match down.
+- Rooms build in 4-11 ms instead of 8-34 ms (opening pickup layout without per-zone sorting, identical result;
+  candidate spots cached per location), and at most `roomsPerTick` (2) are built per 60 Hz step, so a rush of matches
+  never freezes the running ones.
+- Collision checks only the boxes an actor can reach in the step (identical results, hash-checked on all five maps).
+
+**Measured (tools/mp-load.mjs, bots on the real protocol, local container, 4 shared cores, bots on the same box).**
+
+| Run | Matched / joined | Match latency p50 / p95 / p99 | Hangs | Errors | Rooms | Server CPU (1 core) | Step ms (budget 16.7) |
+|---|---|---|---|---|---|---|---|
+| 1v1 25 | 24/25 (1 alone) | 0.19 / 0.26 / 0.26 s | 0 | 0 | 12 | 21% | 1.4 |
+| 1v1 50 | 50/50 | 0.29 / 0.59 / 11.0 s | 0 | 0 | 25 | 29% | 2.0 |
+| 1v1 100 | 100/100 | 0.35 / 0.72 / 11.0 s | 0 | 0 | 50 | 36% | 3.3 |
+| 3v3 120 | 120/120 | 0.25 / 10.9 / 10.9 s | 0 | 0 | 20 | 44% | 4.6 |
+| 3v3 180 | 180/180 | 0.42 / 10.9 / 10.9 s | 0 | 0 | 30 | 55% | 6.2 |
+| 1v1 200 (after fixes) | 200/200 | 0.58 / 0.95 / 11.0 s | 0 | 0 | 100 | 62% | 7.0 |
+| mixed 400 (after all fixes) | 398/400 (2 left in 3v3: 200 is not a multiple of 6) | 0.97 / 1.28 / 10.4 s | 0 | 0 | 133 | 62-85% | 7.5-12.4 |
+| churn 400, 120 s (5%/s leave, rejoin, drop, switch; 10% slow; 5% duplicate tokens) | 776 of 855 joins | 0.33 / 6.5 / 10.6 s | 0 | harness only | 150 | 102% | 13.1 |
+
+p95/p99 near 10-11 s are the location wait (5 locations spread players). Every started match reached snapshots
+(matched-without-snapshot 0). Under churn 1,709 of 1,916 reconnects resumed their match (the rest found it over),
+waits at the end were at most 10.8 s, no queue timed out. Memory peaked at 167 MB.
+
+**Capacity.** One Node process runs every room on one thread, so one server uses at most one core: 400 mixed players
+take most of one core of this container. Render Free is 0.1 CPU and 512 MB (render.com/docs/compute-plans), about a tenth of
+that core: an estimated 30-40 players before steps overrun and every match slows. Starter (0.5 CPU, $7/month) about
+150-200; Standard (1 CPU, $25/month) about 400 at the limit. These are extrapolations from the local core, not measured
+on Render (no load was sent to production). 400 players need either a paid plan with headroom or several game server
+processes behind the matchmaker: an owner decision ($ spend, LOCKED 3).
