@@ -121,10 +121,18 @@ export function layoutPickups(spots: Spot[][], kinds: PickupKind[], seed: number
     // The zones with the fewest tiles go first (a corridor middle has 4), so a big zone that overlaps them (the dock)
     // never takes the only room they had.
     for (const z of byRoom) {
-      const list = ordered(spots[z], seed, z, -1 - t);
-      const s = list.find((c) => placed.every((p) => !p || Math.hypot(p.x - c.x, p.y - c.y) >= P.minSeparation));
+      // The first clear spot in the seeded order (ordered()), found without sorting: a room is built whenever a match
+      // starts, on the game server among all running matches (MP P0: sorting every zone 48 times cost 28 ms a room).
+      // Same keys, same ties (the lower index first), so the layout is the very same one ordered() + find gives.
+      const zs = spots[z];
+      let s: Spot | undefined, sk = Infinity, first: Spot = zs[0], fk = Infinity;
+      for (let i = 0; i < zs.length; i++) {
+        const k = hash32(seed, z * 977 + i, -1 - t), c = zs[i];
+        if (k < fk) { fk = k; first = c; }
+        if (k < sk && placed.every((p) => !p || Math.hypot(p.x - c.x, p.y - c.y) >= P.minSeparation)) { sk = k; s = c; }
+      }
       if (!s) clustered++;
-      placed[z] = s ?? list[0];
+      placed[z] = s ?? first;
     }
     // A foreign map (lab, tests) may leave a side's walk field unreachable: score it as very uneven, never NaN.
     const raw = imbalance(kinds, placed, alpha, bravo);

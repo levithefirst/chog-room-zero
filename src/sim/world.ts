@@ -548,6 +548,7 @@ function derivePoints(level: Level): { x: number; y: number }[] {
  * come from the map and the mode (never from the actors of this match), so the server and a client building the
  * same online match get the same layout.
  */
+const VERSUS_SPOTS = new Map<MapId, { fields: { alpha: Field; bravo: Field }; all: Spot[][] }>();
 function initPickups(level: Level, seed: number, opts: WorldOptions): Pick<World, 'pickups' | 'pickupSpots' | 'pickupSeed' | 'pickupRev' | 'pickupFields'> {
   const fixed: Pickup[] = level.pickupSpawns.map((p) => ({ ...p, active: true, respawnLeft: 0, zone: -1, moves: 0 }));
   const def = mapDefOf(opts);
@@ -557,9 +558,13 @@ function initPickups(level: Level, seed: number, opts: WorldOptions): Pick<World
   const vs = def?.versusSpawns ?? VERSUS_SPAWNS;
   const spawns: Spot[] = opts.versus ? [...vs.alpha, ...vs.bravo]
     : [level.playerSpawn, ...(opts.bots ?? def?.botSpawns ?? (LAB.pacing ? BOT_SPAWNS : BOT_SPAWNS_RC8)).map((b) => ({ x: b.patrol[0][0] + 0.5, y: b.patrol[0][1] + 0.5 }))];
-  const fields = { alpha: walkField(level, [...vs.alpha]), bravo: walkField(level, [...vs.bravo]) };
+  // Online rooms on a registry location always get the same fields and candidate spots (fixed spawns and zones), and
+  // the game server builds one room per match while every other match waits: computed once per location (read only).
+  const cached = opts.versus && def && !opts.pickupZones ? VERSUS_SPOTS.get(def.id) : undefined;
+  const fields = cached?.fields ?? { alpha: walkField(level, [...vs.alpha]), bravo: walkField(level, [...vs.bravo]) };
   // A zone with no tile left on this map (a foreign map) is skipped, never a crash.
-  const all = zoneSpots(level, zones, spawns, fields);
+  const all = cached?.all ?? zoneSpots(level, zones, spawns, fields);
+  if (!cached && opts.versus && def && !opts.pickupZones) VERSUS_SPOTS.set(def.id, { fields, all });
   const keep = zones.map((_, i) => i).filter((i) => all[i].length > 0);
   const spots = keep.map((i) => all[i]);
   const at = layoutPickups(spots, keep.map((i) => zones[i].kind), seed, fields.alpha, fields.bravo);

@@ -145,6 +145,9 @@ export class Lobby {
   private results = new Map<string, { at: number; record: MatchRecord }>();
   private lastSweep = 0;
   private lastRetry = 0;
+  /** Rooms that may still be built this step (TUNING.match.roomsPerTick), and whether a queue wanted more. */
+  private roomBudget: number = TUNING.match.roomsPerTick;
+  private backlog = false;
 
   constructor(opts: Partial<LobbyOptions> & Pick<LobbyOptions, 'now'>) {
     this.opts = { ...DEFAULT_OPTIONS, seed: () => randomBytes(4).readUInt32LE(0), ...opts };
@@ -183,8 +186,12 @@ export class Lobby {
       if (v && v.t === 'hello' && typeof v.v === 'number' && v.v !== PROTOCOL) { this.err(p, 'outdated', 'A new version of Room Zero is out. Reload the page to play online.'); return; }
       this.err(p, 'bad-message', 'Message not understood.'); return;
     }
+    // The client pings from the moment its socket opens and says hello once its ticket is fetched (that can take a
+    // while on a cold site): a ping before the hello is answered, not told off (the hub showed "Say hello first.").
+    if (p.state === 'new' && m.t === 'ping') { p.conn.send({ t: 'pong', at: m.at, tick: 0 }); return; }
     if (p.state === 'new' && m.t !== 'hello') { this.err(p, 'hello-first', 'Say hello first.'); return; }
-    this.handle(p, m);
+    // A message that trips a bug costs that socket an error, never the process every match runs in.
+    try { this.handle(p, m); } catch (e) { console.error(`message from ${p.id} failed:`, e); this.err(p, 'server', 'The server could not handle that. Try again.'); }
   }
 
   disconnect(id: number): void {
@@ -210,15 +217,24 @@ export class Lobby {
         p.conn?.send({ t: 'queueTimeout' });
       }
     }
-    // SB: the matchmaking band widens with waiting, so queues are retried once a second.
-    if (now - this.lastRetry >= 1) {
+    // SB: the matchmaking band widens with waiting, so queues are retried once a second; at once after a step that ran
+    // out of room budget, so a rush is seated over a few steps.
+    this.roomBudget = TUNING.match.roomsPerTick;
+    if (now - this.lastRetry >= 1 || this.backlog) {
       this.lastRetry = now;
+      this.backlog = false;
       for (const key of [...this.queues.keys()]) {
         const k = keyParts(key);
         this.tryMatch(key, k.mode, k.code);
       }
     }
-    for (const room of [...this.rooms.values()]) this.stepRoom(room, now);
+    // MP isolation: one room's failure stops that room only (its players are told, nothing counts), never the server.
+    for (const room of [...this.rooms.values()]) {
+      try { this.stepRoom(room, now); } catch (e) {
+        console.error(`room ${room.id} stopped:`, e);
+        if (this.rooms.has(room.id)) this.cancel(room, 'This match hit a server error and was stopped: nothing counts. Queue again.');
+      }
+    }
     if (now - this.lastSweep > 60) {
       this.lastSweep = now;
       for (const [k, v] of this.results) if (now - v.at > this.opts.resultsKeepSec) this.results.delete(k);
@@ -402,6 +418,7 @@ export class Lobby {
     // map). So a match is on its oldest player's pick, never dragged to a newcomer's.
     const maps = [...new Set(live.map((g) => g.map))];
     for (const map of maps) {
+      if (this.roomBudget <= 0) { this.backlog = true; return; }
       const oldest = live.find((g) => g.map === map)!;
       const open = code !== null || now - oldest.at >= M.anyMapAfterSec;
       const q = open ? live : live.filter((g) => g.map === map);
@@ -470,6 +487,7 @@ export class Lobby {
     const used = new Set([...alpha, ...bravo]);
     const rest = all.filter((g) => !used.has(g));
     if (rest.length) this.queues.set(key, rest); else this.queues.delete(key);
+    this.roomBudget--;
     this.startRoom(mode, alpha.flatMap((g) => g.players), bravo.flatMap((g) => g.players), !!code, map);
     return true;
   }
@@ -730,11 +748,11 @@ export class Lobby {
   }
 
   /** A match voided before it started: no result is stored, everyone still in it is told and is back in the lobby. */
-  private cancel(room: Room): void {
+  private cancel(room: Room, why = 'A player left before the start. Match cancelled: nothing counts. Queue again when ready.'): void {
     room.over = true;
     room.members.forEach((p, i) => {
       if (room.left[i]) return;
-      this.err(p, 'match-cancelled', 'A player left before the start. Match cancelled: nothing counts. Queue again when ready.');
+      this.err(p, 'match-cancelled', why);
       p.state = 'idle';
       p.room = null;
       p.actorId = -1;

@@ -260,6 +260,9 @@ export const TUNING = {
     // A queued player is only matched if their socket said something this recently (pings every 2 s): a phone that
     // went into a tunnel is never seated in a room it cannot play.
     liveWithinSec: 6,
+    // At most this many new rooms per 60 Hz step (each takes 4-11 ms to build): a rush of matches (400 players at once)
+    // queues for a few steps instead of freezing every running match. 2 per step = 120 rooms a second.
+    roomsPerTick: 2,
   },
 
   // SB online own-movement prediction (src/net/predict.ts).
