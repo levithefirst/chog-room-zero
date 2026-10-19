@@ -9,6 +9,7 @@
 // gesture (touchend/click, not touchstart) and fullscreen first. Android Chrome supports both; iPhone Safari has no
 // element fullscreen and no lock, so it keeps the rotated stage. It is tried once per page load; after the player
 // leaves fullscreen it is only re-entered from the Full screen button (never forced again).
+import { applyDevice, currentDevice } from './device';
 
 export interface StageLayout {
   /** Stage turned 90 deg clockwise inside a portrait browser. */
@@ -66,6 +67,9 @@ export function layoutStage(el: HTMLElement): StageLayout {
   b.toggle('rot', L.rotated);
   b.toggle('compact', L.h <= 460);
   b.toggle('narrow', L.h > L.w && L.w < 600);
+  // H34: a small landscape phone (stage under 720 px wide): the top band has no room for full words.
+  b.toggle('slim', L.w < 720 && L.h <= 460);
+  applyDevice(currentDevice());
   document.body.style.setProperty('--vw', `${L.w / 100}px`);
   document.body.style.setProperty('--vh', `${L.h / 100}px`);
   return L;

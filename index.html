@@ -391,6 +391,10 @@
         body.compact .hero { padding: 6px 8px; } body.compact .hero b { font-size: 19px; } body.compact .hero p { display: none; } body.compact .hero .ab { font-size: 12px; }
         body.compact .heroes { gap: 6px; margin-top: 6px; } body.compact .btns { margin-top: 10px; } body.compact .btn { min-height: 40px; min-width: 120px; }
         body.compact #vitals { width: 160px; padding: 6px 8px; }
+        /* H34 smallest phones (stage < 720 px wide): the hostiles pill drops its words (count, pips and timer stay) and
+           sits right of the vitals, so the two never overlap. */
+        body.slim #foes { left: calc(var(--sl) + 172px); transform: none; padding: 4px 8px; gap: 6px; }
+        body.slim #foes > span:nth-child(2), body.slim #zphase { display: none; } body.slim #vitals { width: 150px; }
         body.compact table.howto, body.compact table.traits { font-size: 12px; margin: 4px auto; } body.compact table.howto td, body.compact table.traits td, body.compact table.traits th { padding: 1px 6px; }
         body.compact .democopy { font-size: 12px !important; padding: 3px 8px; } body.compact .pb { font-size: 12px !important; }
         body.compact .card h1 { font-size: 34px; }

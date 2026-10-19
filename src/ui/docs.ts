@@ -45,6 +45,7 @@ ${li([`Everyone has ${BASE_HP.free} health and up to ${TUNING.combat.armorCap} a
   ]) },
   { id: 'vision', title: 'Vision & Information', html: () => li([
     'Your lamp is a cone of light that walls really cut. Right next to you, you always see.',
+    `Some locations have lit areas (a bright store floor, a platform, floodlights): a body standing in one is seen from up to ${TUNING.vision.litRange} m by anyone facing it with a clear line. The dark hides you; the light gives you away. Room Zero is all dark.`,
     'Heard marks show noises you heard, not saw: footprints (steps), a burst (a shot), two dots (a reload). A tick around you means it came through a wall.',
     'A red dotted ring is where a hostile you lost could be by now. It grows as they could have moved and fades as you forget.',
     'AI teammates call what they see and hear ("Contact, north", "Lost him", "Behind us!"), and when they come to get you up.',
@@ -53,6 +54,7 @@ ${li([`Everyone has ${BASE_HP.free} health and up to ${TUNING.combat.armorCap} a
   ]) },
   { id: 'sound', title: 'Sound', html: () => li([
     `Footsteps carry about ${TUNING.sound.quietStep} m creeping and ${TUNING.sound.runStep} m running; standing still is silent.`,
+    `The floor changes it: carpet muffles steps to ${Math.round(TUNING.sound.surface.carpet * 100)}%, a deck, a stair or a service tunnel carries them to ${Math.round(TUNING.sound.surface.deck * 100)}%.`,
     'Shots are heard far away, and a muzzle flash gives a shooter away to anyone with a clear line to it.',
     'Walls muffle sound: through a wall you hear less far and only roughly where.',
     'Reloading, pickups, revives and grenades all make noise. So does a downed player.',
@@ -110,10 +112,15 @@ ${li([
     'A Chog with several power traits picks one on the Class panel. A Chog with none plays its operator\'s ability.',
     `CHOG Training (the TRAINING button on YOUR CHOG, for a verified Chog with a power; or DEMO, labelled): one drill per power (${SUPERPOWER_IDS.map((id) => `${esc(SUPERPOWERS[id].name)}: ${esc(DRILLS[id].name)}, ${DRILLS[id].seconds} s`).join('; ')}), its real numbers with a shorter cooldown. Training earns and records nothing.`,
   ])}` },
-  { id: 'locations', title: 'Locations', html: () => `<p>Pick the location on the hub before you press Play, for the default game and for 1v1, 3v3 and 5v5. Every location is open to everyone; online you only meet players who picked the same one.</p>
-${li(MAP_IDS.map((id) => `<b>${esc(MAPS[id].name)}</b>: ${esc(MAPS[id].blurb)}`))}` },
+  { id: 'locations', title: 'Locations', html: () => `<p>Pick one of the ${MAP_IDS.length} locations on the hub before you press Play (on a phone: the LOCATION button), for the default game and for 1v1, 3v3 and 5v5. Every location is open to everyone; online you only meet players who picked the same one. Each one fights differently:</p>
+${li(MAP_IDS.map((id) => `<b>${esc(MAPS[id].name)}</b> (${esc(MAPS[id].tag)}): ${esc(MAPS[id].blurb)}`))}
+${li([
+    'Rails (railings, track edges, open window frames): you see and shoot across them, you cannot walk through them.',
+    'Decks (scaffolding, the slab): high ground. A shot fired from a deck clears the crates and barriers below it, and a deck has no cover of its own but its columns.',
+    `Stairs: the only way onto a deck, at ${Math.round(TUNING.movement.stairsMul * 100)}% speed, and loud. Hold the top, or get caught on them.`,
+  ])}` },
   { id: 'medals', title: 'Medals', html: () => `<p>${MEDALS.length} medals: ${rarityCount('common')} common, ${rarityCount('uncommon')} uncommon, ${rarityCount('rare')} rare, ${rarityCount('epic')} epic.
-Commons come from playing; rare and epic ones need runs most players rarely have (a clear in under 30 seconds, a last stand, a run without a scratch).</p>
+Commons come from playing; rare and epic ones need runs most players rarely have (a clear in under 25 seconds, a last stand, a run without a scratch).</p>
 ${li(['Signed in, medals are awarded and kept on your account (any device). As a guest they last for the session.', 'Online medals come from matches the server saved, never from the browser.',
     'Pin up to three on your player card.'])}` },
   { id: 'upgrades', title: 'Upgrades', html: () => `<p>Shards buy upgrade ranks. Free players and Chog holders buy the same upgrades at the same prices; nothing is sold.</p>
