@@ -86,3 +86,11 @@ describe('library pages', () => {
     expect(JSON.parse(fs.readFileSync('package.json', 'utf8')).scripts.build).toBe('tsc --noEmit && vite build && vite build -c vite.library.config.ts');
   });
 });
+
+describe('the game links to the library', () => {
+  it('Game Docs carries a link to /library/ that opens in a new tab (never leaves a match)', async () => {
+    const { docsHtml } = await import('../src/ui/docs');
+    const h = docsHtml(false, null, '');
+    expect(h).toMatch(/<a id="docslib" href="\/library\/" target="_blank" rel="noopener">/);
+  });
+});

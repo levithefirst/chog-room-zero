@@ -82,8 +82,8 @@ try {
     check(`${view.label}: you and your two AI teammates are on the map; no hostile at spawn`, s.you === 1 && s.mate === 2 && s.hostile + s.enemy + s.trace + s.visor === 0, JSON.stringify(s));
     await b.click('#tm-close');
     await sleep(300);
-    const back = await b.ev(`({ open: __chog.tmap().open, phase: __chog.phase, keep: window.__keep, sameWorld: __chog.world === window.__w, sameCanvas: document.querySelector('#app canvas') === window.__cv, sameHud: document.getElementById('hud') === window.__hud, mut: window.__mut, hudOn: document.getElementById('hud').classList.contains('on') })`);
-    check(`${view.label}: RETURN closes it back to the same match (same world, canvas and HUD; no reload)`, !back.open && back.phase === 'play' && back.keep === 1 && back.sameWorld && back.sameCanvas && back.sameHud && back.mut === 0 && back.hudOn, JSON.stringify(back));
+    const back = await b.ev(`({ open: __chog.tmap().open, phase: __chog.phase, keep: window.__keep, sameWorld: __chog.world === window.__w, sameCanvas: document.querySelector('#app canvas') === window.__cv, sameHud: document.getElementById('hud') === window.__hud, mut: window.__mut, hudOn: document.getElementById('hud').classList.contains('on'), marks: __chog.tmap().markers.length })`);
+    check(`${view.label}: RETURN closes it back to the same match (same world, canvas and HUD; no reload; nothing of the map kept)`, !back.open && back.phase === 'play' && back.keep === 1 && back.sameWorld && back.sameCanvas && back.sameHud && back.mut === 0 && back.hudOn && back.marks === 0, JSON.stringify(back));
     check(`${view.label}: no page errors`, b.errors.length === 0, b.errors.join(' | '));
     await b.close(); open.splice(open.indexOf(b), 1);
   }
@@ -114,13 +114,14 @@ try {
         // Wheel zooms about the cursor; drag pans; FIT resets.
         const v0 = await b.ev(STATE);
         await b.cmd('Input.dispatchMouseEvent', { type: 'mouseWheel', x: 720, y: 480, deltaX: 0, deltaY: -600 });
-        await sleep(200);
+        // Headless frames here run ~10 fps with long spikes: wait for the input to land, never a fixed short sleep.
+        await b.until(`__chog.tmap().view.k > ${v0.k * 1.5}`, 3000); await sleep(150);
         const v1 = await b.ev(STATE);
         check('desk: mouse wheel zooms in', v1.k > v0.k * 1.5, JSON.stringify({ k0: v0.k, k1: v1.k }));
         await b.cmd('Input.dispatchMouseEvent', { type: 'mousePressed', x: 700, y: 500, button: 'left', clickCount: 1 });
         for (let i = 1; i <= 5; i++) { await b.cmd('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 700 - i * 30, y: 500 - i * 15, buttons: 1 }); await sleep(30); }
         await b.cmd('Input.dispatchMouseEvent', { type: 'mouseReleased', x: 550, y: 425, button: 'left', clickCount: 1 });
-        await sleep(150);
+        await b.until(`__chog.tmap().view.ox < ${v1.ox - 100}`, 3000); await sleep(250);
         const v2 = await b.ev(STATE);
         check('desk: drag pans the zoomed map', Math.abs(v2.ox - v1.ox - -150) < 2 && Math.abs(v2.oy - v1.oy - -75) < 2, JSON.stringify({ dx: v2.ox - v1.ox, dy: v2.oy - v1.oy }));
         await b.shot('map-office-zoomed');
@@ -131,7 +132,7 @@ try {
         check('desk: + zooms in', (await b.ev(STATE)).k > v0.k * 1.4);
       }
       await key(b, 'Escape', 'keyDown'); await key(b, 'Escape', 'keyUp');
-      await sleep(250);
+      await b.until(`!__chog.tmap().open`, 3000); await sleep(150);
       const shut = await b.ev(`({ open: __chog.tmap().open, phase: __chog.phase })`);
       check(`desk: Esc closes the ${id} map and stays in play (not the pause menu)`, !shut.open && shut.phase === 'play', JSON.stringify(shut));
       if (id === 'supermarket') {
@@ -155,7 +156,10 @@ try {
       while (Date.now() - t0 < 50000 && (await b.ev(`__chog.phase`)) === 'play') {
         await sleep(900); fpsShut.push(await b.ev(`__chog.fps`));
         await b.click('#mapbtn'); opens++; await sleep(600);
-        const r = await b.ev(`(() => { const t = __chog.tmap(), w = __chog.world; return t.markers.filter((m) => m.kind === 'hostile').map((m) => { const a = w.actors[m.id]; return { id: m.id, alive: a.alive, team: a.team, d: Math.hypot(a.x - m.x, a.y - m.y) }; }); })()`);
+        // Only while the map is open: the run can end between the loop check and the click (MAP does nothing outside
+        // play), and then last() still holds the markers of the previous open, seconds old (a bot that has since died).
+        const r = await b.ev(`(() => { const t = __chog.tmap(), w = __chog.world; if (!t.open || __chog.phase !== 'play') return null; return t.markers.filter((m) => m.kind === 'hostile').map((m) => { const a = w.actors[m.id]; return { id: m.id, alive: a.alive, team: a.team, d: Math.hypot(a.x - m.x, a.y - m.y) }; }); })()`);
+        if (!r) break;
         fpsOpen.push(await b.ev(`__chog.fps`));
         seen += r.length;
         wrong.push(...r.filter((x) => !x.alive || x.team !== 'bot' || x.d > 0.6));

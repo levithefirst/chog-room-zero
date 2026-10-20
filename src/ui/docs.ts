@@ -178,7 +178,8 @@ export function docsHtml(touch: boolean, open: string | null, topbar: string): s
   const items = DOCS.map((d) => `<details class="doc" id="doc-${d.id}" data-doc="${d.id}"${d.id === open ? ' open' : ''}><summary>${esc(d.title)}</summary><div class="doc-body">${d.html(touch)}</div></details>`).join('');
   return `<div class="screen docs">${topbar}<div class="scroll-body"><section class="hub-card wide">
 <input id="docsq" class="field small" type="search" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false" />
-<p class="note small" id="docsnone" hidden>Nothing matches.</p><div class="docs-list">${items}</div></section></div></div>`;
+<p class="note small" id="docsnone" hidden>Nothing matches.</p><div class="docs-list">${items}</div>
+<p class="note small docs-lib"><a id="docslib" href="/library/" target="_blank" rel="noopener">Open the full game library</a>: maps, operators, weapons and medals, with search.</p></section></div></div>`;
 }
 
 /** Live filter: sections whose title or text contain every word of the query (case-insensitive). Returns how many. */

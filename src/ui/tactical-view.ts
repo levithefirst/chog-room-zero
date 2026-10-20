@@ -129,6 +129,10 @@ export function createTacticalMap(d: TacticalDeps): TacticalMap {
       open = false;
       el.hidden = true;
       pointers.clear(); pinch = null;
+      // Nothing of this view may show on the next open (stale positions for a frame): clear the picture and the list.
+      markers = [];
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.clearRect(0, 0, cv.width, cv.height);
       document.getElementById('mapbtn')?.setAttribute('aria-expanded', 'false');
       d.onClose();
     },

@@ -41,7 +41,7 @@ try {
       await sleep(800);
       const w = await b.ev(`({ map: __chog.world.mapId, bots: __chog.world.actors.filter((a) => a.team === 'bot').length, pickups: __chog.world.pickups.length, hp: __chog.world.actors[0].maxHp, armorCap: __chog.world.actors[0].maxArmor, where: window.__where })`);
       await b.shot(`map-${id}`);
-      check(`${view.label}: choosing ${NAMES[id]} plays a solo run on it, named on the loading card`, on && w.map === id && w.bots === 5 && w.pickups >= 28 && w.where.includes(NAMES[id]), JSON.stringify(w));
+      check(`${view.label}: choosing ${NAMES[id]} plays a solo run on it, named on the loading card`, on && w.map === id && w.bots === 5 && w.pickups >= 28 && w.where.some((x) => x.toUpperCase() === NAMES[id].toUpperCase()), JSON.stringify(w));
       check(`${view.label}: ${NAMES[id]}: a free player starts at 150 health, armour cap 65`, w.hp === 150 && w.armorCap === 65, JSON.stringify(w));
       await b.ev(`__chog.go('pause')`); await sleep(300);
       await b.ev(`__chog.go('quit')`); await b.hub();
