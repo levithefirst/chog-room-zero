@@ -1,7 +1,7 @@
 // Library pages: home, start here, how to play, combat, movement & sound, weapons. Every number is read from facts.ts.
 import { TUNING, WEAPONS, HEROES, MAPS, MAP_IDS, SPEED, BASE_HP, GRENADES, weaponFacts, soloHostiles, mitigate } from './facts';
 import type { Page } from './types';
-import { esc, n, table, facts, note, ul, ol, link, href, shot, figure } from './html';
+import { esc, n, table, facts, ul, link, href, shot, figure } from './html';
 import { coneSvg, soundSvg, soundBarsSvg, coverSvg, falloffSvg, zoneSvg } from './diagrams';
 import { mapSvg } from './mapdata';
 
