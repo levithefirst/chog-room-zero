@@ -67,9 +67,9 @@ describe('RC-7 profile', () => {
 describe('RC-7 settings', () => {
   it('persists valid values and drops invalid ones', () => {
     const s = mem();
-    saveSettings(s, { volume: 0.3, vibration: false, quality: 'high', stick: 'large', tips: false, shareStats: false });
-    expect(loadSettings(s)).toEqual({ volume: 0.3, vibration: false, quality: 'high', stick: 'large', tips: false, shareStats: false });
-    s.m.set(SETTINGS_KEY, JSON.stringify({ volume: 7, quality: 'ultra', stick: 'huge', tips: 'yes' }));
+    saveSettings(s, { volume: 0.3, vibration: false, quality: 'high', stick: 'large', tips: false, shareStats: false, hudScale: 115, motion: 'reduced' });
+    expect(loadSettings(s)).toEqual({ volume: 0.3, vibration: false, quality: 'high', stick: 'large', tips: false, shareStats: false, hudScale: 115, motion: 'reduced' });
+    s.m.set(SETTINGS_KEY, JSON.stringify({ volume: 7, quality: 'ultra', stick: 'huge', tips: 'yes', hudScale: 300, motion: 'wild' }));
     expect(loadSettings(s)).toEqual(DEFAULT_SETTINGS);
   });
 });

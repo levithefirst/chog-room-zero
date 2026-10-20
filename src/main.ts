@@ -24,13 +24,13 @@ import { heroForKey } from './ui/heroKeys';
 import { portraitSvg } from './ui/art';
 import { WEAPONS } from './config/weapons';
 import { orientationOf, ORIENTATION_QUERY } from './ui/orientation';
-import { fullscreenSupported, isFullscreen, layoutStage, rectToStage, requestLandscape, stage, toStage, type LaunchResult } from './ui/stage';
+import { fullscreenSupported, isFullscreen, layoutStage, setHudScale, rectToStage, requestLandscape, stage, toStage, type LaunchResult } from './ui/stage';
 import { coverBoxAt } from './sim/cover';
 import { adapterFromUrl, resolveIdentity, GUEST, type Identity } from './nft/identity';
 import { boundIdentity } from './nft/identity';
 import { DEMO_COPY, TRAIT_INFO, isTokenId, sampleTokens, traitsFor } from './nft/traits';
 import { loadRecords, recordBest, type Records } from './ui/records';
-import { DEFAULT_SETTINGS, QUALITY_DPR, SETTINGS_KEY, STICK_PX, displayName, loadProfile, loadSettings, saveSettings, togglePin, validateNickname, type Profile, type Settings } from './ui/profile';
+import { DEFAULT_SETTINGS, QUALITY_DPR, SETTINGS_KEY, STICK_PX, displayName, loadProfile, loadSettings, saveSettings, togglePin, validateNickname, type Profile, type Settings, HUD_SCALES, type HudScale } from './ui/profile';
 import { MEDALS, awardMedals, loadMedals, type MedalDef, type Unlocked } from './ui/medals';
 import { TIPS_KEY, loadShownTips, nextTip, saveShownTips, tipText, type TipId } from './ui/tips';
 import { esc, howtoHtml, medalCard, nickHtml, resultsHtml, selectHtml, settingsHtml, type AuthView } from './ui/screens';
@@ -195,6 +195,9 @@ async function start() {
   let guestRecords: Records = loadRecords(guestStore);
   let guestMedals: Unlocked = loadMedals(guestStore);
   let settings: Settings = loadSettings(localStorage);
+  const sysReduced = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
+  /** UIX: reduced motion from the setting, or the system preference when the setting is Auto. */
+  const reducedMotion = () => settings.motion === 'reduced' || (settings.motion === 'auto' && !!sysReduced?.matches);
   let shownTips = loadShownTips(localStorage);
   const MODE_KEY = 'chog.mode';
   let playMode: PlayMode = (() => { try { const m = localStorage.getItem(MODE_KEY); return m === '1v1' || m === '3v3' || m === '5v5' || m === 'solo' ? m : 'solo'; } catch { return 'solo'; } })();
@@ -334,12 +337,17 @@ async function start() {
     touchStick.radius = STICK_PX[settings.stick];
     const res = Math.min(window.devicePixelRatio || 1, QUALITY_DPR[settings.quality]);
     if (renderer.app.renderer.resolution !== res) renderer.app.renderer.resolution = res;
+    // UIX: HUD scale (on top of the resolution scale) and reduced motion (no shake, pulses or screen entrances).
+    setHudScale(settings.hudScale);
+    layoutStage(stageEl);
+    document.body.classList.toggle('reduce-motion', reducedMotion());
   }
   applySettings();
   function setSettings(next: Settings) {
     settings = next;
     saveSettings(localStorage, settings);
     applySettings();
+    hudAge = 1e9;
   }
 
   const mute = $('mute') as HTMLButtonElement;
@@ -854,6 +862,8 @@ async function start() {
     else if (name === 'share') s.shareStats = val === 'on';
     else if (name === 'quality' && (val === 'low' || val === 'medium' || val === 'high')) s.quality = val;
     else if (name === 'stick' && (val === 'small' || val === 'medium' || val === 'large')) s.stick = val;
+    else if (name === 'hudscale' && HUD_SCALES.includes(Number(val) as HudScale)) s.hudScale = Number(val) as HudScale;
+    else if (name === 'motion' && (val === 'auto' || val === 'reduced' || val === 'full')) s.motion = val;
     setSettings(s);
     if (name === 'vibration' && s.vibration && canVibrate) navigator.vibrate(30);
     render();
@@ -1794,7 +1804,7 @@ async function start() {
       if (s.type === 'boom') {
         fx.rings.push({ x: s.x, y: s.y, age: 0, r: TUNING.grenade.radius, color: s.team === p.team ? TUNING.palette.ammo : TUNING.palette.hostile });
         spark(s.x, s.y, 16, s.team !== p.team);
-        if (p.alive && Math.hypot(dx, dy) <= TUNING.grenade.radius + 0.5) fx.shake = TUNING.render.shakeSeconds * 1.6;
+        if (p.alive && !reducedMotion() && Math.hypot(dx, dy) <= TUNING.grenade.radius + 0.5) fx.shake = TUNING.render.shakeSeconds * 1.6;
       }
       if (s.type === 'downed') toast(s.sourceId === 0 ? 'YOU ARE DOWN · a teammate can revive you' : `${src0?.name ?? 'Someone'} is DOWN`);
       if (s.type === 'revive') toast(s.sourceId === 0 ? 'Revived a teammate' : 'Revived');
@@ -1884,7 +1894,7 @@ async function start() {
           knew: rung(matchIntel, h.by), knewFor: known && known.state !== 'lost' ? matchIntel.now - known.since : 0 });
         if (settings.vibration && canVibrate) navigator.vibrate(h.killed ? 80 : 25);
         // Shake by how much it hurt (CF): a graze nudges, a shotgun blast shoves. 25 damage = the base shake.
-        fx.shake = Math.max(fx.shake, TUNING.render.shakeSeconds * Math.max(0.6, Math.min(1.8, (h.hpDamage + h.armorDamage) / 25)));
+        if (!reducedMotion()) fx.shake = Math.max(fx.shake, TUNING.render.shakeSeconds * Math.max(0.6, Math.min(1.8, (h.hpDamage + h.armorDamage) / 25)));
         // A shooter outside your sight when it hit you (behind you, or a longer sight than yours online): its distance
         // goes on the arc. Grenades excluded: the arc points at the blast, not the thrower.
         const unseen = !h.grenade && !canSee(world.level, p.x, p.y, p.facing, p.view, h.fromX, h.fromY);
