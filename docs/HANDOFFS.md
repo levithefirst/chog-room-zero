@@ -569,3 +569,24 @@ Not verified    : real phones and GPUs; human play; online on the preview.
 Data written    : none.
 Locked decisions touched : none.
 Next smallest task : owner opens the preview at 1080p and on a phone, opens the map mid-fight: "is the map and HUD readable at a glance?"; files: none.
+
+```
+HANDOFF H39  2026-10-20  claude -> owner
+Branch @ commit : ccr-e7fadb8f-qtochk @ (this handoff commit; code 841cff16ffd2cf5660529c6d79e8d065cfbedec4)   pushed: yes
+Task            : UIX release. Fast-forwarded ccr from grokbot/uix-world-class-h37 6e394fc (PR #12 head; contains H37 7129a3e) and shipped it to production.
+Files changed   : src/ui/docs.ts, index.html (Game Docs link to /library), src/ui/tactical-view.ts (markers and canvas cleared on close),
+                  tests/library-pages.test.ts (link test), tools/tm-map.mjs (wait-until instead of fixed sleeps; reads markers only while open in play),
+                  tools/id-maps.mjs (case-insensitive loading-card name), docs/STATE.md, docs/HANDOFFS.md
+Tests run       : npx tsc --noEmit -> clean; npx vitest run -> 1122/1122; npm run build -> ok (20 library pages);
+                  13 browser suites (qa-journey, gp-ui, master-ui, qa-rewards, sp-training, sp-online, id-maps, tm-map 105/105, h34-blink,
+                  qa-screens, qa-errors, rc8-online 1v1+3v3 PASS, library-qa 9 views 0 problems) -> all pass after the id-maps fix
+Deploy          : Vercel dpl_CFsfCGgtk6Y6LBcRQRoijcTBG6qc READY on chogroomzero.xyz at 841cff1, then redeployed at this handoff commit; Render /stats commit matches.
+Live smoke      : headless Chrome on a Vercel Sandbox against chogroomzero.xyz -> 25/25 (loading, HUD, combat feedback, pause, map open/zoom/close,
+                  scaling, Library and search, no localhost, no test hooks); online prod check -> 10/10
+Known failures  : none. The H37 "dead bot marked hostile" was the test reading stale markers after the run; fixed in the tool, and the map now clears on close.
+Blockers        : none
+Not verified    : real phones and GPUs; human play; Render Free cold start (first online join after sleep waits ~30-60 s).
+Rollback        : dpl_2TBbX4DPr1iTefTGeaLw8sW78aRF (7129a3e, H37) with Render on 7129a3e.
+Locked decisions touched : none
+Next smallest task : owner plays one solo run and one 1v1 on a phone at chogroomzero.xyz, opens the map mid-fight: "readable at a glance?"; files: none.
+```
