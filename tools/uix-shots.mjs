@@ -32,7 +32,7 @@ for (const d of VIEWS) {
   if (await b.click('[data-go=start]')) { await probe('07-roster'); await b.click('[data-go=quit]'); await b.hub(); }
   await b.click('[data-mode=solo]');
   // The deploy briefing shows only while the world builds (a few hundred ms): slow the CPU for the shot only.
-  await b.cmd('Emulation.setCPUThrottlingRate', { rate: 20 }); await b.click('#playbtn');
+  await b.cmd('Emulation.setCPUThrottlingRate', { rate: 20 }); await b.ev(`document.getElementById('playbtn').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: ${d.touch ? "'touch'" : "'mouse'"} }))`); await sleep(150);
   await b.shot('08-deploy'); r.screens.push('08-deploy');
   await b.cmd('Emulation.setCPUThrottlingRate', { rate: 1 });
   await b.until(`__chog.phase === 'play'`, 15000); await sleep(1500); await b.shot('09-hud'); r.screens.push('09-hud');

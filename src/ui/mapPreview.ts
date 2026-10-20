@@ -3,7 +3,7 @@
 // One SVG string, merged horizontal runs per tile kind, built once per location and cached.
 import { MAPS, type MapId } from '../config/maps';
 
-const FILL: Record<string, string> = { '#': 'var(--mp-wall)', c: 'var(--mp-cover)', b: 'var(--mp-cover)', d: 'var(--mp-door)', r: 'var(--mp-rail)', u: 'var(--mp-deck)', s: 'var(--mp-deck)' };
+const FILL: Record<string, string> = { c: 'var(--mp-cover)', b: 'var(--mp-cover)', d: 'var(--mp-door)', r: 'var(--mp-rail)', u: 'var(--mp-deck)', s: 'var(--mp-deck)' };
 const cache = new Map<MapId, string>();
 
 /** SVG markup for a location: viewBox in tiles, so it scales to any box (preserveAspectRatio keeps its shape). */
@@ -17,6 +17,18 @@ export function mapPreviewSvg(id: MapId): string {
   rows.forEach((r, y) => { for (let x = 0; x < r.length; x++) if (r[x] !== '#') { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); } });
   x0 = Math.max(0, x0 - 1); y0 = Math.max(0, y0 - 1); x1 = Math.min(w - 1, x1 + 1); y1 = Math.min(h - 1, y1 + 1);
   const parts: string[] = [];
+  // Walkable ground first (lighter than the walls, so rooms and corridors read), then the features on top.
+  for (let y = y0; y <= y1; y++) {
+    const r = rows[y];
+    let x = x0;
+    while (x <= x1) {
+      if ((r[x] ?? '#') === '#') { x++; continue; }
+      let e = x + 1;
+      while (e <= x1 && (r[e] ?? '#') !== '#') e++;
+      parts.push(`<rect x="${x - x0}" y="${y - y0}" width="${e - x}" height="1" fill="var(--mp-ground)"/>`);
+      x = e;
+    }
+  }
   let spawn: { x: number; y: number } | null = null;
   for (let y = y0; y <= y1; y++) {
     const r = rows[y];
