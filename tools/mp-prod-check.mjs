@@ -22,9 +22,10 @@ function client(name) {
 }
 
 try {
-  // Wake the free host first (it sleeps after 15 idle minutes).
-  for (let i = 0; i < 30; i++) { try { const r = await fetch(`${http}/stats`); if (r.ok) break; } catch { /* waking */ } await sleep(3000); }
-  const st = await (await fetch(`${http}/stats`)).json();
+  // Wake the free host (it sleeps after 15 idle minutes) and wait for it to finish deploying this commit (up to 6 min).
+  let st = null;
+  for (let i = 0; i < 120 && st?.commit !== sha; i++) { try { const r = await fetch(`${http}/stats`); if (r.ok) st = await r.json(); } catch { /* waking or deploying */ } if (st?.commit !== sha) await sleep(3000); }
+  st ??= {};
   check('game server runs the expected commit', st.commit === sha, `${st.commit}`);
   check('game server reports its load', !!st.load, JSON.stringify(st.load));
   const page = await (await fetch(`${site}/`)).text();
