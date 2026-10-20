@@ -34,7 +34,7 @@ import { DEFAULT_SETTINGS, QUALITY_DPR, SETTINGS_KEY, STICK_PX, displayName, loa
 import { MEDALS, awardMedals, loadMedals, type MedalDef, type Unlocked } from './ui/medals';
 import { TIPS_KEY, loadShownTips, nextTip, saveShownTips, tipText, type TipId } from './ui/tips';
 import { esc, howtoHtml, medalCard, nickHtml, resultsHtml, selectHtml, settingsHtml, type AuthView } from './ui/screens';
-import { authHtml, chogHtml, chogPanel, boardScreenHtml, careerHtml, classOf, hubHtml, mapsSheetHtml, medalsScreenHtml, onlineResultsHtml, topbar, upgradesHtml, upgradesReady, type HubCtx, type NetView, type PlayMode } from './ui/hub';
+import { authHtml, chogHtml, chogPanel, boardScreenHtml, careerHtml, classOf, hubHtml, mapsSheetHtml, medalsScreenHtml, onlineResultsHtml, squadScreenHtml, topbar, upgradesHtml, upgradesReady, type HubCtx, type NetView, type PlayMode } from './ui/hub';
 import { docsHtml, filterDocs } from './ui/docs';
 import { CHOG_ERRORS, chogConnect, chogEligibility, chogNetwork, chogPickAccount, chogSign, discoverWallets, fetchAuthConfig, fetchSession, googleSignIn, isMobileBrowser, signOut, walletSignIn, watchWallet, MONAD_CHAIN_HEX, type ChogStep } from './ui/auth';
 import { SIDEGRADES } from './sim/operators';
@@ -45,7 +45,7 @@ import { emptyAcct } from './ui/account';
 import { RANKS, SUPERPOWERS, SUPERPOWER_IDS, superAbility, type Rank, type SuperpowerId } from './config/superpowers';
 import { createTraining, drillFor, stepTraining, trainingInput, trainingStatus, trainingSummary, type TrainingRun } from './sim/training';
 import { pointInPolygon } from './sim/geom';
-import { MAPS, isMapId, type MapId } from './config/maps';
+import { MAPS, MAP_IDS, isMapId, type MapId } from './config/maps';
 import { mapPreviewSvg } from './ui/mapPreview';
 import { BASE_POWER, chogName, powerForToken, signatureFor, tierOfMetadataId, ONE_OF_ONE, TIER_DEFS, type Power } from './config/power';
 import { tierEffect } from './ui/account';
@@ -124,16 +124,22 @@ function boot(i: number) {
     bootTipTimer = setInterval(() => { k = (k + 1) % BOOT_TIPS.length; tip.classList.remove('in'); void tip.offsetWidth; tip.textContent = BOOT_TIPS[k]; tip.classList.add('in'); }, 2200);
   }
 }
-/** UIX boot briefing: your last location (drawn from its real tiles) and your last operator, from this device's picks. */
+/** Boot briefing (owner 2026-10-20 loading pass): the location you last picked, drawn large behind the title from its
+ * real tiles (lit areas and area names from its own data), and the operator you last picked, from this device's picks.
+ * It describes what loads; it never moves the bar (the bar follows the real steps only). */
 function bootBrief() {
   const el = document.getElementById('bootbrief');
   if (!el) return;
   let map: MapId = 'room-zero', hero = HEROES[0];
   try { const m = localStorage.getItem('chog.map'); if (isMapId(m)) map = m; } catch { /* ignore */ }
   try { const id = heroIdOf(localStorage.getItem(HERO_KEY)); if (id) hero = heroById(id); } catch { /* ignore */ }
-  el.innerHTML = `<div class="mapbox">${mapPreviewSvg(map)}</div><dl><dt>Location</dt><dd><b>${esc(MAPS[map].name)}</b><small>${esc(MAPS[map].tag)}</small></dd>
-<dt>Operator</dt><dd><b>${esc(hero.name)}</b><small>${esc(hero.role)} · ${esc(WEAPONS[hero.weapon].name)}</small></dd></dl>`;
+  const world = document.getElementById('bootworld');
+  if (world) { world.innerHTML = mapPreviewSvg(map, true); world.classList.add('in'); }
+  el.innerHTML = `<div class="bb-port">${portraitSvg(hero, 'boot')}</div><div class="bb-txt"><p class="bb-k">Deploying</p><dl><dt>Location</dt><dd><b>${esc(MAPS[map].name)}</b><small>${esc(MAPS[map].tag)}</small></dd>
+<dt>Operator</dt><dd><b>${esc(hero.name)}</b><small>${esc(hero.role)} · ${esc(WEAPONS[hero.weapon].name)}</small></dd></dl></div>`;
   el.hidden = false;
+  const facts = document.getElementById('bootfacts');
+  if (facts) { facts.innerHTML = `<span><b class="num">${MAP_IDS.length}</b> locations</span><span><b class="num">${HEROES.length}</b> operators</span><span>Up to <b class="num">5v5</b></span>`; facts.hidden = false; }
 }
 async function bootDone() {
   const b = document.getElementById('boot');
@@ -156,9 +162,9 @@ async function start() {
   // Lay the stage out first, so the boot screen and the first frame are already landscape on a phone held upright.
   layoutStage(stageEl);
   boot(0);
+  bootBrief();
   await Promise.all([document.fonts.load('600 20px "Plex Mono"'), document.fonts.load('600 20px "Barlow Cond"')]).catch(() => undefined);
   boot(1);
-  bootBrief();
   const renderer = await createRenderer(root);
   const input = createInput(root);
   const audio = createAudio();
@@ -181,7 +187,7 @@ async function start() {
   const ONBOARD_KEY = 'chog.onboarded';
   const YOURCHOG_KEY = 'chog.yourchog';
   let yourChogDue = false;
-  type TitleView = 'main' | 'howto' | 'docs' | 'demo' | 'settings' | 'nick' | 'upgrades' | 'ranks' | 'career' | 'medals' | 'auth' | 'chog' | 'yourchog' | 'maps';
+  type TitleView = 'main' | 'howto' | 'docs' | 'demo' | 'settings' | 'nick' | 'upgrades' | 'ranks' | 'career' | 'medals' | 'auth' | 'chog' | 'yourchog' | 'maps' | 'squad';
   // GP Game Docs: the section opened when the screen is shown (the search box filters the rest live).
   let docsOpen: string | null = null;
   document.addEventListener('input', (e) => {
@@ -600,6 +606,7 @@ async function start() {
       case 'upgrades': return show(upgradesHtml(c));
       case 'ranks': return show(boardScreenHtml(c));
       case 'maps': return show(mapsSheetHtml({ ...c, map: mapId }));
+      case 'squad': return show(squadScreenHtml(c));
       case 'career': return show(careerHtml(c));
       case 'medals': return show(medalsScreenHtml(c, (m) => medalCard(m, c)));
       case 'auth': return show(authHtml({ config: auth.config, session: auth.session, wallets: auth.wallets, busy: auth.busy, message: auth.message, pickWallet, mobile: isMobileBrowser(), pageUrl: walletPageUrl() }, location.host));
@@ -843,6 +850,7 @@ async function start() {
       case 'board-hide': if (acct.boardMe) void account.setPrefs({ hidden: !acct.boardMe.hidden }).then(() => loadBoard()); break;
       case 'career': titleView = 'career'; void refreshAccount(); break;
       case 'medals': titleView = 'medals'; break;
+      case 'squad': titleView = 'squad'; break;
       case 'maps': titleView = 'maps'; break;
       case 'settings': titleView = 'settings'; confirmReset = false; refreshAuth(); break;
       case 'nick': nickReturn = titleView === 'nick' ? nickReturn : titleView; titleView = 'nick'; nickError = ''; nickSaved = false; break;
@@ -1494,7 +1502,7 @@ async function start() {
     const key = `${net.state}|${net.queue?.have}|${net.message}|${JSON.stringify(net.party)}`;
     if (key !== netKey) {
       netKey = key;
-      if (phase === 'title' && titleView === 'main') render();
+      if (phase === 'title' && (titleView === 'main' || titleView === 'squad')) render();
     }
     // A match found from the hub, or a squad leader re-queued while this player looked at any results screen (online
     // or practice): deploy. A new match is a new view world, so the match whose results are showing never re-enters.

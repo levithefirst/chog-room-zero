@@ -2,13 +2,16 @@
 // solo start. It shows the layout only (the same layout the map picker names), never where a hostile is.
 // One SVG string, merged horizontal runs per tile kind, built once per location and cached.
 import { MAPS, type MapId } from '../config/maps';
+import { landmarks } from './tactical';
 
 const FILL: Record<string, string> = { c: 'var(--mp-cover)', b: 'var(--mp-cover)', d: 'var(--mp-door)', r: 'var(--mp-rail)', u: 'var(--mp-deck)', s: 'var(--mp-deck)' };
-const cache = new Map<MapId, string>();
+const cache = new Map<string, string>();
 
-/** SVG markup for a location: viewBox in tiles, so it scales to any box (preserveAspectRatio keeps its shape). */
-export function mapPreviewSvg(id: MapId): string {
-  const hit = cache.get(id);
+/** SVG markup for a location: viewBox in tiles, so it scales to any box (preserveAspectRatio keeps its shape).
+ * `world` (the boot screen's backdrop) adds the location's lit areas and its area names, both from the map's own data. */
+export function mapPreviewSvg(id: MapId, world = false): string {
+  const key = world ? `${id}:world` : id;
+  const hit = cache.get(key);
   if (hit) return hit;
   const rows = MAPS[id].rows;
   const h = rows.length, w = Math.max(...rows.map((r) => r.length));
@@ -29,6 +32,9 @@ export function mapPreviewSvg(id: MapId): string {
       x = e;
     }
   }
+  if (world) {
+    for (const b of MAPS[id].lights) parts.push(`<rect class="mp-lit" x="${b.x0 - x0}" y="${b.y0 - y0}" width="${b.x1 - b.x0 + 1}" height="${b.y1 - b.y0 + 1}" fill="var(--mp-lit)"/>`);
+  }
   let spawn: { x: number; y: number } | null = null;
   for (let y = y0; y <= y1; y++) {
     const r = rows[y];
@@ -45,7 +51,8 @@ export function mapPreviewSvg(id: MapId): string {
   }
   const vw = x1 - x0 + 1, vh = y1 - y0 + 1;
   const sp = spawn ? `<g class="mp-you"><circle cx="${spawn.x - x0 + 0.5}" cy="${spawn.y - y0 + 0.5}" r="1.6" fill="none" stroke="var(--mp-you)" stroke-width="0.35"/><circle cx="${spawn.x - x0 + 0.5}" cy="${spawn.y - y0 + 0.5}" r="0.6" fill="var(--mp-you)"/></g>` : '';
-  const svg = `<svg class="mapprev" viewBox="0 0 ${vw} ${vh}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${MAPS[id].name} layout"><rect width="${vw}" height="${vh}" fill="var(--mp-floor)"/>${parts.join('')}${sp}</svg>`;
-  cache.set(id, svg);
+  const names = world ? landmarks(MAPS[id]).filter((l, i, all) => all.findIndex((o) => o.label === l.label) === i).map((l) => `<text x="${(l.x - x0).toFixed(1)}" y="${(l.y - y0).toFixed(1)}">${l.label.toUpperCase()}</text>`).join('') : '';
+  const svg = `<svg class="mapprev" viewBox="0 0 ${vw} ${vh}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${MAPS[id].name} layout"><rect width="${vw}" height="${vh}" fill="var(--mp-floor)"/>${parts.join('')}${names ? `<g class="mp-names">${names}</g>` : ''}${sp}</svg>`;
+  cache.set(key, svg);
   return svg;
 }

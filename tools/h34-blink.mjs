@@ -50,7 +50,7 @@ try {
     await b.ev(`document.querySelector('[data-act="howto-close"]')?.click()`);
     if (!check(`${view.label}: the hub loads`, await b.hub())) continue;
     await sit(b, view.label, 'hub');
-    for (const act of ['maps', 'ranks', 'docs', 'career', 'medals', 'settings']) {
+    for (const act of ['maps', 'ranks', 'squad', 'docs', 'career', 'medals', 'settings']) {
       const sel = act === 'maps' ? '.map-pick' : `[data-act="${act}"]`;
       // The Location sheet is the phone's picker; on wider screens the row on the hub is the picker (sat on above).
       if (act === 'maps' && !(await b.ev(`(() => { const p = document.querySelector('.map-pick'); return !!p && getComputedStyle(p).display !== 'none'; })()`))) continue;
@@ -67,10 +67,15 @@ try {
     // Online: a squad keeps a session open (ping every 2 s, jittered); the hub must not redraw for it.
     await b.ev(`document.querySelector('[data-mode="3v3"]')?.click()`);
     await sleep(300);
+    await b.ev(`document.querySelector('[data-act="squad"]')?.click()`);
+    await b.until(`!!document.querySelector('[data-act="squad-create"]')`, 5000);
     await b.ev(`document.querySelector('[data-act="squad-create"]')?.click()`);
     const code = await b.until(`document.getElementById('squadcodeshown')?.innerText`, 90000);
     check(`${view.label}: a squad session is open`, !!code, code);
     await sleep(3000);
+    await sit(b, view.label, 'Squad screen with an online session (jittered ping)');
+    await b.ev(`document.querySelector('[data-act="back"]')?.click()`);
+    await b.until(`!!document.getElementById('hub')`, 5000);
     await sit(b, view.label, 'hub with an online session (jittered ping)');
     check(`${view.label}: no page errors`, b.errors.length === 0, b.errors.join(' | '));
   }

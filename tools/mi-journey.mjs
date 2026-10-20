@@ -160,6 +160,8 @@ try {
 
   // ---- 8. Squad: A creates one in the hub, B joins with the typed code; both see it ----
   for (const X of [A, B]) { if (await X.ev(`__chog.phase !== 'title'`)) { await X.click('[data-go=menu]'); } await hubReady(X); }
+  // Owner 2026-10-20: the squad lives on its own screen, opened from the hub's SQUAD button.
+  for (const X of [A, B]) { await X.click('.hub-nav [data-act=squad]'); await X.until(`!!document.querySelector('.squad-screen')`, 5000); }
   await A.click('[data-act=squad-create]');
   const code = await A.until(`document.getElementById('squadcodeshown')?.innerText || null`, 15000);
   await B.ev(`document.getElementById('squadcode').value = '${code}'`);
@@ -168,6 +170,7 @@ try {
   await sleep(500); await B.shot('13-squad');
   const aSees = await A.until(`document.querySelectorAll('.squad-list li').length === 2`, 8000);
   check('squad: created in the hub, joined by code from another browser, both see it with the leader marked', code && sq && aSees && sq.includes('Alice-R0*'), JSON.stringify({ code, sq }));
+  for (const X of [A, B]) { await X.click('[data-act=back]'); await X.until(`!!document.getElementById('hub')`, 5000); }
   await B.click('[data-mode="3v3"]');
   const fol = await B.ev(`({ disabled: document.getElementById('playbtn').disabled, text: document.querySelector('.hub-play').innerText })`);
   check('squad: a member who is not the leader cannot start the match and is told why', fol.disabled && /leader starts the match/i.test(fol.text), fol.text.slice(0, 120));

@@ -1,6 +1,7 @@
 // The hub (master integration pass, owner 2026-10-14): the screen the game lives in between matches. Everything a
 // player owns or can do is on it, not buried in tabs: who you are (callsign, account, level, XP), what you have
-// (shards, upgrades, your Chog and its class), PLAY with the mode, the leaderboard, your squad, career and medals.
+// (shards, upgrades, your Chog and its class), PLAY with the mode. The leaderboard, squad, career and medals are compact
+// buttons that open their own screens (owner 2026-10-20: the hub is a game menu, not a dashboard).
 // Plain HTML from plain data, like every other screen; every number comes from the account service, the game server
 // or the config files, never from the browser's own guess.
 import { HEROES, heroById } from '../config/heroes';
@@ -56,6 +57,7 @@ const ICON = {
   // CF hub nav: one plain glyph per place, drawn in the HUD's stroke style.
   up: '<svg viewBox="0 0 24 24" class="ico"><path d="M12 4l7 7h-4v8H9v-8H5z"/></svg>',
   card: '<svg viewBox="0 0 24 24" class="ico"><rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="10" cy="11" r="2.4"/><path d="M6.5 16.5c1-2 5-2 6 0M15 10h3M15 13h3"/></svg>',
+  squad: '<svg viewBox="0 0 24 24" class="ico"><circle cx="9" cy="8.5" r="3"/><path d="M3.5 19c.8-3.4 3-5 5.5-5s4.7 1.6 5.5 5"/><circle cx="16.5" cy="9.5" r="2.4"/><path d="M15.5 14.2c2.4-.3 4.4 1.2 5 4.8"/></svg>',
   medal: '<svg viewBox="0 0 24 24" class="ico"><circle cx="12" cy="14" r="5"/><path d="M9 3l3 6 3-6M10.5 14l1.5-1.5V17"/></svg>',
   board: '<svg viewBox="0 0 24 24" class="ico"><path d="M4 20V10h4v10M10 20V5h4v15M16 20v-7h4v7"/></svg>',
   help: '<svg viewBox="0 0 24 24" class="ico"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.6a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .8-1 1.6M12 16.6v.3"/></svg>',
@@ -265,30 +267,6 @@ function playBar(c: HubCtx): string {
 <div class="play-wrap"><button class="play-cta${state}" ${playAttr}${disabled ? ' disabled' : ''} id="playbtn"><span class="pl">${esc(playLabel)}</span><small>${busy ? '' : esc(`${MAPS[c.map].name} · ${MODE_INFO[sel].label} · ${MODE_INFO[sel].sub}`)}</small></button>${status}</div>`;
 }
 
-// ---- right: the leaderboard (owner H34: "Remove that entire block ... Replace that space with LEADERBOARD. Make the
-// leaderboard significantly more prominent"), then the squad ----
-const boardRow = (r: BoardRow) => `<tr class="${r.you ? 'me' : ''}"><td class="num rk">${r.rank}</td><td class="nm">${avatar(r.hero)}<span>${esc(r.name)}</span>${r.nftTier ? ` ${tierBadge(r.nftTier)}` : ''}</td><td class="num"><b>${r.kills}</b></td></tr>`;
-
-function boardPreview(c: HubCtx): string {
-  const a = c.acct, solo = a.boardTab === 'solo';
-  let body: string;
-  if (!a.config?.db) body = '<p class="note">Offline: the leaderboard needs the server.</p>';
-  else if (a.boardError) body = '<p class="note">Could not load the leaderboard.</p><button class="btn small" data-act="board-retry">Retry</button>';
-  else if (a.board === null) body = '<p class="note">Loading…</p>';
-  else if (!a.board.length) body = `<p class="note">No one on the ${solo ? 'Solo' : 'Online'} board yet.</p>`;
-  else {
-    const top = a.boardOffset === 0 ? a.board.slice(0, 8) : [];
-    body = `<table class="mini-board"><tr><th>#</th><th>Player</th><th>Kills</th></tr>${top.map(boardRow).join('')}</table>`;
-  }
-  const me = a.boardMe;
-  const mine = !a.config?.db ? '' : !a.signedIn ? '<p class="myrank-mini"><b>My rank</b> <button class="btn small" data-act="signin">Sign in to rank</button></p>'
-    : me ? `<p class="myrank-mini me"><b>My rank</b> <span class="num big">#${me.rank}</span> <span class="num">${me.kills} kills</span>${a.boardTotal ? ` <small class="num">of ${a.boardTotal}</small>` : ''}</p>`
-    : `<p class="myrank-mini"><b>My rank</b> <small>${solo ? 'Finish a solo run to rank.' : 'Finish an online match to rank.'}</small></p>`;
-  const tabs = `<div class="tabs mini" role="tablist">${(['solo', 'online'] as const).map((t) => `<button class="tab${t === a.boardTab ? ' on' : ''}" role="tab" aria-selected="${t === a.boardTab}" data-act="board-${t}">${t === 'solo' ? 'Solo' : 'Online'}</button>`).join('')}</div>`;
-  return `<section class="hub-card board big" id="boardpreview"><div class="card-head"><h3>Leaderboard</h3><button class="btn small" data-act="ranks">All</button></div>
-${tabs}${mine}<div class="board-wrap${a.boardLoading ? ' loading' : ''}">${body}</div><p class="note small rankrule">Ranked by kills</p></section>`;
-}
-
 /** V2 daily challenges: three a day, the same for everyone; done ones are paid once by the site. Shown on the Career
  * screen since H34 (the owner moved them off the hub; the system and its payouts are unchanged). */
 function dailyPanel(c: { acct: HubCtx['acct'] }): string {
@@ -298,19 +276,24 @@ function dailyPanel(c: { acct: HubCtx['acct'] }): string {
   return `<section class="hub-card daily" id="daily"><div class="card-head"><h3>Today</h3>${c.acct.signedIn ? '' : '<small class="note">Sign in to count</small>'}</div><ul class="daily-list">${rows}</ul></section>`;
 }
 
-function squadPanel(c: HubCtx): string {
-  const v = c.net;
-  if (!v.url) return '';
-  const p = v.party;
-  if (!p || p.members.length === 0) {
-    return `<section class="hub-card squad" id="squad"><div class="card-head"><h3>Squad</h3></div>
-<div class="squad-row"><button class="btn small" data-act="squad-create">Create</button>
+// ---- Squad (owner 2026-10-20 hub pass: a compact SQUAD button on the hub opens this; nothing here is new) ----
+export function squadScreenHtml(c: HubCtx): string {
+  const v = c.net, p = v.party;
+  let body: string;
+  if (!v.url) body = '<p class="note">Online play is not available in this build, so there are no squads.</p>';
+  else if (!p || p.members.length === 0) {
+    body = `<section class="hub-card squad" id="squad"><div class="card-head"><h3>Start a squad</h3></div>
+<div class="squad-row"><button class="btn small primary" data-act="squad-create">Create</button>
 <input id="squadcode" class="field small" maxlength="5" placeholder="CODE" autocomplete="off" spellcheck="false" aria-label="Squad code" />
 <button class="btn small" data-act="squad-join">Join</button></div></section>`;
-  }
-  const rows = p.members.map((m) => `<li class="${m.you ? 'me' : ''}"><span>${m.leader ? '★ ' : ''}${esc(m.name)}</span><span>${tierBadge(m.tier, m.demo)}${m.ready ? '' : ' <em>…</em>'}</span></li>`).join('');
-  return `<section class="hub-card squad" id="squad"><div class="card-head"><h3>Squad <span class="num code" id="squadcodeshown">${esc(p.code)}</span></h3><button class="btn small" data-act="squad-leave">Leave</button></div>
+  } else {
+    const rows = p.members.map((m) => `<li class="${m.you ? 'me' : ''}"><span>${m.leader ? '★ ' : ''}${esc(m.name)}</span><span>${tierBadge(m.tier, m.demo)}${m.ready ? '' : ' <em>…</em>'}</span></li>`).join('');
+    body = `<section class="hub-card squad" id="squad"><div class="card-head"><h3>Code <span class="num code" id="squadcodeshown">${esc(p.code)}</span></h3><button class="btn small" data-act="squad-leave">Leave</button></div>
 <ul class="squad-list">${rows}</ul><p class="note small num">${p.members.length}/5</p></section>`;
+  }
+  const msg = v.url && v.message ? `<p class="note warn" id="squadmsg">${esc(v.message)}</p>` : '';
+  const how = v.url ? `<p class="note small squad-how">${v.follower ? 'The leader picks the mode and starts every match.' : 'Up to 5. The leader picks the mode and starts every match; the squad plays on one side, so 1v1 fits 1, 3v3 fits 3 and 5v5 fits 5.'}</p>` : '';
+  return `<div class="screen squad-screen">${topbar('Squad')}<div class="scroll-body"><div class="squad-wrap">${body}${msg}${how}</div></div></div>`;
 }
 
 // ---- Location sheet (H34): the five locations as cards with a plan drawn from their own tiles ----
@@ -352,14 +335,15 @@ export function hubHtml(c: HubCtx): string {
 <div class="hub-mark" aria-hidden="true"><span>CHOG</span><b>ROOM ZERO</b></div>
 <div class="hub-hero">${heroStage(c)}</div>
 <nav class="hub-nav" aria-label="More">
-  <button class="navbtn" data-act="upgrades">${ICON.up}<span>Upgrades</span>${ready ? ` <i class="num dot">${ready}</i>` : ''}</button>
-  <button class="navbtn" data-act="career">${ICON.card}<span>Career</span></button>
-  <button class="navbtn" data-act="medals">${ICON.medal}<span>Medals</span> <i class="num">${MEDALS.filter((m) => c.medals[m.id]).length}/${MEDALS.length}</i></button>
-  <button class="navbtn" data-act="ranks">${ICON.board}<span>Leaderboard</span></button>
-  <button class="navbtn" data-act="docs">${ICON.help}<span>Game Docs</span></button>
+  <button class="navbtn" data-act="upgrades" title="Upgrades" aria-label="Upgrades">${ICON.up}<span>Upgrades</span>${ready ? ` <i class="num dot">${ready}</i>` : ''}</button>
+  <button class="navbtn" data-act="medals" title="Medals" aria-label="Medals">${ICON.medal}<span>Medals</span> <i class="num">${MEDALS.filter((m) => c.medals[m.id]).length}/${MEDALS.length}</i></button>
+  <button class="navbtn" data-act="ranks" title="Leaderboard" aria-label="Leaderboard">${ICON.board}<span>Leaderboard</span>${c.acct.boardMe ? ` <i class="num">#${c.acct.boardMe.rank}</i>` : ''}</button>
+  <button class="navbtn" data-act="career" title="Career" aria-label="Career">${ICON.card}<span>Career</span></button>
+  <button class="navbtn" data-act="docs" title="Game Docs" aria-label="Game Docs">${ICON.help}<span>Game Docs</span></button>
+  ${c.net.url ? `<button class="navbtn" data-act="squad" id="squadbtn" title="Squad" aria-label="Squad">${ICON.squad}<span>Squad</span>${c.net.party?.members.length ? ` <i class="num">${c.net.party.members.length}/5</i>` : ''}</button>` : ''}
   <button class="navbtn demo-link" data-act="demo"><span class="demo">DEMO</span></button>
 </nav>
-<aside class="hub-right">${classOf(c.acct).source !== 'free' ? chogPanel(c) : ''}${boardPreview(c)}${squadPanel(c)}</aside>
+${classOf(c.acct).source !== 'free' ? `<aside class="hub-right">${chogPanel(c)}</aside>` : ''}
 <footer class="hub-bottom">${playBar(c)}</footer>
 </div>`;
 }

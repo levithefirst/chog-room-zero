@@ -456,40 +456,95 @@
         body.narrow table.howto, body.narrow table.traits { font-size: 13px; }
         body.narrow table.howto td, body.narrow table.traits td, body.narrow table.traits th { padding: 2px 5px; }
 
-      /* ---- Master integration pass: loading screen, hub, deploy, results ---- */
-      #boot { display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: calc(var(--st) + 4vh) var(--sr) calc(var(--sb) + 3vh) var(--sl); box-sizing: border-box;
-        background: radial-gradient(ellipse at 50% 38%, #24183a 0%, var(--bg-deep) 62%); overflow: hidden; transition: opacity 600ms ease, transform 600ms ease, filter 600ms ease; }
-      #boot.done { opacity: 0; transform: scale(1.06); filter: blur(6px); }
-      .boot-bg, .boot-bg i { position: absolute; inset: 0; pointer-events: none; }
-      .boot-grid { background-image: linear-gradient(rgba(196,191,212,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(196,191,212,.06) 1px, transparent 1px); background-size: 48px 48px;
-        transform: perspective(500px) rotateX(58deg) translateY(28%) scale(2.2); transform-origin: 50% 100%; animation: gridmove 6s linear infinite; opacity: .7; }
-      @keyframes gridmove { to { background-position: 0 48px; } }
-      .boot-beam { background: conic-gradient(from 200deg at 50% 118%, transparent 0deg, rgba(245,230,200,.13) 14deg, rgba(245,230,200,.02) 26deg, transparent 34deg); animation: sweep 5.5s ease-in-out infinite alternate; }
-      .boot-beam.b2 { background: conic-gradient(from 130deg at 50% 118%, transparent 0deg, rgba(139,92,246,.12) 12deg, transparent 26deg); animation-duration: 7s; animation-direction: alternate-reverse; }
-      @keyframes sweep { from { transform: rotate(-16deg); } to { transform: rotate(16deg); } }
-      .boot-vig { box-shadow: inset 0 0 22vmin 8vmin rgba(0,0,0,.75); }
-      .boot-main { position: relative; text-align: center; margin: auto 0; animation: rise 700ms cubic-bezier(.2,.7,.2,1); }
-      .boot-mark { width: min(120px, 22vh); height: auto; filter: drop-shadow(0 6px 18px rgba(0,0,0,.6)); animation: bob 2.6s ease-in-out infinite; }
-      @keyframes bob { 50% { transform: translateY(-5px) rotate(-2deg); } }
-      #boot .boot-title { font-size: clamp(34px, 7vw, 64px); letter-spacing: 0.16em; font-weight: 600; margin: 6px 0 4px; line-height: 1; text-shadow: 0 0 24px rgba(139,92,246,.45); }
-      #boot .boot-title em { font-style: normal; color: var(--signal); }
-      .boot-tag { margin: 0; color: var(--dim); font-size: 16px; letter-spacing: 0.08em; }
-      .boot-foot { position: relative; width: min(520px, 86%); text-align: center; }
-      #boottip { min-height: 2.6em; margin: 0 0 10px; color: var(--chog-cream-warm); font-size: 15px; letter-spacing: 0.02em; }
+      /* ---- Loading (owner 2026-10-20 loading pass): entering the CHOG world, not a web page loading. ----
+         The location you are about to play is drawn large from its real tiles (lit areas, area names) and tilted under a
+         sweeping lamp; the wordmark and the game's own line sit on the left; what deploys sits bottom right; the bar and
+         the real step it waits on run along the bottom. Nothing here is a fake stage: the bar follows boot() only. */
+      #boot { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); grid-template-rows: 1fr auto; gap: 0 4%; align-items: end; text-align: left;
+        padding: calc(var(--st) + var(--vh) * 6) calc(var(--sr) + 4%) calc(var(--sb) + var(--vh) * 5) calc(var(--sl) + 5%); box-sizing: border-box;
+        background: radial-gradient(ellipse 70% 90% at 78% 40%, #241640 0%, #120a22 55%, var(--bg-deep) 100%); overflow: hidden;
+        transition: opacity 600ms ease, transform 600ms ease, filter 600ms ease; --mp-lit: rgba(246, 232, 184, .13); }
+      #boot.done { opacity: 0; transform: scale(1.04); filter: blur(6px); }
+      .boot-bg, .boot-bg > i { position: absolute; inset: 0; pointer-events: none; }
+      .boot-grid { background-image: linear-gradient(rgba(196,191,212,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(196,191,212,.05) 1px, transparent 1px); background-size: 48px 48px;
+        -webkit-mask-image: linear-gradient(90deg, #000 0%, transparent 60%); mask-image: linear-gradient(90deg, #000 0%, transparent 60%); }
+      /* The world: right two thirds, tilted like a camera over the room, fading out under the title. */
+      .boot-stage { position: absolute; top: -8%; bottom: -8%; right: -10%; width: 72%; perspective: 1400px; pointer-events: none;
+        -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 34%); mask-image: linear-gradient(90deg, transparent 0%, #000 34%); }
+      .boot-world { position: absolute; inset: 0; display: grid; place-items: center; transform: rotateX(46deg) rotateZ(-24deg) scale(1.08); transform-origin: 50% 55%;
+        opacity: 0; transition: opacity 900ms ease; }
+      .boot-world.in { opacity: 1; animation: worlddrift 26s ease-in-out infinite alternate; }
+      .boot-world svg { width: 100%; height: 100%; filter: drop-shadow(0 0 22px rgba(139, 92, 246, .35)); }
+      .boot-world .mp-lit { mix-blend-mode: screen; }
+      .boot-world .mp-names text { font: 600 1.05px/1 var(--mono); letter-spacing: .12px; fill: rgba(255, 248, 231, .42); text-anchor: middle; dominant-baseline: middle; }
+      .boot-world .mp-you circle:first-child { animation: youping 2.2s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+      @keyframes worlddrift { from { transform: rotateX(46deg) rotateZ(-24deg) scale(1.08) translate(2%, 1%); } to { transform: rotateX(46deg) rotateZ(-21deg) scale(1.16) translate(-3%, -2%); } }
+      @keyframes youping { 0% { transform: scale(.6); opacity: 1; } 100% { transform: scale(2.4); opacity: 0; } }
+      /* One lamp sweeping the room: the game's own light, warm, never decoration over the text. */
+      .boot-lamp { position: absolute; inset: 0; background: conic-gradient(from 214deg at 64% 112%, transparent 0deg, rgba(245, 230, 200, .14) 10deg, rgba(245, 230, 200, .03) 22deg, transparent 30deg);
+        animation: sweep 7s ease-in-out infinite alternate; transform-origin: 64% 112%; }
+      @keyframes sweep { from { transform: rotate(-14deg); } to { transform: rotate(18deg); } }
+      .boot-vig { background: linear-gradient(90deg, rgba(14, 9, 28, .92) 0%, rgba(14, 9, 28, .55) 38%, transparent 62%), linear-gradient(0deg, rgba(14, 9, 28, .95) 0%, transparent 32%), linear-gradient(180deg, rgba(14, 9, 28, .7) 0%, transparent 18%); }
+      .boot-facts { position: absolute; top: calc(var(--st) + var(--vh) * 4); right: calc(var(--sr) + 4%); display: flex; gap: 0; font: 600 12px/1 var(--mono); letter-spacing: .2em; text-transform: uppercase; color: var(--dim); }
+      .boot-facts[hidden] { display: none; }
+      .boot-facts span { padding: 0 14px; border-left: 1px solid var(--line); } .boot-facts span:first-child { border-left: 0; } .boot-facts b { color: var(--ink); font-weight: 600; }
+      .boot-main { position: relative; grid-column: 1; grid-row: 1; align-self: center; animation: rise 700ms cubic-bezier(.2,.7,.2,1); }
+      .boot-brand { display: flex; align-items: center; gap: 10px; margin-bottom: calc(var(--vh) * 2); }
+      .boot-brand .kicker { margin: 0; letter-spacing: .3em; }
+      .boot-mark { width: clamp(34px, calc(var(--vh) * 7), 56px); height: auto; filter: drop-shadow(0 4px 12px rgba(0,0,0,.6)); animation: bob 2.6s ease-in-out infinite; }
+      @keyframes bob { 50% { transform: translateY(-3px) rotate(-3deg); } }
+      #boot .boot-title { margin: 0; line-height: .9; font-weight: 600; display: grid; text-transform: uppercase; }
+      #boot .boot-title .bt1 { font-size: clamp(48px, calc(var(--vh) * 15), 150px); letter-spacing: .05em; color: var(--chog-cream);
+        text-shadow: 0 0 1px rgba(255,248,231,.6), 0 6px 30px rgba(0, 0, 0, .7); }
+      #boot .boot-title .bt2 { font-size: clamp(30px, calc(var(--vh) * 9.4), 96px); letter-spacing: .2em; color: var(--chog-pink); margin-top: calc(var(--vh) * .6);
+        text-shadow: 0 0 26px rgba(255, 107, 157, .35); }
+      .boot-line { margin: calc(var(--vh) * 1.6) 0 0; font: 600 13px/1 var(--mono); letter-spacing: .42em; text-transform: uppercase; color: var(--dim); }
+      .boot-line::after { content: ""; display: block; width: min(420px, 80%); height: 2px; margin-top: calc(var(--vh) * 2.4); background: linear-gradient(90deg, var(--chog-pink) 0 14%, rgba(196,191,212,.18) 14% 100%); }
+      .boot-head { margin: calc(var(--vh) * 3) 0 0; font-size: clamp(24px, calc(var(--vh) * 6.4), 64px); line-height: .98; letter-spacing: .04em; font-weight: 600; text-transform: uppercase; color: var(--chog-cream); }
+      .boot-head em { font-style: normal; color: var(--chog-pink); }
+      .boot-tag { margin: calc(var(--vh) * 1.6) 0 0; max-width: 30em; color: var(--chog-cream-warm); font-size: clamp(14px, calc(var(--vh) * 2.1), 19px); line-height: 1.4; letter-spacing: .01em; opacity: .9; }
+      .boot-pillars { list-style: none; display: flex; gap: 0; margin: calc(var(--vh) * 4) 0 0; padding: 0; }
+      .boot-pillars li { display: flex; align-items: center; gap: 10px; padding: 0 18px; border-left: 1px solid var(--line); } .boot-pillars li:first-child { padding-left: 0; border-left: 0; }
+      .boot-pillars svg { width: 28px; height: 28px; flex: none; fill: none; stroke: var(--chog-pink); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+      .boot-pillars span { display: grid; gap: 4px; font: 400 12px/1.2 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+      .boot-pillars b { font: 600 15px/1 var(--sans); letter-spacing: .14em; color: var(--ink); }
+      /* What deploys: the operator portrait, the location and the operator, as a mono field card. */
+      #boot .boot-card { grid-column: 2; grid-row: 1; justify-self: end; align-self: end; margin: 0 0 calc(var(--vh) * 3); grid-template-columns: auto 1fr; gap: 14px;
+        padding: 12px 16px 12px 12px; border: 1px solid rgba(255, 107, 157, .45); border-left: 3px solid var(--chog-pink); background: rgba(14, 9, 28, .78); backdrop-filter: blur(4px); min-width: 280px;
+        animation: rise 700ms 120ms cubic-bezier(.2,.7,.2,1) both; }
+      #boot .boot-card[hidden] { display: none; }
+      .boot-card .bb-port svg { width: 70px; height: 84px; display: block; }
+      .boot-card .bb-k { margin: 0 0 6px; font: 600 12px/1 var(--mono); letter-spacing: .3em; text-transform: uppercase; color: var(--chog-pink); }
+      .boot-card .bb-k::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ally); margin-right: 8px; vertical-align: 1px; animation: blip 1.4s ease-in-out infinite; }
+      @keyframes blip { 50% { opacity: .25; } }
+      .boot-foot { position: relative; grid-column: 1 / -1; grid-row: 2; width: 100%; }
+      #boottip { min-height: 1.4em; margin: 0 0 10px; color: var(--chog-cream-warm); font-size: 15px; letter-spacing: .02em; }
+      #boottip::before { content: "Tip"; font: 600 12px/1 var(--mono); letter-spacing: .24em; text-transform: uppercase; color: var(--chog-pink); margin-right: 12px; }
       #boottip.in { animation: tipin 500ms ease; } @keyframes tipin { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-      #boot .bootbar { width: 100%; height: 6px; border-radius: 3px; background: rgba(42,31,61,.9); box-shadow: inset 0 0 0 1px var(--line); }
+      #boot .bootbar { width: 100%; height: 4px; border-radius: 2px; background: rgba(42,31,61,.9); box-shadow: inset 0 0 0 1px var(--line); }
       #boot .bootbar i { background: linear-gradient(90deg, var(--chog-purple-bright), var(--signal)); box-shadow: 0 0 12px rgba(255,107,157,.6); transition: width 400ms ease; }
-      .boot-row { display: flex; justify-content: space-between; margin-top: 8px; font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; color: var(--dim); text-transform: uppercase; }
+      .boot-row { display: flex; justify-content: space-between; margin-top: 8px; font-family: var(--mono); font-size: 12px; letter-spacing: .16em; color: var(--dim); text-transform: uppercase; }
       #bootstep { margin: 0; }
-      /* CF: the real start-up steps as a checklist. */
-      #bootsteps { list-style: none; display: flex; gap: 6px; margin: 10px 0 0; padding: 0; }
-      #bootsteps li { flex: 1; font: 600 12px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); border-top: 2px solid var(--bg-elevated); padding-top: 5px; text-align: left; }
-      #bootsteps li.done { color: var(--dim); border-top-color: var(--ally); }
-      #bootsteps li.now { color: var(--ink); border-top-color: var(--chog-pink); }
-      #boot .boot-title em { font-size: .42em; letter-spacing: .5em; vertical-align: middle; margin-right: .4em; }
+      #booterr:empty { display: none; } #booterr { text-align: left; margin: 10px 0 0; }
+      /* Short stages (phones held sideways): the title, the card and the bar; the line and pillars step aside. */
+      body.compact #boot { padding-top: calc(var(--st) + var(--vh) * 5); padding-bottom: calc(var(--sb) + var(--vh) * 4); }
+      body.compact .boot-tag, body.compact .boot-pillars, body.compact .boot-facts, body.compact .boot-world .mp-names { display: none; }
+      body.compact .boot-brand { margin-bottom: 6px; } body.compact .boot-head { margin-top: calc(var(--vh) * 2.4); }
+      body.compact .boot-line { letter-spacing: .26em; white-space: nowrap; } body.compact .boot-line::after { margin-top: calc(var(--vh) * 2); }
+      body.compact #boot .boot-card { padding: 8px 10px; gap: 10px; min-width: 0; margin-bottom: 10px; } body.compact .boot-card .bb-port svg { width: 48px; height: 58px; }
+      body.compact #boottip { font-size: 13px; margin-bottom: 6px; }
+      body.tiny #boot { padding-top: calc(var(--st) + 8px); padding-bottom: calc(var(--sb) + 6px); gap: 0 3%; }
+      body.tiny .boot-head, body.tiny .boot-brand .kicker { display: none; } body.tiny .boot-mark { width: 30px; }
+      body.tiny #boot .boot-title .bt1 { font-size: 40px; } body.tiny #boot .boot-title .bt2 { font-size: 24px; letter-spacing: .12em; }
+      body.tiny .boot-line { font-size: 12px; letter-spacing: .12em; } body.tiny .boot-line::after { margin-top: 8px; }
+      body.tiny #boot .boot-card { margin-bottom: 8px; } body.tiny .boot-card .bb-port { display: none; } body.tiny .brief dd { font-size: 13px; }
+      body.tiny #boottip { font-size: 12px; } body.tiny #boottip::before { margin-right: 8px; }
+      /* A narrow (upright desktop) window: one column, the card under the title. */
+      body.narrow #boot { grid-template-columns: 1fr; grid-template-rows: 1fr auto auto; } body.narrow #boot .boot-card { grid-column: 1; grid-row: 2; justify-self: start; }
+      body.narrow .boot-foot { grid-row: 3; } body.narrow .boot-stage { width: 120%; right: -40%; opacity: .55; } body.narrow .boot-facts { display: none; }
+      @media (prefers-reduced-motion: reduce) { #boot *, #boot *::before { animation: none !important; transition: none !important; } .boot-world { opacity: 1; } }
       body.hub-in #overlay > .screen.hub { animation: hubin 700ms cubic-bezier(.2,.7,.2,1); }
       @keyframes hubin { from { opacity: 0; transform: scale(.97); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
-      body.compact .boot-tag { display: none; } body.compact #boottip { font-size: 13px; min-height: 2.4em; margin-bottom: 6px; }
 
       /* Hub */
       #overlay > .screen.hub { gap: 8px; background: radial-gradient(ellipse at 50% 30%, rgba(42,31,61,.55), transparent 70%); }
@@ -541,10 +596,6 @@
       .maps5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 6px; } .map-btn { min-height: 34px; } .map-btn b { font-size: 14px; }
       .hub-play .btn.play { width: min(100%, 480px); min-height: 60px; font-size: 30px; letter-spacing: .22em; box-shadow: 0 8px 26px -8px rgba(139,92,246,.9); }
       .status { margin: 2px 0; font-size: 14px; } .status.warn { color: var(--signal); } .status.small { font-size: 12px; }
-      table.mini-board { width: 100%; border-collapse: collapse; font-size: 13px; }
-      table.mini-board th { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); text-align: left; font-weight: 500; padding: 1px 4px; }
-      table.mini-board td { padding: 3px 4px; border-bottom: 1px solid rgba(196,191,212,.1); color: var(--ink); }
-      table.mini-board td.nm { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       tr.me td { background: rgba(139,92,246,.2); } tr.gap td { text-align: center; color: var(--faint); border: none; padding: 0; }
       .squad-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; } .squad-row .field.small { width: 5.5em; letter-spacing: .14em; }
       .squad-list { list-style: none; margin: 4px 0; padding: 0; } .squad-list li { display: flex; justify-content: space-between; gap: 6px; font-size: 13px; padding: 3px 0; border-bottom: 1px solid rgba(196,191,212,.1); }
@@ -554,6 +605,9 @@
       .code { color: var(--signal); letter-spacing: .14em; font-size: 15px; }
       .hub-nav { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
       .hub-nav .navbtn { min-height: 38px; padding: 6px 12px; font-size: 15px; border-left-width: 1px; border-bottom: 2px solid var(--signal); }
+      /* Squad screen (owner 2026-10-20: opened from the hub's SQUAD button). */
+      .squad-wrap { max-width: 460px; margin: 0 auto; display: grid; gap: 10px; } .squad-wrap .hub-card { padding: 12px 14px; } .squad-wrap .squad-list li { font-size: 15px; padding: 6px 0; }
+      .squad-wrap .code { font-size: 20px; letter-spacing: .2em; color: var(--chog-pink); } .squad-how { margin: 0; color: var(--dim); }
       /* Sub-screens: upgrades, leaderboard, career, medals */
       .up-body, .scroll-body { flex: 1; min-height: 0; overflow-y: auto; display: grid; gap: 10px; align-content: start; padding-right: 4px; }
       .up-body { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
@@ -610,7 +664,7 @@
       body.compact .hub-play { gap: 3px; } body.compact .hub-play .btn.play { min-height: 44px; font-size: 22px; }
       body.compact .hub-nav .navbtn { min-height: 30px; padding: 2px 8px; font-size: 12px; }
       body.compact .pw { grid-template-columns: 48px 1fr 38px; font-size: 12px; } body.compact .sig p { font-size: 12px; } body.compact .hub-play .note.small { display: none; }
-      body.compact .note.small { font-size: 12px; } body.compact table.mini-board { font-size: 12px; } body.compact table.mini-board td { padding: 1px 3px; }
+      body.compact .note.small { font-size: 12px; }
       body.compact .online-results .reward-grid { padding: 4px 8px; gap: 6px; } body.compact .rw b { font-size: 20px; }
       body.compact .career-body { grid-template-columns: 150px 1fr; }
       body.narrow .hub-body { grid-template-columns: 1fr; overflow-y: auto; } body.narrow .hub-center { order: -1; }
@@ -721,6 +775,7 @@
       .hub.cf .pc-txt { display: grid; gap: 1px; min-width: 0; }
       .hub.cf .pc-txt > b { font-size: 17px; letter-spacing: .06em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
       .hub.cf .lvl { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--dim); }
+      .hub.cf .lvl > b { flex: none; white-space: nowrap; }
       .hub.cf .lvl .xpbar { width: 70px; height: 4px; background: var(--bg-elevated); border-radius: 2px; overflow: hidden; display: block; }
       .hub.cf .lvl .xpbar i { display: block; height: 100%; background: var(--chog-pink); }
       .hub.cf .ident-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
@@ -749,11 +804,15 @@
       .hub.cf .op-name b { font-size: clamp(26px, calc(var(--vh) * 7), 54px); letter-spacing: .18em; line-height: 1; }
       .hub.cf .op-name small { font-size: clamp(12px, calc(var(--vh) * 2.4), 17px); color: var(--dim); letter-spacing: .08em; }
       /* Secondary places: smaller, quieter, down the left edge. */
-      .hub.cf .hub-nav { position: absolute; left: 0; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 4px; align-items: stretch; flex-wrap: nowrap; }
-      .hub.cf .navbtn { display: flex; justify-content: flex-start; align-items: center; gap: 8px; min-height: 34px; padding: 0 12px 0 8px; font-size: 14px; letter-spacing: .1em; text-transform: uppercase; background: rgba(26, 18, 40, 0.55); border: 0; border-left: 2px solid transparent; border-radius: 0 6px 6px 0; color: var(--dim); text-align: left; }
-      .hub.cf .navbtn:hover { color: var(--ink); border-left-color: var(--chog-pink); background: rgba(42, 31, 61, 0.85); }
+      .hub.cf .hub-nav { position: absolute; left: 0; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 4px; align-items: stretch; flex-wrap: nowrap; min-width: 188px; }
+      /* Owner 2026-10-20: one family of compact destinations (Upgrades, Medals, Leaderboard, Career, Game Docs, Squad).
+         Same height, icon, type and states; a count or rank rides on the right, never a panel. */
+      .hub.cf .navbtn { display: flex; justify-content: flex-start; align-items: center; gap: 10px; min-height: 38px; padding: 0 12px 0 10px; font-size: 14px; letter-spacing: .1em; text-transform: uppercase; background: rgba(26, 18, 40, 0.6); border: 0; border-left: 2px solid transparent; border-radius: 0 6px 6px 0; color: var(--dim); text-align: left; transition: color 120ms, background 120ms, border-color 120ms; }
+      .hub.cf .navbtn > span:not(.demo) { flex: 1; }
+      .hub.cf .navbtn:hover, .hub.cf .navbtn:focus-visible { color: var(--ink); border-left-color: var(--chog-pink); background: rgba(42, 31, 61, 0.88); outline: none; }
+      .hub.cf .navbtn:active { background: rgba(139, 92, 246, 0.3); }
       .hub.cf .navbtn .ico { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
-      .hub.cf .navbtn i.num { font-style: normal; font-size: 12px; color: var(--chog-pink); }
+      .hub.cf .navbtn i.num { font-style: normal; font-size: 12px; color: var(--chog-pink); letter-spacing: .04em; }
       .hub.cf .navbtn .dot { background: var(--chog-pink); color: var(--bg-deep) !important; border-radius: 9px; padding: 0 5px; }
       .hub.cf .navbtn.demo-link { min-height: 28px; opacity: .8; }
       /* Right: your Chog, squad, top ranks. Secondary: translucent, no heavy borders. */
@@ -762,6 +821,8 @@
       .hub.cf .hub-right .hub-card { background: rgba(26, 18, 40, 0.66); border: 0; border-left: 2px solid var(--accent, var(--line)); border-radius: 0 6px 6px 0; padding: 8px 10px; }
       /* Bottom: mode, then the one PLAY on the right thumb. */
       .hub.cf .hub-bottom { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: flex-end; justify-content: flex-end; gap: 14px; }
+      /* The bar spans the stage but only its controls take taps: the menu above its left end stays reachable. */
+      .hub.cf .hub-bottom { pointer-events: none; } .hub.cf .hub-bottom > * { pointer-events: auto; }
       .hub.cf .modes4 { display: flex; gap: 0; background: rgba(26, 18, 40, 0.75); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; margin-bottom: 4px; }
       .hub.cf .mode-btn { border: 0; border-right: 1px solid var(--line); border-radius: 0; background: transparent; min-height: 50px; min-width: 78px; padding: 4px 10px; display: grid; gap: 1px; align-content: center; color: var(--dim); }
       .hub.cf .mode-btn:last-child { border-right: 0; }
@@ -791,14 +852,6 @@
       .map-card .mc-txt { display: grid; gap: 2px; min-width: 0; } .map-card b { font-size: 16px; letter-spacing: .08em; text-transform: uppercase; }
       .map-card i { font-style: normal; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--chog-pink); } .map-card small { font-size: 12px; color: var(--dim); line-height: 1.3; }
       body.compact .map-card { grid-template-columns: 96px 1fr; min-height: 70px; padding: 6px; } body.compact .map-card .plan { width: 96px; height: 60px; } body.compact .map-card small { display: none; }
-      /* H34 hub leaderboard: the card where TODAY was, bigger: tabs, your rank, the top eight. */
-      .hub.cf .hub-card.board.big { padding: 10px 12px; }
-      .hub.cf .board.big .tabs.mini { justify-content: flex-start; margin: 2px 0 4px; gap: 2px; } .hub.cf .board.big .tabs.mini .tab { font-size: 12px; padding: 4px 12px; min-height: 32px; min-width: 56px; }
-      .myrank-mini { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin: 2px 0 6px; font-size: 12px; color: var(--dim); }
-      .myrank-mini b { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; } .myrank-mini .big { font-size: 20px; color: var(--ink); } .myrank-mini.me .big { color: var(--chog-pink); }
-      .hub.cf .board.big table.mini-board td.nm { display: flex; align-items: center; gap: 5px; max-width: none; } .hub.cf .board.big table.mini-board td.nm span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 130px; }
-      .hub.cf .board.big .av, .hub.cf .board.big .av svg { width: 16px; height: 16px; } .hub.cf .board.big td.rk { color: var(--dim); width: 1.6em; }
-      .hub.cf .board.big .board-wrap.loading { opacity: .55; } .hub.cf .board.big .rankrule { margin: 4px 0 0; text-transform: uppercase; letter-spacing: .12em; font-size: 9px; }
       .hub.cf .play-wrap { display: grid; justify-items: end; gap: 4px; }
       .hub.cf .play-wrap .status { margin: 0; font-size: 13px; max-width: 320px; text-align: right; }
       /* PLAY: a game button. Angled, lit from inside, presses down; disabled goes grey; loading pulses its edge. */
@@ -817,13 +870,19 @@
       @keyframes playwait { 50% { box-shadow: 0 0 0 3px rgba(255, 107, 157, .55), 0 10px 34px -12px rgba(139, 92, 246, 1); } }
       @media (prefers-reduced-motion: reduce) { .play-cta.loading { animation: none; } }
       body.compact .hub.cf .hub-right { top: 50px; bottom: 78px; }
-      body.compact .hub.cf .navbtn { min-height: 30px; font-size: 12px; }
+      body.compact .hub.cf .navbtn { min-height: 32px; font-size: 12px; gap: 8px; } body.compact .hub.cf .hub-nav { min-width: 160px; gap: 3px; }
       body.compact .hub.cf .mode-btn { min-height: 44px; min-width: 64px; padding: 2px 6px; } body.compact .hub.cf .mode-btn b { font-size: 15px; }
       body.compact .hub.cf .maps5 { display: none; } body.compact .hub.cf .map-pick { display: grid; }
-      body.compact .hub.cf .board.big table.mini-board tr:nth-child(n+7) { display: none; } body.compact .hub.cf .hub-card.board.big { padding: 6px 8px; }
       body.compact .hub.cf .player-chip > svg { width: 32px; height: 32px; } body.compact .hub.cf .pc-txt > b { font-size: 15px; max-width: 120px; }
       body.compact .chog-cta { min-height: 34px; font-size: 12px; padding: 0 14px; }
       body.compact .hub.cf .hub-right .hub-card { padding: 5px 8px; }
+      /* Tiny stage (<= 380 px tall): the menu folds to a two-column block of icons under the top bar; each keeps its name
+         as its aria-label and tooltip; the upgrades dot stays. */
+      body.tiny .hub.cf .hub-nav { top: 52px; transform: none; display: grid; grid-template-columns: repeat(2, 40px); gap: 3px; min-width: 0; }
+      body.tiny .hub.cf .navbtn { justify-content: center; padding: 0; min-height: 34px; border-radius: 6px; position: relative; }
+      body.tiny .hub.cf .navbtn > span:not(.demo) { display: none; }
+      body.tiny .hub.cf .navbtn i.num:not(.dot) { display: none; } body.tiny .hub.cf .navbtn .dot { position: absolute; top: 1px; right: 1px; }
+      body.tiny .hub.cf .navbtn.demo-link { grid-column: 1 / -1; min-height: 26px; }
       /* A narrow (upright desktop) window: stack the side columns under the plate. */
       body.narrow .hub.cf .hub-nav { top: auto; bottom: 112px; transform: none; flex-direction: row; flex-wrap: wrap; right: 0; }
       body.narrow .hub.cf .hub-right { display: none; }
@@ -877,7 +936,6 @@
       .brief dd b { font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
       body.compact .brief { padding: 6px 8px; gap: 10px; margin-bottom: 8px; } body.compact .brief .mapbox { width: 112px; height: 68px; }
       body.compact .brief dd { font-size: 14px; } body.compact .brief dd small { font-size: 12px; }
-      #boot .boot-foot { width: min(640px, 92%); }
       /* UIX HUD states. Health: a tick every 25 health (the size of a hit is countable), low health = red bar + words +
          a slow pulse on the panel (never colour alone). Armour: a flash when it breaks. Ammo: amber when low, red with
          RELOAD when the magazine is empty. Ability: the seconds left, over the sweep. */
@@ -963,18 +1021,25 @@
     </div>
     <div id="overlay" class="layer"></div>
     <div id="boot" role="status" aria-live="polite">
-      <div class="boot-bg" aria-hidden="true"><i class="boot-grid"></i><i class="boot-beam"></i><i class="boot-beam b2"></i><i class="boot-vig"></i></div>
+      <div class="boot-bg" aria-hidden="true"><i class="boot-grid"></i><div class="boot-stage"><div id="bootworld" class="boot-world"></div><i class="boot-lamp"></i></div><i class="boot-vig"></i></div>
+      <div id="bootfacts" class="boot-facts" hidden></div>
       <div class="boot-main">
-        <svg class="boot-mark" viewBox="0 0 120 120" aria-hidden="true"><defs><radialGradient id="bm" cx="60" cy="60" r="60" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#8B5CF6" stop-opacity=".55"/><stop offset="1" stop-color="#8B5CF6" stop-opacity="0"/></radialGradient></defs>
+        <div class="boot-brand"><svg class="boot-mark" viewBox="0 0 120 120" aria-hidden="true"><defs><radialGradient id="bm" cx="60" cy="60" r="60" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#8B5CF6" stop-opacity=".55"/><stop offset="1" stop-color="#8B5CF6" stop-opacity="0"/></radialGradient></defs>
           <circle cx="60" cy="60" r="58" fill="url(#bm)"/><circle cx="60" cy="60" r="40" fill="none" stroke="#10B981" stroke-width="3" stroke-dasharray="10 7"/>
           <path d="M60 22l8 14 15-6-3 16 15 5-12 11 9 13-16 1-1 16-14-8-12 11-4-16-16 3 7-15-14-8 15-6-4-16 16 5z" fill="#6B3FA0" stroke="#0E091C" stroke-width="3"/>
-          <ellipse cx="60" cy="66" rx="17" ry="13" fill="#FFF8E7"/><circle cx="53" cy="63" r="3.4" fill="#0E091C"/><circle cx="67" cy="63" r="3.4" fill="#0E091C"/><circle cx="47" cy="71" r="3" fill="#FF6B9D" opacity=".85"/><circle cx="73" cy="71" r="3" fill="#FF6B9D" opacity=".85"/></svg>
-        <div class="kicker">A Chogathon original · tactical survival</div>
-        <h1 class="boot-title"><em>CHOG</em> ROOM ZERO</h1>
-        <p class="boot-tag">Lights out. Every step is heard.</p>
+          <ellipse cx="60" cy="66" rx="17" ry="13" fill="#FFF8E7"/><circle cx="53" cy="63" r="3.4" fill="#0E091C"/><circle cx="67" cy="63" r="3.4" fill="#0E091C"/><circle cx="47" cy="71" r="3" fill="#FF6B9D" opacity=".85"/><circle cx="73" cy="71" r="3" fill="#FF6B9D" opacity=".85"/></svg><span class="kicker">A Chogathon original</span></div>
+        <h1 class="boot-title"><span class="bt1">CHOG:</span><span class="bt2">ROOM ZERO</span></h1>
+        <p class="boot-line">Tactical · Survival · Top-down</p>
+        <p class="boot-head">Information<br><em>is a resource.</em></p>
+        <p class="boot-tag">What you see, what you hear and what you give away decide the fight.</p>
+        <ul class="boot-pillars" aria-hidden="true">
+          <li><svg viewBox="0 0 24 24"><path d="M3 12h2M7 8v8M11 5v14M15 8v8M19 11v2"/></svg><span><b>Hear</b>Every step carries</span></li>
+          <li><svg viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span><b>See</b>Only what your light shows</span></li>
+          <li><svg viewBox="0 0 24 24"><path d="M4 20V9l8-5 8 5v11M9 20v-6h6v6"/></svg><span><b>Outplay</b>Cover, angles, timing</span></li>
+        </ul>
       </div>
+      <div id="bootbrief" class="brief boot-card" hidden></div>
       <div class="boot-foot">
-        <div id="bootbrief" class="brief" hidden></div>
         <p id="boottip" class="in"></p>
         <div class="bootbar"><i id="bootfill"></i></div>
         <div class="boot-row"><span id="bootstep">Loading</span><span id="bootpct" class="num">0%</span></div>

@@ -3,7 +3,7 @@
 import { rewardBreakdown } from '../src/config/progression';
 import { describe, expect, it } from 'vitest';
 import { emptyAcct, tierEffect, type AcctView } from '../src/ui/account';
-import { authHtml, boardScreenHtml, careerHtml, classOf, fiveLockReason, hubHtml, onlineResultsHtml, upgradesHtml, upgradesReady, type AuthSheet, type HubCtx } from '../src/ui/hub';
+import { authHtml, boardScreenHtml, careerHtml, classOf, fiveLockReason, hubHtml, onlineResultsHtml, squadScreenHtml, upgradesHtml, upgradesReady, type AuthSheet, type HubCtx } from '../src/ui/hub';
 import { NO_UPGRADES } from '../src/config/power';
 import { DEFAULT_SETTINGS } from '../src/ui/profile';
 import type { AccountProfile } from '../src/net/account';
@@ -27,14 +27,16 @@ const signed = (o: Partial<AcctView> = {}): AcctView => ({ ...emptyAcct(), confi
 const holder = (): AcctView => signed({ hasWallet: true, tokens: [blaze], choice: { tokenId: 5 } });
 
 describe('hub', () => {
-  it('guest: compact identity, a Sign in button that opens sign-in (never Settings), PLAY, four modes, board, squad', () => {
+  it('guest: compact identity, a Sign in button that opens sign-in (never Settings), PLAY, four modes, Leaderboard and Squad buttons', () => {
     const h = hubHtml(ctx(guest()));
     expect(h).toMatch(/id="playbtn"/);
     for (const m of ['solo', '1v1', '3v3', '5v5']) expect(h).toContain(`data-mode="${m}"`);
     expect(h).toMatch(/You \+ 2 AI/); // the default game is not the online 3v3
     expect(h).toMatch(/Holders only/);
-    expect(h).toMatch(/id="boardpreview"/);
-    expect(h).toMatch(/id="squad"/);
+    // Owner 2026-10-20: the leaderboard and the squad are compact buttons that open their own screens, never panels.
+    expect(h).not.toMatch(/id="boardpreview"|id="squad"|class="hub-right"/);
+    const nav = [...h.matchAll(/class="navbtn[^"]*" data-act="([a-z]+)"/g)].map((m) => m[1]);
+    expect(nav).toEqual(['upgrades', 'medals', 'ranks', 'career', 'docs', 'squad', 'demo']);
     // CF: Sign in is a quiet secondary button; the Chog entry is "Enter with CHOG", never "Connect wallet".
     expect(h).toMatch(/<button class="btn small ghost" data-act="signin" id="signin-cta">Sign in<\/button>/);
     expect(h).toMatch(/data-act="chog" id="chog-cta"><span>Enter with CHOG<\/span>/);
@@ -103,13 +105,32 @@ describe('hub', () => {
     expect(classOf(a).tier).toBe('free');
     expect(hubHtml(ctx(a))).toMatch(/NFT power off/);
   });
-  it('a squad shows its code and members; a follower cannot start the match', () => {
+  it('a squad: the hub button carries its size, the Squad screen its code and members; a follower cannot start the match', () => {
     const party = { code: 'AB2CD', members: [{ name: 'Lead', hero: 'benja', tier: 'free' as const, holder: false, demo: false, you: false, leader: true, ready: true }, { name: 'Me', hero: 'tabsu', tier: 'epic' as const, holder: true, demo: false, you: true, leader: false, ready: true }] };
-    const h = hubHtml(ctx(signed(), { mode: '3v3', net: { url: 'ws://x/ws', state: 'idle', message: '', queue: null, rtt: 0, party, follower: true } }));
-    expect(h).toMatch(/AB2CD/);
+    const c = ctx(signed(), { mode: '3v3', net: { url: 'ws://x/ws', state: 'idle', message: '', queue: null, rtt: 0, party, follower: true } });
+    const h = hubHtml(c);
     expect(h).toMatch(/Leader starts the match/);
-    expect(h).toMatch(/2\/5/);
-    expect(h).toMatch(/data-act="squad-leave"/);
+    expect(h).toMatch(/data-act="squad" id="squadbtn" title="Squad" aria-label="Squad">[^]*?<i class="num">2\/5<\/i>/);
+    expect(h).not.toMatch(/AB2CD|squad-leave/);
+    const s = squadScreenHtml(c);
+    expect(s).toMatch(/id="squadcodeshown">AB2CD/);
+    expect(s).toMatch(/2\/5/);
+    expect(s).toMatch(/data-act="squad-leave"/);
+    expect(s).toMatch(/data-act="back"/);
+    expect(s).toMatch(/The leader picks the mode and starts every match/);
+  });
+  it('the Squad screen without a squad: Create, a code field and Join; with no game server it says so', () => {
+    const s = squadScreenHtml(ctx(signed()));
+    expect(s).toMatch(/data-act="squad-create"/);
+    expect(s).toMatch(/id="squadcode"/);
+    expect(s).toMatch(/data-act="squad-join"/);
+    const off = ctx(signed(), { net: { url: null, state: 'offline', message: '', queue: null, rtt: 0, party: null, follower: false } });
+    expect(squadScreenHtml(off)).toMatch(/not available in this build/);
+    expect(hubHtml(off)).not.toMatch(/data-act="squad"/);
+  });
+  it('the Leaderboard button shows your rank once the board knows it', () => {
+    const me = { rank: 3, name: 'Viper', hero: null, kills: 9, wins: 1, matches: 2, level: 2, rating: 1000, nftTier: null, you: true, hidden: false };
+    expect(hubHtml(ctx(signed({ boardMe: me } as Partial<AcctView>)))).toMatch(/data-act="ranks" title="Leaderboard" aria-label="Leaderboard">[^]*?<span>Leaderboard<\/span> <i class="num">#3<\/i>/);
   });
 });
 

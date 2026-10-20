@@ -70,7 +70,7 @@ export function stage(): StageLayout {
 
 /**
  * Lay out #stage for the current viewport. Body classes replace viewport media queries, which would describe the
- * browser rather than the (possibly turned) stage: `rot`, `compact` (stage <= 460 px tall), `narrow` (portrait
+ * browser rather than the (possibly turned) stage: `rot`, `compact` (stage <= 460 px tall), `tiny` (<= 380), `narrow` (portrait
  * desktop window under 600 px). `--vw`/`--vh` are 1% of the stage.
  */
 export function layoutStage(el: HTMLElement): StageLayout {
@@ -86,6 +86,8 @@ export function layoutStage(el: HTMLElement): StageLayout {
   b.toggle('narrow', L.h > L.w && L.w < 600);
   // H34: a small landscape phone (stage under 720 px wide): the top band has no room for full words.
   b.toggle('slim', L.w < 720 && L.h <= 460);
+  // A short stage (a 320 x 568 to 375 x 667 phone held sideways): the hub menu folds to icons, the loading screen to its title.
+  b.toggle('tiny', L.h <= 380);
   const dev = currentDevice();
   applyDevice(dev);
   document.body.style.setProperty('--vw', `${L.w / 100}px`);

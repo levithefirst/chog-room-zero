@@ -25,9 +25,19 @@ try {
     await b.go('/?debug'); await b.hub();
     const pick = await b.ev(`[...document.querySelectorAll('.maps5 [data-map]')].map((x) => ({ id: x.dataset.map, on: x.classList.contains('on'), name: x.querySelector('b').textContent.trim() }))`);
     check(`${view.label}: the hub offers the five locations, Room Zero chosen by default`, pick?.map((p) => p.id).join() === IDS.join() && pick[0].on && pick.map((p) => p.name.toUpperCase()).join() === IDS.map((i) => NAMES[i].toUpperCase()).join(), JSON.stringify(pick));
-    // H34: the TODAY tasks are gone from the hub; the leaderboard took their place (tabs, my rank, ranked by kills).
-    const hb = await b.ev(`({ today: !!document.getElementById('daily'), board: !!document.querySelector('.hub-right #boardpreview.big'), first: document.querySelector('.hub-right .hub-card')?.id, tabs: [...document.querySelectorAll('#boardpreview .tab')].map((t) => t.innerText.trim().toLowerCase()).join(), mine: !!document.querySelector('#boardpreview .myrank-mini') })`);
-    check(`${view.label}: no TODAY panel on the hub; the leaderboard is first in its place, with Solo/Online and My rank`, !hb.today && hb.board && hb.first === 'boardpreview' && hb.tabs === 'solo,online' && hb.mine, JSON.stringify(hb));
+    // H34: the TODAY tasks are gone from the hub. Owner 2026-10-20: the leaderboard and the squad are compact buttons in
+    // the hub's menu that open their own screens; neither is a panel on the hub.
+    const hb = await b.ev(`({ today: !!document.getElementById('daily'), board: !!document.getElementById('boardpreview'), squad: !!document.getElementById('squad'), nav: [...document.querySelectorAll('.hub-nav .navbtn')].map((x) => x.dataset.act).join() })`);
+    check(`${view.label}: no TODAY, leaderboard or squad panel on the hub; one menu with Leaderboard and Squad buttons`, !hb.today && !hb.board && !hb.squad && hb.nav === 'upgrades,medals,ranks,career,docs,squad,demo', JSON.stringify(hb));
+    for (const [act, sel] of [['ranks', '.screen.ranks .tabs'], ['squad', '.screen.squad-screen [data-act="squad-create"]']]) {
+      await b.click(`.hub-nav [data-act="${act}"]`);
+      const opened = await b.until(`!document.getElementById('hub') && !!document.querySelector(${JSON.stringify(sel)})`, 5000);
+      await b.shot(`${act}-screen`);
+      const fits = (await b.ev(LAYOUT_PROBE) ?? []).length === 0;
+      await b.ev(`history.back()`);
+      const back = await b.until(`!!document.getElementById('hub')`, 5000);
+      check(`${view.label}: ${act === 'ranks' ? 'Leaderboard' : 'Squad'} button opens its screen (fits the screen), browser Back returns to the hub`, opened && fits && back, JSON.stringify({ opened, fits, back }));
+    }
     await b.shot('hub');
     check(`${view.label}: hub layout with the picker (no page scroll, no off-screen buttons)`, (await b.ev(LAYOUT_PROBE) ?? []).length === 0, JSON.stringify(await b.ev(LAYOUT_PROBE)));
     for (const id of [...IDS.slice(1), 'room-zero']) {

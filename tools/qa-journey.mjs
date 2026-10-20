@@ -6,6 +6,9 @@
 // the real /api/auth/wallet/verify; the Monad RPC is faked for that address (it holds Blaze, a 1:1).
 // Usage: node tools/qa-journey.mjs http://localhost:8790 [shotDir]
 import { browser, sleep } from './cdp.mjs';
+// Owner 2026-10-20: the squad lives on its own screen, opened from the hub's SQUAD button.
+const openSquad = async (X) => { await X.click('.hub-nav [data-act=squad]'); return X.until(`!!document.querySelector('.squad-screen')`, 5000); };
+const backToHub = async (X) => { await X.click('[data-act=back]'); return X.until(`!!document.getElementById('hub')`, 5000); };
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 const [base, shotDir] = process.argv.slice(2);
@@ -116,9 +119,9 @@ try {
   await fresh(Bb, '/?debug&google_sub=bob-g&drive=1&driveAfter=24');
   await Bb.click('#signin-cta'); await Bb.click('[data-act=signin-google]'); await Bb.hub(); await Bb.until(`!!__chog.acct().profile`, 15000);
   await A.go('/?debug&drive=1&driveAfter=24'); await A.hub(); await A.until(`!!__chog.acct().profile`, 10000);
-  await A.click('[data-act=squad-create]');
+  await openSquad(A); await A.click('[data-act=squad-create]');
   const code = await A.until(`document.getElementById('squadcodeshown')?.innerText || null`, 30000);
-  await Bb.ev(`document.getElementById('squadcode').value = 'ZZZZZ'`); await Bb.click('[data-act=squad-join]');
+  await openSquad(Bb); await Bb.ev(`document.getElementById('squadcode').value = 'ZZZZZ'`); await Bb.click('[data-act=squad-join]');
   const bad = await Bb.until(`__chog.net()?.message || null`, 15000);
   check('squad: an unknown code says so', /No squad with that code/i.test(bad ?? ''), bad);
   await Bb.ev(`document.getElementById('squadcode').value = ${JSON.stringify(code)}`); await Bb.click('[data-act=squad-join]');
@@ -126,6 +129,7 @@ try {
   const netDiag = (b) => b.ev(`(() => { const n = __chog.net(); return n ? { state: n.state, msg: n.message, party: n.party, log: n.log.slice(-8) } : null; })()`);
   check('squad: created in the hub, joined by code, leader marked', sq && sq.includes('Alice-QA*'), sq ? JSON.stringify(sq) : JSON.stringify({ code, leader: await netDiag(A), member: await netDiag(Bb) }));
   check('squad: a good join leaves no stale error on screen', !(await Bb.ev(`__chog.net()?.message`)), await Bb.ev(`__chog.net()?.message`));
+  await backToHub(A); await backToHub(Bb);
   await Bb.click('[data-mode="3v3"]');
   check('squad: the member cannot start the match', await Bb.ev(`document.getElementById('playbtn').disabled`));
   const solos = [];
@@ -192,11 +196,12 @@ try {
   check('5v5: the server checked the holder ticket and queued the holder', q && q.need === 10 && q.holder && q.tier === 'legendary', JSON.stringify(q));
   await H.click('#playbtn');
   await H.until(`__chog.net()?.state === 'idle'`, 8000);
-  await H.click('[data-act=squad-create]');
+  await openSquad(H); await H.click('[data-act=squad-create]');
   const hcode = await H.until(`document.getElementById('squadcodeshown')?.innerText || null`, 15000);
   const F = await B('freebie'); await fresh(F);
-  await F.ev(`document.getElementById('squadcode').value = ${JSON.stringify(hcode)}`); await F.click('[data-act=squad-join]');
+  await openSquad(F); await F.ev(`document.getElementById('squadcode').value = ${JSON.stringify(hcode)}`); await F.click('[data-act=squad-join]');
   await H.until(`__chog.net()?.party?.members.length === 2`, 15000);
+  await backToHub(H); await backToHub(F);
   await H.click('[data-mode="5v5"]');
   // The holder's PLAY is enabled (they hold a Chog); the server must refuse the squad because a member does not.
   await H.click('#playbtn');

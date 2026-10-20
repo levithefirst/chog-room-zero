@@ -55,3 +55,36 @@ loading screen spoke to the engine (FONTS / RENDERER / ROOM / PLAYER / ACCOUNT c
 
 Counts: P0 3 (scale, boot loading, typography-at-scale), P1 11, P2 8, P3 rest; N/A 1 (comms ping).
 What was implemented is listed in docs/HANDOFFS.md (UIX) and the PR.
+
+## Hub and loading pass (owner 2026-10-20)
+
+```
+BRIEF: Hub as a game menu; loading as entering the world
+PURPOSE      On a phone the hub's leaderboard and squad panels took a third of the screen and competed with PLAY;
+             the loading screen read as a web page loading.
+GAMEPLAY     None changed. The hub answers one question: what next? Pick location and mode, PLAY.
+NFT RELATION Not NFT related.
+PLAYER FEEL  PLAY is the one big control (measured: at least twice the area of any menu button at every viewport).
+TECH COST    Half a day. No dependency, no new system: one screen (Squad) reusing the squad panel's own controls.
+RISK         Squad harder to find. Kept as a named button with its member count (2/5) on the hub.
+SCOPE        Owner-requested. It removes two hub panels and adds no system.
+QUALITY BAR  Mediocre = a dashboard of cards, or a splash of generic shooter art. Avoided: compact destinations of
+             one family; the loading backdrop is the location you are about to play, drawn from its own tiles.
+VERDICT      KEEP.
+```
+
+Hub (`src/ui/hub.ts` `hubHtml`, `squadScreenHtml`; `index.html` "CF hub"):
+- One menu, one family: Upgrades, Medals, Leaderboard, Career, Game Docs, Squad (and DEMO). Same height, icon, type, hover and focus states. A count or rank rides on the right (medals 28/40, your rank #1, squad 2/5).
+- Leaderboard opens the existing full Leaderboard screen. Squad opens a Squad screen with the same Create, code, Join, members and Leave as the old panel. Browser Back and the screen's back button both return to the hub.
+- The right column now holds only a verified Chog's card, if you have one.
+- A short stage (`body.tiny`, 380 px tall or less: phones from 320 x 568 to 375 x 667) folds the menu to a two-column block of icons; each keeps its name as aria-label and tooltip.
+
+Loading (`index.html` `#boot`, `src/main.ts` `bootBrief`, `src/ui/mapPreview.ts` world variant):
+- Backdrop: the location you last picked, drawn from its real tiles with its lit areas and area names, tilted under one sweeping lamp. Its YOU ring sits on the real solo start.
+- Left: the wordmark (CHOG: / ROOM ZERO), the game's own line "Information is a resource.", and three pillars that are real rules (hear, see, outplay).
+- Bottom right: the deploy card (operator portrait, location, operator, weapon). Top right: the real counts (5 locations, 7 operators, up to 5v5) from the config.
+- Bottom: one real tip, the bar and the real step it waits on. The bar moves only on `boot()` steps; nothing is staged for show.
+- Reduced motion (system or Settings): nothing animates; the world is still drawn.
+
+Evidence: `tools/uix2-hub-loading.mjs` (10 viewports from 320 x 568 to 3440 x 1440, emulated; NOT devices).
+Open: the owner on a real phone: "is PLAY the first thing you see, and can you still find Squad?"
