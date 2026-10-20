@@ -1,11 +1,11 @@
 # Chog: Room Zero - shared state
 
 Source of truth. Rules: `docs/RULES.md`. Edit only in a handoff commit. Under 8,000 characters.
-Last verified: 2026-10-20 by claude (H36 multiplayer reliability, live from ccr-e7fadb8f-qtochk).
+Last verified: 2026-10-20 by claude (H37 tactical map, live from ccr-e7fadb8f-qtochk).
 
 ## Snapshot (EVIDENCE)
-- Repo `levithefirst/chog-room-zero`. Base branch `setup/skill-system` (LOCKED 2026-10-11: no `main`); never merge without owner. PR #10 = ccr-e7fadb8f-qtochk (= d98ef8d, live); docs-only commits stay on claude/h34-maps (no Render restart). Client and server ship from one commit.
-- Vercel project `chog-room-zero` (protection off). Production `chogroomzero.xyz` = `dpl_SbSnNzyk1J8uxXbHbpK37hJuCWuw` (d98ef8d). Rollback: `dpl_46MAf8pLrnp2qn6ywR2haNvf8PRb` (e6f92a9) with Render on e6f92a9; no migration since H33. No `NFT_COMBAT` (power on). Game server: Render Free (0.1 CPU, 512 MB, est. 30-40 players) `https://room-zero-game.onrender.com` (redeploys on every push to the branch); `ALLOWED_ORIGINS` = production + branch preview.
+- Repo `levithefirst/chog-room-zero`. Base branch `setup/skill-system` (LOCKED 2026-10-11: no `main`); never merge without owner. PR #10 = ccr-e7fadb8f-qtochk (live; claude/h34-maps holds H34-H36). Client and server ship from one commit.
+- Vercel project `chog-room-zero` (protection off). Production `chogroomzero.xyz` = H37 code 002dc7b (see HANDOFFS H37). Rollback: `dpl_SbSnNzyk1J8uxXbHbpK37hJuCWuw` (d98ef8d) with Render on d98ef8d; no migration since H33. No `NFT_COMBAT` (power on). Game server: Render Free (0.1 CPU, 512 MB, est. 30-40 players) `https://room-zero-game.onrender.com` (redeploys on every push to the branch); `ALLOWED_ORIGINS` = production + branch preview.
 - Chog Genesis (NFT-R1, EVIDENCE): Monad 143, contract `0xc96d31F8626c6D03Fae5dCD3d61e3FB9F4a73763` (ChogMint, Sourcify), ERC-721, supply 1,969, catalogue in `data/chog-genesis/`; token id is NOT the displayed number. `/api/game/chain` checks it live.
 - Chogathon 2026 (`docs/SUBMISSION.md`): "the Chog NFT must be essential".
 
@@ -16,7 +16,7 @@ Last verified: 2026-10-20 by claude (H36 multiplayer reliability, live from ccr-
 4. Controls: mobile LANDSCAPE (upright turned 90 deg); left thumb move, right thumb aim+fire outside deadzone, ability in right-thumb reach, no auto-fire. PC: WASD, mouse, click, Space.
 5. Test devices: Pixel 7, iPhone 13.
 6. Projectiles travel visibly, no hitscan. Walls block bullets and vision via real occlusion.
-7. Movement has deliberate acceleration, turning, stopping. Humans turn at a cap too (owner 2026-10-16 CF: "capped/weighted human turning").
+7. Movement has deliberate acceleration, turning, stopping. Humans turn at a cap too.
 8. Bots: patrol, investigate, pursue, attack, reposition, disengage; cover, angles, break LOS; never just rush.
 9. Class system. CHANGED by the owner 2026-10-18 (CHOG SUPERPOWER SYSTEM, rule 6: "Do not use NFT rarity for generic health/damage stat inflation"): no tier adds health, armour or damage; a verified Chog's real traits give one superpower (Laser Eyes, Visor, Bubble, Drool Web, Aura; X-Ray Eyes has no trait, DEMO/Training only) in the single ability slot, ranked by its tier; owner 2026-10-18 IDENTITY pass: 150 health for every operator and free player, 200 for a verified Chog with no mapped power (no other edge), armour cap 65; the ten 1:1s keep their names and signatures; same upgrades for all; nothing sold. `src/config/superpowers.ts`, `docs/design/superpowers.md`. NFT power ON (`NFT_COMBAT=0` off).
 10. Solo, 1v1, 3v3 open to all; 5v5 verified holders only, server-enforced (every squad member). Ownership verified server-side (SIWE, Monad); fails closed. Demo mode labelled, isolated, no rewards. 1:1 names used (owner 2026-10-14); art rights pending.
@@ -30,7 +30,7 @@ Last verified: 2026-10-20 by claude (H36 multiplayer reliability, live from ccr-
 
 ## PROPOSALS (not approved)
 - All tuning numbers, art direction, maps, fonts, CHOG palette (`docs/BRAND.md`), NFT-R1 layers. Deps: @neondatabase/serverless, @electric-sql/pglite (dev), @noble/*.
-- V2 (H31): perks, AI guard, challenges, Ace, solo board cap, telemetry.
+- V2 (H31): perks, AI guard, challenges, Ace, solo board cap, telemetry. H37: map look, the 1v1 opponent rule (shown only when known).
 - SP/ID (H32, H33): superpower numbers, Visor radii, drills, beam/orb rules; sawn-off 10 per pellet.
 - H34: all five layouts, rail/deck/stairs rules, lit range 22 m, surface noise, medal thresholds.
 - H36: location is a preference: after 10 s anyone in the mode meets on the longest waiter's pick (`anyMapAfterSec`; Infinity = strict per-location queues as H33).
@@ -42,13 +42,14 @@ Last verified: 2026-10-20 by claude (H36 multiplayer reliability, live from ccr-
 - Whether a real holder can play 5v5 (fake-chain holder passes locally).
 
 ## Implemented (EVIDENCE)
-- H34 (live): five locations, RAIL/DECK/STAIRS tiles, lit areas, surfaces, hub leaderboard, map picker, 40 medals, device layer, protocol 2 (`docs/design/maps.md`, HANDOFFS H34).
-- H35 (live): hub blink fixed (ping time redrew the hub).
-- H36 (live): human 1v1 fixed (saved locations split the queue); dead sockets never seated; queue rejoins after a drop; a failing room stops alone; rooms build 3x faster. `docs/MULTIPLAYER.md`.
-- ID (H33) and earlier: `docs/HANDOFFS.md`.
+- H34/H35 (live): five locations, rail/deck/stairs, lit areas, hub leaderboard, 40 medals, protocol 2, hub blink fixed (`docs/design/maps.md`).
+- H37 (live): tactical map (MAP, M): the live level, areas, zone, supplies; your side always, hostiles only from your intel, Visor dots; no protocol change. `docs/design/tactical-map.md`.
+- H36 (live): human 1v1 fixed; dead sockets never seated; queue rejoins; a failing room stops alone. `docs/MULTIPLAYER.md`.
+- Earlier: `docs/HANDOFFS.md`.
 
 ## Automated tests (EVIDENCE, Node 22.22)
-H36 (d98ef8d): vitest 1030/1030, tsc clean, 11 browser suites, h34-blink 34/34, mp-human met 9.4 s. Load (local, bots): 400 mixed 398/398 started, p50 1.0 s, 0 hangs; churn 400 x 120 s 0 hangs. Production check 10/10 (different locations met 9.2 s).
+H37 (002dc7b): vitest 1048/1048, tsc clean, 12 browser suites (tm-map 105/105), rc8 1v1+3v3 PASS; prod check 10/10.
+H36 load (local, bots): 400 mixed 398/398 started, 0 hangs (HANDOFFS H36).
 
 ## Not performed (needs the owner)
 - Human play of CF to H34 (all five locations), real phones, real-GPU FPS, audio by ear, a real wallet, hosted 5v5 with a holder, art rights, demo video.
@@ -59,9 +60,10 @@ Core Feel Gate: BLOCKED on owner playtests. G10: automated PASS; playtest not ru
 ## Current task
 | Id | Owner | Branch | Files | Done when | Status |
 |---|---|---|---|---|---|
-| MP | claude | claude/h34-maps -> ccr-e7fadb8f-qtochk | see H36 | Owner P0 multiplayer reliability | live; owner: 10 human 1v1s, server plan |
+| TM | claude | ccr-e7fadb8f-qtochk | see H37 | Owner 2026-10-20 TACTICAL MAP | live; owner plays it on a phone |
+| MP | claude | same | see H36 | Owner P0 multiplayer reliability | live; owner: 10 human 1v1s, server plan |
 | H34/ID/SP | claude | same | see H32-H35 | Owner 2026-10-18/19 | live; owner plays five maps; open items above |
 | RC-8 | claude | PR #10 | see H16 | Owner RC-8 mandate | PR #10 not merged (owner decides) |
 
 ## Handoffs
-Latest: H36 (2026-10-20, claude -> owner; multiplayer reliability live). History: `docs/HANDOFFS.md`.
+Latest: H37 (2026-10-20, claude -> owner; tactical map live). History: `docs/HANDOFFS.md`.
