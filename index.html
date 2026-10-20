@@ -894,6 +894,11 @@
       #abcd { position: absolute; inset: 0; display: grid; place-items: center; font-size: 20px; color: var(--ink); pointer-events: none; text-shadow: 0 1px 2px #000; }
       #abcd:empty { display: none; } #ability:not(.ready) #abl { opacity: 0.35; }
       body.reduce-motion #vitals.low { animation: none; }
+      /* UIX pause: run state + controls legend (keycaps). */
+      .pause-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 10px auto 14px; max-width: 520px; }
+      ul.keys { list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; padding: 0; margin: 16px 0 0; font-size: 13px; color: var(--dim); }
+      ul.keys li { display: flex; gap: 6px; align-items: center; }
+      kbd { font: 600 11px/1 var(--mono); color: var(--ink); padding: 4px 6px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px; background: var(--bg-elevated); }
       /* UIX reduced motion (Settings > Motion, or the system preference when it is System): no entrances, pulses or
          sweeps; state changes stay (colour, words, numbers). Gameplay shake is skipped in src/main.ts. */
       body.reduce-motion #overlay *, body.reduce-motion #hud *, body.reduce-motion #overlay, body.reduce-motion #boot * { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
