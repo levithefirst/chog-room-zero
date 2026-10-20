@@ -1,4 +1,4 @@
-import { createRenderer, createFx, COVER_FLASH_SECONDS, COLLECT_SECONDS, RING_SECONDS } from './render/render';
+import { createRenderer, createFx, COVER_FLASH_SECONDS, COLLECT_SECONDS, RING_SECONDS, HIT_SECONDS, KILL_SECONDS, DMG_BATCH, DMG_SECONDS } from './render/render';
 import { createInput, touchStick } from './input/input';
 import { createSummaryGate, overlayInputAllowed } from './input/gate';
 import { createAudio } from './audio/audio';
@@ -29,7 +29,7 @@ import { coverBoxAt } from './sim/cover';
 import { adapterFromUrl, resolveIdentity, GUEST, type Identity } from './nft/identity';
 import { boundIdentity } from './nft/identity';
 import { DEMO_COPY, TRAIT_INFO, isTokenId, sampleTokens, traitsFor } from './nft/traits';
-import { loadRecords, recordBest, type Records } from './ui/records';
+import { fmtTime, loadRecords, recordBest, type Records } from './ui/records';
 import { DEFAULT_SETTINGS, QUALITY_DPR, SETTINGS_KEY, STICK_PX, displayName, loadProfile, loadSettings, saveSettings, togglePin, validateNickname, type Profile, type Settings, HUD_SCALES, type HudScale } from './ui/profile';
 import { MEDALS, awardMedals, loadMedals, type MedalDef, type Unlocked } from './ui/medals';
 import { TIPS_KEY, loadShownTips, nextTip, saveShownTips, tipText, type TipId } from './ui/tips';
@@ -664,9 +664,16 @@ async function start() {
       <div class="btns"><button class="btn primary" data-go="resume">Resume</button><button class="btn" data-go="quit">Leave match</button>${fsButton()}</div>`);
       return;
     }
-    card(`<h2>Paused</h2><p>The basement waits.</p>
+    // UIX: the pause card says where the run stands (only numbers the game tracks) and, on PC, the controls.
+    const p = player(world);
+    const foes = world.actors.filter((a) => a.team === 'bot');
+    const where = training ? 'CHOG Training' : MAPS[mapId].name;
+    const stat = (k: string, v: string) => `<div class="rw"><span>${k}</span><b class="num">${v}</b></div>`;
+    const keys = input.mode === 'touch' ? '' : `<ul class="keys">${[['WASD', 'Move'], ['Shift', 'Creep'], ['Mouse', 'Aim'], ['Click', 'Fire'], ['R', 'Reload'], ['Space', 'Ability'], ['G', 'Grenade'], ['Esc', 'Resume']].map(([k, v]) => `<li><kbd>${k}</kbd>${v}</li>`).join('')}</ul>`;
+    card(`<div class="kicker">${training ? 'Training' : 'Vs bots'} · ${esc(where)}</div><h2>Paused</h2>
+      <div class="reward-grid pause-grid">${stat('Time', fmtTime(Math.round(playTime)))}${stat('Hostiles left', `${foes.filter((a) => a.alive).length}/${foes.length}`)}${stat('Health', String(Math.max(0, Math.ceil(p.hp))))}${stat('Your kills', String(p.kills))}</div>
       <div class="btns"><button class="btn primary" data-go="resume">Resume</button><button class="btn" data-go="restart">Restart</button><button class="btn" data-go="quit">Quit</button>${fsButton()}</div>
-      <p style="font-size:13px">${input.mode === 'touch' ? '' : 'Esc or P to resume.'}</p>`);
+      ${keys}`);
   }
 
   /** SB: the one or two reasons this death happened (src/sim/insight.ts), from the player's own fight record. */
@@ -1147,7 +1154,7 @@ async function start() {
     suggestPilot = null;
     renderer.reset(world);
     drawnWorld = world;
-    fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = fx.rings.length = fx.noise.length = fx.comms.length = 0;
+    fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.dmgNums.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = fx.rings.length = fx.noise.length = fx.comms.length = 0;
     matchIntel = createIntel();
     wasDowned = false;
     rep = { sent: false, downs: 0, bled: 0, fireAt: -1, firing: false, delays: [] };
@@ -1374,7 +1381,7 @@ async function start() {
     world = net!.world!;
     renderer.reset(world);
     drawnWorld = world;
-    fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = fx.rings.length = fx.noise.length = fx.comms.length = 0;
+    fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.dmgNums.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = fx.rings.length = fx.noise.length = fx.comms.length = 0;
     matchIntel = createIntel();
     wasDowned = false;
     rep = { sent: false, downs: 0, bled: 0, fireAt: -1, firing: false, delays: [] };
@@ -1901,6 +1908,13 @@ async function start() {
         // An X-Ray beam through a wall tells you it landed, never where (no mark or spark outside your light).
         if (!h.power || pointInPolygon(h.x, h.y, renderer.visPoly())) {
           fx.hitMarks.push({ x: h.x, y: h.y, age: 0, kill: h.killed });
+          // UIX: one number per target while hits keep landing within DMG_BATCH (eight pellets read as one number).
+          const tg = world.actors[h.target], dmg = (h.hpDamage ?? 0) + (h.armorDamage ?? 0);
+          if (dmg > 0 && tg) {
+            const prev = fx.dmgNums.find((d) => d.target === h.target && d.age < DMG_BATCH);
+            if (prev) { prev.amount += dmg; prev.age = 0; prev.x = tg.x; prev.y = tg.y; prev.kill ||= h.killed; prev.armor &&= !(h.hpDamage > 0); }
+            else fx.dmgNums.push({ target: h.target, x: tg.x, y: tg.y, amount: dmg, age: 0, kill: h.killed, armor: !(h.hpDamage > 0) });
+          }
           spark(h.x, h.y, h.killed ? 10 : 4, true);
         }
         if (h.killed) toast(`${world.actors[h.target].name} eliminated`);
@@ -2094,6 +2108,8 @@ async function start() {
     }
     for (const m of fx.impacts) m.age += dt;
     for (const m of fx.hitMarks) m.age += dt;
+    for (const d of fx.dmgNums) d.age += dt;
+    fx.dmgNums = fx.dmgNums.filter((d) => d.age < DMG_SECONDS);
     for (const m of fx.damageArcs) m.age += dt;
     for (const m of fx.pings) m.age += dt;
     for (let i = 0; i < fx.threats.length; i++) if (fx.threats[i] > 0) fx.threats[i] -= dt;
@@ -2107,7 +2123,7 @@ async function start() {
     fx.impacts = fx.impacts.filter((m) => m.age < 0.25);
     for (const c of fx.coverFlashes) c.age += dt;
     fx.coverFlashes = fx.coverFlashes.filter((c) => c.age < COVER_FLASH_SECONDS);
-    fx.hitMarks = fx.hitMarks.filter((m) => m.age < 0.2);
+    fx.hitMarks = fx.hitMarks.filter((m) => m.age < (m.kill ? KILL_SECONDS : HIT_SECONDS));
     fx.damageArcs = fx.damageArcs.filter((m) => m.age < TUNING.render.damageArcSeconds);
     fx.pings = fx.pings.filter((m) => m.age < 0.7);
     fx.shake = Math.max(0, fx.shake - dt);

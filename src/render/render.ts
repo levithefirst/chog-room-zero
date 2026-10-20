@@ -99,6 +99,8 @@ export interface Fx {
   /** Cover pieces that just stopped a bullet: outline flash (COVER_FLASH_SECONDS). */
   coverFlashes: { box: { x0: number; y0: number; x1: number; y1: number }; age: number }[];
   hitMarks: { x: number; y: number; age: number; kill: boolean }[];
+  /** UIX: your damage on a hostile you can see, batched per target (DMG_BATCH s), shown on the target (DMG_SECONDS). */
+  dmgNums: { target: number; x: number; y: number; amount: number; age: number; kill: boolean; armor: boolean }[];
   shake: number;
   corpses: { x: number; y: number; hostile: boolean }[];
   // Fixed pool; `age >= 1` means free. Capped at TUNING.render.maxSparks.
@@ -122,13 +124,15 @@ export interface Fx {
 }
 
 export const RING_SECONDS = 0.45;
+/** UIX hit feedback timing: a hit marker 0.28 s, a kill marker 0.6 s; damage numbers merge for 0.25 s, live 0.8 s. */
+export const HIT_SECONDS = 0.28, KILL_SECONDS = 0.6, DMG_BATCH = 0.25, DMG_SECONDS = 0.8;
 
 /** How long the pickup ring lasts (s). */
 export const COLLECT_SECONDS = 0.5;
 
 export function createFx(): Fx {
   return {
-    markers: [], impacts: [], coverFlashes: [], hitMarks: [], shake: 0, corpses: [], damageArcs: [], pings: [], threats: [], collects: [], rings: [], noise: [], intel: createIntel(), comms: [],
+    markers: [], impacts: [], coverFlashes: [], hitMarks: [], dmgNums: [], shake: 0, corpses: [], damageArcs: [], pings: [], threats: [], collects: [], rings: [], noise: [], intel: createIntel(), comms: [],
     sparks: Array.from({ length: R.maxSparks }, () => ({ x: 0, y: 0, vx: 0, vy: 0, age: 1, hostile: false })),
   };
 }
@@ -206,8 +210,10 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
   // V2: "shot from the dark" tags on damage arcs (distance to a shooter you could not see), pooled.
   const arcTags = new Container();
   const arcTagPool: Text[] = [];
+  const dmgTags = new Container();
+  const dmgPool: Text[] = [];
   world.addChild(dimSprite, fogG, lightLayer, props, zoneG, labels, marks, actors, bars, fxG, recapG, debugG, debugLabels);
-  app.stage.addChild(world, screen, arcTags);
+  app.stage.addChild(world, screen, arcTags, dmgTags);
 
   let level: Level;
   let baked: Baked | null = null;
@@ -980,9 +986,15 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
         if (im.blocked) circle(fxG, im.x, im.y, 0.12 + im.age * 1.4, 8).stroke({ width: 0.06, color: 0xe8f1ff, alpha: Math.max(0, 0.9 - im.age * 3.5) });
       }
       for (const h of fx.hitMarks) {
-        const s = 0.24, al = 1 - h.age / 0.2;
-        fxG.moveTo(h.x - s, h.y - s).lineTo(h.x + s, h.y + s).moveTo(h.x + s, h.y - s).lineTo(h.x - s, h.y + s)
-          .stroke({ width: h.kill ? 0.12 : 0.07, color: h.kill ? P.hostile : 0xffffff, alpha: al });
+        // UIX: a hit is a white X with a gap at its centre (the target stays visible); a kill is bigger, red, and
+        // pops out over KILL_SECONDS. Both have a dark under-stroke so they read on any floor.
+        const life = h.kill ? KILL_SECONDS : HIT_SECONDS, t = Math.min(1, h.age / life), al = 1 - t * t;
+        const s = h.kill ? 0.3 + 0.12 * Math.min(1, h.age / 0.12) : 0.22, g = h.kill ? 0.1 : 0.08;
+        for (const [w, c, a] of [[h.kill ? 0.2 : 0.13, 0x0e091c, 0.7 * al], [h.kill ? 0.11 : 0.07, h.kill ? P.hostile : 0xffffff, al]] as const) {
+          fxG.moveTo(h.x - s, h.y - s).lineTo(h.x - g, h.y - g).moveTo(h.x + g, h.y + g).lineTo(h.x + s, h.y + s)
+            .moveTo(h.x + s, h.y - s).lineTo(h.x + g, h.y - g).moveTo(h.x - g, h.y + g).lineTo(h.x - s, h.y + s)
+            .stroke({ width: w, color: c, alpha: a });
+        }
       }
       for (const pg of fx.pings) {
         const t = pg.age / 0.7;
@@ -1030,6 +1042,15 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
           .moveTo(mx, my - gap - 7).lineTo(mx, my - gap).moveTo(mx, my + gap).lineTo(mx, my + gap + 7)
           .stroke({ width: 2, color: P.team, alpha: 0.9 });
         screen.circle(mx, my, 1.2).fill(P.team);
+        // UIX: the reticle confirms your last hit too (four ticks just outside it; red on a kill), so a hit far from
+        // the cursor is never in doubt. Same frame as the world marker and the confirm sound.
+        const last = fx.hitMarks[fx.hitMarks.length - 1];
+        if (last && last.age < (last.kill ? 0.3 : 0.16)) {
+          const k = gap + 10, l = last.kill ? 9 : 6, al = 1 - last.age / (last.kill ? 0.3 : 0.16);
+          screen.moveTo(mx - k, my - k).lineTo(mx - k + l, my - k + l).moveTo(mx + k, my - k).lineTo(mx + k - l, my - k + l)
+            .moveTo(mx - k, my + k).lineTo(mx - k + l, my + k - l).moveTo(mx + k, my + k).lineTo(mx + k - l, my + k - l)
+            .stroke({ width: last.kill ? 3 : 2, color: last.kill ? P.hostile : 0xffffff, alpha: al });
+        }
         // CF-A: while the body is still turning, a tick shows where the gun points now (it catches up in a moment).
         if (LAB.turn && p.aimLag > 4 * DEG) {
           const gx = ps.x + Math.cos(p.facing) * d, gy = ps.y + Math.sin(p.facing) * d;
@@ -1059,6 +1080,27 @@ export async function createRenderer(parent: HTMLElement): Promise<Renderer> {
         tags++;
       }
       for (let i = tags; i < arcTagPool.length; i++) arcTagPool[i].visible = false;
+      // UIX damage numbers: on the target, rising a little, merged per target; a kill is red and larger, armour-only
+      // damage is blue. Only for hits you can see (the game only queues those).
+      let dn = 0;
+      for (const d of fx.dmgNums) {
+        let t = dmgPool[dn];
+        if (!t) {
+          t = new Text({ text: '', style: { fontFamily: 'Plex Mono, monospace', fontSize: 16, fontWeight: '600', fill: 0xffffff, stroke: { color: 0x0e091c, width: 4 } } });
+          t.anchor.set(0.5, 1);
+          dmgTags.addChild(t);
+          dmgPool.push(t);
+        }
+        const sp = r.toScreen(d.x, d.y), u = d.age / DMG_SECONDS;
+        t.text = String(Math.round(d.amount));
+        t.tint = d.kill ? P.hostile : d.armor ? P.armor : 0xffffff;
+        t.scale.set(d.kill ? 1.3 : 1 + Math.max(0, 0.25 - d.age) * 1.2);
+        t.position.set(sp.x + ppu * 0.5, sp.y - ppu * 0.7 - u * 18);
+        t.alpha = u < 0.7 ? 1 : 1 - (u - 0.7) / 0.3;
+        t.visible = true;
+        dn++;
+      }
+      for (let i = dn; i < dmgPool.length; i++) dmgPool[i].visible = false;
       // Outside the danger zone: a red chevron next to you pointing the shortest way back in.
       if (w.zone && p.alive && opts.playing) {
         const zc = zoneAt(w.zone, matchSeconds(w)).circle;
