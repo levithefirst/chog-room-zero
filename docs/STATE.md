@@ -1,11 +1,11 @@
 # Chog: Room Zero - shared state
 
 Source of truth. Rules: `docs/RULES.md`. Edit only in a handoff commit. Under 8,000 characters.
-Last verified: 2026-10-19 by claude (H34 maps pass, live from ccr-e7fadb8f-qtochk).
+Last verified: 2026-10-20 by claude (H36 multiplayer reliability, live from ccr-e7fadb8f-qtochk).
 
 ## Snapshot (EVIDENCE)
-- Repo `levithefirst/chog-room-zero`. Base branch `setup/skill-system` (LOCKED 2026-10-11: no `main`); never merge without owner. PRs #1-#9 stacked, PR #10 = ccr-e7fadb8f-qtochk. H34, ID, SP, V2 live from it. Client and server always ship from one commit (Render `/stats`).
-- Vercel project `chog-room-zero` (protection off). Production `chogroomzero.xyz` = `dpl_F2u9XN72Py12WWGbNPzfwxv1Fjqu` (8068224, H34 code). Rollback: `dpl_8gcYGXbzA997cAZCtyxqqVtDBNXv` (1b93756) with Render on 1b93756; no migration in H34. No `NFT_COMBAT` (power on). Game server: Render Free `https://room-zero-game.onrender.com` (redeploys on every push to the branch); `ALLOWED_ORIGINS` = production + branch preview.
+- Repo `levithefirst/chog-room-zero`. Base branch `setup/skill-system` (LOCKED 2026-10-11: no `main`); never merge without owner. PR #10 = ccr-e7fadb8f-qtochk (= d98ef8d, live); docs-only commits stay on claude/h34-maps (no Render restart). Client and server ship from one commit.
+- Vercel project `chog-room-zero` (protection off). Production `chogroomzero.xyz` = `dpl_SbSnNzyk1J8uxXbHbpK37hJuCWuw` (d98ef8d). Rollback: `dpl_46MAf8pLrnp2qn6ywR2haNvf8PRb` (e6f92a9) with Render on e6f92a9; no migration since H33. No `NFT_COMBAT` (power on). Game server: Render Free (0.1 CPU, 512 MB, est. 30-40 players) `https://room-zero-game.onrender.com` (redeploys on every push to the branch); `ALLOWED_ORIGINS` = production + branch preview.
 - Chog Genesis (NFT-R1, EVIDENCE): Monad 143, contract `0xc96d31F8626c6D03Fae5dCD3d61e3FB9F4a73763` (ChogMint, Sourcify), ERC-721, supply 1,969, catalogue in `data/chog-genesis/`; token id is NOT the displayed number. `/api/game/chain` checks it live.
 - Chogathon 2026 (`docs/SUBMISSION.md`): "the Chog NFT must be essential".
 
@@ -33,7 +33,8 @@ Last verified: 2026-10-19 by claude (H34 maps pass, live from ccr-e7fadb8f-qtoch
 - V2 (H31): perks, AI guard, challenges, Ace, solo board cap, telemetry.
 - SP/ID (H32, H33): superpower numbers, Visor radii, drills, beam/orb rules; sawn-off 10 per pellet.
 - H34: all five layouts, rail/deck/stairs rules, lit range 22 m, surface noise, medal thresholds.
-- Owner decisions open: Supermarket solo is hard (autopilot won 1 of 8); approved powers #5 and #6 (not found; not invented); which trait carries X-Ray (none literal; candidates in `docs/design/superpowers.md`); Squad/Breach drill (3 holders); grenade capacity by tier; solo 1v5 autopilot wins fell 39 to 5 of 280 at 150 health; paid always-on game server; labelled bot backfill online.
+- H36: location is a preference: after 10 s anyone in the mode meets on the longest waiter's pick (`anyMapAfterSec`; Infinity = strict per-location queues as H33).
+- Owner decisions open: confirm the H36 location rule; game server plan for 400 players (Free ~30-40, Starter $7 ~150-200, Standard $25 ~400 at the limit; estimates); Supermarket solo hard (autopilot 1 of 8); powers #5 and #6 (not found); X-Ray trait (candidates in `docs/design/superpowers.md`); Squad/Breach drill; grenade capacity by tier; solo 1v5 wins 5 of 280 at 150 health; bot backfill online.
 
 ## UNKNOWN (never guess)
 - Chog Genesis art and name rights; `baseURI`, totalSupply from chain; metadata hash (`docs/research/chog-genesis/`).
@@ -41,11 +42,13 @@ Last verified: 2026-10-19 by claude (H34 maps pass, live from ccr-e7fadb8f-qtoch
 - Whether a real holder can play 5v5 (fake-chain holder passes locally).
 
 ## Implemented (EVIDENCE)
-- H34 (live): five locations (`docs/design/maps.md`); tiles RAIL (blocks movement, not sight or shots), DECK (high ground ignores half cover), STAIRS (0.65 speed); lit areas seen to 22 m; carpet quiet, deck and tunnel loud; hub leaderboard replaces TODAY (Daily on Career); map picker (sheet on phones); 40 medals ~30% harder; device layer (`src/ui/device.ts`); protocol 2, older clients told to reload.
-- ID (H33), SP (H32), V2 (H31), GP (H30) and earlier: `docs/HANDOFFS.md`.
+- H34 (live): five locations, RAIL/DECK/STAIRS tiles, lit areas, surfaces, hub leaderboard, map picker, 40 medals, device layer, protocol 2 (`docs/design/maps.md`, HANDOFFS H34).
+- H35 (live): hub blink fixed (ping time redrew the hub).
+- H36 (live): human 1v1 fixed (saved locations split the queue); dead sockets never seated; queue rejoins after a drop; a failing room stops alone; rooms build 3x faster. `docs/MULTIPLAYER.md`.
+- ID (H33) and earlier: `docs/HANDOFFS.md`.
 
 ## Automated tests (EVIDENCE, Node 22.22)
-H34 (8068224): vitest 1023/1023 (101 files), tsc clean. Browser (headless, emulated, local stack): all 11 suites pass (id-maps 35/35; counts in H34), HUD at 7 sizes clean. Production smoke 20/20: endpoints 200, migrations 1-8, five maps in the bundle, no localhost or test hooks; metro queue matched on metro, 'moon' refused, protocol 1 told to reload; Render /stats = 8068224; no runtime errors.
+H36 (d98ef8d): vitest 1030/1030, tsc clean, 11 browser suites, h34-blink 34/34, mp-human met 9.4 s. Load (local, bots): 400 mixed 398/398 started, p50 1.0 s, 0 hangs; churn 400 x 120 s 0 hangs. Production check 10/10 (different locations met 9.2 s).
 
 ## Not performed (needs the owner)
 - Human play of CF to H34 (all five locations), real phones, real-GPU FPS, audio by ear, a real wallet, hosted 5v5 with a holder, art rights, demo video.
@@ -56,10 +59,9 @@ Core Feel Gate: BLOCKED on owner playtests. G10: automated PASS; playtest not ru
 ## Current task
 | Id | Owner | Branch | Files | Done when | Status |
 |---|---|---|---|---|---|
-| H34 | claude | claude/h34-maps -> ccr-e7fadb8f-qtochk | see H34 | Owner 2026-10-19 H34 | live; owner plays five maps |
-| ID | claude | ccr-e7fadb8f-qtochk | see H33 | Owner 2026-10-18 IDENTITY | live; X-Ray trait, Squad drill open |
-| SP | claude | ccr-e7fadb8f-qtochk | see H32 | Owner 2026-10-18 SUPERPOWERS | live; #5/#6 open |
+| MP | claude | claude/h34-maps -> ccr-e7fadb8f-qtochk | see H36 | Owner P0 multiplayer reliability | live; owner: 10 human 1v1s, server plan |
+| H34/ID/SP | claude | same | see H32-H35 | Owner 2026-10-18/19 | live; owner plays five maps; open items above |
 | RC-8 | claude | PR #10 | see H16 | Owner RC-8 mandate | PR #10 not merged (owner decides) |
 
 ## Handoffs
-Latest: H34 (2026-10-19, claude -> owner; five locations, hub leaderboard, 40 medals live). History: `docs/HANDOFFS.md`.
+Latest: H36 (2026-10-20, claude -> owner; multiplayer reliability live). History: `docs/HANDOFFS.md`.
