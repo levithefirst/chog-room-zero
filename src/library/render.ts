@@ -41,7 +41,7 @@ export function renderBody(p: Page): string {
   const body = p.sections.map((s) => `<section id="${s.id}" class="sec" aria-labelledby="${s.id}-h"><h2 id="${s.id}-h"><a class="anchor" href="#${s.id}" aria-label="Link to ${esc(s.title)}">#</a>${esc(s.title)}</h2>${s.html}</section>`).join('');
   return `<a class="skip" href="#main">Skip to content</a>
 <header class="top" role="banner"><button class="menu-btn" type="button" aria-controls="nav" aria-expanded="false" aria-label="Open the navigation">&#9776;</button>
-<a class="brand" href="${href('')}" aria-label="Chog: Room Zero game library home"><span class="b1">CHOG: ROOM ZERO</span><span class="b2">GAME LIBRARY</span></a>
+<a class="brand" href="${href('')}"><span class="b1">CHOG: ROOM ZERO</span><span class="b2">GAME LIBRARY</span></a>
 <button class="search-btn" type="button" data-open-search aria-label="Search the library (press / or Ctrl K)"><span aria-hidden="true">&#9906;</span><span class="sl">Search</span><kbd>/</kbd></button>
 <button class="theme-btn" type="button" data-theme-toggle aria-label="Switch to the light theme" aria-pressed="false"><span aria-hidden="true">&#9680;</span></button>
 <a class="play-btn" href="/">Play</a></header>
