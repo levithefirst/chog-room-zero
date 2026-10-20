@@ -49,7 +49,7 @@ for (const d of SIZES) {
   await wallet(b);
   await b.go('/?debug&nooverlay'); await b.ev(`localStorage.setItem('chog.onboarded','1')`);
   await b.go('/?debug&nooverlay');
-  await b.until(`!!document.getElementById('bootsteps')?.children.length`, 5000); await b.shot('01-loading');
+  await b.until(`!!document.getElementById('boottip')?.innerText`, 5000); await b.shot('01-loading');
   await b.hub(); await sleep(2200); await b.shot('02-landing');
   await b.click('#chog-cta'); await b.until(`document.getElementById('chogstate')?.dataset.state === 'pick'`, 8000); await sleep(300); await b.shot('03-chog-signin');
   // The sheet fits (or scrolls inside itself): its buttons stay on screen.

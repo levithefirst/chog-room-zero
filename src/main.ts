@@ -1,4 +1,4 @@
-import { createRenderer, createFx, COVER_FLASH_SECONDS, COLLECT_SECONDS, RING_SECONDS } from './render/render';
+import { createRenderer, createFx, COVER_FLASH_SECONDS, COLLECT_SECONDS, RING_SECONDS, HIT_SECONDS, KILL_SECONDS, DMG_BATCH, DMG_SECONDS } from './render/render';
 import { createInput, touchStick } from './input/input';
 import { createSummaryGate, overlayInputAllowed } from './input/gate';
 import { createAudio } from './audio/audio';
@@ -24,13 +24,13 @@ import { heroForKey } from './ui/heroKeys';
 import { portraitSvg } from './ui/art';
 import { WEAPONS } from './config/weapons';
 import { orientationOf, ORIENTATION_QUERY } from './ui/orientation';
-import { fullscreenSupported, isFullscreen, layoutStage, rectToStage, requestLandscape, stage, toStage, type LaunchResult } from './ui/stage';
+import { fullscreenSupported, isFullscreen, layoutStage, setHudScale, rectToStage, requestLandscape, stage, toStage, type LaunchResult } from './ui/stage';
 import { coverBoxAt } from './sim/cover';
 import { adapterFromUrl, resolveIdentity, GUEST, type Identity } from './nft/identity';
 import { boundIdentity } from './nft/identity';
 import { DEMO_COPY, TRAIT_INFO, isTokenId, sampleTokens, traitsFor } from './nft/traits';
-import { loadRecords, recordBest, type Records } from './ui/records';
-import { DEFAULT_SETTINGS, QUALITY_DPR, SETTINGS_KEY, STICK_PX, displayName, loadProfile, loadSettings, saveSettings, togglePin, validateNickname, type Profile, type Settings } from './ui/profile';
+import { fmtTime, loadRecords, recordBest, type Records } from './ui/records';
+import { DEFAULT_SETTINGS, QUALITY_DPR, SETTINGS_KEY, STICK_PX, displayName, loadProfile, loadSettings, saveSettings, togglePin, validateNickname, type Profile, type Settings, HUD_SCALES, type HudScale } from './ui/profile';
 import { MEDALS, awardMedals, loadMedals, type MedalDef, type Unlocked } from './ui/medals';
 import { TIPS_KEY, loadShownTips, nextTip, saveShownTips, tipText, type TipId } from './ui/tips';
 import { esc, howtoHtml, medalCard, nickHtml, resultsHtml, selectHtml, settingsHtml, type AuthView } from './ui/screens';
@@ -46,6 +46,7 @@ import { RANKS, SUPERPOWERS, SUPERPOWER_IDS, superAbility, type Rank, type Super
 import { createTraining, drillFor, stepTraining, trainingInput, trainingStatus, trainingSummary, type TrainingRun } from './sim/training';
 import { pointInPolygon } from './sim/geom';
 import { MAPS, isMapId, type MapId } from './config/maps';
+import { mapPreviewSvg } from './ui/mapPreview';
 import { BASE_POWER, chogName, powerForToken, signatureFor, tierOfMetadataId, ONE_OF_ONE, TIER_DEFS, type Power } from './config/power';
 import { tierEffect } from './ui/account';
 import { LAB, applyLab } from './config/lab';
@@ -91,7 +92,7 @@ declare const __TEST_HOOKS__: boolean;
 // Loading screen (master integration pass): its own full screen, separate from the hub, with the real start-up steps
 // in order (fonts, renderer, sign-in, the account, the map), a percentage, rotating game tips, and a transition into
 // the hub. A failure shows the reason and a Retry button.
-const BOOT_STEPS = ['Loading fonts', 'Starting the renderer', 'Building the basement', 'Checking your sign-in', 'Loading your account'];
+const BOOT_STEPS = ['Loading', 'Starting the renderer', 'Building the room', 'Checking sign-in', 'Loading your profile'];
 const BOOT_TIPS = [
   'Walls block bullets and sight. If you cannot see them, they cannot hit you.',
   'Running is loud. Creep (half push or Shift) and they hear nothing.',
@@ -106,22 +107,31 @@ const BOOT_TIPS = [
 let bootTipTimer: ReturnType<typeof setInterval> | null = null;
 // SB ?perf: milliseconds from navigation to the hub (the real load time a player waits).
 let bootAt = 0;
-// CF: the same real steps as a checklist (done, now, to come), so the screen says what it is waiting on.
-const BOOT_SHORT = ['Fonts', 'Renderer', 'Room', 'Player', 'Account'];
+// UIX: the step checklist (FONTS / RENDERER / ROOM / PLAYER / ACCOUNT) is gone: the one status line under the bar still
+// names the real step it waits on, and the screen above it briefs the player (bootBrief) instead of the engine.
 function boot(i: number) {
   const fill = document.getElementById('bootfill'), step = document.getElementById('bootstep'), pctEl = document.getElementById('bootpct');
   const share = Math.round((i / BOOT_STEPS.length) * 100);
   if (fill) fill.style.width = `${share}%`;
   if (pctEl) pctEl.textContent = `${share}%`;
   if (step) step.textContent = BOOT_STEPS[i] ?? '';
-  const list = document.getElementById('bootsteps');
-  if (list) list.innerHTML = BOOT_SHORT.map((t, k) => `<li class="${k < i ? 'done' : k === i ? 'now' : ''}">${t}</li>`).join('');
   const tip = document.getElementById('boottip');
   if (tip && !bootTipTimer) {
     let k = Math.floor(Math.random() * BOOT_TIPS.length);
     tip.textContent = BOOT_TIPS[k];
     bootTipTimer = setInterval(() => { k = (k + 1) % BOOT_TIPS.length; tip.classList.remove('in'); void tip.offsetWidth; tip.textContent = BOOT_TIPS[k]; tip.classList.add('in'); }, 2200);
   }
+}
+/** UIX boot briefing: your last location (drawn from its real tiles) and your last operator, from this device's picks. */
+function bootBrief() {
+  const el = document.getElementById('bootbrief');
+  if (!el) return;
+  let map: MapId = 'room-zero', hero = HEROES[0];
+  try { const m = localStorage.getItem('chog.map'); if (isMapId(m)) map = m; } catch { /* ignore */ }
+  try { const id = heroIdOf(localStorage.getItem(HERO_KEY)); if (id) hero = heroById(id); } catch { /* ignore */ }
+  el.innerHTML = `<div class="mapbox">${mapPreviewSvg(map)}</div><dl><dt>Location</dt><dd><b>${esc(MAPS[map].name)}</b><small>${esc(MAPS[map].tag)}</small></dd>
+<dt>Operator</dt><dd><b>${esc(hero.name)}</b><small>${esc(hero.role)} · ${esc(WEAPONS[hero.weapon].name)}</small></dd></dl>`;
+  el.hidden = false;
 }
 async function bootDone() {
   const b = document.getElementById('boot');
@@ -130,9 +140,7 @@ async function bootDone() {
   const pctEl = document.getElementById('bootpct');
   if (pctEl) pctEl.textContent = '100%';
   const step = document.getElementById('bootstep');
-  if (step) step.textContent = 'Entering Room Zero';
-  const list = document.getElementById('bootsteps');
-  if (list) list.innerHTML = BOOT_SHORT.map((t) => `<li class="done">${t}</li>`).join('');
+  if (step) step.textContent = 'Ready';
   // CF: no minimum display time (the owner: never fake loading). One frame for the bar to land, then the hub.
   await new Promise((r) => requestAnimationFrame(() => r(null)));
   if (bootTipTimer) clearInterval(bootTipTimer);
@@ -148,6 +156,7 @@ async function start() {
   boot(0);
   await Promise.all([document.fonts.load('600 20px "Plex Mono"'), document.fonts.load('600 20px "Barlow Cond"')]).catch(() => undefined);
   boot(1);
+  bootBrief();
   const renderer = await createRenderer(root);
   const input = createInput(root);
   const audio = createAudio();
@@ -195,6 +204,9 @@ async function start() {
   let guestRecords: Records = loadRecords(guestStore);
   let guestMedals: Unlocked = loadMedals(guestStore);
   let settings: Settings = loadSettings(localStorage);
+  const sysReduced = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
+  /** UIX: reduced motion from the setting, or the system preference when the setting is Auto. */
+  const reducedMotion = () => settings.motion === 'reduced' || (settings.motion === 'auto' && !!sysReduced?.matches);
   let shownTips = loadShownTips(localStorage);
   const MODE_KEY = 'chog.mode';
   let playMode: PlayMode = (() => { try { const m = localStorage.getItem(MODE_KEY); return m === '1v1' || m === '3v3' || m === '5v5' || m === 'solo' ? m : 'solo'; } catch { return 'solo'; } })();
@@ -334,12 +346,17 @@ async function start() {
     touchStick.radius = STICK_PX[settings.stick];
     const res = Math.min(window.devicePixelRatio || 1, QUALITY_DPR[settings.quality]);
     if (renderer.app.renderer.resolution !== res) renderer.app.renderer.resolution = res;
+    // UIX: HUD scale (on top of the resolution scale) and reduced motion (no shake, pulses or screen entrances).
+    setHudScale(settings.hudScale);
+    layoutStage(stageEl);
+    document.body.classList.toggle('reduce-motion', reducedMotion());
   }
   applySettings();
   function setSettings(next: Settings) {
     settings = next;
     saveSettings(localStorage, settings);
     applySettings();
+    hudAge = 1e9;
   }
 
   const mute = $('mute') as HTMLButtonElement;
@@ -427,6 +444,7 @@ async function start() {
   // into stage coordinates (the stage may be rotated); cached and refreshed on resize/orientation change and every 30
   // frames (cheap) so layout changes are picked up.
   const HUD_IDS = ['vitals', 'foes', 'sys', 'weapon', 'ability', 'reload'];
+  let lastArmor = 0;
   let hudCache: { x: number; y: number; w: number; h: number }[] = [];
   let hudAge = 1e9;
   function hudRects() {
@@ -607,18 +625,29 @@ async function start() {
   }
 
   function showLoading() {
-    // Deploy screen: what you are dropping into, full screen, while the world is built.
+    // UIX deploy briefing: where (the location drawn from its real tiles), what wins, what you bring, one real tip.
+    // Shown while the world is built; it waits on nothing else (owner: never fake loading).
     const h = heroById(heroId);
-    const m = online ? `Online ${onlineMode}` : 'Vs bots · You + 2 AI vs 5';
+    const m = online ? `Online ${onlineMode}` : training ? 'CHOG Training' : 'Vs bots · You + 2 AI vs 5';
     const tip = BOOT_TIPS[(runIndex + 3) % BOOT_TIPS.length];
     // The location the match is on: the server's word online, your pick solo, the drill room in Training.
-    const where = training ? 'CHOG Training' : MAPS[online && isMapId(net?.match?.map) ? net!.match!.map! : mapId].name;
-    show(`<div class="screen deploy"><div class="deploy-in"><div class="kicker">${esc(m)}</div><h2 id="deploy-map">${esc(where)}</h2>
-<div class="deploy-op">${portraitSvg(h, 'dep', identity.marking)}<span><b>${esc(h.name)}</b><small>${esc(h.role)} · ${esc(WEAPONS[h.weapon].name)}</small></span></div>
-<div class="loadbar"><i></i></div><p class="deploy-tip">${esc(tip)}</p></div></div>`);
+    const mid: MapId = online && isMapId(net?.match?.map) ? net!.match!.map! : mapId;
+    const where = training ? 'CHOG Training' : MAPS[mid].name;
+    const goal = training ? 'Run the drill. Nothing is recorded.' : online ? 'Last side standing wins. Stay inside the zone.' : 'Eliminate every hostile. Stay inside the zone as it closes.';
+    show(`<div class="screen deploy"><div class="deploy-in">
+<div class="dep-map">${training ? '' : mapPreviewSvg(mid)}</div>
+<div class="dep-info"><div class="kicker">${esc(m)}</div><h2 id="deploy-map">${esc(where)}</h2>${training ? '' : `<p class="dep-tag">${esc(MAPS[mid].tag)}</p>`}
+<p class="dep-goal"><b>Objective</b>${esc(goal)}</p>
+<div class="deploy-op">${portraitSvg(h, 'dep', identity.marking)}<span><b>${esc(h.name)}</b><small>${esc(h.role)} · ${esc(WEAPONS[h.weapon].name)}</small><small id="deploy-ab" class="dep-ab"></small><small id="deploy-cls" class="dep-cls"></small></span></div>
+<div class="loadbar" role="progressbar" aria-label="Building the match"><i></i></div><p class="deploy-tip"><b>Tip</b>${esc(tip)}</p></div></div></div>`);
     // Build the world (and bake the map if needed) after the loading card has painted.
     requestAnimationFrame(() => setTimeout(() => {
       if (online) beginOnlineWorld(); else beginWorld();
+      // The real ability and class of this match (a verified Chog's superpower replaces the operator's ability).
+      const me = player(world), ab = me.ability as { name: string; cooldown: number; text?: string };
+      const abEl = document.getElementById('deploy-ab'), clsEl = document.getElementById('deploy-cls');
+      if (abEl) abEl.innerHTML = `<em>Ability</em> ${esc(ab.name)}${ab.cooldown > 0 ? ` · ${ab.cooldown} s` : ''}${ab.text ? ` — ${esc(ab.text)}` : ''}`;
+      if (clsEl) clsEl.innerHTML = $('hero').innerHTML.split(' · ').slice(2).join(' · ') ? `<em>Class</em> ${$('hero').innerHTML.split(' · ').slice(2).join(' · ')}` : '';
       // A tab hidden or a window left while the deploy card showed starts the match paused, never unattended.
       setTimeout(() => { go('loaded'); if (phase === 'play' && (document.hidden || focusLost)) go('pause'); }, 350);
     }, 30));
@@ -635,9 +664,16 @@ async function start() {
       <div class="btns"><button class="btn primary" data-go="resume">Resume</button><button class="btn" data-go="quit">Leave match</button>${fsButton()}</div>`);
       return;
     }
-    card(`<h2>Paused</h2><p>The basement waits.</p>
+    // UIX: the pause card says where the run stands (only numbers the game tracks) and, on PC, the controls.
+    const p = player(world);
+    const foes = world.actors.filter((a) => a.team === 'bot');
+    const where = training ? 'CHOG Training' : MAPS[mapId].name;
+    const stat = (k: string, v: string) => `<div class="rw"><span>${k}</span><b class="num">${v}</b></div>`;
+    const keys = input.mode === 'touch' ? '' : `<ul class="keys">${[['WASD', 'Move'], ['Shift', 'Creep'], ['Mouse', 'Aim'], ['Click', 'Fire'], ['R', 'Reload'], ['Space', 'Ability'], ['G', 'Grenade'], ['Esc', 'Resume']].map(([k, v]) => `<li><kbd>${k}</kbd>${v}</li>`).join('')}</ul>`;
+    card(`<div class="kicker">${training ? 'Training' : 'Vs bots'} · ${esc(where)}</div><h2>Paused</h2>
+      <div class="reward-grid pause-grid">${stat('Time', fmtTime(Math.round(playTime)))}${stat('Hostiles left', `${foes.filter((a) => a.alive).length}/${foes.length}`)}${stat('Health', String(Math.max(0, Math.ceil(p.hp))))}${stat('Your kills', String(p.kills))}</div>
       <div class="btns"><button class="btn primary" data-go="resume">Resume</button><button class="btn" data-go="restart">Restart</button><button class="btn" data-go="quit">Quit</button>${fsButton()}</div>
-      <p style="font-size:13px">${input.mode === 'touch' ? '' : 'Esc or P to resume.'}</p>`);
+      ${keys}`);
   }
 
   /** SB: the one or two reasons this death happened (src/sim/insight.ts), from the player's own fight record. */
@@ -854,6 +890,8 @@ async function start() {
     else if (name === 'share') s.shareStats = val === 'on';
     else if (name === 'quality' && (val === 'low' || val === 'medium' || val === 'high')) s.quality = val;
     else if (name === 'stick' && (val === 'small' || val === 'medium' || val === 'large')) s.stick = val;
+    else if (name === 'hudscale' && HUD_SCALES.includes(Number(val) as HudScale)) s.hudScale = Number(val) as HudScale;
+    else if (name === 'motion' && (val === 'auto' || val === 'reduced' || val === 'full')) s.motion = val;
     setSettings(s);
     if (name === 'vibration' && s.vibration && canVibrate) navigator.vibrate(30);
     render();
@@ -1116,7 +1154,7 @@ async function start() {
     suggestPilot = null;
     renderer.reset(world);
     drawnWorld = world;
-    fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = fx.rings.length = fx.noise.length = fx.comms.length = 0;
+    fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.dmgNums.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = fx.rings.length = fx.noise.length = fx.comms.length = 0;
     matchIntel = createIntel();
     wasDowned = false;
     rep = { sent: false, downs: 0, bled: 0, fireAt: -1, firing: false, delays: [] };
@@ -1343,7 +1381,7 @@ async function start() {
     world = net!.world!;
     renderer.reset(world);
     drawnWorld = world;
-    fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = fx.rings.length = fx.noise.length = fx.comms.length = 0;
+    fx.markers.length = fx.impacts.length = fx.hitMarks.length = fx.dmgNums.length = fx.corpses.length = fx.damageArcs.length = fx.pings.length = fx.collects.length = fx.rings.length = fx.noise.length = fx.comms.length = 0;
     matchIntel = createIntel();
     wasDowned = false;
     rep = { sent: false, downs: 0, bled: 0, fireAt: -1, firing: false, delays: [] };
@@ -1794,7 +1832,7 @@ async function start() {
       if (s.type === 'boom') {
         fx.rings.push({ x: s.x, y: s.y, age: 0, r: TUNING.grenade.radius, color: s.team === p.team ? TUNING.palette.ammo : TUNING.palette.hostile });
         spark(s.x, s.y, 16, s.team !== p.team);
-        if (p.alive && Math.hypot(dx, dy) <= TUNING.grenade.radius + 0.5) fx.shake = TUNING.render.shakeSeconds * 1.6;
+        if (p.alive && !reducedMotion() && Math.hypot(dx, dy) <= TUNING.grenade.radius + 0.5) fx.shake = TUNING.render.shakeSeconds * 1.6;
       }
       if (s.type === 'downed') toast(s.sourceId === 0 ? 'YOU ARE DOWN · a teammate can revive you' : `${src0?.name ?? 'Someone'} is DOWN`);
       if (s.type === 'revive') toast(s.sourceId === 0 ? 'Revived a teammate' : 'Revived');
@@ -1870,6 +1908,13 @@ async function start() {
         // An X-Ray beam through a wall tells you it landed, never where (no mark or spark outside your light).
         if (!h.power || pointInPolygon(h.x, h.y, renderer.visPoly())) {
           fx.hitMarks.push({ x: h.x, y: h.y, age: 0, kill: h.killed });
+          // UIX: one number per target while hits keep landing within DMG_BATCH (eight pellets read as one number).
+          const tg = world.actors[h.target], dmg = (h.hpDamage ?? 0) + (h.armorDamage ?? 0);
+          if (dmg > 0 && tg) {
+            const prev = fx.dmgNums.find((d) => d.target === h.target && d.age < DMG_BATCH);
+            if (prev) { prev.amount += dmg; prev.age = 0; prev.x = tg.x; prev.y = tg.y; prev.kill ||= h.killed; prev.armor &&= !(h.hpDamage > 0); }
+            else fx.dmgNums.push({ target: h.target, x: tg.x, y: tg.y, amount: dmg, age: 0, kill: h.killed, armor: !(h.hpDamage > 0) });
+          }
           spark(h.x, h.y, h.killed ? 10 : 4, true);
         }
         if (h.killed) toast(`${world.actors[h.target].name} eliminated`);
@@ -1884,7 +1929,7 @@ async function start() {
           knew: rung(matchIntel, h.by), knewFor: known && known.state !== 'lost' ? matchIntel.now - known.since : 0 });
         if (settings.vibration && canVibrate) navigator.vibrate(h.killed ? 80 : 25);
         // Shake by how much it hurt (CF): a graze nudges, a shotgun blast shoves. 25 damage = the base shake.
-        fx.shake = Math.max(fx.shake, TUNING.render.shakeSeconds * Math.max(0.6, Math.min(1.8, (h.hpDamage + h.armorDamage) / 25)));
+        if (!reducedMotion()) fx.shake = Math.max(fx.shake, TUNING.render.shakeSeconds * Math.max(0.6, Math.min(1.8, (h.hpDamage + h.armorDamage) / 25)));
         // A shooter outside your sight when it hit you (behind you, or a longer sight than yours online): its distance
         // goes on the arc. Grenades excluded: the arc points at the blast, not the thrower.
         const unseen = !h.grenade && !canSee(world.level, p.x, p.y, p.facing, p.view, h.fromX, h.fromY);
@@ -2063,6 +2108,8 @@ async function start() {
     }
     for (const m of fx.impacts) m.age += dt;
     for (const m of fx.hitMarks) m.age += dt;
+    for (const d of fx.dmgNums) d.age += dt;
+    fx.dmgNums = fx.dmgNums.filter((d) => d.age < DMG_SECONDS);
     for (const m of fx.damageArcs) m.age += dt;
     for (const m of fx.pings) m.age += dt;
     for (let i = 0; i < fx.threats.length; i++) if (fx.threats[i] > 0) fx.threats[i] -= dt;
@@ -2076,7 +2123,7 @@ async function start() {
     fx.impacts = fx.impacts.filter((m) => m.age < 0.25);
     for (const c of fx.coverFlashes) c.age += dt;
     fx.coverFlashes = fx.coverFlashes.filter((c) => c.age < COVER_FLASH_SECONDS);
-    fx.hitMarks = fx.hitMarks.filter((m) => m.age < 0.2);
+    fx.hitMarks = fx.hitMarks.filter((m) => m.age < (m.kill ? KILL_SECONDS : HIT_SECONDS));
     fx.damageArcs = fx.damageArcs.filter((m) => m.age < TUNING.render.damageArcSeconds);
     fx.pings = fx.pings.filter((m) => m.age < 0.7);
     fx.shake = Math.max(0, fx.shake - dt);
@@ -2106,9 +2153,20 @@ async function start() {
     const left = world.actors.filter((a) => a.team !== p.team && a.alive).length;
     const cdShare = p.abilityCd / p.ability.cooldown;
     const reloadShare = p.reloadLeft > 0 ? 1 - p.reloadLeft / p.weapon.reloadSeconds : 0;
-    const key = `${p.downed ? 'D' : ''}${Math.ceil(p.hp)}|${Math.ceil(p.armor)}|${p.ammo}|${p.reserve}|${left}|${Math.round(cdShare * 60)}|${Math.round(reloadShare * 40)}|${p.grenades}|${p.nadeCd > 0 ? 1 : 0}`;
+    const key = `${p.downed ? 'D' : ''}${Math.ceil(p.hp)}|${Math.ceil(p.armor)}|${p.ammo}|${p.reserve}|${left}|${Math.round(cdShare * 60)}|${Math.round(reloadShare * 40)}|${p.grenades}|${p.nadeCd > 0 ? 1 : 0}|${Math.ceil(p.abilityCd)}|${p.maxHp}`;
     if (key !== lastHud) {
       lastHud = key;
+      // UIX HUD states (index.html "UIX HUD states").
+      const vit = $('vitals');
+      vit.classList.toggle('low', p.alive && !p.downed && p.hp / p.maxHp <= TUNING.render.lowHpShare);
+      ($('hpbar') as HTMLElement).style.setProperty('--seg', `${(25 / Math.max(25, p.maxHp)) * 100}%`);
+      if (lastArmor > 0 && p.armor <= 0 && p.alive) { vit.classList.remove('broke'); void vit.offsetWidth; vit.classList.add('broke'); }
+      lastArmor = p.armor;
+      const wpn = $('weapon');
+      wpn.classList.toggle('reloading', p.reloadLeft > 0);
+      wpn.classList.toggle('out', p.reloadLeft <= 0 && p.ammo === 0);
+      wpn.classList.toggle('low', p.reloadLeft <= 0 && p.ammo > 0 && p.ammo <= Math.ceil(p.weapon.magazine * 0.25));
+      $('abcd').textContent = cdShare > 0 && p.alive ? String(Math.ceil(p.abilityCd)) : '';
       $('hpn').textContent = String(Math.max(0, Math.ceil(p.hp)));
       const hpEl = $('hpfill');
       hpEl.style.width = `${Math.min(100, (p.hp / p.maxHp) * 100)}%`;
