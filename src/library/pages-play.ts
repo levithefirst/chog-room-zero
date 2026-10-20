@@ -33,7 +33,7 @@ export const multiplayer: Page = {
       `If nobody is found in ${SERVER.queueTimeoutSec} s the queue gives up and the game offers Vs bots instead.`,
       `A ${SERVER.countdownSec} s countdown starts the match, so every player has the map and roster.`,
     ])}` },
-    { id: 'squads', title: 'Squads and squad codes', keywords: ['squad', 'party', 'code', 'friends', 'invite'], html: `${ul([
+    { id: 'squads', title: 'Squads and squad codes', keywords: ['squad', 'party', 'code', 'friends', 'invite', 'play with friends'], html: `${ul([
       `Create a squad to get a ${SERVER.squadCodeLength}-character code; friends join with it. Codes use letters and digits that cannot be confused (no 0, O, 1 or I).`,
       `A squad holds up to ${SERVER.squadMax}. You cannot join a squad that is in a queue or a match.`,
       'For 5v5 every squad member needs a verified Chog.',

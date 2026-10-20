@@ -36,4 +36,14 @@ describe('library search', () => {
   it('a query with no match returns nothing', () => {
     expect(search(index, 'zzqxw')).toEqual([]);
   });
+
+  // Player test: twelve newcomer questions (a stated set; the owner's own twelve were not in the brief). The section
+  // that answers each must be in the top three hits.
+  const NEWCOMER: [string, string][] = [
+    ['How do I start my first match?', 'how-to-play#hub'], ['What are the PC controls?', 'controls#desktop'], ['How do I play on my phone?', 'controls#touch'],
+    ['How do I win?', 'how-to-play#win'], ['What does armour do?', 'combat#health'], ['Can a teammate revive me?', 'combat#revive'],
+    ["Why can't I see the enemy?", 'faq#see'], ['Can enemies hear my footsteps?', 'movement-sound#footsteps'], ['Which operator should I pick?', 'chog-traits#roster'],
+    ['Do I need an NFT to play?', 'faq#nft'], ['How do I play with friends?', 'multiplayer#squads'], ['What do I earn from a match?', 'rewards#table'],
+  ];
+  for (const [q, want] of NEWCOMER) it(`newcomer: "${q}" -> ${want}`, () => expect(top(q).slice(0, 3)).toContain(want));
 });

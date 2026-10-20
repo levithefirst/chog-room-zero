@@ -11,7 +11,7 @@ const CANON: Record<string, string> = {
   reloading: 'reload', reloads: 'reload', maps: 'map', traits: 'trait', operators: 'operator', characters: 'operator', character: 'operator', heroes: 'operator', hero: 'operator',
   guns: 'weapon', gun: 'weapon', weapons: 'weapon', medals: 'medal', achievements: 'medal', achievement: 'medal', winning: 'win', wins: 'win', won: 'win', victory: 'win',
   colour: 'color', sneak: 'creep', crouch: 'creep', quiet: 'creep', creeping: 'creep', keys: 'controls', bindings: 'controls', control: 'controls', storm: 'zone', circle: 'zone',
-  sounds: 'sound', noise: 'sound', supplies: 'pickup', pickups: 'pickup', supply: 'pickup', powers: 'superpower', superpowers: 'superpower', nft: 'chog', nfts: 'chog',
+  sounds: 'sound', noise: 'sound', supplies: 'pickup', pickups: 'pickup', supply: 'pickup', powers: 'superpower', superpowers: 'superpower', nft: 'chog', nfts: 'chog', friend: 'friends', mates: 'friends',
 };
 export const norm = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 export function tokens(s: string): string[] {
