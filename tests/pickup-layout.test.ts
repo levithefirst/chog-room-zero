@@ -47,7 +47,7 @@ describe('the layout', () => {
         expect(p.x > z.x0 && p.x < z.x1 + 1 && p.y > z.y0 && p.y < z.y1 + 1, z.name).toBe(true);
       }
     }
-  });
+  }, 30000); // ~3.5 s alone, over 5 s when the whole suite runs in parallel
   it('deterministic per seed and different between matches', () => {
     const at = (w: World) => w.pickups.map((p) => `${p.kind}@${p.x},${p.y}`).join(';');
     expect(at(online(7))).toBe(at(online(7)));

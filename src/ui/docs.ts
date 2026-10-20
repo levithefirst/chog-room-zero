@@ -152,8 +152,8 @@ ${li(UPGRADE_IDS.map((id) => `<b>${esc(UPGRADES[id].name)}</b>: ${esc(UPGRADES[i
     'Rather not be listed? Switch "Shown to others" off on the leaderboard. You still see your own rank.',
   ]) },
   { id: 'controls', title: 'Controls', html: (t) => `<table class="howto">${t
-    ? '<tr><td>Move</td><td>Left thumb (half push: creep)</td></tr><tr><td>Aim and fire</td><td>Right thumb; push past the ring to fire, back inside to stop</td></tr><tr><td>Ability</td><td>Ability button</td></tr><tr><td>Grenade</td><td>Grenade button (drag it to aim the throw)</td></tr><tr><td>Reload</td><td>Reload button</td></tr>'
-    : '<tr><td>Move</td><td>WASD (Shift: creep)</td></tr><tr><td>Aim</td><td>Mouse</td></tr><tr><td>Fire</td><td>Left click</td></tr><tr><td>Ability</td><td>Space</td></tr><tr><td>Grenade</td><td>Hold G and release, or right click: lands at the cursor</td></tr><tr><td>Reload</td><td>R</td></tr><tr><td>Pause</td><td>Esc</td></tr>'}</table>` },
+    ? '<tr><td>Move</td><td>Left thumb (half push: creep)</td></tr><tr><td>Aim and fire</td><td>Right thumb; push past the ring to fire, back inside to stop</td></tr><tr><td>Ability</td><td>Ability button</td></tr><tr><td>Grenade</td><td>Grenade button (drag it to aim the throw)</td></tr><tr><td>Reload</td><td>Reload button</td></tr><tr><td>Tactical map</td><td>MAP button under your health; RETURN closes it. Pinch to zoom, drag to pan</td></tr>'
+    : '<tr><td>Move</td><td>WASD (Shift: creep)</td></tr><tr><td>Aim</td><td>Mouse</td></tr><tr><td>Fire</td><td>Left click</td></tr><tr><td>Ability</td><td>Space</td></tr><tr><td>Grenade</td><td>Hold G and release, or right click: lands at the cursor</td></tr><tr><td>Reload</td><td>R</td></tr><tr><td>Tactical map</td><td>M or the MAP button (Esc or M closes it). Wheel to zoom, drag to pan</td></tr><tr><td>Pause</td><td>Esc</td></tr>'}</table>` },
   { id: 'modes', title: 'Game Modes', html: () => li([
     '<b>Vs bots</b>: you and 2 AI teammates against 5 hostiles. No sign-in needed.',
     '<b>1v1</b> and <b>3v3</b>: online against people, open to everyone.',
@@ -165,6 +165,7 @@ ${li(UPGRADE_IDS.map((id) => `<b>${esc(UPGRADES[id].name)}</b>: ${esc(UPGRADES[i
 <dt>Why is my health going down?</dt><dd>You are outside the danger zone (the HUD says Outside zone and the screen edge pulses red), or you are downed and bleeding out. Nothing else takes health without a hit.</dd>
 <dt>Why didn't my shot fire straight away?</dt><dd>You turned a long way: the shot waits until your body faces where you aim (a fraction of a second), so it goes where you meant.</dd>
 <dt>Why can't I move?</dt><dd>A Bubble caged you or Drool glued you to a wall (the status under your health says which and for how long). You can still aim and shoot.</dd>
+<dt>What does the tactical map show?</dt><dd>The whole location as it is played: walls, doors, cover, rails, decks and stairs, the named areas, stocked supplies and the danger zone. You and your side always. A hostile only while you see it, as a fading "last known" circle after you lose it, or as a Visor mark if you hold the Visor: the map never shows what your own eyes, team and powers do not. The match keeps running while it is open, and your operator stands still.</dd>
 <dt>Can I play without a wallet?</dt><dd>Yes: solo, 1v1 and 3v3 never need one.</dd>
 <dt>Where is my rank?</dt><dd>Leaderboard, at the top: sign in and finish a run (Solo) or a match (Online).</dd>
 <dt>Do I lose my progress as a guest?</dt><dd>A guest's runs last for the session. Sign in (Google or wallet) to keep XP, shards, upgrades, medals and your rank.</dd>

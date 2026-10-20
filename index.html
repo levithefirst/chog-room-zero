@@ -49,7 +49,41 @@
       #hud.on { opacity: 1; }
       #hud > * { position: absolute; }
       .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
-      #vitals { left: var(--sl); top: var(--st); padding: 8px 10px; width: 190px; }
+      #lefthud { left: var(--sl); top: var(--st); display: flex; flex-direction: column; align-items: flex-start; gap: 6px; pointer-events: none; }
+      #vitals { padding: 8px 10px; width: 190px; }
+      /* Tactical map button (owner 2026-10-20): under the vitals, left edge, out of the move thumb's lower-left. */
+      #mapbtn { pointer-events: auto; display: flex; align-items: center; gap: 6px; height: 38px; padding: 0 12px 0 10px; color: var(--ink); font-weight: 700; letter-spacing: .12em; font-size: 13px; }
+      #mapbtn svg { width: 18px; height: 18px; fill: none; stroke: var(--chog-pink); stroke-width: 2; stroke-linejoin: round; }
+      #mapbtn .keyhint { opacity: .6; font-size: 10px; margin-left: 2px; }
+      body.touch #mapbtn { height: 46px; padding: 0 16px 0 12px; } body.touch #mapbtn .keyhint { display: none; }
+      body.compact #mapbtn { height: 40px; }
+      /* Full-screen tactical map: above the HUD, below menus. */
+      #tmap { pointer-events: auto; background: #0b0716; z-index: 5; }
+      #tmap[hidden] { display: none; }
+      #tmapc { position: absolute; inset: 0; cursor: grab; touch-action: none; }
+      #tmapc:active { cursor: grabbing; }
+      #tmap .tm-head { position: absolute; left: var(--sl); right: var(--sr); top: var(--st); display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; pointer-events: none; }
+      #tmap .tm-title { display: grid; gap: 1px; background: rgba(14, 9, 28, 0.8); border-left: 3px solid var(--chog-pink); padding: 4px 12px 5px 10px; border-radius: 0 6px 6px 0; }
+      #tmap .tm-title .kicker { font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--chog-pink); }
+      #tmap .tm-title b { font-size: 20px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink); }
+      #tmap .tm-title small { font-size: 11px; color: var(--dim); letter-spacing: .08em; text-transform: uppercase; }
+      #tmap .tm-close { pointer-events: auto; display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 18px 0 14px; border-radius: 8px; border: 2px solid var(--chog-pink);
+        background: rgba(255, 107, 157, 0.16); color: var(--ink); font-weight: 800; letter-spacing: .14em; font-size: 15px; box-shadow: 0 0 18px rgba(255, 107, 157, 0.25); }
+      #tmap .tm-close svg { width: 20px; height: 20px; stroke: var(--ink); stroke-width: 2.6; fill: none; }
+      #tmap .tm-close .keyhint { font-size: 10px; opacity: .65; }
+      body.touch #tmap .tm-close .keyhint { display: none; }
+      #tmap .tm-legend { position: absolute; left: var(--sl); bottom: var(--sb); margin: 0; padding: 6px 10px; list-style: none; display: grid; grid-template-columns: repeat(2, auto); gap: 3px 14px;
+        background: rgba(14, 9, 28, 0.82); border: 1px solid var(--line); border-radius: 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink); pointer-events: none; }
+      #tmap .tm-legend li { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+      #tmap .tm-legend i { width: 11px; height: 11px; border-radius: 50%; flex: none; }
+      #tmap .tm-legend .you { background: #22c55e; box-shadow: 0 0 0 2px #fff8e7 inset; } #tmap .tm-legend .mate { background: #3b82f6; } #tmap .tm-legend .enemy { background: #ef4444; }
+      #tmap .tm-legend .hostile { background: #f59e0b; } #tmap .tm-legend .trace { border: 1.5px dashed #ef4444; } #tmap .tm-legend .visor { background: #4fd6e8; border-radius: 1px; transform: rotate(45deg) scale(.8); }
+      #tmap .tm-legend .zone { border: 2px solid #ef4444; } #tmap .tm-legend .supply { background: #f59e0b; border-radius: 1px; width: 7px; height: 7px; margin: 0 2px; }
+      #tmap .tm-ctl { position: absolute; right: var(--sr); bottom: var(--sb); display: grid; gap: 8px; }
+      #tmap .tm-ctl button { width: 48px; height: 48px; border-radius: 8px; border: 1px solid var(--line); background: rgba(26, 18, 40, 0.88); color: var(--ink); font-size: 22px; font-weight: 700; padding: 0; }
+      #tmap .tm-ctl #tm-fit { font-size: 12px; letter-spacing: .1em; }
+      body.compact #tmap .tm-legend { grid-template-columns: repeat(4, auto); font-size: 10px; padding: 4px 8px; gap: 2px 10px; }
+      body.compact #tmap .tm-title b { font-size: 16px; } body.compact #tmap .tm-ctl { gap: 6px; } body.compact #tmap .tm-ctl button { width: 44px; height: 44px; }
       .bar { position: relative; height: 10px; background: var(--bg-elevated); border-radius: 2px; overflow: hidden; margin: 3px 0 5px; }
       .bar > i { position: absolute; inset: 0 auto 0 0; width: 100%; transition: width 120ms linear; }
       #hpfill { background: var(--health); } #hpfill.low { background: var(--damage); }
@@ -825,6 +859,7 @@
     <div id="hurt" class="layer"></div>
     <div id="zoneedge" class="layer"></div>
     <div id="hud" class="layer">
+      <div id="lefthud">
       <div id="vitals" class="panel">
         <div class="row"><span>Health</span><span class="num" id="hpn">100</span></div>
         <div class="bar"><i id="hpghost"></i><i id="hpfill"></i></div>
@@ -834,6 +869,8 @@
         <div id="status" aria-live="polite"></div>
         <div id="perk"></div>
         <canvas id="tracker" width="170" height="106" hidden aria-label="Visor tracker"></canvas>
+      </div>
+      <button id="mapbtn" class="panel" type="button" aria-label="Open tactical map" aria-expanded="false" aria-controls="tmap"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z" /><path d="M9 4v14M15 6v14" /></svg><span>MAP</span><small class="keyhint">M</small></button>
       </div>
       <ol id="feed" aria-live="polite"></ol>
       <div id="foes" class="panel"><span id="foesn" class="num">5</span><span>hostiles</span><span id="pips"></span><span id="zone"><i aria-hidden="true"></i><b id="zphase">Zone in</b><span id="ztime" class="num"></span></span></div>
@@ -852,6 +889,18 @@
       <div id="hint"></div>
       <div id="downcard" class="panel" role="status" aria-live="polite"><b id="downh">DOWNED</b><span id="downt" class="num"></span><small id="downwhy"></small><div class="bar"><i id="downbar"></i></div></div>
       <div id="toast"></div>
+    </div>
+    <div id="tmap" class="layer" hidden role="dialog" aria-modal="true" aria-label="Tactical map">
+      <canvas id="tmapc"></canvas>
+      <div class="tm-head">
+        <div class="tm-title"><span class="kicker">Tactical map</span><b id="tm-name"></b><small id="tm-sub"></small></div>
+        <button id="tm-close" class="tm-close" type="button" aria-label="Close the map and return to combat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>RETURN<small class="keyhint">M</small></button>
+      </div>
+      <ul class="tm-legend" aria-label="Legend">
+        <li><i class="you"></i>You</li><li><i class="mate"></i>Teammate</li><li><i class="enemy"></i>Enemy</li><li><i class="hostile"></i>Hostile</li>
+        <li><i class="trace"></i>Last known</li><li><i class="visor"></i>Visor</li><li><i class="zone"></i>Zone</li><li><i class="supply"></i>Supply</li>
+      </ul>
+      <div class="tm-ctl" role="group" aria-label="Zoom"><button id="tm-in" type="button" aria-label="Zoom in">+</button><button id="tm-out" type="button" aria-label="Zoom out">&minus;</button><button id="tm-fit" type="button" aria-label="Fit the whole map">FIT</button></div>
     </div>
     <div id="overlay" class="layer"></div>
     <div id="boot" role="status" aria-live="polite">

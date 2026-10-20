@@ -1,9 +1,9 @@
 import { createRenderer, createFx, COVER_FLASH_SECONDS, COLLECT_SECONDS, RING_SECONDS } from './render/render';
-import { createInput, touchStick } from './input/input';
+import { createInput, touchStick, typing } from './input/input';
 import { createSummaryGate, overlayInputAllowed } from './input/gate';
 import { createAudio } from './audio/audio';
 import { fixedSteps } from './sim/sim';
-import { createWorld, hears, wallFactorOf, matchSeconds, player, stepWorld, touchingFull, trackedBy, visorTracks, wants, IDLE_INPUT, type Pickup, type PickupKind, type World } from './sim/world';
+import { createWorld, hears, wallFactorOf, matchSeconds, player, stepWorld, touchingFull, trackedBy, wants, IDLE_INPUT, type Pickup, type PickupKind, type World } from './sim/world';
 import { outsideCircle, zoneAt } from './sim/zone';
 import { OnlineSession, serverUrl } from './net/client';
 import { MODE_SIZE, type Mode } from './net/protocol';
@@ -51,6 +51,8 @@ import { tierEffect } from './ui/account';
 import { LAB, applyLab } from './config/lab';
 import { OWN_NOISE, markKind } from './render/marks';
 import { createIntel, locatesSource, senseFor } from './sim/intel';
+import { visorDots } from './ui/tactical';
+import { createTacticalMap } from './ui/tactical-view';
 import { commsLine, compass } from './ui/comms';
 import { createFightRecord, deathInsights, gaitOf, offFacing, trimFight, type Insight } from './sim/insight';
 import { rung } from './sim/intel';
@@ -361,6 +363,22 @@ async function start() {
     e.stopPropagation();
     if (phase === 'play') go('pause');
   };
+  // Tactical map: the match keeps running behind it (online the server never pauses); while it is open your operator
+  // stands still and holds its facing, and nothing pressed on the map reaches the game.
+  const tmap = createTacticalMap({
+    world: () => world,
+    intel: () => matchIntel,
+    netTracks: () => (online && net ? net.tracks : null),
+    subtitle: () => training?.run ? 'CHOG Training' : online ? `Online ${onlineMode}` : 'Vs bots · you + 2 AI',
+    onOpen: () => input.releaseAll(),
+    onClose: () => input.holdFireUntilRelease(),
+  });
+  $('mapbtn').onpointerdown = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (phase === 'play') tmap.toggle();
+  };
+  $('mapbtn').onclick = (e) => { if (e.detail === 0 && phase === 'play') tmap.toggle(); };
   $('reload').onpointerdown = (e) => {
     e.stopPropagation();
     input.reload();
@@ -426,7 +444,7 @@ async function start() {
   // HUD panel rects for label avoidance (CHOG-HUD-002). Measured from the DOM, so safe-area insets count, and turned
   // into stage coordinates (the stage may be rotated); cached and refreshed on resize/orientation change and every 30
   // frames (cheap) so layout changes are picked up.
-  const HUD_IDS = ['vitals', 'foes', 'sys', 'weapon', 'ability', 'reload'];
+  const HUD_IDS = ['vitals', 'mapbtn', 'foes', 'sys', 'weapon', 'ability', 'reload'];
   let hudCache: { x: number; y: number; w: number; h: number }[] = [];
   let hudAge = 1e9;
   function hudRects() {
@@ -1175,9 +1193,7 @@ async function start() {
     const r = p.ability.radius ?? 16;
     g.strokeStyle = 'rgba(181, 123, 255, 0.7)'; g.lineWidth = 1;
     g.beginPath(); g.arc(ox + p.x * k, oy + p.y * k, r * k, 0, Math.PI * 2); g.stroke();
-    const dots = online && net
-      ? [...net.tracks, ...world.actors.filter((a) => a.team !== p.team && a.alive && a.x > -50 && Math.hypot(a.x - p.x, a.y - p.y) <= r)]
-      : visorTracks(world, p);
+    const dots = visorDots(world, p, online && net ? net.tracks : null);
     g.fillStyle = '#ff3b4a';
     for (const d of dots) { g.beginPath(); g.arc(ox + d.x * k, oy + d.y * k, 2.6, 0, Math.PI * 2); g.fill(); }
     g.fillStyle = '#4ee08a';
@@ -1642,6 +1658,11 @@ async function start() {
   window.addEventListener('keydown', (e) => {
     if (!e.repeat) summaryGate.press(performance.now());
   }, { capture: true });
+  // Tactical map (owner 2026-10-20): M opens and closes it during a match (Esc closes it: see takePause below).
+  window.addEventListener('keydown', (e) => {
+    if (e.code !== 'KeyM' || e.repeat || typing(e)) return;
+    if (phase === 'play' || tmap.open) { e.preventDefault(); tmap.toggle(); }
+  });
   // Hero select: 1-4 pick the matching card (CHOG-UI-001). Enter deploys (existing handler).
   window.addEventListener('keydown', (e) => {
     if (phase !== 'select' || e.repeat) return; // keys 1-4 never act on the summary
@@ -1945,6 +1966,8 @@ async function start() {
       telemetry: () => teleSummary(tele), product: () => ({ ...product }), perf: () => perfNow(),
       // CHOG Training (tools/sp-training.mjs): the drill in play, or null.
       training: () => training?.run ?? null,
+      // Tactical map (tools/tm-map.mjs): open state, the markers last drawn and the view.
+      tmap: () => ({ open: tmap.open, ...tmap.last() }),
       resolution: () => renderer.app.renderer.resolution, volume: () => audio.volume,
       // RC-8 online (tools/rc8-online.mjs): the session and whether the shown world is an online match. Test builds only.
       ...(__TEST_HOOKS__ ? { net: () => net, online: () => online } : {}) });
@@ -1981,9 +2004,11 @@ async function start() {
       fpsFrames = 0;
     }
     document.body.classList.toggle('touch', input.mode === 'touch');
+    if (tmap.open && phase !== 'play') tmap.close();
     const action = input.takeAction();
     if (input.takePause()) {
-      if (phase === 'play') go('pause');
+      if (tmap.open) tmap.close();
+      else if (phase === 'play') go('pause');
       else if (phase === 'pause') go('resume');
       // Esc closes a sheet or sub-screen of the hub (Back), like its close button.
       else if (phase === 'title' && titleView !== 'main' && overlayInputAllowed(phase, summaryGate)) menuAct('back');
@@ -1994,7 +2019,9 @@ async function start() {
       // Online: send controls, show the server's state. Nothing here decides a hit, damage or the result.
       const p = player(world);
       const ps = renderer.toScreen(p.x, p.y);
-      const inp = onlineDriver ? onlineDriver(world) : input.read(ps.x, ps.y, renderer.toScreen(p.x + 1, p.y).x - ps.x);
+      const read = onlineDriver ? onlineDriver(world) : input.read(ps.x, ps.y, renderer.toScreen(p.x + 1, p.y).x - ps.x);
+      // Tactical map open: the match goes on, your operator stands and holds its facing (nothing fires behind the map).
+      const inp = tmap.open ? { ...IDLE_INPUT, aim: p.facing } : read;
       trackFire(inp.firing);
       net.sendInput(p.alive ? inp : { ...inp, firing: false, moveX: 0, moveY: 0 }, performance.now());
       net.update(p.alive ? inp.aim : null);
@@ -2015,7 +2042,9 @@ async function start() {
       resumeSkip = false;
       acc = r.remainder;
       // Only consume input on frames that step the sim, so a latched tap is never lost on a 0-step frame.
-      const inp = r.steps > 0 ? input.read(ps.x, ps.y, renderer.toScreen(p.x + 1, p.y).x - ps.x) : null;
+      const read = r.steps > 0 ? input.read(ps.x, ps.y, renderer.toScreen(p.x + 1, p.y).x - ps.x) : null;
+      // Tactical map open: the sim keeps running (the bots do not wait), your operator stands and holds its facing.
+      const inp = read && tmap.open ? { ...IDLE_INPUT, aim: p.facing } : read;
       if (inp) trackFire(inp.firing);
       for (let i = 0; inp && i < r.steps && world.outcome === 'playing'; i++) {
         stepWorld(world, autopilot ? autopilot.next(world) : training?.run ? trainingInput(training.run, world, inp) : inp);
@@ -2023,10 +2052,10 @@ async function start() {
         inp.reload = false;
         // A held key stays held for every step of a long frame: dropping it for the rest of the frame read as a
         // release, so the next frame's held key was a fresh press that dropped an Aura (seen on a 5-step frame).
-        inp.ability = input.abilityHeld();
+        inp.ability = !tmap.open && input.abilityHeld();
         inp.grenade = false;
         // A tap fires exactly once: after the first step, firing follows the real button state.
-        if (!input.fireHeld()) inp.firing = false;
+        if (!input.fireHeld() || tmap.open) inp.firing = false;
         afterStep();
         playTime += TUNING.simStepSeconds;
       }
@@ -2146,6 +2175,7 @@ async function start() {
       const trackedNow = p.alive && (online ? !!net?.tracked : trackedBy(world, p));
       const st2 = training?.run ? trainingStatus(training.run) : trackedNow && !st ? 'TRACKED · a hostile Visor knows where you are' : st;
       drawTracker(p);
+      if (tmap.open) tmap.draw(p);
       if (st2 !== lastStatus) { lastStatus = st2; $('status').textContent = st2; }
       feed = feed.filter((f) => playTime - f.t < 6);
       const fh = feed.map((f) => `<li class="${f.mine ? 'mine' : ''}${f.down ? ' down' : ''}">${f.html}</li>`).join('');

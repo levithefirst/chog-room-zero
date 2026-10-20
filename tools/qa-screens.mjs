@@ -35,7 +35,7 @@ for (const d of DEVICES) {
   await b.click('[data-go=quit]'); await b.hub();
   await b.click('[data-mode=solo]'); await b.click('#playbtn');
   await b.until(`__chog.phase === 'play'`, 15000); await sleep(1500); await b.shot('12-game-hud');
-  const hud = await b.ev(`(() => { const out = []; for (const id of ['vitals','foes','weapon','ability','sys']) { const el = document.getElementById(id); if (!el || el.offsetParent === null) continue; const r = el.getBoundingClientRect(); const st = document.getElementById('stage').getBoundingClientRect(); if (r.left < st.left - 1 || r.right > st.right + 1 || r.top < st.top - 1 || r.bottom > st.bottom + 1) out.push('hud off-screen ' + id); } return out; })()`);
+  const hud = await b.ev(`(() => { const out = []; for (const id of ['vitals','mapbtn','foes','weapon','ability','sys']) { const el = document.getElementById(id); if (!el || el.offsetParent === null) continue; const r = el.getBoundingClientRect(); const st = document.getElementById('stage').getBoundingClientRect(); if (r.left < st.left - 1 || r.right > st.right + 1 || r.top < st.top - 1 || r.bottom > st.bottom + 1) out.push('hud off-screen ' + id); } return out; })()`);
   for (const x of hud ?? []) problems.push(`${d.name} game: ${x}`);
   console.log(`${d.name} 12-game-hud: ${hud?.length ? hud.join(' | ') : 'ok'}`);
   await b.ev(`(() => { const w = __chog.world; for (const a of w.actors) if (a.team === 'player') { a.hp = 0; a.alive = false; } w.outcome = 'dead'; w.playerKill = { cause: 'zone', killerId: -1, weapon: 'x', fromX: 0, fromY: 0, toX: 0, toY: 0, tick: 0 }; })()`);
