@@ -92,6 +92,9 @@ p, li { max-width: 72ch; }
   background: radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--chog-purple) 45%, transparent), transparent 60%), var(--panel); }
 .hero::after { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 16px 16px; }
 .hero > * { position: relative; z-index: 1; }
+.hero-shot { margin: 28px 0 0; max-width: 760px; }
+.hero-shot figcaption .src { display: inline; }
+@media (min-width: 1280px) { .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); column-gap: 32px; align-items: center; } .hero > :not(.hero-shot) { grid-column: 1; } .hero-shot { grid-column: 2; grid-row: 1 / span 4; margin: 0; } }
 .hero h1 { font-size: clamp(40px, 8vw, 84px); line-height: 0.95; margin: 0.15em 0 0.3em; }
 .cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 22px; }
 .btn { display: inline-flex; align-items: center; min-height: 48px; padding: 0 20px; border: 1px solid var(--line-2); border-radius: 6px; font: 600 18px/1 var(--display);
@@ -139,6 +142,7 @@ figcaption .src { display: block; font-size: 12px; font-family: var(--mono); }
 .shot ol.marks { margin: 6px 0 0; padding-left: 22px; font-size: 14px; color: var(--muted); }
 .diagram { border: 1px solid var(--line); border-radius: 4px; background: var(--panel); padding: 12px; overflow-x: auto; }
 .dg { display: block; max-width: 100%; height: auto; margin: 0 auto; }
+@media (max-width: 640px) { .diagram .dg, .controls svg { min-width: 560px; max-width: none; } }
 .dg .lbl { fill: var(--text); font: 400 13px var(--mono); } .dg .lbl.small { font-size: 12px; fill: var(--muted); }
 .dg .grid { stroke: var(--line); } .dg .axis, .dg .tick { stroke: var(--muted); }
 .dg .me { fill: var(--ally); } .dg .foe { fill: var(--enemy); }
@@ -188,15 +192,15 @@ polyline.fo0, polyline.fo1, polyline.fo2, polyline.fo3, polyline.fo4, polyline.f
 .mg-view.dragging { cursor: grabbing; }
 .mg-view .mg-svg { width: 100%; height: 100%; display: block; max-width: none; }
 .mg-svg .mg-bg { fill: #07040F; } .mg-floor rect { fill: #241A36; }
-.mg-walls rect, .mg-walls { fill: #C4BFD4; } .mg-doors { fill: #6B4FA0; }
-.mg-crate { fill: #8A6A3A; } .mg-barrier { fill: #6E6A80; }
+.mg-walls rect, .mg-walls { fill: #5E5378; } .mg-doors { fill: #6B4FA0; }
+.mg-crate { fill: #B08850; } .mg-barrier { fill: #6E6A80; }
 .mg-deck { fill: #2F4F6A; } .mg-stairs { fill: #4C7FA8; } .mg-rail { fill: #3A3F55; }
 .mg-lit { fill: rgba(255, 236, 170, 0.12); }
 .mg-pickups rect { fill: none; stroke-width: 0.2; stroke-dasharray: 0.5 0.35; }
 .pk-health { stroke: var(--health); } .pk-armor { stroke: var(--armor); } .pk-ammo { stroke: var(--ammo); } .pk-grenade { stroke: var(--pickup); }
 .mg-zone circle { fill: none; stroke: var(--danger-zone); stroke-width: 0.25; }
 .sp-alpha { fill: var(--ally); } .sp-bravo { fill: var(--chog-pink); } .sp-solo { fill: #FFFFFF; stroke: var(--neon); stroke-width: 0.25; } .sp-bot { fill: var(--enemy); }
-.mg-labels text { fill: #FFF8E7; font: 600 1.25px var(--mono); letter-spacing: 0.08px; text-anchor: middle; paint-order: stroke; stroke: #07040F; stroke-width: 0.35px; }
+.mg-labels text { fill: #FFF8E7; font: 600 1.05px var(--mono); letter-spacing: 0.04px; text-anchor: middle; paint-order: stroke; stroke: #07040F; stroke-width: 0.35px; }
 .mg-svg.mini .mg-bg { fill: transparent; }
 .mg-svg [data-layer].off { display: none; }
 .mg-layers { border-top: 1px solid var(--line); padding: 8px 12px; }
@@ -207,7 +211,7 @@ polyline.fo0, polyline.fo1, polyline.fo2, polyline.fo3, polyline.fo4, polyline.f
 .mg-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; list-style: none; margin: 0; padding: 10px 12px 12px; border-top: 1px solid var(--line); font-size: 14px; }
 .mg-legend li { display: inline-flex; align-items: center; gap: 8px; }
 .mg-legend i { display: inline-block; width: 16px; height: 12px; border-radius: 2px; border: 1px solid rgba(255,255,255,.25); }
-.lg-wall { background: #C4BFD4; } .lg-cover { background: #8A6A3A; } .lg-door { background: #6B4FA0; } .lg-deck { background: #2F4F6A; } .lg-stairs { background: #4C7FA8; }
+.lg-wall { background: #5E5378; } .lg-cover { background: #8A6A3A; } .lg-door { background: #6B4FA0; } .lg-deck { background: #2F4F6A; } .lg-stairs { background: #4C7FA8; }
 .lg-rail { background: #3A3F55; } .lg-lit { background: rgba(255, 236, 170, 0.45); } .lg-alpha { background: var(--ally); border-radius: 50% !important; } .lg-bravo { background: var(--chog-pink); border-radius: 50% !important; }
 .lg-solo { background: #fff; border-radius: 50% !important; } .lg-bot { background: var(--enemy); clip-path: polygon(50% 0, 100% 100%, 0 100%); }
 .lg-zone { border: 2px solid var(--danger-zone) !important; border-radius: 50% !important; } .lg-pk { border: 2px dashed var(--health) !important; }

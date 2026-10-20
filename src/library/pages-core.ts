@@ -17,6 +17,7 @@ export const home: Page = {
 <h1 id="hero-h">THE OFFICIAL<br>GAME LIBRARY</h1>
 <p class="sub">A dark, top-down tactical shooter where what you see, what you hear and what you give away decide the fight. Every rule and number on these pages is read from the game's own code.</p>
 <div class="cta"><a class="btn primary" href="/">PLAY ROOM ZERO</a><a class="btn" href="${href('start-here')}">START HERE</a><a class="btn" href="${href('maps')}">EXPLORE THE MAPS</a></div>
+${shot('hud-desktop', 'A solo match on Office, straight from the game.', true).replace('class="shot"', 'class="shot hero-shot"')}
 </section>`,
   sections: [
     { id: 'explore', title: 'Explore the library', html: `<div class="cards">
@@ -32,7 +33,7 @@ ${[
     { id: 'new', title: 'New to Room Zero?', keywords: ['what is room zero', 'beginner', 'new player'], html: `<div class="qa">
 <div><h3>What is it?</h3><p>A top-down tactical shooter played in short rooms. By default you and two AI teammates enter a dark location against ${soloHostiles('room-zero')} hostile bots. Your side wins when every hostile is down. Online, it is 1v1, 3v3 or 5v5 against other players, and the last side standing wins.</p></div>
 <div><h3>Why is it different?</h3><p>You only see what your light and a clear line show you. Walls block sight and bullets. Every step, shot and reload makes a sound that carries a set distance, and the other side hears it too. Bullets travel; they are not instant. Winning is about information as much as aim.</p></div>
-<div><h3>How do I start?</h3><p>Press ${link('', 'PLAY ROOM ZERO', '')} above (it opens the game), pick an operator, choose <b>Vs bots</b> and press Play. On a PC: WASD to move, the mouse to aim, hold the left button to fire. On a phone, hold it sideways: left thumb moves, right thumb aims and fires.</p></div>
+<div><h3>How do I start?</h3><p>Press <a href="/">PLAY ROOM ZERO</a> above (it opens the game), pick an operator, choose <b>Vs bots</b> and press Play. On a PC: WASD to move, the mouse to aim, hold the left button to fire. On a phone, hold it sideways: left thumb moves, right thumb aims and fires.</p></div>
 <div><h3>Where do I learn more?</h3><p>${link('start-here', 'Start here')} covers a first room in five minutes. ${link('how-to-play', 'How to play')} explains a whole match. ${link('controls', 'Controls')} lists every key and touch button. Press <kbd>/</kbd> to search.</p></div>
 </div>` },
   ],
@@ -43,7 +44,7 @@ function mini(id: (typeof MAP_IDS)[number]): string { return `<span class="card-
 function shotOr(name: string, id: (typeof MAP_IDS)[number]): string {
   const s = shot(name, '');
   if (!s) return mini(id);
-  return `<span class="card-img">${s.replace(/<figcaption>[\s\S]*<\/figcaption>/, '').replace('<figure class="shot">', '').replace('</figure>', '')}</span>`;
+  return `<span class="card-img">${s.replace(/<figcaption>[\s\S]*<\/figcaption>/, '').replace(/<svg class="callouts"[\s\S]*?<\/svg>/, '').replace('<figure class="shot">', '').replace('</figure>', '')}</span>`;
 }
 
 export const startHere: Page = {
@@ -72,8 +73,8 @@ export const howToPlay: Page = {
     { id: 'hub', title: 'The hub', html: `<p>The hub is where you pick your operator, the mode and the location. <b>Vs bots</b> works without signing in. 1v1 and 3v3 are online; 5v5 is for verified Chog holders. The location is a preference: see ${link('multiplayer', 'Multiplayer')} for how online matching uses it.</p>` },
     { id: 'deploy', title: 'Deploy', html: `<p>The loading screen is a briefing: the location, the objective, your operator's ability and its cooldown, and a tip.</p>${shot('deploy', 'The deploy briefing: map, objective, ability and class.')}` },
     { id: 'win', title: 'How to win', keywords: ['how do i win', 'win condition', 'victory', 'objective'], html: `${facts([['Vs bots', `Down all ${soloHostiles('room-zero')} hostiles. Your AI teammates' downs count for your side.`], ['Online', 'The last side with anyone standing wins.'], ['Time limit online', `${240} s; then the side with more health standing wins (the zone normally ends it first).`], ['Lose', 'You are eliminated (shot, bled out, or caught by the zone).']])}` },
-    { id: 'hud', title: 'Reading the HUD', keywords: ['hud', 'health bar', 'ammo'], html: `<p>Top left: health (ticks every 25), armour, your operator and mode. Top middle: hostiles left and the zone timer. Bottom: weapon and ammo, ability (with its cooldown seconds) and grenades. The MAP button under the vitals opens the full-screen tactical map.</p>${shot('hud-desktop', 'The HUD at 1920 x 1080 with the callouts drawn over the live page.')}` },
-    { id: 'states', title: 'HUD warnings', keywords: ['low health', 'armour break', 'reload', 'empty'], html: `<p>The HUD changes when something needs you: low health is spelled out and pulses, the armour bar marks the moment it breaks, and the weapon panel warns when ammo is low or out and while you reload.</p>${shot('low-health', 'Low health: the bar turns red and says so.')}${shot('armour-break', 'Armour break: the armour bar empties and flashes.')}${shot('reload', 'Reloading: the weapon panel shows the reload.')}` },
+    { id: 'hud', title: 'Reading the HUD', keywords: ['hud', 'health bar', 'ammo'], html: `<p>Top left: health (ticks every 25), armour, your operator and mode. Top middle: hostiles left and the zone timer. Bottom: weapon and ammo, ability (with its cooldown seconds) and grenades. The MAP button under the vitals opens the full-screen tactical map.</p>${shot('hud-desktop', 'The desktop HUD (captured at 1600 by 900), with numbered callouts measured from the HUD elements of the game.')}` },
+    { id: 'states', title: 'HUD warnings', keywords: ['low health', 'armour break', 'reload', 'empty'], html: `<p>The HUD changes when something needs you: low health is spelled out and pulses, the armour bar marks the moment it breaks, and the weapon panel warns when ammo is low or out and while you reload.</p>${shot('low-health', 'Low health: the bar turns red and says so.')}${shot('armour-break', 'Armour break: the armour bar empties and flashes.')}${shot('reload', 'Reloading: the weapon panel shows the reload.')}${shot('ability-cd', 'Ability used: the button counts down its cooldown, and Ping\'s sonar ring spreads out.')}` },
     { id: 'tactical-map', title: 'The tactical map', keywords: ['map', 'minimap', 'tactical map', 'm key'], html: `<p>Press <kbd>M</kbd> or the MAP button for a full-screen map of the location in play. It shows the layout, area names, the zone and stocked supplies, you and your side, and hostiles only while you actually have them (seen, last known, or Visor dots). It never shows anyone you could not know about. Your operator stops while it is open.</p>${shot('tactical-map', 'The tactical map (M) over a live match.')}` },
     { id: 'end', title: 'End of a room', html: `<p>A defeat shows a short recap of how you went down, then the results. The results list what the run paid in XP and shards, line by line, and any medals earned.</p>${shot('victory', 'Victory: the results screen with the run summary.')}${shot('death', 'Defeat: the recap after going down.')}` },
   ],
