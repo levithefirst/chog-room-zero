@@ -162,7 +162,7 @@ export function settingsHtml(c: ScreenCtx, confirmReset: boolean): string {
 <section><h3>Display</h3>
 <div class="row2"><span>Graphics quality</span>${seg('quality', s.quality, [['low', 'Low'], ['medium', 'Medium'], ['high', 'High']])}</div>
 <div class="row2"><span>HUD size</span>${seg('hudscale', String(s.hudScale), HUD_SCALES.map((v) => [String(v), `${v}%`] as [string, string]))}</div>
-<div class="row2"><span>Motion<small class="sub">Shake, pulses, screen entrances</small></span>${seg('motion', s.motion, [['auto', 'System'], ['reduced', 'Reduced'], ['full', 'Full']])}</div>
+<div class="row2 wrap"><span>Motion<small class="sub">Shake, pulses, screen entrances</small></span>${seg('motion', s.motion, [['auto', 'System'], ['reduced', 'Reduced'], ['full', 'Full']])}</div>
 
 ${c.canFs && c.touch ? '<div class="row2"><span>Full screen</span><button class="btn small" data-fs>Full screen</button></div>' : ''}</section>
 <section><h3>Account</h3>

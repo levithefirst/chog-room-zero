@@ -95,7 +95,7 @@ export function layoutStage(el: HTMLElement): StageLayout {
   const hud = Math.round(ui * hudPct) / 100;
   scales = { ui, hud };
   for (const [id, z] of [['overlay', ui], ['boot', ui], ['hud', hud]] as const) {
-    const layer = document.getElementById(id);
+    const layer = typeof document.getElementById === 'function' ? document.getElementById(id) : null;
     if (!layer) continue;
     layer.style.setProperty('zoom', z === 1 ? '' : String(z));
     layer.style.setProperty('--vw', `${L.w / z / 100}px`);
