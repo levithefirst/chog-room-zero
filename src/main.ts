@@ -687,7 +687,7 @@ async function start() {
     const foes = world.actors.filter((a) => a.team === 'bot');
     const where = training ? 'CHOG Training' : MAPS[mapId].name;
     const stat = (k: string, v: string) => `<div class="rw"><span>${k}</span><b class="num">${v}</b></div>`;
-    const keys = input.mode === 'touch' ? '' : `<ul class="keys">${[['WASD', 'Move'], ['Shift', 'Creep'], ['Mouse', 'Aim'], ['Click', 'Fire'], ['R', 'Reload'], ['Space', 'Ability'], ['G', 'Grenade'], ['Esc', 'Resume']].map(([k, v]) => `<li><kbd>${k}</kbd>${v}</li>`).join('')}</ul>`;
+    const keys = input.mode === 'touch' ? '' : `<ul class="keys">${[['WASD', 'Move'], ['Shift', 'Creep'], ['Mouse', 'Aim'], ['Click', 'Fire'], ['R', 'Reload'], ['Space', 'Ability'], ['G', 'Grenade'], ['M', 'Map'], ['Esc', 'Resume']].map(([k, v]) => `<li><kbd>${k}</kbd>${v}</li>`).join('')}</ul>`;
     card(`<div class="kicker">${training ? 'Training' : 'Vs bots'} · ${esc(where)}</div><h2>Paused</h2>
       <div class="reward-grid pause-grid">${stat('Time', fmtTime(Math.round(playTime)))}${stat('Hostiles left', `${foes.filter((a) => a.alive).length}/${foes.length}`)}${stat('Health', String(Math.max(0, Math.ceil(p.hp))))}${stat('Your kills', String(p.kills))}</div>
       <div class="btns"><button class="btn primary" data-go="resume">Resume</button><button class="btn" data-go="restart">Restart</button><button class="btn" data-go="quit">Quit</button>${fsButton()}</div>

@@ -101,6 +101,10 @@ export function layoutStage(el: HTMLElement): StageLayout {
     layer.style.setProperty('--vw', `${L.w / z / 100}px`);
     layer.style.setProperty('--vh', `${L.h / z / 100}px`);
   }
+  // H38: the tactical map (H37) keeps its canvas in stage px (it measures and draws there); only its chrome (title,
+  // RETURN, legend, zoom buttons) takes the UI scale, and tactical-view reads that zoom back when it fits the map box.
+  const tmap = typeof document.getElementById === 'function' ? document.getElementById('tmap') : null;
+  if (tmap) for (const c of Array.from(tmap.querySelectorAll<HTMLElement>('.tm-head, .tm-legend, .tm-ctl'))) c.style.setProperty('zoom', ui === 1 ? '' : String(ui));
   document.body.style.setProperty('--ui', String(ui));
   return L;
 }

@@ -157,7 +157,7 @@ export function drawTactical(g: CanvasRenderingContext2D, d: DrawInput): void {
   drawTiles(g, l, k);
   g.restore();
   // Area names (screen-sized text, hidden when they would not fit).
-  const fs = Math.max(9, Math.min(14, k * 0.9));
+  const fs = Math.max(12, Math.min(14, k * 0.9)); // H38: 12 px floor (was 9)
   if (k >= 7) {
     g.font = `600 ${fs}px Barlow Condensed, system-ui, sans-serif`;
     g.textAlign = 'center'; g.textBaseline = 'middle';
@@ -262,7 +262,7 @@ function drawMarker(g: CanvasRenderingContext2D, m: Marker, v: MapView, visorR?:
     line(g, s.x, s.y, s.x + Math.cos(m.facing) * r * 0.9, s.y + Math.sin(m.facing) * r * 0.9);
   }
   if (m.kind === 'you') {
-    g.font = '800 11px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'bottom';
+    g.font = '800 12px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'bottom';
     g.strokeStyle = '#0b0716'; g.lineWidth = 3; g.strokeText('YOU', s.x, s.y - r - 3);
     g.fillStyle = C.you; g.fillText('YOU', s.x, s.y - r - 3);
   }

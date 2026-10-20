@@ -54,7 +54,7 @@
       /* Tactical map button (owner 2026-10-20): under the vitals, left edge, out of the move thumb's lower-left. */
       #mapbtn { pointer-events: auto; display: flex; align-items: center; gap: 6px; height: 38px; padding: 0 12px 0 10px; color: var(--ink); font-weight: 700; letter-spacing: .12em; font-size: 13px; }
       #mapbtn svg { width: 18px; height: 18px; fill: none; stroke: var(--chog-pink); stroke-width: 2; stroke-linejoin: round; }
-      #mapbtn .keyhint { opacity: .6; font-size: 10px; margin-left: 2px; }
+      #mapbtn .keyhint { opacity: .6; font-size: 12px; margin-left: 2px; }
       body.touch #mapbtn { height: 46px; padding: 0 16px 0 12px; } body.touch #mapbtn .keyhint { display: none; }
       body.compact #mapbtn { height: 40px; }
       /* Full-screen tactical map: above the HUD, below menus. */
@@ -64,13 +64,13 @@
       #tmapc:active { cursor: grabbing; }
       #tmap .tm-head { position: absolute; left: var(--sl); right: var(--sr); top: var(--st); display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; pointer-events: none; }
       #tmap .tm-title { display: grid; gap: 1px; background: rgba(14, 9, 28, 0.8); border-left: 3px solid var(--chog-pink); padding: 4px 12px 5px 10px; border-radius: 0 6px 6px 0; }
-      #tmap .tm-title .kicker { font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--chog-pink); }
+      #tmap .tm-title .kicker { font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: var(--chog-pink); }
       #tmap .tm-title b { font-size: 20px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink); }
-      #tmap .tm-title small { font-size: 11px; color: var(--dim); letter-spacing: .08em; text-transform: uppercase; }
+      #tmap .tm-title small { font-size: 12px; color: var(--dim); letter-spacing: .08em; text-transform: uppercase; }
       #tmap .tm-close { pointer-events: auto; display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 18px 0 14px; border-radius: 8px; border: 2px solid var(--chog-pink);
         background: rgba(255, 107, 157, 0.16); color: var(--ink); font-weight: 800; letter-spacing: .14em; font-size: 15px; box-shadow: 0 0 18px rgba(255, 107, 157, 0.25); }
       #tmap .tm-close svg { width: 20px; height: 20px; stroke: var(--ink); stroke-width: 2.6; fill: none; }
-      #tmap .tm-close .keyhint { font-size: 10px; opacity: .65; }
+      #tmap .tm-close .keyhint { font-size: 12px; opacity: .65; }
       body.touch #tmap .tm-close .keyhint { display: none; }
       #tmap .tm-legend { position: absolute; left: var(--sl); bottom: var(--sb); margin: 0; padding: 6px 10px; list-style: none; display: grid; grid-template-columns: repeat(2, auto); gap: 3px 14px;
         background: rgba(14, 9, 28, 0.82); border: 1px solid var(--line); border-radius: 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink); pointer-events: none; }
@@ -82,7 +82,7 @@
       #tmap .tm-ctl { position: absolute; right: var(--sr); bottom: var(--sb); display: grid; gap: 8px; }
       #tmap .tm-ctl button { width: 48px; height: 48px; border-radius: 8px; border: 1px solid var(--line); background: rgba(26, 18, 40, 0.88); color: var(--ink); font-size: 22px; font-weight: 700; padding: 0; }
       #tmap .tm-ctl #tm-fit { font-size: 12px; letter-spacing: .1em; }
-      body.compact #tmap .tm-legend { grid-template-columns: repeat(4, auto); font-size: 10px; padding: 4px 8px; gap: 2px 10px; }
+      body.compact #tmap .tm-legend { grid-template-columns: repeat(4, auto); font-size: 12px; padding: 4px 8px; gap: 2px 10px; }
       body.compact #tmap .tm-title b { font-size: 16px; } body.compact #tmap .tm-ctl { gap: 6px; } body.compact #tmap .tm-ctl button { width: 44px; height: 44px; }
       .bar { position: relative; height: 10px; background: var(--bg-elevated); border-radius: 2px; overflow: hidden; margin: 3px 0 5px; }
       .bar > i { position: absolute; inset: 0 auto 0 0; width: 100%; transition: width 120ms linear; }

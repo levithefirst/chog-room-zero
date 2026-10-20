@@ -41,13 +41,17 @@ export function createTacticalMap(d: TacticalDeps): TacticalMap {
     // The map area: below the header, inside the safe-area padding (CSS vars --sl/--st/--sr/--sb).
     // Layout sizes (offset*), not screen rects: on a phone held upright the stage is turned and a rect's height on
     // screen is the element's width.
+    // H38: the chrome may carry a CSS zoom (UI scale on large screens); offset* are in its own unzoomed px, so scale
+    // them back to stage px (zoom 1 everywhere else, so nothing changes there).
+    const zf = (e: HTMLElement) => parseFloat(e.style.zoom) || 1;
     const head = el.querySelector('.tm-head') as HTMLElement;
-    const top = head.offsetTop + head.offsetHeight + 6;
-    const left = (el.querySelector('.tm-legend') as HTMLElement).offsetLeft;
-    const right = size.w - ((el.querySelector('.tm-ctl') as HTMLElement).offsetLeft + (el.querySelector('.tm-ctl') as HTMLElement).offsetWidth);
-    // Short screens: stop above the legend so it never covers the map (taller screens have room beside it).
     const legend = el.querySelector('.tm-legend') as HTMLElement;
-    const bottom = document.body.classList.contains('compact') ? legend.offsetTop - 4 : size.h - 6;
+    const ctl = el.querySelector('.tm-ctl') as HTMLElement;
+    const top = (head.offsetTop + head.offsetHeight) * zf(head) + 6;
+    const left = legend.offsetLeft * zf(legend);
+    const right = size.w - (ctl.offsetLeft + ctl.offsetWidth) * zf(ctl);
+    // Short screens: stop above the legend so it never covers the map (taller screens have room beside it).
+    const bottom = document.body.classList.contains('compact') ? legend.offsetTop * zf(legend) - 4 : size.h - 6;
     return { x: left, y: top, w: size.w - left - right, h: bottom - top };
   };
   const refit = () => {
