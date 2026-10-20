@@ -116,7 +116,7 @@ export const controls: Page = {
   keywords: ['keys', 'keyboard', 'mouse', 'touch', 'mobile', 'tablet', 'bindings', 'buttons'],
   sections: [
     { id: 'desktop', title: 'Desktop (keyboard and mouse)', keywords: ['pc', 'keyboard', 'wasd', 'hotkeys'], html: `<figure class="diagram">${keyboardSvg()}<figcaption>The keys the game reads.</figcaption></figure>${table(['Input', 'Action'], KEY_ROWS.map(([a, b]) => [`<kbd>${esc(a)}</kbd>`, esc(b)]), 'Keyboard and mouse')}<p>Grenades on PC land where the cursor is (${TUNING.grenade.minThrow} to ${TUNING.grenade.maxThrow} m); holding G shows where it will land.</p>` },
-    { id: 'touch', title: 'Phone (touch)', keywords: ['mobile', 'phone', 'touch', 'twin stick', 'landscape'], html: `<figure class="diagram">${touchSvg()}<figcaption>The touch layout (schematic). The game plays in landscape; held upright, the screen is turned for you.</figcaption></figure>${ul([
+    { id: 'touch', title: 'Phone (touch)', keywords: ['mobile', 'phone', 'touch', 'twin stick', 'landscape', 'mobile', 'phone', 'can i play on mobile'], html: `<figure class="diagram">${touchSvg()}<figcaption>The touch layout (schematic). The game plays in landscape; held upright, the screen is turned for you.</figcaption></figure>${ul([
       'Left thumb: the move stick follows your thumb if it drifts past the rim. Push less than 60% of the way to creep.',
       `Right thumb: aim. It fires once you push past ${Math.round(INPUT.aimDeadzone * 100)}% of the stick; inside that it only turns you. There is no auto-fire.`,
       'With the aim thumb lifted you face where you walk.',

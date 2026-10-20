@@ -30,7 +30,7 @@ ${[
     ['medals', 'Medals', 'All 40 medals, searchable and filterable by rarity.', shotOr('victory', 'room-zero')],
   ].map(([s, t, d, img]) => `<a class="card" href="${href(s)}">${img}<span class="card-t">${t}</span><span class="card-d">${d}</span></a>`).join('')}
 </div>` },
-    { id: 'new', title: 'New to Room Zero?', keywords: ['what is room zero', 'beginner', 'new player'], html: `<div class="qa">
+    { id: 'new', title: 'New to Room Zero?', keywords: ['what is room zero', 'what is this game', 'how do i start', 'where do i find the answer', 'where do i learn more', 'beginner', 'new player'], html: `<div class="qa">
 <div><h3>What is it?</h3><p>A top-down tactical shooter played in short rooms. By default you and two AI teammates enter a dark location against ${soloHostiles('room-zero')} hostile bots. Your side wins when every hostile is down. Online, it is 1v1, 3v3 or 5v5 against other players, and the last side standing wins.</p></div>
 <div><h3>Why is it different?</h3><p>You only see what your light and a clear line show you. Walls block sight and bullets. Every step, shot and reload makes a sound that carries a set distance, and the other side hears it too. Bullets travel; they are not instant. Winning is about information as much as aim.</p></div>
 <div><h3>How do I start?</h3><p>Press <a href="/">PLAY ROOM ZERO</a> above (it opens the game), pick an operator, choose <b>Vs bots</b> and press Play. On a PC: WASD to move, the mouse to aim, hold the left button to fire. On a phone, hold it sideways: left thumb moves, right thumb aims and fires.</p></div>

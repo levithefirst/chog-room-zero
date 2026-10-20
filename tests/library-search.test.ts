@@ -46,4 +46,13 @@ describe('library search', () => {
     ['Do I need an NFT to play?', 'faq#nft'], ['How do I play with friends?', 'multiplayer#squads'], ['What do I earn from a match?', 'rewards#table'],
   ];
   for (const [q, want] of NEWCOMER) it(`newcomer: "${q}" -> ${want}`, () => expect(top(q).slice(0, 3)).toContain(want));
+
+  // The owner's twelve newcomer questions (brief section 27), exactly as written: the answering section is in the top 3.
+  const OWNER: [string, string][] = [
+    ['What is this game?', '#new'], ['How do I start?', '#new'], ['How do I win?', 'how-to-play#win'], ['What does armour do?', 'combat#health'],
+    ['How do I revive?', 'combat#revive'], ['What does my CHOG do?', 'chog-traits#chog-traits'], ['Which weapon should I use?', 'weapons#table'],
+    ['What is different about Metro?', 'maps/metro#identity'], ['How does sound work?', 'movement-sound#sounds'], ['How does 3v3 work?', 'game-modes#3v3'],
+    ['Can I play on mobile?', 'controls#touch'], ['Where do I find the answer?', '#new'],
+  ];
+  for (const [q, want] of OWNER) it(`owner newcomer: "${q}" -> ${want}`, () => expect(top(q).slice(0, 3)).toContain(want));
 });

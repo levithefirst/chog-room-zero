@@ -4,7 +4,7 @@
 export interface Entry { p: string; s: string; pt: string; t: string; x: string; k: string }
 export interface Hit { e: Entry; score: number }
 
-const STOP = new Set(['how', 'do', 'does', 'i', 'a', 'an', 'the', 'to', 'is', 'can', 'what', 'of', 'and', 'in', 'on', 'my', 'me', 'it', 'are', 'for', 'with', 'be', 'get', 'you', 'your']);
+const STOP = new Set(['how', 'do', 'does', 'i', 'a', 'an', 'the', 'to', 'is', 'can', 'what', 'of', 'and', 'in', 'on', 'my', 'me', 'it', 'are', 'for', 'with', 'be', 'get', 'you', 'your', 'this', 'there', 'about', 'where', 'which', 'does', 'use', 'should', 'work']);
 const CANON: Record<string, string> = {
   armor: 'armour', armors: 'armour', armours: 'armour', shield: 'armour', nade: 'grenade', nades: 'grenade', grenades: 'grenade',
   footstep: 'footsteps', steps: 'footsteps', step: 'footsteps', revives: 'revive', revived: 'revive', reviving: 'revive', rescue: 'revive',
@@ -39,6 +39,9 @@ export function search(index: readonly Entry[], q: string, limit = 12): Hit[] {
       if (m) matched++;
       score += m;
     }
+    // A section that lists the reader's exact question as a keyword answers it.
+    const exact = e.k.split(' | ').some((k) => norm(k) === norm(q));
+    if (exact) { score += 40; matched = Math.max(matched, qt.length); }
     if (!matched) continue;
     if (qt.length > 1) {
       if (phrase(e.t).includes(qp)) score += 15;
