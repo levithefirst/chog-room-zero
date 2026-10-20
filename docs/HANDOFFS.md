@@ -553,3 +553,19 @@ Not verified    : human play (no person played it; the "human QA" asked for was 
 Data written    : none (production probe matches left early).
 Locked decisions touched : none. RULES section 6 asks for an equal scope cut; none named by the owner for this request (logged in the design doc).
 Next smallest task : owner plays one Office and one Metro run on a phone, opens the map three times mid-fight, and answers "could you tell where you were and where the zone closes?" and "did standing still to look cost you?"; then confirms the 1v1 opponent rule; files: none.
+
+HANDOFF H38  2026-10-20  grokbot -> owner
+Branch @ commit : grokbot/uix-world-class-h37 @ 9125c42 (code; this handoff is docs only), from H37 7129a3e (ccr-e7fadb8f-qtochk); PR -> ccr-e7fadb8f-qtochk   pushed: yes
+Task            : owner: put the UIX work (was "H37 grokbot" on PR #11, renumbered H38) on top of claude's H37 tactical map; H37 and the map win every conflict. PR #11 superseded, not closed.
+Picked          : 8f45322 (tool), 38283b6, ec61308, 98bf53c, 5a60869, 33cc3f2, bfe3125 one by one; 95154e5 (docs) rewritten as this handoff.
+Conflicts       : src/main.ts HUD_IDS (kept H37 mapbtn, added lastArmor); src/main.ts imports (kept H37 typing, added hit constants); STATE/HANDOFFS (H37 kept whole, H38 appended; MP and H34/ID/SP rows merged to stay under 8,000).
+Adapted         : 8a36cd8 map canvas stays in stage px; only its chrome (title, RETURN, legend, zoom) takes the UI scale, and tactical-view box() reads that zoom back; 12 px floor for map chrome, MAP keyhint, canvas labels (area names 12-14, YOU 12); M Map on the pause keycaps. 9125c42 legend 12 px. The map has no animation (Motion: nothing to do). Markers, information rules, input unchanged.
+Tests run       : tsc clean. env -u DATABASE_URL vitest 1048/1048 (rerun; first run 1044, 4 PGlite hook timeouts at load 4.2); bare 7129a3e 1048/1048. Build OK (743.6/239.9 kB gz; base 736.8/237.4). Headless Chrome, emulated, local stack: tm-map 104/105; the one FAIL (Room Zero combat, dead bot 7 marked hostile, d 1.7) is identical on bare 7129a3e. Map at 1920x1080, 2560x1440, 844x390 (Office, Metro): opens, draws, closes to play, no overlap, text >= 12 px, 0 console/page errors. uix-shots 5 views: 0 page errors.
+Deploy          : Vercel PREVIEW only. Production untouched (H37 002dc7b).
+Rollback        : close the PR (nothing merged or live).
+Known failures  : the H37 tm-map Room Zero combat check (pre-existing, above).
+Blockers        : none
+Not verified    : real phones and GPUs; human play; online on the preview.
+Data written    : none.
+Locked decisions touched : none.
+Next smallest task : owner opens the preview at 1080p and on a phone, opens the map mid-fight: "is the map and HUD readable at a glance?"; files: none.

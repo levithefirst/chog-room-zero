@@ -45,6 +45,7 @@ Last verified: 2026-10-20 by claude (H37 tactical map, live from ccr-e7fadb8f-qt
 - H34/H35 (live): five locations, rail/deck/stairs, lit areas, hub leaderboard, 40 medals, protocol 2, hub blink fixed (`docs/design/maps.md`).
 - H37 (live): tactical map (MAP, M): the live level, areas, zone, supplies; your side always, hostiles only from your intel, Visor dots; no protocol change. `docs/design/tactical-map.md`.
 - H36 (live): human 1v1 fixed; dead sockets never seated; queue rejoins; a failing room stops alone. `docs/MULTIPLAYER.md`.
+- UIX (H38, PR, not live): `docs/design/ui-audit.md`.
 - Earlier: `docs/HANDOFFS.md`.
 
 ## Automated tests (EVIDENCE, Node 22.22)
@@ -61,9 +62,9 @@ Core Feel Gate: BLOCKED on owner playtests. G10: automated PASS; playtest not ru
 | Id | Owner | Branch | Files | Done when | Status |
 |---|---|---|---|---|---|
 | TM | claude | ccr-e7fadb8f-qtochk | see H37 | Owner 2026-10-20 TACTICAL MAP | live; owner plays it on a phone |
-| MP | claude | same | see H36 | Owner P0 multiplayer reliability | live; owner: 10 human 1v1s, server plan |
-| H34/ID/SP | claude | same | see H32-H35 | Owner 2026-10-18/19 | live; owner plays five maps; open items above |
+| MP, H34/ID/SP | claude | same | see H32-H36 | Owner 2026-10-18/19 | live; owner: 10 human 1v1s, server plan, five maps |
+| UIX | grokbot | grokbot/uix-world-class-h37 | see H38 | Owner 2026-10-20 UI | owner reviews PR |
 | RC-8 | claude | PR #10 | see H16 | Owner RC-8 mandate | PR #10 not merged (owner decides) |
 
 ## Handoffs
-Latest: H37 (2026-10-20, claude -> owner; tactical map live). History: `docs/HANDOFFS.md`.
+Latest: H38 (grokbot; UIX PR, not live); H37 live. History: `docs/HANDOFFS.md`.
