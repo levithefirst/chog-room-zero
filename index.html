@@ -850,6 +850,11 @@
       @keyframes statin { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
       .card.results .btn.again { clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%); background: linear-gradient(100deg, #7b4fe0, var(--chog-purple-bright) 45%, #b26ad8); border: 0; min-width: 180px; font-size: 20px; letter-spacing: .24em; }
       @media (prefers-reduced-motion: reduce) { .card.results h2, .card.results .reward-grid .rw { animation: none; } }
+          /* UIX reduced motion (Settings > Motion, or the system preference when it is System): no entrances, pulses or
+         sweeps; state changes stay (colour, words, numbers). Gameplay shake is skipped in src/main.ts. */
+      body.reduce-motion #overlay *, body.reduce-motion #hud *, body.reduce-motion #overlay, body.reduce-motion #boot * { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
+      .row2 small.sub { display: block; font-size: 12px; color: var(--dim); letter-spacing: 0.02em; text-transform: none; }
+
     </style>
   </head>
   <body>
