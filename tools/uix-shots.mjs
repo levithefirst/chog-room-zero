@@ -30,8 +30,11 @@ for (const d of VIEWS) {
     await probe(name); await back();
   }
   if (await b.click('[data-go=start]')) { await probe('07-roster'); await b.click('[data-go=quit]'); await b.hub(); }
-  await b.click('[data-mode=solo]'); await b.click('#playbtn');
-  await sleep(60); await b.shot('08-deploy'); r.screens.push('08-deploy');
+  await b.click('[data-mode=solo]');
+  // The deploy briefing shows only while the world builds (a few hundred ms): slow the CPU for the shot only.
+  await b.cmd('Emulation.setCPUThrottlingRate', { rate: 12 }); await b.click('#playbtn');
+  await b.until(`!!document.querySelector('.screen.deploy')`, 3000); await sleep(400); await b.shot('08-deploy'); r.screens.push('08-deploy');
+  await b.cmd('Emulation.setCPUThrottlingRate', { rate: 1 });
   await b.until(`__chog.phase === 'play'`, 15000); await sleep(1500); await b.shot('09-hud'); r.screens.push('09-hud');
   r.fps = await b.ev(`new Promise((res) => { let n = 0; const t0 = performance.now(); const f = () => { n++; if (performance.now() - t0 < 2000) requestAnimationFrame(f); else res(Math.round(n / ((performance.now() - t0) / 1000))); }; requestAnimationFrame(f); })`);
   // Some combat: walk forward and fire for a few seconds (real inputs on desktop; touch views just wait).
