@@ -861,7 +861,8 @@
       #abcd:empty { display: none; } #ability:not(.ready) #abl { opacity: 0.35; }
       body.reduce-motion #vitals.low { animation: none; }
       /* UIX pause: run state + controls legend (keycaps). */
-      .pause-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 10px auto 14px; max-width: 520px; }
+      .card .reward-grid.pause-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; margin: 12px auto 16px; max-width: 520px; border: 1px solid var(--line); background: rgba(14, 9, 28, 0.6); }
+      .pause-grid .rw { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 6px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); } .pause-grid .rw + .rw { border-left: 1px solid var(--line); } .pause-grid .rw b { font-size: 22px; color: var(--ink); letter-spacing: 0; }
       ul.keys { list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; padding: 0; margin: 16px 0 0; font-size: 13px; color: var(--dim); }
       ul.keys li { display: flex; gap: 6px; align-items: center; }
       kbd { font: 600 11px/1 var(--mono); color: var(--ink); padding: 4px 6px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px; background: var(--bg-elevated); }
