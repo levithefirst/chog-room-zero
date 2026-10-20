@@ -124,7 +124,8 @@ function mapGuides() {
       vb = { x: p.x - (p.x - vb.x) * k, y: p.y - (p.y - vb.y) * k, w: nw, h: nw * (H / W) };
       clamp(); apply();
     };
-    const fit = () => { vb = { x: 0, y: 0, w: W, h: H }; apply(); };
+    const orig = svg.getAttribute('viewBox')!;
+    const fit = () => { vb = { x: 0, y: 0, w: W, h: H }; svg.setAttribute('viewBox', orig); };
     const pan = (dxPx: number, dyPx: number) => { const s = toMap(0, 0).s; vb.x -= dxPx / s; vb.y -= dyPx / s; clamp(); apply(); };
     $$<HTMLButtonElement>('[data-mg]', root).forEach((b) => b.addEventListener('click', () => {
       const a = b.dataset.mg; if (a === 'in') zoom(1.4); else if (a === 'out') zoom(1 / 1.4); else fit();
