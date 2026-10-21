@@ -128,7 +128,7 @@ ${li(UPGRADE_IDS.map((id) => `<b>${esc(UPGRADES[id].name)}</b>: ${esc(UPGRADES[i
   { id: 'rewards', title: 'Rewards', html: () => li([
     `Daily: three challenges a day (the same for everyone, new at 00:00 UTC), easy, medium and hard, paying ${CHALLENGE_REWARDS[1].shards}, ${CHALLENGE_REWARDS[2].shards} and ${CHALLENGE_REWARDS[3].shards} shards once each. They count your verified solo runs and online matches of the day (the hub card shows how far you are). Nothing carries over and nothing is lost if you skip a day.`,
     `Online match: ${REWARDS.xpPlay} XP and ${REWARDS.shardsPlay} shards for playing, more for kills and damage, ${REWARDS.xpWin} XP and ${REWARDS.shardsWin} shards for a win.`,
-    `Solo (signed in): ${PRACTICE_REWARDS.xpPlay} XP and ${PRACTICE_REWARDS.shardsPlay} shards a run, kills and damage pay a little, a clear pays most; up to ${PRACTICE_REWARDS.dailyCap} paid runs a day.`,
+    `Solo (signed in): ${PRACTICE_REWARDS.xpPlay} XP and ${PRACTICE_REWARDS.shardsPlay} shards a run, ${PRACTICE_REWARDS.shardsPerKill} shards a kill (up to ${PRACTICE_REWARDS.maxKills}), ${PRACTICE_REWARDS.shardsWin} for a clear, a little for damage; up to ${PRACTICE_REWARDS.dailyCap} paid runs a day.`,
     'A loss where you fought still moves you forward. Quitting, private rooms and demo play pay nothing.',
     'The results screen shows every line, your new totals and the upgrades your shards already cover.',
   ]) },

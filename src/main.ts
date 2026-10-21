@@ -2204,6 +2204,8 @@ async function start() {
       wpn.classList.toggle('reloading', p.reloadLeft > 0);
       wpn.classList.toggle('out', p.reloadLeft <= 0 && p.ammo === 0);
       wpn.classList.toggle('low', p.reloadLeft <= 0 && p.ammo > 0 && p.ammo <= Math.ceil(p.weapon.magazine * 0.25));
+      // The Reload key lights up when a reload is due and there is ammo to load.
+      $('reload').classList.toggle('need', p.reloadLeft <= 0 && p.reserve > 0 && p.ammo <= Math.ceil(p.weapon.magazine * 0.25));
       $('abcd').textContent = cdShare > 0 && p.alive ? String(Math.ceil(p.abilityCd)) : '';
       $('hpn').textContent = String(Math.max(0, Math.ceil(p.hp)));
       const hpEl = $('hpfill');

@@ -31,8 +31,8 @@ const run = (o: Record<string, unknown> = {}) => ({ hero: 'benja', won: false, s
 beforeEach(async () => { db = await memoryDb(); await migrate(db); clock = 1_800_000_000_000; });
 
 describe('the reward rule', () => {
-  it('a win always pays more than the best possible loss (online and practice, shards and XP)', () => {
-    for (const t of [REWARDS, PRACTICE_REWARDS]) {
+  it('online: a win always pays more than the best possible loss (shards and XP)', () => {
+    for (const t of [REWARDS]) {
       expect(winFloor(t).shards).toBeGreaterThan(lossCeiling(t).shards);
       expect(winFloor(t).xp).toBeGreaterThan(lossCeiling(t).xp);
       // And the rule itself agrees with the two bounds.
@@ -153,10 +153,26 @@ describe('practice rewards: ticketed, capped, paid once', () => {
     const p = (await call('GET', 'profile', c)).j.profile;
     expect(p).toMatchObject({ xp: want.xp, shards: want.shards, rating: 1000, matches: 0 });
   });
-  it('a win in practice pays more than any practice loss, and less than the same online win', () => {
-    const win = rewardBreakdown(facts({ won: true }), PRACTICE_REWARDS);
-    expect(win.shards).toBeGreaterThan(lossCeiling(PRACTICE_REWARDS).shards);
-    expect(win.shards).toBeLessThan(rewardBreakdown(facts({ won: true })).shards);
+  it('practice pays 3 a run, 5 a kill (up to 5), 12 a clear (owner 2026-10-21), line by line', () => {
+    expect([PRACTICE_REWARDS.shardsPlay, PRACTICE_REWARDS.shardsPerKill, PRACTICE_REWARDS.shardsWin]).toEqual([3, 5, 12]);
+    const win = rewardBreakdown(facts({ won: true, kills: 3 }), PRACTICE_REWARDS);
+    expect(win.lines.map((l) => [l.id, l.shards])).toEqual([['played', 3], ['win', 12], ['kills', 15]]);
+    expect(win.shards).toBe(30);
+    const loss = rewardBreakdown(facts({ kills: 2, damage: 260 }), PRACTICE_REWARDS);
+    expect(loss.lines.map((l) => [l.id, l.shards])).toEqual([['played', 3], ['kills', 10], ['damage', 2]]);
+    expect(loss.shards).toBe(15);
+    // Kills past the cap pay nothing more; XP is unchanged by this pass.
+    expect(rewardBreakdown(facts({ kills: 9 }), PRACTICE_REWARDS).shards).toBe(3 + 25);
+    expect(win.xp).toBe(PRACTICE_REWARDS.xpPlay + PRACTICE_REWARDS.xpWin + 3 * PRACTICE_REWARDS.xpPerKill);
+  });
+  it('a win in practice pays more than a practice loss with the same kills and damage, and less than the same online win', () => {
+    for (const k of [0, 1, 3, 5]) {
+      const win = rewardBreakdown(facts({ won: true, kills: k, damage: 300 }), PRACTICE_REWARDS);
+      const loss = rewardBreakdown(facts({ kills: k, damage: 300 }), PRACTICE_REWARDS);
+      expect(win.shards - loss.shards).toBe(PRACTICE_REWARDS.shardsWin);
+      expect(win.xp).toBeGreaterThan(loss.xp);
+    }
+    expect(rewardBreakdown(facts({ won: true }), PRACTICE_REWARDS).shards).toBeLessThan(rewardBreakdown(facts({ won: true })).shards);
   });
   it('refuses to pay a run that claims more time than passed, has no ticket, or carries another run or account', async () => {
     const c = await cookie('p2'), other = await cookie('p3');

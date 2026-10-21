@@ -253,7 +253,11 @@ function playBar(c: HubCtx): string {
     state = ' loading';
     status = v.state === 'connecting'
       ? `<p class="status" id="queuestatus">${esc(v.message || 'Connecting…')}</p>`
-      : `<p class="status num" id="queuestatus">Finding players · ${esc(v.queue?.mode ?? sel)} · ${v.queue?.have ?? 0}/${v.queue?.need ?? 0}</p><p class="status small" id="queuemap">${esc(MAPS[c.map].name)} first, then any location</p>`;
+      // Everyone is in the queue but the server is still settling the location (your pick first for up to
+      // TUNING.match.anyMapAfterSec) or the skill band: say so, a full count under "Finding players" read as stuck.
+      : v.queue && v.queue.need > 0 && v.queue.have >= v.queue.need
+        ? `<p class="status num" id="queuestatus">Players found · ${esc(v.queue.mode)} · ${v.queue.have}/${v.queue.need}</p><p class="status small" id="queuemap">Agreeing on a location · starting in a few seconds</p>`
+        : `<p class="status num" id="queuestatus">Finding players · ${esc(v.queue?.mode ?? sel)} · ${v.queue?.have ?? 0}/${v.queue?.need ?? 0}</p><p class="status small" id="queuemap">${esc(MAPS[c.map].name)} first, then any location</p>`;
   } else if (v.state === 'match') { status = '<p class="status good">Match found</p>'; state = ' found'; }
   else if (v.message && !status) status = `<p class="status warn">${esc(v.message)}</p>`;
   const warn = c.acct.ticketWarning ? TICKET_WARN[c.acct.ticketWarning] ?? c.acct.ticketWarning : c.netProfile?.note ?? '';

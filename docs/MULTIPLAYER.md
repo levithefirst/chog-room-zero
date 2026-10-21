@@ -102,8 +102,11 @@ then Online says plainly that the server is not deployed. Owner: create the serv
 default for an omitted plan is the paid 0.5c-512mb), region frankfurt, branch `ccr-e7fadb8f-qtochk`, build
 `npm ci && npm run build:server`, start `npm run server`, health check `/`. Environment variable names:
 `NODE_VERSION` (22.22.0, the tested runtime; `package.json` engines has no upper bound) and `ALLOWED_ORIGINS`
-(`https://chogroomzero.xyz`, `https://chog-room-zero.vercel.app` and the RC-8 preview's stable branch URL; exact match,
-no wildcard; production domains added in the release commit 3743ded). `PORT` is provided by Render. No database, no disk, no secrets.
+(`https://chogroomzero.xyz`, `https://chog-room-zero.vercel.app`, the production deployment's stable team URL
+`https://chog-room-zero-levithefirst-1227s-projects.vercel.app` (added 2026-10-21: it serves the game, and its sockets
+were refused) and the RC-8 preview's stable branch URL; exact match, no wildcard; production domains added in the
+release commit 3743ded). If the service was created from the Blueprint without sync, set the same value by hand in the
+Render dashboard: the file alone does not change a running service's environment. `PORT` is provided by Render. No database, no disk, no secrets.
 
 Owner steps (this agent has no Render access, and this environment's network blocks render.com and onrender.com):
 1. dashboard.render.com > New > Blueprint > connect GitHub repo `levithefirst/chog-room-zero` > branch

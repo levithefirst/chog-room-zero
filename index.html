@@ -148,16 +148,22 @@
       @keyframes abpulse { 0% { box-shadow: 0 0 0 0 rgba(255, 122, 182, 0.75); } 100% { box-shadow: 0 0 0 16px rgba(255, 122, 182, 0); } }
       @media (prefers-reduced-motion: reduce) { #ability.pulse { animation: none; } }
       #ability small { display: block; font-size: 12px; color: var(--dim); }
-      #reload { display: none; right: calc(var(--sr) + 8px); bottom: calc(var(--sb) + 76px); width: 58px; height: 58px; border-radius: 50%; pointer-events: auto;
-        background: var(--panel); border: 1px solid var(--line); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
-      body.touch #reload { display: block; }
+      /* Reload: on PC a labelled key above the weapon panel (R, or click it), lit when the magazine runs low; on touch a
+         round button in thumb reach. */
+      #reload { right: var(--sr); bottom: calc(var(--sb) + 76px); height: 32px; padding: 0 6px 0 10px; border-radius: 6px; pointer-events: auto; display: flex; align-items: center; gap: 8px;
+        background: var(--panel); border: 1px solid var(--line); color: var(--ink); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+      #reload .keyhint { font: 600 12px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px; background: var(--bg-elevated); letter-spacing: 0; }
+      #reload.need { border-color: var(--ammo); color: var(--ammo); }
+      body.touch #reload { display: block; right: calc(var(--sr) + 8px); width: 58px; height: 58px; padding: 0; border-radius: 50%; }
+      body.touch #reload .keyhint { display: none; }
       /* Grenade: a real control with its count, beside the ability (PC: G or right click). Empty = dimmed, 0 shown. */
       #nade { right: calc(var(--sr) + 276px); bottom: calc(var(--sb) + 4px); width: 56px; height: 56px; border-radius: 50%; pointer-events: auto; padding: 0;
         background: rgba(26, 18, 40, 0.9); border: 2px solid var(--ammo); color: var(--ink); display: grid; place-items: center; }
       #nade svg { width: 28px; height: 28px; fill: none; stroke: var(--ammo); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
       #nade b { position: absolute; right: -4px; top: -4px; min-width: 22px; height: 22px; border-radius: 11px; background: var(--ammo); color: var(--bg-deep);
         font-size: 13px; line-height: 22px; text-align: center; padding: 0 4px; }
-      #nade small { position: absolute; bottom: -15px; left: 50%; transform: translateX(-50%); font-size: 12px; color: var(--dim); }
+      #nade small { position: absolute; bottom: -13px; left: 50%; transform: translateX(-50%); font: 600 12px/1 var(--mono); color: var(--ink); padding: 3px 6px;
+        border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px; background: var(--bg-elevated); }
       #nade.empty { border-color: var(--line); opacity: 0.55; } #nade.empty svg { stroke: var(--dim); } #nade.empty b { background: var(--disabled); color: var(--ink); }
       #nade.cool svg { opacity: 0.45; }
       body.touch #nade { right: calc(var(--sr) + 160px); bottom: calc(var(--sb) + 84px); width: 62px; height: 62px; }
@@ -1003,9 +1009,9 @@
         <svg id="ring" viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="17" /><circle class="fill" id="ringfill" cx="20" cy="20" r="17" /></svg>
         <div><div id="wname"></div><div id="ammo" class="num"></div></div>
       </div>
-      <button id="ability" type="button"><span id="abl"></span><b id="abcd" class="num" aria-hidden="true"></b></button>
-      <button id="nade" type="button" aria-label="Throw grenade"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="11" cy="14.6" rx="6.2" ry="6.6" /><path d="M8.6 8.2V6.3h4.8v1.9" /><path d="M13.4 6.6c2.4-.2 4-1.4 4.6-3.4" /><circle cx="18.6" cy="3.4" r="1.5" /><path d="M7.5 13.4h7M7.5 16.4h7" /></svg><b id="naden" class="num">3</b><small class="keyhint">G</small></button>
-      <button id="reload" type="button">Reload</button>
+      <button id="ability" type="button" title="Ability (Space)"><span id="abl"></span><b id="abcd" class="num" aria-hidden="true"></b></button>
+      <button id="nade" type="button" aria-label="Throw grenade" title="Grenade: hold G and release to throw at the cursor, or right click"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="11" cy="14.6" rx="6.2" ry="6.6" /><path d="M8.6 8.2V6.3h4.8v1.9" /><path d="M13.4 6.6c2.4-.2 4-1.4 4.6-3.4" /><circle cx="18.6" cy="3.4" r="1.5" /><path d="M7.5 13.4h7M7.5 16.4h7" /></svg><b id="naden" class="num">3</b><small class="keyhint">G</small></button>
+      <button id="reload" type="button" title="Reload (R)"><span>Reload</span><small class="keyhint">R</small></button>
       <div id="hint"></div>
       <div id="downcard" class="panel" role="status" aria-live="polite"><b id="downh">DOWNED</b><span id="downt" class="num"></span><small id="downwhy"></small><div class="bar"><i id="downbar"></i></div></div>
       <div id="toast"></div>

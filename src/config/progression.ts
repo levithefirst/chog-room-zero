@@ -26,17 +26,18 @@ export const REWARDS = {
 
 /**
  * Solo practice vs bots (owner 2026-10-17: "players need to earn progression even when they lose"). The run is simulated
- * in the browser, so it pays less than a validated online match and a day's practice is capped: a forged run can never
- * be worth more than an honest one. Same shape as online, so the rule "a win beats any loss" holds for both.
+ * in the browser, so a day's practice is capped (PRACTICE_SHARDS_PER_DAY in api/_lib/career.ts). Owner 2026-10-21: a
+ * run pays 3 shards, each kill 5, a clear 12; kills now pay most, so a loss with several kills can out-pay a clear with
+ * none (the "any win beats any loss" rule holds online only).
  */
 export const PRACTICE_REWARDS = {
   xpPlay: 20,
   xpWin: 30,
   xpPerKill: 5,
   maxKills: 5,
-  shardsPlay: 4,
+  shardsPlay: 3,
   shardsWin: 12,
-  shardsPerKill: 1,
+  shardsPerKill: 5,
   damagePerShard: 100,
   damageShardsMax: 3,
   minSeconds: 20,
@@ -86,7 +87,7 @@ export function rewardBreakdown(f: RewardFacts, t: RewardTable = REWARDS): Rewar
   return { lines, xp: lines.reduce((a, l) => a + l.xp, 0), shards: lines.reduce((a, l) => a + l.shards, 0), none: null };
 }
 
-/** The most a loss can pay, and the least a win pays (tests hold the second above the first for both tables). */
+/** The most a loss can pay, and the least a win pays (tests hold the second above the first online). */
 export const lossCeiling = (t: RewardTable) => ({ xp: t.xpPlay + t.maxKills * t.xpPerKill, shards: t.shardsPlay + t.maxKills * t.shardsPerKill + t.damageShardsMax });
 export const winFloor = (t: RewardTable) => ({ xp: t.xpPlay + t.xpWin, shards: t.shardsPlay + t.shardsWin });
 

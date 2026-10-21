@@ -127,14 +127,14 @@ describe('2: practice farming', () => {
     const acc = (await call('GET', 'profile', { cookie: c })).j.profile.account as string;
     for (let i = 0; i < 13; i++) {
       await db.query(`INSERT INTO room_zero.practice_runs (account_id, run_id, hero, won, seconds, kills, bullets, hits, damage_dealt, damage_taken, pickups, abilities, hp_left, xp, shards, created_at)
-        VALUES ($1, $2, 'benja', true, 60, 5, 0, 0, 0, 0, 0, 0, 0, 75, 22, now() - interval '2 hours')`, [acc, `old-run-${i}-xx`]);
+        VALUES ($1, $2, 'benja', true, 60, 5, 0, 0, 0, 0, 0, 0, 0, 75, 21, now() - interval '2 hours')`, [acc, `old-run-${i}-xx`]);
     }
-    // 286 paid: a max win (24) would pass 300 and is capped; a small loss (8) still fits.
+    // 273 paid: a max win (3 + 12 + 25 + 3 = 43) would pass 300 and is capped; a small loss (3 + 10 + 2 = 15) still fits.
     let t = await start(c); clock += 70_000;
     expect((await call('POST', 'practice', { cookie: c, body: { ...maxWin, runId: t.runId, ticket: t.ticket } })).j.reward.none).toBe('cap');
     t = await start(c); clock += 70_000;
     const loss = await call('POST', 'practice', { cookie: c, body: { ...maxWin, won: false, kills: 2, damageDealt: 260, runId: t.runId, ticket: t.ticket } });
-    expect(loss.j.reward).toMatchObject({ none: null, shards: 8 });
+    expect(loss.j.reward).toMatchObject({ none: null, shards: 15 });
   });
   it('8: an unticketed run is stored and answered as before, but earns no medals, bests or career', async () => {
     const c = await cookieFor([g('p4')]);
