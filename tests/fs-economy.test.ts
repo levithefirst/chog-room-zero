@@ -41,10 +41,14 @@ describe('against the upgrade costs and the daily limits', () => {
     expect(2 * pay(PRACTICE_REWARDS, false, 1, 0)).toBeGreaterThanOrEqual(cheapest);
     expect(pay(PRACTICE_REWARDS, true, 0, 0)).toBeGreaterThanOrEqual(cheapest);
   });
-  it('not trivially farmable: even playing to every daily cap with perfect results takes days to max out', () => {
+  it('not trivially farmable: even playing to every daily cap with perfect results takes more than a day to max out', () => {
+    // Owner 2026-10-21: the old 2-day bound is retired with the new online shards (10 played, 10 a kill, 30 a win);
+    // the daily match cap stays at 20, so a perfect day still cannot buy everything.
+    expect(REWARDS.dailyCap).toBe(20);
     const maxOnline = REWARDS.dailyCap * pay(REWARDS, true, 99, 99999);
+    expect(maxOnline).toBe(20 * 95);
     const maxPractice = Math.min(PRACTICE_SHARDS_PER_DAY, PRACTICE_REWARDS.dailyCap * pay(PRACTICE_REWARDS, true, 99, 99999));
-    expect(totalCost / (maxOnline + maxPractice)).toBeGreaterThanOrEqual(2);
+    expect(totalCost / (maxOnline + maxPractice)).toBeGreaterThan(1);
   });
   it('nobody is stuck: a player who only loses in practice (one kill a run) still maxes out in about three weeks', () => {
     const perDay = Math.min(PRACTICE_SHARDS_PER_DAY, PRACTICE_REWARDS.dailyCap * pay(PRACTICE_REWARDS, false, 1, 100));
