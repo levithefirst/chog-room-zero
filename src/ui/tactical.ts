@@ -149,7 +149,7 @@ const FLOOR: Record<Material, string> = {
 const C = {
   bg: '#0b0716', wall: '#c9c1e0', wallFill: '#2b2240', cover: '#6b5a8f', barrier: '#8a6f3a', door: '#ff6b9d', rail: '#d9c95a',
   deck: 'rgba(139, 92, 246, 0.30)', deckEdge: 'rgba(181, 140, 255, 0.85)', stairs: '#b9a6e8', light: 'rgba(255, 236, 170, 0.06)',
-  label: 'rgba(255, 248, 231, 0.62)', you: '#22c55e', mate: '#3b82f6', enemy: '#ef4444', hostile: '#f59e0b', visor: '#4fd6e8',
+  label: 'rgba(255, 248, 231, 0.62)', you: '#22c55e', mate: '#3b82f6', enemy: '#ef4444', hostile: '#ff2b3a', visor: '#4fd6e8',
   zone: 'rgba(239, 68, 68, 0.9)', next: 'rgba(255, 248, 231, 0.75)', pickup: { health: '#22c55e', armor: '#3b82f6', ammo: '#f59e0b', grenade: '#ff6b9d' } as Record<string, string>,
 };
 

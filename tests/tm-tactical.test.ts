@@ -11,6 +11,7 @@ import { sightClear, walkable, WALL } from '../src/sim/level';
 import { superAbility } from '../src/config/superpowers';
 import { TUNING } from '../src/config/tuning';
 import { clampView, drawTactical, fitView, landmarks, mapHostiles, mapMarkers, panBy, toMap, visorDots, zoomAt, MAX_ZOOM } from '../src/ui/tactical';
+import { readFileSync } from 'node:fs';
 import { Lobby } from '../server/room';
 import { OnlineSession } from '../src/net/client';
 
@@ -511,7 +512,7 @@ describe('tactical map: every hostile while open (owner 2026-10-21)', () => {
     // Supplies: one 5x5 square each; zone ring; hostile bodies in their colour; area names.
     expect(r.ops.filter((o) => /^fillRect:.*,5\.00,5\.00$/.test(o)).length).toBeGreaterThanOrEqual(active);
     if (w.zone) expect(r.ops.some((o) => o === 'strokeStyle=rgba(239, 68, 68, 0.9)')).toBe(true);
-    expect(r.ops.filter((o) => o === 'fillStyle=#f59e0b').length).toBeGreaterThanOrEqual(5);
+    expect(r.ops.filter((o) => o === 'fillStyle=#ff2b3a').length).toBeGreaterThanOrEqual(5); // hostile bodies: bright red (owner 2026-10-21 t27u)
     expect(m.filter((x) => x.kind === 'hostile')).toHaveLength(5);
   });
   it('the snapshot carries the unseen hostiles in the map-only field `mh`, never in `actors`', async () => {
@@ -558,5 +559,41 @@ describe('tactical map overlay: open shows every hostile, close hides the map (o
       m.draw(p);
       expect(r.ops.length).toBe(n);
     } finally { vi.unstubAllGlobals(); }
+  });
+});
+
+// Owner 2026-10-21 (t27u): live HOSTILE markers are bright red (was amber #f59e0b), on the map and in its legend. Nothing
+// else changes colour: last-known traces, Visor dots, you, teammates, online enemies, zone and supplies keep theirs.
+describe('hostile marker colour', () => {
+  const HOSTILE = '#ff2b3a';
+  const paint = (m: Record<string, unknown>) => {
+    const w = createWorld({ mapId: 'office', seed: 4 });
+    const r = recorder();
+    drawTactical(r.g, { w, def: MAPS.office, markers: [m as never], view: fitView(w.level.w, w.level.h, 0, 0, 1280, 720), vw: 1280, vh: 720, dpr: 1 });
+    const base = recorder();
+    drawTactical(base.g, { w, def: MAPS.office, markers: [], view: fitView(w.level.w, w.level.h, 0, 0, 1280, 720), vw: 1280, vh: 720, dpr: 1 });
+    return r.ops.slice(base.ops.length).filter((o) => /^(fill|stroke)Style=/.test(o));
+  };
+  it('a live hostile body (and its facing wedge) is bright red, never the old amber', () => {
+    const ops = paint({ kind: 'hostile', x: 10, y: 10, facing: 0, id: 9, name: 'Bot' });
+    expect(ops.filter((o) => o === `fillStyle=${HOSTILE}`).length).toBeGreaterThanOrEqual(2);
+    expect(ops).not.toContain('fillStyle=#f59e0b');
+  });
+  it('last-known, Visor, you, teammate and online enemy colours are unchanged', () => {
+    expect(paint({ kind: 'trace', x: 10, y: 10, r: 1, conf: 0.8, id: 9 })).toContain('strokeStyle=#ef4444');
+    expect(paint({ kind: 'visor', x: 10, y: 10, id: 9 })).toContain('fillStyle=#4fd6e8');
+    expect(paint({ kind: 'you', x: 10, y: 10, facing: 0, id: 0 })).toContain('fillStyle=#22c55e');
+    expect(paint({ kind: 'mate', x: 10, y: 10, facing: 0, id: 1 })).toContain('fillStyle=#3b82f6');
+    expect(paint({ kind: 'enemy', x: 10, y: 10, facing: 0, id: 9 })).toContain('fillStyle=#ef4444');
+    for (const k of ['trace', 'visor', 'you', 'mate', 'enemy']) expect(paint({ kind: k, x: 10, y: 10, r: 1, conf: 0.8, facing: 0, id: 9 })).not.toContain(`fillStyle=${HOSTILE}`);
+  });
+  it('the legend swatch for Hostile is the same red; the other swatches keep their colours', () => {
+    const css = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+    expect(css).toContain(`#tmap .tm-legend .hostile { background: ${HOSTILE}; }`);
+    expect(css).toContain('#tmap .tm-legend .enemy { background: #ef4444; }');
+    expect(css).toContain('#tmap .tm-legend .trace { border: 1.5px dashed #ef4444; }');
+    expect(css).toContain('#tmap .tm-legend .visor { background: #4fd6e8;');
+    expect(css).toContain('#tmap .tm-legend .supply { background: #f59e0b;');
+    expect(css).toContain('#tmap .tm-legend .mate { background: #3b82f6; }');
   });
 });
