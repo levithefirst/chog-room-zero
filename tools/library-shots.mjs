@@ -54,7 +54,7 @@ async function solo(b, map, { hero, touch = false, deployShot } = {}) {
 }
 
 const D = { w: 1600, h: 900 };
-const HUD = [['#vitals', 'Health (green) and armour (blue)'], ['#mapbtn', 'Tactical map (M)'], ['#foes', 'Hostiles left and the danger-zone timer'], ['#nade', 'Grenades left (G)'], ['#ability', 'Ability and its cooldown (Space)'], ['#weapon', 'Weapon, magazine and reserve, reload ring']];
+const HUD = [['#vitals', 'Health (green) and armour (blue)'], ['#mapbtn', 'Tactical map (M)'], ['#foes', 'Hostiles left and the danger-zone timer'], ['#nade', 'Grenades left (G)'], ['#ability', 'Ability and its cooldown (Space or Q)'], ['#weapon', 'Weapon, magazine and reserve, reload ring']];
 
 // ---- Desktop: one solo run on Office covers the HUD states ----
 if (['deploy', 'hud-desktop', 'sound-rings', 'reload', 'ability-cd', 'low-health', 'armour-break', 'tactical-map', 'death', 'victory'].some(want)) {
