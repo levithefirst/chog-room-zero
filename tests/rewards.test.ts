@@ -1,13 +1,13 @@
 // Owner 2026-10-17 "final test -> improve -> retest": players earn progression even when they lose. One rule
 // (src/config/progression.ts rewardBreakdown) pays online matches (settled from the game server's record) and solo
-// practice (ticketed, smaller, capped). A win always beats any loss, kills and damage are capped, and nothing pays twice.
+// practice (ticketed, smaller, capped). Kills and damage are capped, and nothing pays twice.
 import { beforeEach, describe, expect, it } from 'vitest';
 import { handleGame, type Deps } from '../api/_lib/game-api';
 import { SESSION_COOKIE, sign } from '../api/_lib/auth';
 import { migrate, type Db } from '../api/_lib/db';
 import { memoryDb } from './helpers/pglite';
 import { accountFor, profileOf, settleMatch, buyUpgrade, type MatchRecord } from '../api/_lib/game';
-import { PRACTICE_REWARDS, REWARDS, lossCeiling, rewardBreakdown, winFloor, type RewardFacts } from '../src/config/progression';
+import { PRACTICE_REWARDS, REWARDS, lossCeiling, rewardBreakdown, type RewardFacts } from '../src/config/progression';
 import { Lobby } from '../server/room';
 import type { ServerMsg } from '../src/net/protocol';
 import type { GameTicket } from '../api/_lib/game';
@@ -31,16 +31,25 @@ const run = (o: Record<string, unknown> = {}) => ({ hero: 'benja', won: false, s
 beforeEach(async () => { db = await memoryDb(); await migrate(db); clock = 1_800_000_000_000; });
 
 describe('the reward rule', () => {
-  it('a win always pays more than the best possible loss (online and practice, shards and XP)', () => {
-    for (const t of [REWARDS, PRACTICE_REWARDS]) {
-      expect(winFloor(t).shards).toBeGreaterThan(lossCeiling(t).shards);
-      expect(winFloor(t).xp).toBeGreaterThan(lossCeiling(t).xp);
-      // And the rule itself agrees with the two bounds.
-      const bestLoss = rewardBreakdown(facts({ kills: 99, damage: 1e6 }), t), worstWin = rewardBreakdown(facts({ won: true }), t);
-      expect(bestLoss.shards).toBe(lossCeiling(t).shards);
-      expect(worstWin.shards).toBe(winFloor(t).shards);
-      expect(worstWin.shards).toBeGreaterThan(bestLoss.shards);
-    }
+  it('online shards (owner 2026-10-21): +10 played, +10 per kill, +30 victory; old "every win beats every loss" rule superseded', () => {
+    expect([REWARDS.shardsPlay, REWARDS.shardsPerKill, REWARDS.shardsWin]).toEqual([10, 10, 30]);
+    const cases: [boolean, number, number][] = [[true, 0, 40], [true, 1, 50], [true, 3, 70], [true, 5, 90], [false, 0, 10], [false, 3, 40], [false, 5, 60]];
+    for (const [won, kills, shards] of cases) expect(rewardBreakdown(facts({ won, kills })).shards).toBe(shards);
+  });
+  it('online kill cap (5) and damage bonus (+1 per 50, max +5) are unchanged', () => {
+    expect(REWARDS.maxKills).toBe(5);
+    expect(rewardBreakdown(facts({ won: true, kills: 7 })).shards).toBe(90);
+    expect(rewardBreakdown(facts({ kills: 99 })).shards).toBe(60);
+    expect([REWARDS.damagePerShard, REWARDS.damageShardsMax]).toEqual([50, 5]);
+    expect(rewardBreakdown(facts({ damage: 99 })).shards).toBe(11);
+    expect(rewardBreakdown(facts({ damage: 250 })).shards).toBe(15);
+    expect(rewardBreakdown(facts({ won: true, kills: 5, damage: 1e6 })).shards).toBe(95);
+  });
+  it('XP, practice rewards and the other limits are unchanged', () => {
+    expect([REWARDS.xpPlay, REWARDS.xpWin, REWARDS.xpPerKill]).toEqual([40, 60, 10]);
+    expect(rewardBreakdown(facts({ won: true, kills: 3 })).xp).toBe(130);
+    expect([REWARDS.minSeconds, REWARDS.dailyCap]).toEqual([20, 20]);
+    expect(PRACTICE_REWARDS).toEqual({ xpPlay: 20, xpWin: 30, xpPerKill: 5, maxKills: 5, shardsPlay: 4, shardsWin: 12, shardsPerKill: 1, damagePerShard: 100, damageShardsMax: 3, minSeconds: 20, dailyCap: 25 });
   });
   it('a loss is never empty: showing up pays, and fighting pays more than standing around', () => {
     const idle = rewardBreakdown(facts()), fought = rewardBreakdown(facts({ kills: 2, damage: 260 }));
@@ -124,10 +133,11 @@ describe('online settlement applies the rule from the server record', () => {
     expect(r.ok && r.players.filter((p) => p.acc === a).length).toBe(1);
     expect((await profileOf(db, a))!.matches).toBe(1);
   });
-  it('kill farming never beats winning: a 5 kill, 900 damage loss earns less than a 0 kill win', async () => {
+  it('settlement pays the new online shards: a 0 kill win 40, a 5 kill 900 damage loss 65', async () => {
     const [w, farmer] = [await acct('win0'), await acct('farm')];
     await settleMatch(db, rec({ players: [pl(w, 'alpha'), pl(farmer, 'bravo', { kills: 5, damage: 900 })] }));
-    expect((await profileOf(db, w))!.shards).toBeGreaterThan((await profileOf(db, farmer))!.shards);
+    expect((await profileOf(db, w))!.shards).toBe(40);
+    expect((await profileOf(db, farmer))!.shards).toBe(65);
   });
   it('rewards feed the upgrade system: a loser can buy the first rank after one match', async () => {
     const [a, b] = [await acct('ua'), await acct('ub')];

@@ -13,8 +13,8 @@ export const REWARDS = {
   // Shards buy upgrades (src/config/power.ts UPGRADES). A first saved match always pays enough for a first rank (10).
   shardsPlay: 10,
   /** Owner 2026-10-17: kills and damage pay too, so a loss where you fought still moves you forward. */
-  shardsWin: 25,
-  shardsPerKill: 3,
+  shardsWin: 30,
+  shardsPerKill: 10,
   /** One shard per this much damage dealt to opponents, up to damageShardsMax. */
   damagePerShard: 50,
   damageShardsMax: 5,
