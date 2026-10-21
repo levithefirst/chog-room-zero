@@ -640,6 +640,9 @@ export class Lobby {
     }));
     // Visor: the hostiles on this player's own tracker that it is not already shown (positions only).
     const vt = visorTracks(w, me).filter((t) => !visible(t)).map((t) => ({ id: t.id, x: r3(t.x), y: r3(t.y) }));
+    // Tactical map (owner 2026-10-21): every living hostile not already in `actors`, position only. Only the client's
+    // tactical map reads it (src/net/client.ts mapHostiles); the world view, HUD and intel never do.
+    const mh = w.actors.filter((a) => a.team !== me.team && a.alive && !visible(a)).map((a) => ({ id: a.id, x: r3(a.x), y: r3(a.y) }));
     // Grenades: your team's always; a hostile one when you can see it or it is close to you on a clear line (you hear
     // it land and see the ring), so you can read the danger you are in. Never one behind a wall.
     const near = (x: number, y: number, r: number) => Math.hypot(me.x - x, me.y - y) <= r && sightClear(w.level, me.x, me.y, x, y);
@@ -690,7 +693,7 @@ export class Lobby {
     const lt: NetLoot[] = w.loot.filter((l) => l.known.includes(me.team)).map((l) => ({ id: l.id, x: r3(l.x), y: r3(l.y), left: r3(l.left),
       k: (l.health >= 1 ? 1 : 0) | (l.armor >= 1 ? 2 : 0) | (l.mags >= 0.05 ? 4 : 0) | (l.grenades > 0 ? 8 : 0), ...(l.perk ? { p: l.perk } : {}) }));
     return {
-      t: 'snap', tick: w.tick, actors, bullets, grenades, ...(ob.length ? { ob } : {}), ...(bm.length ? { bm } : {}), ...(vt.length ? { vt } : {}), pickups: w.pickups.map((k) => k.active), ...(pk ? { pk } : {}), ...(lt.length ? { lt } : {}), ...(sp.length ? { sp } : {}), sounds: heard, hits: netHits,
+      t: 'snap', tick: w.tick, actors, bullets, grenades, ...(ob.length ? { ob } : {}), ...(bm.length ? { bm } : {}), ...(vt.length ? { vt } : {}), ...(mh.length ? { mh } : {}), pickups: w.pickups.map((k) => k.active), ...(pk ? { pk } : {}), ...(lt.length ? { lt } : {}), ...(sp.length ? { sp } : {}), sounds: heard, hits: netHits,
       barriers: w.barriers.map((b) => ({ ...b.box, left: r3(b.left) })), ack: room.acks[p.actorId], as: room.ackSteps[p.actorId],
     };
   }
