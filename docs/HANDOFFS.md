@@ -647,3 +647,31 @@ Not verified    : real phones; a real CHOG wallet (no key available; never simul
 Locked decisions touched : none
 Next smallest task : owner plays the free journey and the holder journey with a real wallet on a phone; files: none.
 ```
+
+```
+HANDOFF H42  2026-10-21  claude -> owner
+Branch @ commit : ccr-e7fadb8f-qtochk @ 655269ff260bbada6a1ba6512d3252a7744388cf (+ this handoff commit)   pushed: no (a push redeploys
+                  Render production; held for the owner's go, per "do not deploy anything")
+Task            : UIX2+QA add-on: owner saw no hostile markers on the production tactical map (possible P1).
+Finding         : P1, real bug, fixed. A hostile revealed by your Ping (Benja, the default free operator, has Ping) or by a Marker
+                  hit by your side is drawn live in the game view (src/render/render.ts), but the map drew it as a fading '?' trace,
+                  against docs/design/tactical-map.md ("A hostile, live: ... your Ping"). Seen hostiles were already drawn live
+                  (tm-map combat 7 and 32 marks at H41), but that check never required one, so it could not catch an empty map.
+                  Otherwise intentional (code + doc): the map shows only what you know (seen, flash, Ping/Marker live; heard,
+                  teammate-spotted, lost as traces that fade and expire; dead removed; online the server sends only earned bodies,
+                  server/room.ts snapshot). An enemy you have not detected never appears.
+Files changed   : src/ui/tactical.ts (Ping/Marker reveal = live mark); tests/tm-tactical.test.ts (8 tests: seen + update, lost ->
+                  trace -> fades -> expires, dead removed live or traced, heard behind / through a wall, muzzle flash in a clear
+                  line, teammate spot = trace only, Ping live through a wall then trace, Marker live, 1800-step no-omniscience run;
+                  behindWall helper now tests the tile centre it returns); tools/tm-map.mjs (combat needs >= 1 live mark, each a
+                  known hostile, none known missing); src/main.ts (test-build hook: intel); docs/design/tactical-map.md.
+Tests run       : npx tsc --noEmit clean; npx vitest run 1132/1132 (alone; a run beside the browser suite had 1 timing failure, and
+                  one beside a build had PGlite hook timeouts, neither reproduced); node tools/tm-map.mjs (local stack, headless
+                  Chrome, emulated) 105/105 incl. online 1v1/3v3 information rules.
+Known failures  : none.
+Blockers        : production deploy waits on the owner's go.
+Not verified    : real phones; a human looking at the map in a fight; Ping reveal on the hosted server (covered by unit tests of the
+                  shared code and the server's existing exact-body rule for your own Ping).
+Locked decisions touched : none
+Next smallest task : owner says go -> push, Vercel deploy at the same sha, Render /stats match, production smoke; files: none.
+```

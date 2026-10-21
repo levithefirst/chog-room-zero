@@ -1,7 +1,7 @@
 # Chog: Room Zero - shared state
 
 Source of truth. Rules: `docs/RULES.md`. Edit only in a handoff commit. Under 8,000 characters.
-Last verified: 2026-10-21 by claude (H41: final pre-submission QA; hub + loading release, see HANDOFFS H41).
+Last verified: 2026-10-21 by claude (H42: tactical map Ping/Marker fix, committed, NOT deployed; HANDOFFS H42).
 
 ## Snapshot (EVIDENCE)
 - Repo `levithefirst/chog-room-zero`. Base branch `setup/skill-system` (LOCKED 2026-10-11: no `main`); never merge without owner. PR #10 = ccr-e7fadb8f-qtochk (live; claude/h34-maps holds H34-H36). Client and server ship from one commit.
@@ -47,7 +47,7 @@ Last verified: 2026-10-21 by claude (H41: final pre-submission QA; hub + loading
 - UIX + Library (H38, H39, live): UI scale, briefing loading, HUD states, combat feedback, pause card, motion setting, 12 px floor (`docs/design/ui-audit.md`); game Library at /library (20 prerendered pages from game data, search), linked from Game Docs.
 
 ## Automated tests (EVIDENCE, Node 22.22)
-H39 (841cff1): vitest 1122/1122, tsc clean, 13 browser suites (tm-map 105/105, library-qa 9 views 0 problems), rc8 1v1+3v3 PASS; live smoke 25/25, prod check 10/10.
+H42 (655269f): vitest 1132/1132, tsc clean, tm-map 105/105 (combat requires live hostile marks, none known missing).
 H41 (6f297d7): vitest 1124/1124, 22 browser suites 647/647 (tm-map 105, uix2 111, mobile 66), online 1v1/3v3/5v5-holders PASS.
 
 ## Not performed (needs the owner)
@@ -62,8 +62,8 @@ Core Feel Gate: BLOCKED on owner playtests. G10: automated PASS; playtest not ru
 | TM | claude | ccr-e7fadb8f-qtochk | see H37 | Owner 2026-10-20 TACTICAL MAP | live; owner plays it on a phone |
 | MP, H34/ID/SP | claude | same | see H32-H36 | Owner 2026-10-18/19 | live; owner: 1v1s, server plan |
 | UIX | claude (from grokbot) | ccr-e7fadb8f-qtochk | see H38/H39 | Owner 2026-10-20 UI release | live (PR #12 head in branch) |
-| UIX2+QA | claude | ccr-e7fadb8f-qtochk | see H40/H41 | Owner 2026-10-21 final QA | QA passed; release in H41 |
+| UIX2+QA | claude | ccr-e7fadb8f-qtochk | see H40-H42 | Owner 2026-10-21 final QA | H42 map fix local, not deployed |
 | RC-8 | claude | PR #10 | see H16 | Owner RC-8 mandate | PR #10 not merged (owner decides) |
 
 ## Handoffs
-Latest: H41 (claude; final QA, release). History: `docs/HANDOFFS.md`.
+Latest: H42 (claude; map P1 fix, awaiting deploy go). History: `docs/HANDOFFS.md`.
