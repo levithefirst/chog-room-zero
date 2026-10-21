@@ -104,7 +104,9 @@ export type ServerMsg =
   /** ack/as (SB): the newest input seq the server had from you when it took this snapshot, and how many sim steps it has
    * applied it so far (your movement prediction replays the rest). Optional: an older server sends neither. */
   /** vt: hostiles on YOUR Visor tracker that you are not shown: where they are, nothing else. */
-  | { t: 'snap'; tick: number; actors: NetActor[]; bullets: NetBullet[]; grenades?: NetGrenade[]; ob?: NetOrb[]; bm?: NetBeam[]; vt?: { id: number; x: number; y: number }[]; pickups: boolean[]; pk?: number[]; lt?: NetLoot[]; sp?: { id: number; x: number; y: number }[]; sounds: NetSound[]; hits: NetHit[]; barriers: { x0: number; y0: number; x1: number; y1: number; left: number }[]; ack?: number; as?: number }
+  /** mh (owner 2026-10-21): every living hostile you are not shown, position only, for the TACTICAL MAP alone (never
+   *  the world view, HUD or intel). The world-view fields above keep the snapshot-privacy rules. */
+  | { t: 'snap'; tick: number; actors: NetActor[]; bullets: NetBullet[]; grenades?: NetGrenade[]; ob?: NetOrb[]; bm?: NetBeam[]; vt?: { id: number; x: number; y: number }[]; mh?: { id: number; x: number; y: number }[]; pickups: boolean[]; pk?: number[]; lt?: NetLoot[]; sp?: { id: number; x: number; y: number }[]; sounds: NetSound[]; hits: NetHit[]; barriers: { x0: number; y0: number; x1: number; y1: number; left: number }[]; ack?: number; as?: number }
   | { t: 'over'; winner: Team | null; reason: 'eliminated' | 'time'; results: PlayerResult[]; matchId?: string; settle?: boolean }
   | { t: 'pong'; at: number; tick: number }
   | { t: 'party'; code: string | null; members: PartyMember[] }

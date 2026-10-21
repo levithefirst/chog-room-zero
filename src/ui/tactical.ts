@@ -2,14 +2,15 @@
 // the Level the sim plays on (world.level, parsed from MAPS[id].rows), its floor materials and lit areas, and the area
 // names the location already carries (its pickup zones). Change a map's rows and this map changes with it.
 //
-// Information rule (LAW 1, V2 information integrity): the map knows exactly what the HUD knows, never more.
+// Information rule. Owner 2026-10-21 override, TACTICAL MAP ONLY: while the map is open it shows the live position of
+// every living hostile on the whole map, unconditionally (no sight, sound or prior detection needed). The game view,
+// HUD and intel keep the old rule (LAW 1): nothing there shows a hostile through walls.
 // - You and your own side: always (the server sends your team's bodies; solo they are your AI squad).
-// - Hostiles: only the player's contact intel (src/sim/intel.ts), the same beliefs the game view draws. VISIBLE is the
-//   live body; anything weaker (heard, last known, spotted by a teammate) is a fading area, never the body.
+// - Every living hostile: a live body at its current spot (mapHostiles below). Solo from the sim; online the bodies
+//   you are shown plus the server's map-only list (snapshot `mh`, src/net/client.ts mapHostiles).
+// - Your contact intel as before: a "last known" trace for a hostile you are not seeing now (src/sim/intel.ts).
 // - The Visor holder's tracker dots (visorDots below, the HUD tracker uses the same function).
 // - Shared state everyone has: the danger zone and which supply points are stocked.
-// It never reads a hostile's position from world.actors unless intel says it is VISIBLE now. Online the client only
-// holds what the server chose to send anyway (server/room.ts snapshot), so even a modified client gains nothing here.
 import type { Level } from '../sim/level';
 import type { Intel } from '../sim/intel';
 import { matchSeconds, visorTracks, type Actor, type World } from '../sim/world';
@@ -46,8 +47,31 @@ export function visorDots(w: World, p: Actor, netTracks: readonly { id: number; 
   return visorTracks(w, p);
 }
 
-/** Everything the player is entitled to see on the map, in draw order (traces under bodies, you on top). */
-export function mapMarkers(w: World, p: Actor, intel: Intel, dots: readonly { id: number; x: number; y: number }[]): Marker[] {
+export interface HostileSpot { id: number; x: number; y: number; facing?: number }
+/**
+ * Every living hostile's current position, for the tactical map only (owner 2026-10-21). Solo (netList null): from the
+ * sim, so every one. Online: the hostiles the client is shown (in the view world) plus the server's map-only list.
+ * Dead hostiles and bodies parked off the map (x < -50, a client's unshown actor) are not live.
+ */
+export function mapHostiles(w: World, p: Actor, netList: readonly { id: number; x: number; y: number }[] | null): HostileSpot[] {
+  const out: HostileSpot[] = [];
+  const have = new Set<number>();
+  for (const a of w.actors) {
+    if (a.team === p.team || !a.alive || a.x < -50) continue;
+    out.push({ id: a.id, x: a.x, y: a.y, facing: a.facing });
+    have.add(a.id);
+  }
+  for (const h of netList ?? []) {
+    const a = w.actors[h.id];
+    if (!a || a.team === p.team || have.has(h.id)) continue;
+    out.push({ id: h.id, x: h.x, y: h.y });
+    have.add(h.id);
+  }
+  return out;
+}
+
+/** Everything the map shows, in draw order (traces under bodies, you on top). `hostiles`: mapHostiles (default solo). */
+export function mapMarkers(w: World, p: Actor, intel: Intel, dots: readonly { id: number; x: number; y: number }[], hostiles: readonly HostileSpot[] = mapHostiles(w, p, null)): Marker[] {
   const out: Marker[] = [];
   const live = new Set<number>();
   for (const c of intel.contacts.values()) {
@@ -61,9 +85,11 @@ export function mapMarkers(w: World, p: Actor, intel: Intel, dots: readonly { id
     out.push({ kind: 'trace', x: c.x, y: c.y, r: Math.max(c.r, 0.6), conf: c.conf, id: c.id });
   }
   for (const d of dots) if (!live.has(d.id)) out.push({ kind: 'visor', x: d.x, y: d.y, id: d.id });
-  for (const id of live) {
-    const a = w.actors[id];
-    out.push({ kind: a.team === 'bot' ? 'hostile' : 'enemy', x: a.x, y: a.y, facing: a.facing, name: a.name, id });
+  // Every living hostile, live, wherever it is (owner 2026-10-21; the map alone).
+  for (const h of hostiles) {
+    const a = w.actors[h.id];
+    if (!a) continue;
+    out.push({ kind: a.team === 'bot' ? 'hostile' : 'enemy', x: h.x, y: h.y, ...(h.facing !== undefined ? { facing: h.facing } : {}), name: a.name, id: h.id });
   }
   for (const a of w.actors) {
     if (a === p || a.team !== p.team || !a.alive || a.x < -50) continue;

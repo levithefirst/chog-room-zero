@@ -317,6 +317,8 @@ export class OnlineSession {
   /** Visor: hostiles on your tracker you are not shown, and whether a hostile Visor has you on its tracker. */
   tracks: { id: number; x: number; y: number }[] = [];
   tracked = false;
+  /** Tactical map only (owner 2026-10-21): every living hostile you are not shown, from the newest snapshot (view ids). */
+  mapHostiles: { id: number; x: number; y: number }[] = [];
   /** Teammates' sightings from the newest snapshot (view actor ids). */
   spotted: { id: number; x: number; y: number }[] = [];
 
@@ -334,6 +336,7 @@ export class OnlineSession {
     this.world.zone = m.zone.length ? { plan: m.zone as Circle[], cfg: TUNING.zone } : null;
     this.snaps = [];
     this.spotted = [];
+    this.mapHostiles = [];
     this.predictor.reset();
     this.barrierBoxes = [];
     this.over = null;
@@ -354,6 +357,8 @@ export class OnlineSession {
     this.beams = (m.bm ?? []).map((b) => ({ ...b, o: v(b.o) }));
     // Visor: hostiles on your tracker that you are not shown (their spot only).
     this.tracks = (m.vt ?? []).map((t) => ({ id: v(t.id), x: t.x, y: t.y }));
+    // Tactical map only: every living hostile you are not shown (never fed to the world view or intel).
+    this.mapHostiles = (m.mh ?? []).map((t) => ({ id: v(t.id), x: t.x, y: t.y }));
     this.tracked = !!m.actors.find((a) => a.id === this.fromView[0])?.tk;
     m.pickups.forEach((on, i) => { if (w.pickups[i]) w.pickups[i].active = on; });
     // Hostiles only a teammate sees: spots the server placed near them (fed to the contact intel, never drawn as bodies).

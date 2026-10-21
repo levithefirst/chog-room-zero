@@ -386,6 +386,7 @@ async function start() {
     world: () => world,
     intel: () => matchIntel,
     netTracks: () => (online && net ? net.tracks : null),
+    netHostiles: () => (online && net ? net.mapHostiles : null),
     subtitle: () => training?.run ? 'CHOG Training' : online ? `Online ${onlineMode}` : 'Vs bots · you + 2 AI',
     onOpen: () => input.releaseAll(),
     onClose: () => input.holdFireUntilRelease(),

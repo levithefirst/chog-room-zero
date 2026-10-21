@@ -1,5 +1,6 @@
 // Full-screen tactical map (owner 2026-10-20): drawn from the live Level of each location, showing only what the
-// player's information model holds (src/ui/tactical.ts). These tests pin the geometry source, the information rules
+// player's information model holds (src/ui/tactical.ts), plus (owner 2026-10-21) every living hostile's live position,
+// map only. These tests pin the geometry source, the information rules
 // solo and online (through the real Lobby and the real client), the Visor, and the zoom/pan maths.
 import { describe, expect, it, vi } from 'vitest';
 import { MAPS, MAP_IDS } from '../src/config/maps';
@@ -9,7 +10,7 @@ import { canSee } from '../src/sim/vision';
 import { sightClear, walkable, WALL } from '../src/sim/level';
 import { superAbility } from '../src/config/superpowers';
 import { TUNING } from '../src/config/tuning';
-import { clampView, drawTactical, fitView, landmarks, mapMarkers, panBy, toMap, visorDots, zoomAt, MAX_ZOOM } from '../src/ui/tactical';
+import { clampView, drawTactical, fitView, landmarks, mapHostiles, mapMarkers, panBy, toMap, visorDots, zoomAt, MAX_ZOOM } from '../src/ui/tactical';
 import { Lobby } from '../server/room';
 import { OnlineSession } from '../src/net/client';
 
@@ -89,7 +90,7 @@ describe('geometry: one source of truth per location', () => {
 });
 
 describe('information rules (solo, vs bots)', () => {
-  it('you and your AI squad always; a hostile only once you see it; never a hidden one', () => {
+  it('you and your AI squad always; every living hostile live at its spot, seen or not; traces as before', () => {
     const w = createWorld({ mapId: 'office', seed: 4, allies: [{ name: 'A', hero: 'toad' }, { name: 'B', hero: 'ray' }] });
     const p = w.actors[0], intel = createIntel();
     senseFor(w, p, intel, DT);
@@ -97,8 +98,11 @@ describe('information rules (solo, vs bots)', () => {
     expect(m.filter((x) => x.kind === 'you')).toHaveLength(1);
     expect(m.find((x) => x.kind === 'you')).toMatchObject({ x: p.x, y: p.y, facing: p.facing });
     expect(m.filter((x) => x.kind === 'mate')).toHaveLength(2);
-    // The five bots start far off and unseen: nothing of them on the map, not a trace.
-    expect(m.filter((x) => x.kind === 'hostile' || x.kind === 'trace' || x.kind === 'visor')).toHaveLength(0);
+    // The five bots start far off and unseen (owner 2026-10-21): all five on the map at their live spots, no trace or dot.
+    const bots = w.actors.filter((a) => a.team === 'bot');
+    expect(bots).toHaveLength(5);
+    expect(m.filter((x) => x.kind === 'trace' || x.kind === 'visor')).toHaveLength(0);
+    for (const b of bots) expect(m.filter((x) => x.id === b.id)).toEqual([expect.objectContaining({ kind: 'hostile', x: b.x, y: b.y, facing: b.facing })]);
     // Put one in your light: it shows, at its real spot and facing.
     const bot = w.actors.find((a) => a.team === 'bot')!;
     const spot = sightSpots(w, p, 1)[0];
@@ -107,14 +111,15 @@ describe('information rules (solo, vs bots)', () => {
     m = mapMarkers(w, p, intel, []);
     const seen = m.find((x) => x.id === bot.id)!;
     expect(seen).toMatchObject({ kind: 'hostile', x: bot.x, y: bot.y, facing: bot.facing });
-    // It walks behind a wall: the map keeps where you last saw it (a fading trace), never its new spot.
+    // It walks behind a wall: the map keeps where you last saw it (a fading trace, as before) AND its live body at the new spot.
     const was = { x: bot.x, y: bot.y };
     park(bot, behindWall(w, p.x, p.y, 20));
     for (let i = 0; i < 30; i++) senseFor(w, p, intel, DT);
     m = mapMarkers(w, p, intel, []);
-    const tr = m.filter((x) => x.id === bot.id);
-    expect(tr.every((x) => x.kind === 'trace')).toBe(true);
+    const tr = m.filter((x) => x.id === bot.id && x.kind === 'trace');
+    expect(tr.length).toBeGreaterThan(0);
     for (const x of tr) expect(Math.hypot(x.x - bot.x, x.y - bot.y)).toBeGreaterThan(Math.hypot(x.x - was.x, x.y - was.y));
+    expect(m.filter((x) => x.id === bot.id && x.kind === 'hostile')).toEqual([expect.objectContaining({ x: bot.x, y: bot.y })]);
   });
 
   it('facing updates as you turn', () => {
@@ -133,23 +138,26 @@ describe('information rules (solo, vs bots)', () => {
     const bot = w.actors.find((a) => a.team === 'bot')!;
     park(bot, behindWall(w, p.x, p.y, 12));
     expect(visorDots(w, p, null)).toHaveLength(0);
-    expect(mapMarkers(w, p, intel, visorDots(w, p, null)).some((x) => x.id === bot.id)).toBe(false);
+    // Without the Visor: no dot, but its live body (the map shows every hostile, owner 2026-10-21).
+    expect(mapMarkers(w, p, intel, visorDots(w, p, null)).filter((x) => x.id === bot.id).map((x) => x.kind)).toEqual(['hostile']);
     p.ability = superAbility('visor', 'common');
     const dots = visorDots(w, p, null);
     expect(dots.map((d) => d.id)).toContain(bot.id);
-    const v = mapMarkers(w, p, intel, dots).find((x) => x.id === bot.id)!;
+    const v = mapMarkers(w, p, intel, dots).find((x) => x.id === bot.id && x.kind === 'visor')!;
     expect(v).toMatchObject({ kind: 'visor', x: bot.x, y: bot.y });
     expect(v.facing).toBeUndefined(); // position only, as the Visor rule says
   });
 
-  it('5v5: four teammates and up to five opponents, opponents only when seen', () => {
+  it('5v5: four teammates and all five opponents, seen or not', () => {
     const vs = MAPS.construction.versusSpawns;
     const w = createWorld({ mapId: 'construction', seed: 1, versus: [...vs.alpha.map((s, i) => ({ name: `a${i}`, hero: 'benja', team: 'alpha' as const, x: s.x, y: s.y, facing: 0 })), ...vs.bravo.map((s, i) => ({ name: `b${i}`, hero: 'benja', team: 'bravo' as const, x: s.x, y: s.y, facing: Math.PI }))] });
     const p = w.actors[0], intel = createIntel();
     senseFor(w, p, intel, DT);
     let m = mapMarkers(w, p, intel, []);
     expect(m.filter((x) => x.kind === 'mate')).toHaveLength(4);
-    expect(m.filter((x) => x.kind === 'enemy' || x.kind === 'trace')).toHaveLength(0);
+    expect(m.filter((x) => x.kind === 'trace')).toHaveLength(0);
+    expect(m.filter((x) => x.kind === 'enemy')).toHaveLength(5);
+    expect(m).toHaveLength(10);
     // Line all five up in front of you: all five show as enemies (not hostile bots).
     const foes = w.actors.filter((a) => a.team === 'bravo');
     // From the open slab (a zone centre), facing whichever way shows five spots.
@@ -202,11 +210,11 @@ function clientMarkers(s: OnlineSession) {
   s.update(null);
   const w = s.world!, p = w.actors[0], intel = createIntel();
   senseFor(w, p, intel, 0);
-  return { w, p, m: mapMarkers(w, p, intel, visorDots(w, p, s.tracks)) };
+  return { w, p, intel, m: mapMarkers(w, p, intel, visorDots(w, p, s.tracks), mapHostiles(w, p, s.mapHostiles)) };
 }
 
 describe('information rules online (real Lobby, real client)', () => {
-  it('1v1: an opponent behind walls is not on your map; in your light it is, at its real spot', async () => {
+  it('1v1: an opponent behind walls is on your map at its real spot (map-only list), and still not in your world view', async () => {
     const o = await online(2, '1v1', 'office');
     expect(o.ss.every((s) => s.state === 'match')).toBe(true);
     const sw = o.room.world;
@@ -215,8 +223,12 @@ describe('information rules online (real Lobby, real client)', () => {
     o.run(0.3);
     const a = o.ss.findIndex((s) => s.world!.actors[0].name === me.name);
     let c = clientMarkers(o.ss[a]);
-    expect(c.m.filter((x) => x.kind === 'enemy')).toHaveLength(0);
-    for (const x of c.m) if (x.kind !== 'you') expect(Math.hypot(x.x - foe.x, x.y - foe.y)).toBeGreaterThan(3);
+    let e0 = c.m.filter((x) => x.kind === 'enemy');
+    expect(e0).toHaveLength(1);
+    expect(Math.hypot(e0[0].x - foe.x, e0[0].y - foe.y)).toBeLessThan(0.6);
+    // The world view still has no body for it (parked off the map) and the intel holds no live contact.
+    expect(c.w.actors.find((x) => x.team !== c.p.team)!.x).toBeLessThan(-50);
+    expect([...c.intel.contacts.values()].some((k) => k.state === 'visible')).toBe(false);
     // Move the foe into my light on the server: the next snapshot shows it, and the map with it.
     const spot = sightSpots(sw, me, 1)[0];
     o.run(0.3, () => park(foe, spot));
@@ -227,7 +239,7 @@ describe('information rules online (real Lobby, real client)', () => {
     o.done();
   });
 
-  it('3v3: two teammates always, enemies never while unseen (the server never sent them)', async () => {
+  it('3v3: two teammates always, all three enemies at their real spots across the map (map-only list)', async () => {
     const o = await online(6, '3v3', 'supermarket');
     expect(o.ss.every((s) => s.state === 'match')).toBe(true);
     o.run(0.5);
@@ -235,10 +247,13 @@ describe('information rules online (real Lobby, real client)', () => {
       const c = clientMarkers(s);
       expect(c.m.filter((x) => x.kind === 'you')).toHaveLength(1);
       expect(c.m.filter((x) => x.kind === 'mate')).toHaveLength(2);
-      // At spawn the two sides are a whole store apart: no enemy, and nothing near any real enemy body.
-      expect(c.m.filter((x) => x.kind === 'enemy')).toHaveLength(0);
+      // At spawn the two sides are a whole store apart: all three enemies on the map anyway, each at its real spot.
+      const en = c.m.filter((x) => x.kind === 'enemy');
+      expect(en).toHaveLength(3);
       const myTeam = o.room.world.actors.find((a) => a.name === c.p.name)!.team;
-      for (const foe of o.room.world.actors.filter((a) => a.team !== myTeam)) for (const x of c.m) expect(Math.hypot(x.x - foe.x, x.y - foe.y)).toBeGreaterThan(3);
+      for (const foe of o.room.world.actors.filter((a) => a.team !== myTeam)) expect(en.some((x) => Math.hypot(x.x - foe.x, x.y - foe.y) < 0.6)).toBe(true);
+      // The world view still parks every unseen enemy off the map.
+      for (const a of c.w.actors.filter((x) => x.team !== c.p.team)) expect(a.x).toBeLessThan(-50);
     }
     o.done();
   });
@@ -254,9 +269,10 @@ describe('information rules online (real Lobby, real client)', () => {
     const v = c.m.filter((x) => x.kind === 'visor');
     expect(v).toHaveLength(1);
     expect(Math.hypot(v[0].x - foe.x, v[0].y - foe.y)).toBeLessThan(0.01);
-    // The other client (no Visor) has no dot of me, and no body either.
+    // The other client (no Visor) has no dot of me; its map shows my live body (every hostile, owner 2026-10-21).
     const o2 = clientMarkers(o.ss[b]);
-    expect(o2.m.filter((x) => x.kind === 'visor' || x.kind === 'enemy')).toHaveLength(0);
+    expect(o2.m.filter((x) => x.kind === 'visor')).toHaveLength(0);
+    expect(o2.m.filter((x) => x.kind === 'enemy')).toHaveLength(1);
     o.done();
   });
 });
@@ -294,13 +310,111 @@ describe('view: fit, zoom, pan', () => {
 void WALL;
 
 describe('Game Docs', () => {
-  it('Controls and the FAQ explain the tactical map and what it will never show', async () => {
+  it('Controls and the FAQ explain the tactical map and that it shows every hostile', async () => {
     const { docsHtml } = await import('../src/ui/docs');
     for (const touch of [false, true]) {
       const h = docsHtml(touch, null, '');
       expect(h).toMatch(/Tactical map/);
       expect(h).toMatch(touch ? /MAP button/ : /\bM or the MAP button/);
     }
-    expect(docsHtml(false, null, '')).toMatch(/never shows what your own eyes, team and powers do not/);
+    expect(docsHtml(false, null, '')).toMatch(/every living hostile on the whole map/);
+  });
+});
+
+// ---- owner 2026-10-21: opening the map shows every hostile on the whole map; the rest of the map is unchanged ----
+describe('tactical map: every hostile while open (owner 2026-10-21)', () => {
+  it('every living hostile on every location, far away and behind walls, never seen; dead ones not live', () => {
+    for (const id of MAP_IDS) {
+      const w = createWorld({ mapId: id, seed: 9, allies: [{ name: 'A', hero: 'toad' }, { name: 'B', hero: 'ray' }] });
+      const p = w.actors[0], intel = createIntel();
+      senseFor(w, p, intel, DT);
+      const bots = w.actors.filter((a) => a.team === 'bot');
+      // One far behind walls (never seen), one dead.
+      park(bots[0], behindWall(w, p.x, p.y, 20));
+      bots[1].alive = false;
+      senseFor(w, p, intel, DT);
+      expect(canSee(w.level, p.x, p.y, p.facing, p.view, bots[0].x, bots[0].y)).toBe(false);
+      const m = mapMarkers(w, p, intel, visorDots(w, p, null));
+      const live = m.filter((x) => x.kind === 'hostile');
+      expect(live.map((x) => x.id).sort()).toEqual(bots.filter((b) => b.alive).map((b) => b.id).sort());
+      for (const b of bots.filter((x) => x.alive)) expect(live.find((x) => x.id === b.id)).toMatchObject({ x: b.x, y: b.y });
+      expect(live.some((x) => x.id === bots[1].id)).toBe(false);
+      // The farthest hostile is somewhere across the map, not near you.
+      expect(Math.max(...live.map((x) => Math.hypot(x.x - p.x, x.y - p.y)))).toBeGreaterThan(10);
+      // You and both teammates still there; the game view's intel has no live contact for the hidden one.
+      expect(m.filter((x) => x.kind === 'you')).toHaveLength(1);
+      expect(m.filter((x) => x.kind === 'mate')).toHaveLength(2);
+      expect(intel.contacts.get(bots[0].id)?.state === 'visible').toBe(false);
+    }
+  });
+  it('positions update every frame: a hostile that moves is drawn at its new spot', () => {
+    const w = createWorld({ mapId: 'metro', seed: 2 });
+    const p = w.actors[0], intel = createIntel();
+    const bot = w.actors.find((a) => a.team === 'bot')!;
+    for (let i = 0; i < 30; i++) stepWorld(w, IDLE_INPUT);
+    const a = mapMarkers(w, p, intel, []).find((x) => x.id === bot.id)!;
+    park(bot, behindWall(w, p.x, p.y, 20));
+    const b = mapMarkers(w, p, intel, []).find((x) => x.id === bot.id)!;
+    expect(b).toMatchObject({ x: bot.x, y: bot.y });
+    expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(0);
+  });
+  it('the drawn map still has supplies, the zone and the area names, plus a body for every hostile', () => {
+    const w = createWorld({ mapId: 'supermarket', seed: 3, zone: true });
+    const p = w.actors[0], intel = createIntel();
+    const m = mapMarkers(w, p, intel, []);
+    const r = recorder();
+    drawTactical(r.g, { w, def: MAPS.supermarket, markers: m, view: fitView(w.level.w, w.level.h, 0, 0, 1280, 720), vw: 1280, vh: 720, dpr: 1 });
+    const active = w.pickups.filter((k) => k.active).length;
+    expect(active).toBeGreaterThan(0);
+    // Supplies: one 5x5 square each; zone ring; hostile bodies in their colour; area names.
+    expect(r.ops.filter((o) => /^fillRect:.*,5\.00,5\.00$/.test(o)).length).toBeGreaterThanOrEqual(active);
+    if (w.zone) expect(r.ops.some((o) => o === 'strokeStyle=rgba(239, 68, 68, 0.9)')).toBe(true);
+    expect(r.ops.filter((o) => o === 'fillStyle=#f59e0b').length).toBeGreaterThanOrEqual(5);
+    expect(m.filter((x) => x.kind === 'hostile')).toHaveLength(5);
+  });
+  it('the snapshot carries the unseen hostiles in the map-only field `mh`, never in `actors`', async () => {
+    const o = await online(2, '1v1', 'office');
+    o.run(0.3);
+    const sw = o.room.world;
+    const lobby = o.lobby as unknown as { snapshot: (r: unknown, p: unknown) => { actors: { id: number }[]; mh?: { id: number; x: number; y: number }[] } };
+    const room = [...o.lobby.rooms.values()][0] as unknown as { members: unknown[] };
+    const snap = lobby.snapshot(room, room.members[0]);
+    const me = sw.actors[0], foe = sw.actors[1];
+    expect(canSee(sw.level, me.x, me.y, me.facing, me.view, foe.x, foe.y)).toBe(false);
+    expect(snap.actors.some((a) => a.id === foe.id)).toBe(false);
+    expect(snap.mh).toEqual([{ id: foe.id, x: expect.closeTo(foe.x, 2), y: expect.closeTo(foe.y, 2) }]);
+    o.done();
+  });
+});
+
+describe('tactical map overlay: open shows every hostile, close hides the map (owner 2026-10-21)', () => {
+  it('opening draws every hostile; closing hides the layer, clears the markers and draws nothing more', async () => {
+    const el = (extra: Record<string, unknown> = {}) => ({ hidden: true, textContent: '', style: {} as Record<string, string>, offsetTop: 0, offsetHeight: 40, offsetLeft: 0, offsetWidth: 60,
+      addEventListener: () => undefined, setAttribute: () => undefined, setPointerCapture: () => undefined, ...extra });
+    const parts: Record<string, ReturnType<typeof el>> = {};
+    const tmap = el({ querySelector: (s: string) => (parts[s] ??= el()) });
+    const r = recorder();
+    const cv = el({ width: 0, height: 0, getContext: () => r.g });
+    vi.stubGlobal('window', { innerWidth: 1280, innerHeight: 720, devicePixelRatio: 1, addEventListener: () => undefined });
+    vi.stubGlobal('document', { getElementById: (id: string) => (id === 'tmap' ? tmap : id === 'tmapc' ? cv : null), body: { classList: { contains: () => false } } });
+    try {
+      const { createTacticalMap } = await import('../src/ui/tactical-view');
+      const w = createWorld({ mapId: 'construction', seed: 5 }), p = w.actors[0], intel = createIntel();
+      const m = createTacticalMap({ world: () => w, intel: () => intel, netTracks: () => null, netHostiles: () => null, subtitle: () => 'Vs bots', onOpen: () => undefined, onClose: () => undefined });
+      m.draw(p);
+      expect(m.last().markers).toHaveLength(0); // closed: nothing drawn
+      m.show();
+      expect(tmap.hidden).toBe(false);
+      m.draw(p);
+      const bots = w.actors.filter((a) => a.team === 'bot' && a.alive);
+      expect(m.last().markers.filter((x) => x.kind === 'hostile').map((x) => x.id).sort()).toEqual(bots.map((b) => b.id).sort());
+      expect(m.last().markers.some((x) => x.kind === 'you')).toBe(true);
+      m.close();
+      expect(tmap.hidden).toBe(true);
+      expect(m.last().markers).toHaveLength(0);
+      const n = r.ops.length;
+      m.draw(p);
+      expect(r.ops.length).toBe(n);
+    } finally { vi.unstubAllGlobals(); }
   });
 });

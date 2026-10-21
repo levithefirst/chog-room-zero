@@ -45,7 +45,7 @@ export const multiplayer: Page = {
       `A connection that sends nothing for ${SERVER.idleTimeoutSec} s is closed.`,
       'Leaving while still standing counts as a quit: the match pays no rewards.',
     ])}` },
-    { id: 'netcode', title: 'Fair play', keywords: ['server', 'authoritative', 'cheat', 'wallhack'], html: `<p>Online matches run on the game server; it sends each player only what that player may know (hostiles they can see, teammates' spots, their own Visor dots). The tactical map and HUD draw only that, so nothing on screen shows a hostile through walls. The server sends ${60 / SERVER.snapEvery} updates a second.</p>` },
+    { id: 'netcode', title: 'Fair play', keywords: ['server', 'authoritative', 'cheat', 'wallhack'], html: `<p>Online matches run on the game server; for the game view it sends each player only what that player may know (hostiles they can see, teammates' spots, their own Visor dots), so the game view and HUD never show a hostile through walls. The tactical map is the one exception: it also gets every living hostile's position. The server sends ${60 / SERVER.snapEvery} updates a second.</p>` },
   ],
   related: ['game-modes', 'progression', 'rewards'],
 };
@@ -142,7 +142,7 @@ export const faq: Page = {
     { id: 'leave', title: 'What happens if I disconnect?', keywords: ['disconnect', 'reconnect'], html: `<p>Your operator waits ${SERVER.reconnectGraceSec} s for you while the game reconnects. ${link('multiplayer', 'Disconnects', 'reconnect')}.</p>` },
     { id: 'pay', title: 'Why did a match pay nothing?', keywords: ['no rewards'], html: `<p>It was under ${REWARDS.minSeconds} s, you left while standing, you were over the daily cap, or it was private, DEMO or Training. ${link('rewards', 'Rewards', 'limits')}.</p>` },
     { id: 'buy', title: 'Can I buy anything?', keywords: ['buy', 'purchase', 'pay to win', 'shop'], html: `<p>No. There are no purchases in the game: upgrades cost shards earned by playing, and are the same for everyone.</p>` },
-    { id: 'map', title: 'Is there a minimap?', keywords: ['map', 'minimap', 'tactical map'], html: `<p>There is a full-screen tactical map: press <kbd>M</kbd> or MAP. It shows only what you know. ${link('how-to-play', 'The tactical map', 'tactical-map')}.</p>` },
+    { id: 'map', title: 'Is there a minimap?', keywords: ['map', 'minimap', 'tactical map'], html: `<p>There is a full-screen tactical map: press <kbd>M</kbd> or MAP. It shows every living hostile on the whole map while it is open. ${link('how-to-play', 'The tactical map', 'tactical-map')}.</p>` },
   ],
   related: ['start-here', 'controls', 'combat'],
 };
