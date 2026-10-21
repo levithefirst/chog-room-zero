@@ -46,6 +46,12 @@ export const PRACTICE_REWARDS = {
   dailyCap: 25,
 } as const;
 
+/**
+ * Practice shards paid per account per rolling 24 h (owner 2026-10-21 t31u: 1,000, was 300). Applied in
+ * api/_lib/career.ts: a run that would take the day past it pays nothing (no XP, no shards; it is still stored).
+ */
+export const PRACTICE_SHARDS_PER_DAY = 1000;
+
 export type RewardTable = { [K in keyof typeof PRACTICE_REWARDS]: number };
 
 export type RewardLineId = 'played' | 'win' | 'kills' | 'damage';

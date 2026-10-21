@@ -80,6 +80,10 @@ describe('practice shards are 10 / 10 / 30 too (owner 2026-10-21 t30u)', () => {
     expect(r).toContain(`Per kill (up to 5) +${REWARDS.xpPerKill} +10 +${PRACTICE_REWARDS.xpPerKill} +10`);
     expect(text('game-modes')).toContain('the same shards as online for playing, kills and a clear');
     expect(all).not.toMatch(/smaller than online/);
+    // Practice shard limit (owner 2026-10-21 t31u): 1,000 a day, from config.
+    expect(text('rewards')).toContain('Over the practice shard limit: 1,000 practice shards per rolling 24 h. A run that would pass it pays no XP or shards');
+    expect(docs).toContain('up to 25 paid runs and 1,000 practice shards a day.');
+    expect(all + docs).not.toMatch(/\b300 (practice )?shards/);
     expect(docs).toContain(`Solo (signed in): 10 shards and ${PRACTICE_REWARDS.xpPlay} XP a run, 10 shards and ${PRACTICE_REWARDS.xpPerKill} XP per kill (up to 5), 30 shards and ${PRACTICE_REWARDS.xpWin} XP for a clear`);
   });
 });

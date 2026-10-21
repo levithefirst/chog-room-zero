@@ -6,7 +6,7 @@ import { TUNING } from '../config/tuning';
 import { allKeys, mainKey, moveKeys } from '../input/bindings';
 import { BASE_HP, GRENADES, UPGRADES, UPGRADE_IDS } from '../config/power';
 import { MAPS, MAP_IDS } from '../config/maps';
-import { PRACTICE_REWARDS, REWARDS } from '../config/progression';
+import { PRACTICE_REWARDS, PRACTICE_SHARDS_PER_DAY, REWARDS } from '../config/progression';
 import { MEDALS } from './medals';
 import { HEROES } from '../config/heroes';
 import { THREAT_RANGE } from './downed';
@@ -132,7 +132,7 @@ ${li(UPGRADE_IDS.map((id) => `<b>${esc(UPGRADES[id].name)}</b>: ${esc(UPGRADES[i
   { id: 'rewards', title: 'Rewards', html: () => li([
     `Daily: three challenges a day (the same for everyone, new at 00:00 UTC), easy, medium and hard, paying ${CHALLENGE_REWARDS[1].shards}, ${CHALLENGE_REWARDS[2].shards} and ${CHALLENGE_REWARDS[3].shards} shards once each. They count your verified solo runs and online matches of the day (the hub card shows how far you are). Nothing carries over and nothing is lost if you skip a day.`,
     `Online match: ${REWARDS.shardsPlay} shards and ${REWARDS.xpPlay} XP for a completed match, ${REWARDS.shardsPerKill} shards and ${REWARDS.xpPerKill} XP per kill (up to ${REWARDS.maxKills} kills), ${REWARDS.shardsWin} shards and ${REWARDS.xpWin} XP for a win, and 1 shard per ${REWARDS.damagePerShard} damage dealt (up to ${REWARDS.damageShardsMax}). Up to ${REWARDS.dailyCap} paid matches a day; a match under ${REWARDS.minSeconds} s pays nothing.`,
-    `Solo (signed in): ${PRACTICE_REWARDS.shardsPlay} shards and ${PRACTICE_REWARDS.xpPlay} XP a run, ${PRACTICE_REWARDS.shardsPerKill} shards and ${PRACTICE_REWARDS.xpPerKill} XP per kill (up to ${PRACTICE_REWARDS.maxKills}), ${PRACTICE_REWARDS.shardsWin} shards and ${PRACTICE_REWARDS.xpWin} XP for a clear, 1 shard per ${PRACTICE_REWARDS.damagePerShard} damage (up to ${PRACTICE_REWARDS.damageShardsMax}); up to ${PRACTICE_REWARDS.dailyCap} paid runs a day.`,
+    `Solo (signed in): ${PRACTICE_REWARDS.shardsPlay} shards and ${PRACTICE_REWARDS.xpPlay} XP a run, ${PRACTICE_REWARDS.shardsPerKill} shards and ${PRACTICE_REWARDS.xpPerKill} XP per kill (up to ${PRACTICE_REWARDS.maxKills}), ${PRACTICE_REWARDS.shardsWin} shards and ${PRACTICE_REWARDS.xpWin} XP for a clear, 1 shard per ${PRACTICE_REWARDS.damagePerShard} damage (up to ${PRACTICE_REWARDS.damageShardsMax}); up to ${PRACTICE_REWARDS.dailyCap} paid runs and ${PRACTICE_SHARDS_PER_DAY.toLocaleString('en-US')} practice shards a day.`,
     'A loss where you fought still moves you forward. Quitting, private rooms and demo play pay nothing.',
     'The results screen shows every line, your new totals and the upgrades your shards already cover.',
   ]) },

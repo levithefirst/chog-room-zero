@@ -39,10 +39,24 @@ describe('against the upgrade costs and the daily limits', () => {
     const maxOnline = REWARDS.dailyCap * pay(REWARDS, true, 99, 99999);
     expect(maxOnline).toBe(20 * 95);
     const maxPractice = Math.min(PRACTICE_SHARDS_PER_DAY, PRACTICE_REWARDS.dailyCap * pay(PRACTICE_REWARDS, true, 99, 99999));
+    expect(maxPractice).toBe(1000);
+    // 3,250 shards of upgrades / (1,900 online + 1,000 practice) = 1.12 days (was 1.48 with the 300 limit).
     expect(totalCost / (maxOnline + maxPractice)).toBeGreaterThan(1);
+  });
+  it('practice shard limit 1,000 a day (owner 2026-10-21 t31u, was 300): how many runs are fully paid before it', () => {
+    expect(PRACTICE_SHARDS_PER_DAY).toBe(1000);
+    // Runs in a row, each paid only while the day stays within the limit (api/_lib/career.ts; the crossing run pays nothing).
+    const fully = (v: number) => { let s = 0, n = 0; while (n < PRACTICE_REWARDS.dailyCap && s + v <= PRACTICE_SHARDS_PER_DAY) { s += v; n++; } return n; };
+    expect(pay(PRACTICE_REWARDS, true, 5, 1e6)).toBe(93);
+    expect(fully(93)).toBe(10); // max runs: the 11th is cut off (was 3 at 300)
+    expect(fully(pay(PRACTICE_REWARDS, true, 5, 0))).toBe(11); // 5-kill clears, 90 each (was 3)
+    expect(fully(pay(PRACTICE_REWARDS, true, 3, 0))).toBe(14); // 3-kill clears, 70 each (was 4)
+    expect(fully(pay(PRACTICE_REWARDS, false, 1, 100))).toBe(PRACTICE_REWARDS.dailyCap); // 1-kill losses, 21 each: all 25 (was 14)
+    expect(PRACTICE_REWARDS.dailyCap * pay(PRACTICE_REWARDS, true, 5, 1e6)).toBe(2325); // so the limit can still bite
   });
   it('nobody is stuck: a player who only loses in practice (one kill a run) still maxes out in about three weeks', () => {
     const perDay = Math.min(PRACTICE_SHARDS_PER_DAY, PRACTICE_REWARDS.dailyCap * pay(PRACTICE_REWARDS, false, 1, 100));
+    expect(perDay).toBe(525); // 25 runs x 21, under the 1,000 limit: 3,250 / 525 = 6.2 days (was 300 a day, 10.8 days)
     expect(totalCost / perDay).toBeLessThanOrEqual(25);
   });
 });

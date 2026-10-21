@@ -712,3 +712,18 @@ Not verified    : real phones (Pixel 7, iPhone 13: BLOCKED); human play of the m
 Locked decisions touched : none (rewards and map rule are owner decisions of 2026-10-21).
 Next smallest task : owner plays one Vs bots run and one 1v1, opens MAP: every hostile shown, Ping still live; files: none.
 ```
+
+```
+HANDOFF H45  2026-10-21  grokbot -> owner
+Branch @ commit : grokbot/practice-shards-10-10-30 from ccr-e7fadb8f-qtochk @ 164e9db (production: H44 + red hostile markers ce058d9 and 6 regenerated map shots 164e9db); local commits a0097a0 + this handoff commit; not pushed.
+Task            : owner 2026-10-21 t30u: practice shards 10 a run / 10 a kill / 30 a clear (was 3/3/18); t31u: practice daily shard limit 1,000 (was 300). Everything else unchanged.
+Rewards         : PRACTICE_REWARDS shards 10/10/30; XP 20/30/5, kill cap 5, damage +1 per 100 up to +3, minSeconds 20, 25 paid runs/24 h, win-length and seconds-per-kill checks and exclusions unchanged. Online unchanged (10/10/30, cap 20/day, no shard limit). PRACTICE_SHARDS_PER_DAY moved to src/config/progression.ts (1000; api/_lib/career.ts re-exports it) so Library and Game Docs read it. A run that would pass the limit pays nothing, XP included (still stored).
+Economy         : practice shards (no damage): clear 0/1/3/5/7 kills = 40/50/70/90/90; loss 0/3/5 = 10/40/60; damage max +3 (best run 93). "Every clear beats every loss" superseded in practice as online (4-kill full-damage loss 53 > 0-kill clear 40); a clear beats the same run lost. Runs fully paid per day at 1,000 (was 300): 93-shard runs 10 (3), 90-shard clears 11 (3), 70-shard clears 14 (4), 1-kill losses 25 of 25 (14). Days to buy all upgrades (3,250): perfect online + practice 1.12 (1.48); practice losses only 6.2 (10.8).
+Docs            : Library solo note (same shards as online; less XP, smaller damage bonus) and Rewards limits list (1,000 practice shards/day); Game Docs solo line (10 shards per kill; 1,000 practice shards a day). Screenshots: none show practice numbers; none regenerated.
+Tests run       : tsc clean; env -u DATABASE_URL vitest 1192/1192 (109 files); npm run build OK. Database-backed reward files run one at a time (a combined run timed out under load in t30u).
+Deploy          : none. Production stays 164e9db (Vercel dpl_6HTRrYUcD7usX4JPtfYo3bc31T3j, Render 164e9db).
+Rollback        : nothing live to roll back; production rollback target remains dpl_7fEx2vkeiFkKwmbANPJ7wbfEhjj1 (0de58c6).
+Not verified    : real phones (BLOCKED); a real practice payout against the live database; human play.
+Locked decisions touched : none (owner decisions of 2026-10-21 recorded here).
+Next smallest task : owner says push; then production smoke incl. the Library Rewards page (practice 10/10/30, 1,000/day).
+```

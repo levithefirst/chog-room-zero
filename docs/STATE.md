@@ -1,11 +1,11 @@
 # Chog: Room Zero - shared state
 
 Source of truth. Rules: `docs/RULES.md`. Edit only in a handoff commit. Under 8,000 characters.
-Last verified: 2026-10-21 by grokbot (H44 release on H43 e9fac04).
+Last verified: 2026-10-21 by grokbot (H45 local, not pushed).
 
 ## Snapshot (EVIDENCE)
 - Repo `levithefirst/chog-room-zero`. Base branch `setup/skill-system` (LOCKED 2026-10-11: no `main`); never merge without owner. PR #10 = ccr-e7fadb8f-qtochk (live; claude/h34-maps holds H34-H36). Client and server ship from one commit.
-- Vercel project `chog-room-zero`. Production `chogroomzero.xyz`: H44 (HANDOFFS H44). Rollback: `dpl_9JnuCPEi2jQ5B7o712DEJuxtxkZb` (e9fac04, H43) with Render on e9fac04; no migration since H33. No `NFT_COMBAT` (power on). Game server: Render Free `https://room-zero-game.onrender.com` (redeploys on every push to the branch); `ALLOWED_ORIGINS` = production + branch preview.
+- Vercel project `chog-room-zero`. Production `chogroomzero.xyz`: 164e9db (H44 + red hostile markers). Rollback: `dpl_7fEx2vkeiFkKwmbANPJ7wbfEhjj1` (0de58c6) with Render on 0de58c6; no migration since H33. No `NFT_COMBAT` (power on). Game server: Render Free `https://room-zero-game.onrender.com` (redeploys on every push to the branch); `ALLOWED_ORIGINS` = production + branch preview.
 - Chog Genesis (NFT-R1, EVIDENCE): Monad 143, contract `0xc96d31F8626c6D03Fae5dCD3d61e3FB9F4a73763` (ChogMint, Sourcify), ERC-721, supply 1,969, catalogue in `data/chog-genesis/`; token id is NOT the displayed number. `/api/game/chain` checks it live.
 - Chogathon 2026 (`docs/SUBMISSION.md`): "the Chog NFT must be essential".
 
@@ -44,13 +44,13 @@ Last verified: 2026-10-21 by grokbot (H44 release on H43 e9fac04).
 - H37 (live): tactical map (MAP, M): live level, areas, zone, supplies, your side, intel traces, Visor dots (H44: plus every living hostile). `docs/design/tactical-map.md`.
 - H36: human 1v1 fixed, queue rejoins (`docs/MULTIPLAYER.md`).
 - H40/H41: hub menu, cinematic loading (`docs/design/ui-audit.md`); H41 QA fixes.
-- UIX + Library (H38, H39, live): UI scale, briefing loading, HUD states, combat feedback, pause card, motion setting, 12 px floor (`docs/design/ui-audit.md`); game Library at /library (20 prerendered pages, search).
-- H44: online shards 10 play/10 a kill/30 win (XP, practice 3/3/18, caps same); map shows every living hostile (online map-only `mh`, readable by a modified client; game view unchanged); docs audited.
+- UIX + Library (H38, H39, live): UI scale, HUD states, combat feedback, pause card, motion (`docs/design/ui-audit.md`); Library at /library (20 pages, search).
+- H44: online shards 10 play/10 a kill/30 win (XP, caps same); map shows every living hostile, red #ff2b3a (online `mh`, readable by a modified client); docs audited.
+- H45 (local): practice shards 10/10/30 too (XP, caps same); practice limit 1,000 shards/day (was 300).
 
 ## Automated tests (EVIDENCE, Node 22.22)
-H44: vitest 1187/1187, tsc, build OK.
+H44: vitest 1187/1187, tsc, build OK. H45: vitest 1192/1192, tsc, build OK.
 H42 (655269f): vitest 1132/1132, tsc clean, tm-map 105/105. H43 prod smoke 25, gate 8, mp 10, 1v1 8.
-H41 (6f297d7): vitest 1124/1124, 22 browser suites 647/647, online 1v1/3v3/5v5-holders PASS.
 
 ## Not performed (needs the owner)
 - Human play (all five locations), real phones (BLOCKED), real-GPU FPS, audio by ear, a real wallet, hosted 5v5 with a holder, art rights, demo video.
@@ -65,8 +65,8 @@ Core Feel Gate: BLOCKED on owner playtests. G10: automated PASS; playtest not ru
 | MP, H34/ID/SP | claude | same | see H32-H36 | Owner 2026-10-18/19 | live; owner: 1v1s, server plan |
 | UIX | claude (from grokbot) | same | see H38/H39 | Owner 2026-10-20 UI release | live (PR #12 head in branch) |
 | UIX2+QA | claude | same | see H40-H43 | Owner 2026-10-21 final QA | live (H43) |
-| SHARDS/MAP | grokbot | same | see H44 | Owner 2026-10-21 | live (H44) |
+| SHARDS/MAP | grokbot | same | see H44/H45 | Owner 2026-10-21 | H44 live; H45 local |
 | RC-8 | claude | PR #10 | see H16 | Owner RC-8 mandate | PR #10 not merged (owner decides) |
 
 ## Handoffs
-Latest: H44 (grokbot; shards, map, docs). History: `docs/HANDOFFS.md`.
+Latest: H45 (grokbot; practice shards, local). History: `docs/HANDOFFS.md`.

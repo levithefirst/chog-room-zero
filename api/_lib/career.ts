@@ -14,7 +14,7 @@
 // here from the stored VERIFIED runs only (an unticketed or implausible run is stored, pays nothing, counts for nothing).
 import type { Db, Tx } from './db.js';
 import { b64url, sign, unsign } from './auth.js';
-import { PRACTICE_REWARDS, rewardBreakdown, type RewardLine, type NoReward } from '../../src/config/progression.js';
+import { PRACTICE_REWARDS, PRACTICE_SHARDS_PER_DAY, rewardBreakdown, type RewardLine, type NoReward } from '../../src/config/progression.js';
 import { MEDALS, medalsDue, type OnlineTotals, type RunFacts } from '../../src/ui/medals.js';
 import type { Best, Records } from '../../src/ui/records.js';
 import { validateNickname } from '../../src/ui/profile.js';
@@ -31,8 +31,8 @@ export const PRACTICE_PER_MINUTE = 6;
 export const PRACTICE_TICKET_SECONDS = 30 * 60;
 /** Slack between the browser's play clock and the site's wall clock (seconds). */
 const CLOCK_SLACK = 3;
-/** Practice shards paid per account per rolling 24 h (25 max-value wins would be 600). */
-export const PRACTICE_SHARDS_PER_DAY = 300;
+/** Practice shards paid per account per rolling 24 h: 1,000 (src/config/progression.ts; 25 max-value runs would be 2,325). */
+export { PRACTICE_SHARDS_PER_DAY };
 /**
  * A practice win shorter than this is not paid. Measured 2026-10-17 (autopilot, 168 runs, 7 heroes, seeds 1-12, with and
  * without AI teammates, zone on): the fastest of 42 wins took 35.2 s.

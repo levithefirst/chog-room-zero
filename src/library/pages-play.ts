@@ -1,5 +1,5 @@
 // Game modes, multiplayer, progression, rewards, medals, controls, FAQ. Numbers from facts.ts.
-import { TUNING, MODES, SERVER, INPUT, REWARDS, PRACTICE_REWARDS, RATING, xpForNext, rewardBreakdown, UPGRADES, UPGRADE_IDS, MEDALS, PERKS, PERK_IDS, GRENADES, soloHostiles } from './facts';
+import { TUNING, MODES, SERVER, INPUT, REWARDS, PRACTICE_REWARDS, PRACTICE_SHARDS_PER_DAY, RATING, xpForNext, rewardBreakdown, UPGRADES, UPGRADE_IDS, MEDALS, PERKS, PERK_IDS, GRENADES, soloHostiles } from './facts';
 import type { Page } from './types';
 import { esc, n, table, facts, note, ul, ol, link, shot } from './html';
 import { medalSvg, RARITY_LABEL } from '../ui/art';
@@ -78,6 +78,7 @@ export const rewards: Page = {
     { id: 'examples', title: 'Online shards, worked out', keywords: ['shards', 'how many shards', 'shard rewards', 'kill reward', 'victory reward', 'online rewards'], html: `${table(['Match (no damage dealt)', 'Online shards', 'Online XP'], EXAMPLES.map(([label, won, kills]) => { const b = rewardBreakdown({ won, kills, damage: 0, seconds: 60, leftEarly: false, capped: false }); return [label, `${b.shards}`, `${b.xp}`]; }), 'Online shards by result')}<p>Each line is ${R.shardsPlay} for the match${R.shardsPerKill ? `, ${R.shardsPerKill} a kill` : ''} and ${R.shardsWin} for the win, from the same rule the server pays with. Damage dealt adds 1 shard per ${R.damagePerShard} up to ${R.damageShardsMax} on top. A win always adds the victory bonus, but a loss with many kills can pay more than a win with none.</p>` },
     { id: 'limits', title: 'When a match pays nothing', keywords: ['no reward', 'cap', 'daily'], html: ul([
       `Shorter than ${R.minSeconds} s.`, 'You left while still standing.', `Over the daily cap: ${R.dailyCap} rewarded online matches and ${PR.dailyCap} rewarded practice runs per rolling 24 h (later ones still count for history and medals).`,
+      `Over the practice shard limit: ${PRACTICE_SHARDS_PER_DAY.toLocaleString('en-US')} practice shards per rolling 24 h. A run that would pass it pays no XP or shards (it is still stored for your career).`,
       'Private room codes, DEMO tokens and Training.', 'A practice run without a valid start ticket, or one that claims more time than passed.',
     ]) },
   ],
