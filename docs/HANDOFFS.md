@@ -675,3 +675,24 @@ Not verified    : real phones; a human looking at the map in a fight; Ping revea
 Locked decisions touched : none
 Next smallest task : owner says go -> push, Vercel deploy at the same sha, Render /stats match, production smoke; files: none.
 ```
+
+```
+HANDOFF H43  2026-10-21  claude -> owner
+Branch @ commit : ccr-e7fadb8f-qtochk @ 9836bb13e620c5506647fb44a64d4634a17c41cb released (+ this handoff commit, redeployed)   pushed: yes
+Task            : owner "Go": push the H42 fixes, deploy Vercel + Render at the same commit, production smoke, READY/NOT READY.
+Deploy          : Vercel production dpl_4ERd3TbLwGA8dbWNWzZnda9m7bzg READY at 9836bb1, aliasError null, chogroomzero.xyz -> it.
+                  Render /stats commit 9836bb1 and the live site bundle stamped 9836bb1 (mp-prod-check, both checked).
+Rollback        : Vercel dpl_EQfyjLNtTN63fKhBYxGALyjF3E9B (1cd9f96, H41) and point Render at 1cd9f96; no migration.
+Tests run       : From a Vercel Sandbox (headless Chrome, emulated, NOT phones) against https://chogroomzero.xyz and the Render server:
+                  smoke 25/25 (desktop 1440x900 + phone landscape 844x390 touch: load, hub, solo, HUD, tactical map over the match,
+                  RETURN, pause, no test hooks, no localhost, no page errors; Game Docs + Library); ownership gate 8/8 (guest asking
+                  for a 1:1 gets a free ticket, forged and garbage tickets 401, foreign origin 403, live Monad read, config power on,
+                  5v5 holders-only and PLAY cannot start it); multiplayer 10/10 (server and site on 9836bb1); real 1v1 between two
+                  guests on the production server: matched, 150 health each, played to Victory/Defeat, no page errors.
+Known failures  : first 1v1 run 6/7: the script tapped Continue inside the results screen's 0.75 s input lock (src/input/gate.ts,
+                  RC-1, by design) and never re-tapped. Rerun tapping after the lock: both players' Continue returns to the hub, 8/8.
+                  Not a product bug; the script was wrong.
+Not verified    : real phones; a real CHOG wallet in production (never simulated); human play of the map Ping reveal online.
+Locked decisions touched : none
+Next smallest task : owner plays a match on a phone with Benja, uses Ping near a hidden hostile, opens MAP; files: none.
+```
