@@ -1,7 +1,7 @@
 # Chog: Room Zero - shared state
 
 Source of truth. Rules: `docs/RULES.md`. Edit only in a handoff commit. Under 8,000 characters.
-Last verified: 2026-10-20 by claude (H37 tactical map, live from ccr-e7fadb8f-qtochk).
+Last verified: 2026-10-21 by grokbot (H39, local commits on grokbot/uix-world-class-h37, not pushed).
 
 ## Snapshot (EVIDENCE)
 - Repo `levithefirst/chog-room-zero`. Base branch `setup/skill-system` (LOCKED 2026-10-11: no `main`); never merge without owner. PR #10 = ccr-e7fadb8f-qtochk (live; claude/h34-maps holds H34-H36). Client and server ship from one commit.
@@ -10,7 +10,7 @@ Last verified: 2026-10-20 by claude (H37 tactical map, live from ccr-e7fadb8f-qt
 - Chogathon 2026 (`docs/SUBMISSION.md`): "the Chog NFT must be essential".
 
 ## LOCKED (owner; 2026-10-07, 2026-10-11, 2026-10-12, 2026-10-13)
-1. Dark top-down tactical survival shooter, ~90 s rooms, mobile and PC, original IP. Bullet Echo is a benchmark only: nothing copied.
+1. Dark top-down tactical survival shooter, ~90 s rooms, mobile and PC, original IP. Bullet Echo: benchmark only.
 2. 14 days. Playable by Day 7. Freeze after Day 11. Days 12-14 fixes, QA, submission.
 3. $0 target, $20 cap, owner approves each spend.
 4. Controls: mobile LANDSCAPE (upright turned 90 deg); left thumb move, right thumb aim+fire outside deadzone, ability in right-thumb reach, no auto-fire. PC: WASD, mouse, click, Space.
@@ -30,11 +30,11 @@ Last verified: 2026-10-20 by claude (H37 tactical map, live from ccr-e7fadb8f-qt
 
 ## PROPOSALS (not approved)
 - All tuning numbers, art direction, maps, fonts, CHOG palette (`docs/BRAND.md`), NFT-R1 layers. Deps: @neondatabase/serverless, @electric-sql/pglite (dev), @noble/*.
-- V2 (H31): perks, AI guard, challenges, Ace, solo board cap, telemetry. H37: map look, the 1v1 opponent rule (shown only when known).
-- SP/ID (H32, H33): superpower numbers, Visor radii, drills, beam/orb rules; sawn-off 10 per pellet.
+- V2 (H31): perks, AI guard, challenges, Ace, solo board cap, telemetry. H37: map look.
+- SP/ID (H32, H33): power numbers, Visor radii, drills, beam/orb rules.
 - H34: all five layouts, rail/deck/stairs rules, lit range 22 m, surface noise, medal thresholds.
 - H36: location is a preference: after 10 s anyone in the mode meets on the longest waiter's pick (`anyMapAfterSec`; Infinity = strict per-location queues as H33).
-- Owner decisions open: confirm the H36 location rule; game server plan for 400 players (Free ~30-40, Starter $7 ~150-200, Standard $25 ~400 at the limit; estimates); Supermarket solo hard (autopilot 1 of 8); powers #5 and #6 (not found); X-Ray trait (candidates in `docs/design/superpowers.md`); Squad/Breach drill; grenade capacity by tier; solo 1v5 wins 5 of 280 at 150 health; bot backfill online.
+- Owner decisions open: confirm the H36 location rule; game server plan for 400 players (estimates: HANDOFFS H36); Supermarket solo hard (autopilot 1 of 8); powers #5 and #6 (not found); X-Ray trait (candidates in `docs/design/superpowers.md`); Squad/Breach drill; grenade capacity by tier; solo 1v5 wins 5 of 280 at 150 health; bot backfill online.
 
 ## UNKNOWN (never guess)
 - Chog Genesis art and name rights; `baseURI`, totalSupply from chain; metadata hash (`docs/research/chog-genesis/`).
@@ -42,18 +42,18 @@ Last verified: 2026-10-20 by claude (H37 tactical map, live from ccr-e7fadb8f-qt
 - Whether a real holder can play 5v5 (fake-chain holder passes locally).
 
 ## Implemented (EVIDENCE)
-- H34/H35 (live): five locations, rail/deck/stairs, lit areas, hub leaderboard, 40 medals, protocol 2, hub blink fixed (`docs/design/maps.md`).
-- H37 (live): tactical map (MAP, M): the live level, areas, zone, supplies; your side always, hostiles only from your intel, Visor dots; no protocol change. `docs/design/tactical-map.md`.
-- H36 (live): human 1v1 fixed; dead sockets never seated; queue rejoins; a failing room stops alone. `docs/MULTIPLAYER.md`.
-- UIX (H38, PR, not live): `docs/design/ui-audit.md`.
-- Earlier: `docs/HANDOFFS.md`.
+- H34/H35 (live): five locations, rails/decks/stairs, lit areas, leaderboard, 40 medals (`docs/design/maps.md`).
+- H37 (live): tactical map (MAP, M): level, areas, zone, supplies, your side, intel traces, Visor dots. `docs/design/tactical-map.md`.
+- H39 (local; owner 2026-10-21): online shards 10/10 a kill/30 win (XP, practice, caps same); tactical map shows every living hostile (online: map-only `mh`, sent every update, readable by a modified client; game view unchanged); docs audited.
+- H36 (live): 1v1 fixed; dead sockets never seated; queue rejoins. `docs/MULTIPLAYER.md`.
+- UIX + Library (H38, H39; PR #12, not live): `docs/design/ui-audit.md`, `/library`.
 
 ## Automated tests (EVIDENCE, Node 22.22)
-H37 (002dc7b): vitest 1048/1048, tsc clean, 12 browser suites (tm-map 105/105), rc8 1v1+3v3 PASS; prod check 10/10.
-H36 load (local, bots): 400 mixed 398/398 started, 0 hangs (HANDOFFS H36).
+H37 (002dc7b): vitest 1048/1048, tsc clean, tm-map 105/105, rc8 PASS. H36 load: 398/398, 0 hangs.
+H39: vitest 1152/1152, tsc, build OK; browser suites not rerun.
 
 ## Not performed (needs the owner)
-- Human play of CF to H34 (all five locations), real phones, real-GPU FPS, audio by ear, a real wallet, hosted 5v5 with a holder, art rights, demo video.
+- Human play (all five locations), real phones (BLOCKED), real-GPU FPS, audio by ear, a real wallet, hosted 5v5 with a holder, art rights, demo video.
 
 ## Gates
 Core Feel Gate: BLOCKED on owner playtests. G10: automated PASS; playtest not run.
@@ -63,8 +63,8 @@ Core Feel Gate: BLOCKED on owner playtests. G10: automated PASS; playtest not ru
 |---|---|---|---|---|---|
 | TM | claude | ccr-e7fadb8f-qtochk | see H37 | Owner 2026-10-20 TACTICAL MAP | live; owner plays it on a phone |
 | MP, H34/ID/SP | claude | same | see H32-H36 | Owner 2026-10-18/19 | live; owner: 10 human 1v1s, server plan, five maps |
-| UIX | grokbot | grokbot/uix-world-class-h37 | see H38 | Owner 2026-10-20 UI | owner reviews PR |
+| UIX/LIB/H39 | grokbot | grokbot/uix-world-class-h37 | see H38, H39 | Owner 2026-10-20/21 | local, awaiting owner's push/deploy word |
 | RC-8 | claude | PR #10 | see H16 | Owner RC-8 mandate | PR #10 not merged (owner decides) |
 
 ## Handoffs
-Latest: H38 (grokbot; UIX PR, not live); H37 live. History: `docs/HANDOFFS.md`.
+Latest: H39 (grokbot; local, not pushed); H37 live. History: `docs/HANDOFFS.md`.
