@@ -816,7 +816,7 @@ async function start() {
       case 'training': startTraining(soloPower()); return;
       case 'demo-online': if (identity.tokenId && tierOfMetadataId(Number(identity.tokenId))) setChoice({ demo: Number(identity.tokenId) }); break;
       case 'demo-online-off': setChoice(null); break;
-      case 'online-cancel': net?.leave(); break;
+      case 'online-cancel': net?.leave('cancel'); break;
       case 'settle-retry': if (lastReward.matchId && !lastReward.pending) { settleOnline(lastReward.matchId, false); render(); } return;
       case 'online-again': online = false; go('menu'); titleView = 'main'; if (!net?.follower) joinOnline(onlineMode); break;
       case 'upgrades-from-results': online = false; go('menu'); titleView = 'upgrades'; break;
@@ -997,7 +997,7 @@ async function start() {
     }
     const b = t.closest('[data-go]') as HTMLElement | null;
     if (b) {
-      if (b.dataset.go === 'menu' || b.dataset.go === 'quit') { if (online) net?.leave(); online = false; }
+      if (b.dataset.go === 'menu' || b.dataset.go === 'quit') { if (online) net?.leave(b.dataset.go); online = false; }
       e.preventDefault();
       e.stopPropagation(); // a menu press is consumed here and never reaches the game input
       go(b.dataset.go as MatchEvent);

@@ -34,6 +34,12 @@ const pub = secp256k1.getPublicKey(Uint8Array.from(TEST_KEY.match(/../g)!.map((h
 const HOLDER = '0x' + Array.from(keccak_256(pub.subarray(1)).subarray(12), (b) => b.toString(16).padStart(2, '0')).join('');
 const OWNED: Record<string, number[]> = { '0x00000000000000000000000000000000000000a1': [5, 900], [HOLDER]: [5, 900] };
 const META: Record<number, number> = { 5: 53, 900: 1462 };
+// Ten more test holders for a full holder-only 5v5 (tools/rc8-online.mjs HOLDERS=1): 0x...0b01 to 0x...0b0a, one token
+// each (1001-1010), signed in through /__test/login as wallet identities. Their metadata covers every power and tier
+// path: laser (14, common), visor (11), bubble (12), drool (27), aura (3), aura epic (31), laser uncommon (25), no
+// mapped power (1462, uncommon), no power (4, uncommon), legendary 1:1 (392).
+export const HOLDER_META = [14, 11, 12, 27, 3, 31, 25, 1462, 4, 392];
+for (let i = 1; i <= 10; i++) { OWNED['0x' + (0xb00 + i).toString(16).padStart(40, '0')] = [1000 + i]; META[1000 + i] = HOLDER_META[i - 1]; }
 const word = (n: number) => n.toString(16).padStart(64, '0');
 async function fakeChain(init: RequestInit): Promise<Response> {
   const calls = JSON.parse(String(init.body)) as { id: number; method: string; params: [{ to: string; data: string }] }[];

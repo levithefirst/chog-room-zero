@@ -184,7 +184,8 @@ export class OnlineSession {
     this.pendingQueue = null;
   }
 
-  leave(): void {
+  leave(why = ''): void {
+    this.note(`leave ${this.state}${why ? ' ' + why : ''}`);
     this.pendingQueue = null;
     this.lastQueue = null;
     this.send({ t: 'leave' });

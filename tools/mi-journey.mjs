@@ -12,8 +12,10 @@ const results = [];
 const check = (name, ok, detail = '') => { results.push({ name, ok: !!ok }); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` | ${detail}` : ''}`); };
 const procs = [];
 
+// One debugging port per browser, never reused in this run (random ports could collide: two "devices" on one page).
+const PORT0 = 9400 + Math.floor(Math.random() * 40) * 10; let portN = 0;
 async function browser(label, w = 1280, h = 720) {
-  const port = 9400 + Math.floor(Math.random() * 500);
+  const port = PORT0 + portN++;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), `rz-${label}-`));
   const proc = spawn(process.env.CHROME_BIN ?? 'google-chrome', ['--headless=new', '--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required', `--user-data-dir=${dir}`, `--remote-debugging-port=${port}`, 'about:blank'], { stdio: 'ignore' });
   procs.push({ proc, dir });

@@ -9,8 +9,11 @@ const killGroup = (proc) => { try { process.kill(-proc.pid, 'SIGKILL'); } catch 
 process.on('exit', () => { for (const proc of live) killGroup(proc); });
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => process.exit(130));
 
+const PORT0 = 9100 + Math.floor(Math.random() * 40) * 20; let portN = 0;
+
 export async function browser(label, { base, shotDir, w = 1280, h = 720, mobile = false, touch = false } = {}) {
-  const port = 9100 + Math.floor(Math.random() * 800);
+  // One port per browser, never reused by this process: random ports collided, and two clients then drove one page.
+  const port = PORT0 + portN++;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), `rz-${label}-`));
   const proc = spawn(process.env.CHROME_BIN ?? 'google-chrome', ['--headless=new', '--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required',
     '--disable-background-timer-throttling', '--disable-renderer-backgrounding', `--user-data-dir=${dir}`, `--remote-debugging-port=${port}`, 'about:blank'], { stdio: 'ignore', detached: true });
