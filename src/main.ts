@@ -2023,7 +2023,8 @@ async function start() {
       tmap: () => ({ open: tmap.open, ...tmap.last() }),
       resolution: () => renderer.app.renderer.resolution, volume: () => audio.volume,
       // RC-8 online (tools/rc8-online.mjs): the session and whether the shown world is an online match. Test builds only.
-      ...(__TEST_HOOKS__ ? { net: () => net, online: () => online } : {}) });
+      // Contact intel (tools/tm-map.mjs: every hostile known live is on the map). Test builds only.
+      ...(__TEST_HOOKS__ ? { net: () => net, online: () => online, intel: () => matchIntel } : {}) });
     (window as unknown as { __chog: unknown }).__chog = hook;
   }
 
