@@ -12,6 +12,10 @@ try {
   await fetch(`${base}/__test/slow?ms=20000`);
   const a = await browser('slow-api', { base, shotDir }); open.push(a);
   await a.go('/?debug'); await a.ev(`localStorage.setItem('chog.onboarded','1')`);
+  // Let that first page finish booting before timing the next load: navigating away 300 ms in, while it was still
+  // starting the renderer (1-3 s of one main-thread task on software GL), held the new page's start for up to 4 s and
+  // was counted as loading time (production dde3f5a failed the same way, 2026-10-21).
+  await a.until(`!document.getElementById('boot')`, 20000);
   const t0 = Date.now();
   await a.go('/?debug');
   const hub = await a.hub();

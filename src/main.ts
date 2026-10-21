@@ -485,7 +485,8 @@ async function start() {
     const c = capturingKey;
     if (!c) return;
     stopCapture();
-    bindNote = rebind(c.action, c.slot, code) ? '' : `${keyLabel(code)} is kept for menus: pick another key.`;
+    // Enter, Tab and the system keys stay with menus and the browser; extra mouse buttons (back, forward) are not bindable.
+    bindNote = rebind(c.action, c.slot, code) ? '' : /^Mouse/.test(code) ? 'That mouse button cannot be bound: pick a key or the left, middle or right button.' : `${keyLabel(code)} is kept for menus: pick another key.`;
     render();
   }
   // Capture phase, before the game and the menus see the press.
