@@ -79,6 +79,8 @@ describe('controls match the input code', () => {
     expect(docs).toMatch(/M, Esc or RETURN closes it/);
     expect(text('controls')).toMatch(/Space or Q Ability/);
     expect(text('controls')).toMatch(/Esc or P Pause/);
+    // Claude's rebindable PC keys (0c0e504): the library names the Controls screen and that the table shows defaults.
+    expect(text('controls')).toMatch(/Settings, Change keys lets you rebind each action/);
   });
 });
 

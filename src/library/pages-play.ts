@@ -125,7 +125,7 @@ export const controls: Page = {
       `Ability button: tap. Grenade button: tap to throw ${TUNING.grenade.touchThrow} m along your aim, or drag from it to aim the throw. Reload button: R.`,
       'MAP opens the tactical map; the pause button is top right.'])}${shot('touch-hud', 'The touch HUD on an 844 x 390 landscape phone (emulated).')}` },
     { id: 'tablet', title: 'Tablet', keywords: ['ipad', 'tablet'], html: `<p>Tablets use the touch controls above. With a keyboard and mouse attached, the desktop controls work too.</p>` },
-    { id: 'settings', title: 'Settings that change controls', keywords: ['settings', 'stick size', 'hud size', 'motion'], html: ul(['Stick size for touch.', 'HUD size (85% to 130%) and Motion (System, Reduced or Full: Reduced removes screen shake, pulses and entrances).']) },
+    { id: 'settings', title: 'Settings that change controls', keywords: ['settings', 'stick size', 'hud size', 'motion', 'rebind', 'change keys', 'key bindings'], html: ul(['PC keys: Settings, Change keys lets you rebind each action; the keys above are the defaults, and Reset to defaults restores them.', 'Stick size for touch.', 'HUD size (85% to 130%) and Motion (System, Reduced or Full: Reduced removes screen shake, pulses and entrances).']) },
   ],
   related: ['start-here', 'movement-sound', 'faq'],
 };
