@@ -1,11 +1,11 @@
 # Chog: Room Zero - shared state
 
 Source of truth. Rules: `docs/RULES.md`. Edit only in a handoff commit. Under 8,000 characters.
-Last verified: 2026-10-21 by claude (H43: H42 map fix live; prod smoke; HANDOFFS H43).
+Last verified: 2026-10-21 by grokbot (H44 release on H43 e9fac04).
 
 ## Snapshot (EVIDENCE)
 - Repo `levithefirst/chog-room-zero`. Base branch `setup/skill-system` (LOCKED 2026-10-11: no `main`); never merge without owner. PR #10 = ccr-e7fadb8f-qtochk (live; claude/h34-maps holds H34-H36). Client and server ship from one commit.
-- Vercel project `chog-room-zero`. Production `chogroomzero.xyz`: H43 (HANDOFFS H43). Rollback: `dpl_EQfyjLNtTN63fKhBYxGALyjF3E9B` (1cd9f96, H41) with Render on 1cd9f96; no migration since H33. No `NFT_COMBAT` (power on). Game server: Render Free `https://room-zero-game.onrender.com` (redeploys on every push to the branch); `ALLOWED_ORIGINS` = production + branch preview.
+- Vercel project `chog-room-zero`. Production `chogroomzero.xyz`: H44 (HANDOFFS H44). Rollback: `dpl_9JnuCPEi2jQ5B7o712DEJuxtxkZb` (e9fac04, H43) with Render on e9fac04; no migration since H33. No `NFT_COMBAT` (power on). Game server: Render Free `https://room-zero-game.onrender.com` (redeploys on every push to the branch); `ALLOWED_ORIGINS` = production + branch preview.
 - Chog Genesis (NFT-R1, EVIDENCE): Monad 143, contract `0xc96d31F8626c6D03Fae5dCD3d61e3FB9F4a73763` (ChogMint, Sourcify), ERC-721, supply 1,969, catalogue in `data/chog-genesis/`; token id is NOT the displayed number. `/api/game/chain` checks it live.
 - Chogathon 2026 (`docs/SUBMISSION.md`): "the Chog NFT must be essential".
 
@@ -30,9 +30,9 @@ Last verified: 2026-10-21 by claude (H43: H42 map fix live; prod smoke; HANDOFFS
 
 ## PROPOSALS (not approved)
 - All tuning numbers, art direction, maps, fonts, CHOG palette (`docs/BRAND.md`), NFT-R1 layers. Deps: @neondatabase/serverless, @electric-sql/pglite (dev), @noble/*.
-- V2 (H31) perks, AI guard, challenges, telemetry; H32-H34 superpower numbers, Visor radii, drills, layouts, rail/deck rules, medal thresholds; H37 map look, 1v1 opponent rule.
+- V2 (H31) perks, AI guard, challenges, telemetry; H32-H34 power numbers, Visor radii, drills, layouts, rail/deck rules, medal thresholds; H37 map look, 1v1 opponent rule.
 - H36: location is a preference: after 10 s anyone in the mode meets on the longest waiter's pick (`anyMapAfterSec`; Infinity = strict per-location queues as H33).
-- Owner decisions open: H36 location rule; server plan for 400 players (Free ~30-40, Starter $7 ~150-200, Standard $25 ~400; estimates); Supermarket solo hard; powers #5/#6; X-Ray trait; Squad/Breach drill; grenade capacity; bot backfill online.
+- Owner decisions open: H36 location rule; server plan for 400 players (estimates: HANDOFFS H36); Supermarket solo hard; powers #5/#6; X-Ray trait; Squad/Breach drill; grenade capacity; bot backfill online.
 
 ## UNKNOWN (never guess)
 - Chog Genesis art and name rights; `baseURI`, totalSupply from chain; metadata hash (`docs/research/chog-genesis/`).
@@ -41,17 +41,19 @@ Last verified: 2026-10-21 by claude (H43: H42 map fix live; prod smoke; HANDOFFS
 
 ## Implemented (EVIDENCE)
 - H34/H35 (live): five locations, 40 medals, protocol 2 (`docs/design/maps.md`).
-- H37 (live): tactical map (MAP, M): the live level, areas, zone, supplies; your side always, hostiles only from your intel, Visor dots; no protocol change. `docs/design/tactical-map.md`.
+- H37 (live): tactical map (MAP, M): live level, areas, zone, supplies, your side, intel traces, Visor dots (H44: plus every living hostile). `docs/design/tactical-map.md`.
 - H36: human 1v1 fixed, queue rejoins (`docs/MULTIPLAYER.md`).
-- H40/H41: hub menu (Leaderboard, Squad as buttons), cinematic loading (`docs/design/ui-audit.md`); H41 QA fixes.
-- UIX + Library (H38, H39, live): UI scale, briefing loading, HUD states, combat feedback, pause card, motion setting, 12 px floor (`docs/design/ui-audit.md`); game Library at /library (20 prerendered pages from game data, search), linked from Game Docs.
+- H40/H41: hub menu, cinematic loading (`docs/design/ui-audit.md`); H41 QA fixes.
+- UIX + Library (H38, H39, live): UI scale, briefing loading, HUD states, combat feedback, pause card, motion setting, 12 px floor (`docs/design/ui-audit.md`); game Library at /library (20 prerendered pages, search).
+- H44: online shards 10 play/10 a kill/30 win (XP, practice 3/3/18, caps same); map shows every living hostile (online map-only `mh`, readable by a modified client; game view unchanged); docs audited.
 
 ## Automated tests (EVIDENCE, Node 22.22)
-H42 (655269f): vitest 1132/1132, tsc clean, tm-map 105/105. H43 prod: smoke 25, gate 8, mp 10, 1v1 8.
-H41 (6f297d7): vitest 1124/1124, 22 browser suites 647/647 (tm-map 105, uix2 111, mobile 66), online 1v1/3v3/5v5-holders PASS.
+H44: vitest 1187/1187, tsc, build OK.
+H42 (655269f): vitest 1132/1132, tsc clean, tm-map 105/105. H43 prod smoke 25, gate 8, mp 10, 1v1 8.
+H41 (6f297d7): vitest 1124/1124, 22 browser suites 647/647, online 1v1/3v3/5v5-holders PASS.
 
 ## Not performed (needs the owner)
-- Human play of CF to H34 (all five locations), real phones, real-GPU FPS, audio by ear, a real wallet, hosted 5v5 with a holder, art rights, demo video.
+- Human play (all five locations), real phones (BLOCKED), real-GPU FPS, audio by ear, a real wallet, hosted 5v5 with a holder, art rights, demo video.
 
 ## Gates
 Core Feel Gate: BLOCKED on owner playtests. G10: automated PASS; playtest not run.
@@ -61,9 +63,10 @@ Core Feel Gate: BLOCKED on owner playtests. G10: automated PASS; playtest not ru
 |---|---|---|---|---|---|
 | TM | claude | ccr-e7fadb8f-qtochk | see H37 | Owner 2026-10-20 TACTICAL MAP | live; owner plays it on a phone |
 | MP, H34/ID/SP | claude | same | see H32-H36 | Owner 2026-10-18/19 | live; owner: 1v1s, server plan |
-| UIX | claude (from grokbot) | ccr-e7fadb8f-qtochk | see H38/H39 | Owner 2026-10-20 UI release | live (PR #12 head in branch) |
-| UIX2+QA | claude | ccr-e7fadb8f-qtochk | see H40-H43 | Owner 2026-10-21 final QA | live (H43) |
+| UIX | claude (from grokbot) | same | see H38/H39 | Owner 2026-10-20 UI release | live (PR #12 head in branch) |
+| UIX2+QA | claude | same | see H40-H43 | Owner 2026-10-21 final QA | live (H43) |
+| SHARDS/MAP | grokbot | same | see H44 | Owner 2026-10-21 | live (H44) |
 | RC-8 | claude | PR #10 | see H16 | Owner RC-8 mandate | PR #10 not merged (owner decides) |
 
 ## Handoffs
-Latest: H43 (claude; map fix live, prod smoke). History: `docs/HANDOFFS.md`.
+Latest: H44 (grokbot; shards, map, docs). History: `docs/HANDOFFS.md`.
