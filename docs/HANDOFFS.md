@@ -590,3 +590,29 @@ Rollback        : dpl_2TBbX4DPr1iTefTGeaLw8sW78aRF (7129a3e, H37) with Render on
 Locked decisions touched : none
 Next smallest task : owner plays one solo run and one 1v1 on a phone at chogroomzero.xyz, opens the map mid-fight: "readable at a glance?"; files: none.
 ```
+
+```
+HANDOFF H40  2026-10-21  claude -> owner
+Branch @ commit : claude/uix2-hub-loading @ 8a62b6f6d16e33c9e386334fcf49d0fc4cb07afc (code; this handoff is docs only), from aaa5cd8 (H39)   pushed: yes
+                  Not pushed to ccr-e7fadb8f-qtochk on purpose: Render redeploys production from that branch; the owner asked for no production deploy yet.
+Task            : owner 2026-10-20 hub + loading pass. Leaderboard and Squad panels off the hub: compact menu buttons (one family with
+                  Upgrades, Medals, Career, Game Docs); Squad opens its own screen (same Create, code, Join, members, Leave). Loading
+                  redesigned: the picked location drawn from its real tiles (lit areas, area names) under a lamp, wordmark, the game's
+                  line, deploy card with the operator portrait, real step + bar. Fixed: the bottom bar swallowed taps on the menu (phones).
+Files changed   : index.html, src/main.ts, src/ui/hub.ts, src/ui/mapPreview.ts, src/ui/stage.ts (body.tiny <= 380 px), tests/account-ui.test.ts,
+                  tools/uix2-hub-loading.mjs (new), tools/id-maps.mjs, tools/h34-blink.mjs, tools/qa-journey.mjs, tools/mi-journey.mjs, docs/design/ui-audit.md
+Tests run       : npx tsc --noEmit -> clean; env -u DATABASE_URL npx vitest run -> 1124/1124 (run alone; a run beside the browser batch had 1-4 load timeouts,
+                  rerun clean); npm run build -> ok (744.2 / 242.8 kB gz). Browser (headless Chrome, emulated, local stack): qa-journey 39/39, gp-ui 34/34,
+                  master-ui pass, qa-rewards 13/13, sp-training 21/21, sp-online 8/8, id-maps 39/39, tm-map 105/105, h34-blink 40/40, qa-screens 0 problems,
+                  qa-errors 7/7, library-qa 0 problems, uix2-hub-loading 111/111 (11 viewports 320x568 to 3440x1440 + reduced motion);
+                  rc8-online: 3v3 failed once in the batch (no client matched in 40 s, 6 browsers), one rerun alone 1v1 + 3v3 PASS.
+Preview         : dpl_3mD1v1YWYqZZNtPVBvDKeP8MhT9r https://chog-room-zero-cpm8alqh5-levithefirst-1227s-projects.vercel.app READY (sha 8a62b6f);
+                  smoke in a Vercel Sandbox (puppeteer) 15/15 at 1920x1080, 844x390, 390x844. Production untouched (aaa5cd8, Render aaa5cd8).
+Known failures  : none
+Blockers        : none
+Not verified    : real phones; online and the Squad button on the preview (the preview has no game-server address: VITE_GAME_SERVER_URL
+                  is scoped to the ccr branch, and Render ALLOWED_ORIGINS lists only the ccr preview); squad flow verified on the local stack.
+Locked decisions touched : none
+Next smallest task : owner opens the preview on a phone: "is PLAY the first thing you see; can you still find Squad?"; then approves production
+                  (merge into ccr-e7fadb8f-qtochk, push, deploy Vercel at that sha); files: none.
+```
