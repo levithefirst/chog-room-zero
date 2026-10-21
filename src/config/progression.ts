@@ -1,5 +1,5 @@
 // Account progression (master build, stage C): XP, levels, shards and rating. Online matches are validated by the game
-// server; solo practice pays a smaller, capped amount (owner 2026-10-17). Shared by the Vercel settlement
+// server; solo practice pays less XP and is capped per day (owner 2026-10-17; shards as online since 2026-10-21). Shared by the Vercel settlement
 // (api/_lib/game.ts, api/_lib/career.ts) and the client UI, so the numbers players see are the ones applied.
 // Rating is separate from character power: it is adjusted for the power gap, so beating a weaker profile earns less.
 import type { Tier } from './power';
@@ -26,19 +26,19 @@ export const REWARDS = {
 
 /**
  * Solo practice vs bots (owner 2026-10-17: "players need to earn progression even when they lose"). The run is simulated
- * in the browser, so it pays less than a validated online match and a day's practice is capped (PRACTICE_SHARDS_PER_DAY
- * in api/_lib/career.ts). Owner 2026-10-21: a run pays 3 shards, each kill 3 (the online rate before 2026-10-21's 10), a clear 18. A clear with
- * no kills (21) ties the theoretical best loss (3 + 5 kills + 3 damage = 21); in solo a loss never has 5 kills (all five
- * hostiles down is a clear), so every real clear still out-pays every real loss.
+ * in the browser, so it pays less XP than a validated online match and a day's practice is capped (PRACTICE_SHARDS_PER_DAY
+ * in api/_lib/career.ts). Owner 2026-10-21 (t30u): practice shards match online, a run 10, each kill 10, a clear 30 (was
+ * 3 / 3 / 18); XP, the kill cap, the damage bonus, the minimum length and the caps are unchanged. "Every clear out-pays
+ * every loss" is superseded here as it was online: a clear pays more than the same run lost.
  */
 export const PRACTICE_REWARDS = {
   xpPlay: 20,
   xpWin: 30,
   xpPerKill: 5,
   maxKills: 5,
-  shardsPlay: 3,
-  shardsWin: 18,
-  shardsPerKill: 3,
+  shardsPlay: 10,
+  shardsWin: 30,
+  shardsPerKill: 10,
   damagePerShard: 100,
   damageShardsMax: 3,
   minSeconds: 20,
@@ -73,8 +73,8 @@ export interface RewardFacts {
 
 /**
  * What one match pays, line by line: the server applies exactly these numbers and the results screen prints them.
- * Kills and damage are capped per match, and the win bonus is larger than everything a loss can pay on top of
- * participation, so farming kills never beats winning.
+ * Kills and damage are capped per match. A win always pays more than the same match lost (owner 2026-10-21: the
+ * win bonus no longer has to beat every possible loss).
  */
 export function rewardBreakdown(f: RewardFacts, t: RewardTable = REWARDS): RewardBreakdown {
   const none: NoReward = f.demo ? 'demo' : f.lab ? 'lab' : f.private ? 'private' : f.unverified ? 'unverified' : f.leftEarly ? 'left' : f.seconds < t.minSeconds ? 'short' : f.capped ? 'cap' : null;

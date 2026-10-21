@@ -71,6 +71,19 @@ describe('no stale claims', () => {
   });
 });
 
+describe('practice shards are 10 / 10 / 30 too (owner 2026-10-21 t30u)', () => {
+  it('the Rewards table, the solo note and the in-game docs show practice 10 a run, +10 a kill, +30 a clear', () => {
+    expect([PRACTICE_REWARDS.shardsPlay, PRACTICE_REWARDS.shardsPerKill, PRACTICE_REWARDS.shardsWin]).toEqual([10, 10, 30]);
+    const r = text('rewards');
+    expect(r).toContain(`Match played ${REWARDS.xpPlay} 10 ${PRACTICE_REWARDS.xpPlay} 10`);
+    expect(r).toContain(`Victory +${REWARDS.xpWin} +30 +${PRACTICE_REWARDS.xpWin} +30`);
+    expect(r).toContain(`Per kill (up to 5) +${REWARDS.xpPerKill} +10 +${PRACTICE_REWARDS.xpPerKill} +10`);
+    expect(text('game-modes')).toContain('the same shards as online for playing, kills and a clear');
+    expect(all).not.toMatch(/smaller than online/);
+    expect(docs).toContain(`Solo (signed in): 10 shards and ${PRACTICE_REWARDS.xpPlay} XP a run, 10 shards and ${PRACTICE_REWARDS.xpPerKill} XP per kill (up to 5), 30 shards and ${PRACTICE_REWARDS.xpWin} XP for a clear`);
+  });
+});
+
 describe('controls match the input code', () => {
   it('desktop: ability Space or Q, pause Esc or P, map M; the map closes with M, Esc or RETURN', () => {
     // In-game docs print the live (rebindable, Claude H40+) bindings; with the defaults: "Space / Q", "Esc / P".

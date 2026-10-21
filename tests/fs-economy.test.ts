@@ -16,29 +16,20 @@ describe('every legitimate completed match pays, in the order the owner asked fo
       expect(pay(t, false, 0, 0)).toBeGreaterThan(0);
       expect(pay(t, false, 1, 0)).toBeGreaterThan(pay(t, false, 0, 0));
       expect(pay(t, false, 1, 300)).toBeGreaterThan(pay(t, false, 1, 0));
-      if (name === 'practice') {
-        // Practice (Claude, owner 2026-10-21 table 3 / 3 / 18): the worst clear beats the best loss. A solo practice
-        // loss has at most 4 kills (all five hostiles down is a clear).
-        let bestLoss = 0;
-        for (let k = 0; k <= 4; k++) for (const d of [0, 100, 300, 1000, 5000]) bestLoss = Math.max(bestLoss, pay(t, false, k, d));
-        expect(pay(t, true, 0, 0)).toBeGreaterThan(bestLoss);
-      } else {
-        // Online (owner 2026-10-21: shards 10 / 10 / 30; the old "worst win beats the best loss" rule is superseded):
-        // a win pays more than the same match lost.
-        for (let k = 0; k <= 8; k++) for (const d of [0, 100, 300, 1000, 5000]) expect(pay(t, true, k, d)).toBeGreaterThan(pay(t, false, k, d));
-      }
+      // Owner 2026-10-21: shards 10 / 10 / 30 online and (t30u) in practice; the old "worst win beats the best loss" rule
+      // is superseded for both: a win pays more than the same match lost.
+      for (let k = 0; k <= 8; k++) for (const d of [0, 100, 300, 1000, 5000]) expect(pay(t, true, k, d)).toBeGreaterThan(pay(t, false, k, d));
       expect(pay(t, true, 0, 0)).toBeGreaterThanOrEqual(2 * pay(t, false, 0, 0));
     });
   }
 });
 
 describe('against the upgrade costs and the daily limits', () => {
-  it('the first rank comes in the first session: one online match, or four practice losses (two with a kill each)', () => {
+  it('the first rank comes in the first session: one online match, or one practice loss', () => {
     const cheapest = Math.min(...UPGRADE_IDS.map((id) => UPGRADES[id].costs[0]));
     expect(pay(REWARDS, false, 0, 0)).toBeGreaterThanOrEqual(cheapest);
-    // Owner 2026-10-21 practice table (3 a run): three bare losses pay 9, so four; a kill each makes it two.
-    expect(4 * pay(PRACTICE_REWARDS, false, 0, 0)).toBeGreaterThanOrEqual(cheapest);
-    expect(2 * pay(PRACTICE_REWARDS, false, 1, 0)).toBeGreaterThanOrEqual(cheapest);
+    // Owner 2026-10-21 (t30u) practice table (10 a run): one bare loss pays the cheapest first rank.
+    expect(pay(PRACTICE_REWARDS, false, 0, 0)).toBeGreaterThanOrEqual(cheapest);
     expect(pay(PRACTICE_REWARDS, true, 0, 0)).toBeGreaterThanOrEqual(cheapest);
   });
   it('not trivially farmable: even playing to every daily cap with perfect results takes more than a day to max out', () => {
