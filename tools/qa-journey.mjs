@@ -51,8 +51,10 @@ try {
   // ---- 1. Guest: loading, hub, Sign in opens the sign-in sheet (not Settings), Google returns to the hub signed in ----
   const A = await B('alice');
   await A.go('/?debug'); await A.ev(`localStorage.setItem('chog.onboarded','1')`);
+  // Recorded from inside the page while it loads (polling from outside after navigating could miss a fast local boot).
+  await A.cmd('Page.addScriptToEvaluateOnNewDocument', { source: `document.addEventListener('DOMContentLoaded', () => { const t = setInterval(() => { const b = document.getElementById('boot'), tip = document.getElementById('boottip'); if (b && tip && tip.textContent && !b.classList.contains('done')) { window.__bootSeen = { tip: tip.textContent, pct: document.getElementById('bootpct')?.textContent }; clearInterval(t); } }, 10); setTimeout(() => clearInterval(t), 20000); });` });
   await A.go('/?debug&google_sub=alice-g');
-  const boot = await A.until(`(() => { const b = document.getElementById('boot'); return b && document.getElementById('boottip')?.innerText ? { tip: document.getElementById('boottip').innerText } : null; })()`, 5000);
+  const boot = await A.until(`window.__bootSeen || null`, 8000);
   check('loading: its own full screen with tip and progress before the hub', boot);
   await A.hub(); await sleep(500); await A.shot('01-hub-guest');
   const guest = await A.ev(`({ chip: document.getElementById('callsign').innerText, sub: document.querySelector('.player-chip small')?.innerText ?? null })`);

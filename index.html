@@ -367,6 +367,9 @@
       .err { color: var(--hostile) !important; min-height: 1.2em; font-size: 14px !important; margin: 6px 0 0 !important; } .ok { color: var(--heal) !important; font-size: 14px !important; margin: 0 !important; }
       /* How to play */
       .howto-card { max-width: 860px; }
+      /* Final QA 2026-10-21: on a short phone these cards scroll (How to play; results with medals earned); their buttons
+         stay pinned in view, so a first-time player never has to discover the scroll to leave or play again. */
+      .howto-card > .btns, #overlay .card.results > .btns { position: sticky; bottom: 0; margin-bottom: 0; padding: 14px 0 6px; background: linear-gradient(rgba(14, 9, 28, 0), rgba(14, 9, 28, .96) 40%); z-index: 1; }
       .howto-grid { display: grid; grid-template-columns: minmax(180px, 280px) 1fr; gap: 16px; align-items: center; margin-top: 6px; }
       .controls { width: 100%; height: auto; }
       /* Online (RC-8) */

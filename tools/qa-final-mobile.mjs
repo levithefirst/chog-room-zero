@@ -15,6 +15,7 @@ const ALL = [
 const pick = process.env.VIEWS?.split(',');
 const VIEWS = pick ? ALL.filter((v) => pick.includes(v.name)) : ALL;
 const results = [];
+const R = {};
 const check = (name, ok, detail = '') => { results.push({ name, ok: !!ok }); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` | ${String(detail).slice(0, 500)}` : ''}`); return !!ok; };
 
 // Controls the player uses in a match, by view. Touch adds Reload; desktop shows the same HUD minus touch-only parts.
@@ -39,7 +40,9 @@ try {
     await b.go('/?debug'); await b.until(`document.readyState !== 'loading'`, 20000);
     await b.ev(`localStorage.setItem('chog.onboarded','1'); localStorage.setItem('chog.map','room-zero')`);
     await b.go('/?debug');
-    if (!check(`${v.name}: the hub loads`, await b.hub())) continue;
+    // Up to 60 s, timed: a 3440 px canvas in software rendering beside other browsers can pass 30 s (measured).
+    const tHub = Date.now(); const hubOk = await b.until(`!!document.getElementById('hub') && !document.getElementById('boot')`, 60000);
+    if (!check(`${v.name}: the hub loads`, hubOk, `${Date.now() - tHub} ms`)) continue;
     await b.click('[data-mode="solo"]'); await b.click('#playbtn');
     if (!check(`${v.name}: PLAY starts a solo run`, await b.until(`__chog.phase === 'play'`, 30000))) continue;
     await sleep(1500);
@@ -61,19 +64,24 @@ try {
       const s0 = at(0.18, 0.62), s1 = at(0.27, 0.62);
       await touch('touchStart', [{ ...s0, id: 1 }]);
       for (let k = 1; k <= 6; k++) { await touch('touchMove', [{ x: s0.x + (s1.x - s0.x) * k / 6, y: s0.y + (s1.y - s0.y) * k / 6, id: 1 }]); await sleep(40); }
-      await sleep(1200);
+      const km = await b.ev(`__chog.world.tick`); await b.until(`__chog.world.tick >= ${km} + 60`, 30000);
       const p1 = await me();
       await touch('touchEnd', []);
       check(`${v.name}: left thumb moves the operator`, Math.hypot(p1.x - p0.x, p1.y - p0.y) > 0.8, JSON.stringify({ from: [p0.x, p0.y], to: [p1.x, p1.y] }));
       // Right thumb: press outside the deadzone and hold: it aims and fires; lifting stops firing.
-      const r0 = at(0.78, 0.55), r1 = at(0.88, 0.45);
+      // Start where a right thumb lands that is not on a HUD control (on a 320x568 phone the natural spot is the Ability
+      // button: logged as P2 in the final QA; this checks the fire stick itself).
+      let rs = null;
+      for (const [fx, fy] of [[0.78, 0.55], [0.78, 0.35], [0.7, 0.35], [0.85, 0.3], [0.66, 0.8]]) { const q = at(fx, fy); if (await b.ev(`!document.elementFromPoint(${q.x}, ${q.y})?.closest('button, #hud .panel, #hint')`)) { rs = [fx, fy]; break; } }
+      R.rightStart = rs;
+      const r0 = at(rs[0], rs[1]), r1 = at(Math.min(0.95, rs[0] + 0.1), rs[1] - 0.1);
       const a0 = (await me()).ammo;
       await touch('touchStart', [{ ...r0, id: 2 }]);
       for (let k = 1; k <= 6; k++) { await touch('touchMove', [{ x: r0.x + (r1.x - r0.x) * k / 6, y: r0.y + (r1.y - r0.y) * k / 6, id: 2 }]); await sleep(40); }
-      await sleep(900);
+      const k0 = await b.ev(`__chog.world.tick`); await b.until(`__chog.world.tick >= ${k0} + 30`, 30000);
       await touch('touchEnd', []);
-      const a1 = (await me()).ammo; await sleep(600); const a2 = (await me()).ammo;
-      check(`${v.name}: right thumb outside the deadzone fires; lifting it stops`, a1 < a0 && a2 === a1, JSON.stringify({ a0, a1, a2 }));
+      const a1 = (await me()).ammo; const k1 = await b.ev(`__chog.world.tick`); await b.until(`__chog.world.tick >= ${k1} + 30`, 30000); const a2 = (await me()).ammo;
+      check(`${v.name}: right thumb outside the deadzone fires; lifting it stops`, a1 < a0 && a2 === a1, JSON.stringify({ a0, a1, a2, start: R.rightStart }));
       // Reload control.
       const rr = await b.ev(`(() => { const r = document.getElementById('reload').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
       await touch('touchStart', [{ ...rr, id: 3 }]); await sleep(120); await touch('touchEnd', []);
@@ -100,14 +108,22 @@ try {
       check(`${v.name}: pause opens; Resume returns to play`, pz && (await b.until(`__chog.phase === 'play'`, 4000)));
     } else {
       const key = async (code, k, vk, ms = 0) => { await b.cmd('Input.dispatchKeyEvent', { type: 'keyDown', code, key: k, windowsVirtualKeyCode: vk }); if (ms) await sleep(ms); await b.cmd('Input.dispatchKeyEvent', { type: 'keyUp', code, key: k, windowsVirtualKeyCode: vk }); };
-      await key('KeyD', 'd', 68, 1200);
-      const p1 = await me();
-      check(`${v.name}: WASD moves the operator`, Math.hypot(p1.x - p0.x, p1.y - p0.y) > 0.8, JSON.stringify({ from: [p0.x, p0.y], to: [p1.x, p1.y] }));
+      // Hold D until the operator has moved, up to one GAME second (60 ticks; the headless sim runs slow, see below).
+      await b.cmd('Input.dispatchKeyEvent', { type: 'keyDown', code: 'KeyD', key: 'd', windowsVirtualKeyCode: 68 });
+      const kd = await b.ev(`__chog.world.tick`); let p1 = p0;
+      while (!(await b.ev(`__chog.world.tick >= ${kd} + 60`))) { await sleep(150); p1 = await me(); if (Math.hypot(p1.x - p0.x, p1.y - p0.y) > 0.8) break; }
+      await b.cmd('Input.dispatchKeyEvent', { type: 'keyUp', code: 'KeyD', key: 'd', windowsVirtualKeyCode: 68 });
+      p1.fps = await b.ev(`Math.round(__chog.fps)`);
+      check(`${v.name}: WASD moves the operator`, Math.hypot(p1.x - p0.x, p1.y - p0.y) > 0.8, JSON.stringify({ from: [p0.x, p0.y], to: [p1.x, p1.y], fps: p1.fps }));
       const a0 = p1.ammo, cx = v.w * 0.7, cy = v.h * 0.4;
       await b.cmd('Input.dispatchMouseEvent', { type: 'mouseMoved', x: cx, y: cy });
-      await b.cmd('Input.dispatchMouseEvent', { type: 'mousePressed', x: cx, y: cy, button: 'left', buttons: 1, clickCount: 1 }); await sleep(700);
+      // Held for half a GAME second (30 sim ticks), not wall time: software-rendered headless Chrome runs the sim at 3-5
+      // ticks a second at these sizes (measured), so a fixed wall-clock hold proved nothing either way.
+      const k0 = await b.ev(`__chog.world.tick`);
+      await b.cmd('Input.dispatchMouseEvent', { type: 'mousePressed', x: cx, y: cy, button: 'left', buttons: 1, clickCount: 1 });
+      await b.until(`__chog.world.tick >= ${k0} + 30`, 30000);
       await b.cmd('Input.dispatchMouseEvent', { type: 'mouseReleased', x: cx, y: cy, button: 'left', buttons: 0, clickCount: 1 });
-      const a1 = (await me()).ammo; await sleep(500); const a2 = (await me()).ammo;
+      const a1 = (await me()).ammo; const k1 = await b.ev(`__chog.world.tick`); await b.until(`__chog.world.tick >= ${k1} + 30`, 30000); const a2 = (await me()).ammo;
       check(`${v.name}: holding the left button fires; releasing stops`, a1 < a0 && a2 === a1, JSON.stringify({ a0, a1, a2 }));
       await key('KeyR', 'r', 82);
       check(`${v.name}: R reloads`, await b.until(`(() => { const a = __chog.world.actors[0]; return a.ammo === a.weapon.magazine || a.reloadLeft > 0 || !!document.getElementById('weapon')?.classList.contains('reloading'); })()`, 6000));

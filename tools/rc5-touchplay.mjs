@@ -38,15 +38,23 @@ const center = (sel) => ev(`(()=>{const e=document.querySelector(${JSON.stringif
 async function tap(sel, tid = 30) { const c = await center(sel); if (!c) return false; await down(tid, c[0], c[1]); await up(tid); return true; }
 const phase = () => ev('__chog.phase');
 async function waitPhase(want, ms = 10000) { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (want.includes(await phase())) return true; await sleep(50); } return false; }
-const shot = async (name) => { if (!shotDir) return; const s = await cmd('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(`${shotDir}/rc5-${size}-${name}.png`, Buffer.from(s.data, 'base64')); };
+const shot = async (name) => { if (!shotDir) return; fs.mkdirSync(shotDir, { recursive: true }); const s = await cmd('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(`${shotDir}/rc5-${size}-${name}.png`, Buffer.from(s.data, 'base64')); };
 
 await cmd('Page.navigate', { url: `${base}/?debug&nooverlay&pilot=11` }); await sleep(2500);
 await ev(`localStorage.clear();localStorage.setItem('chog.hero',${JSON.stringify(hero)})`);
-await cmd('Page.navigate', { url: `${base}/?debug&nooverlay&pilot=11` }); await sleep(3000);
+await cmd('Page.navigate', { url: `${base}/?debug&nooverlay&pilot=11` }); await sleep(1000);
+// Final QA 2026-10-21: wait for the game (a fixed 3 s was too short on a loaded host: __chog was not there yet).
+for (let i = 0; i < 160 && !(await ev(`!!window.__chog && !document.getElementById('boot')`)); i++) await sleep(250);
 S = await ev('__chog.stage()');
 const out = { base, size, hero, stage: S, label: 'SCRIPTED decisions, real touch events (emulated), headless Chrome; NOT a physical phone', steps: {} };
-out.steps.menus = (await tap('[data-act="howto-close"]')) && (await sleep(300), await tap('[data-go="start"]')) && (await sleep(400), await tap('[data-go="pick"]')) && (await waitPhase(['play']));
+// The first-run How to play, then the hub (CF): Vs bots, PLAY (all by touch).
+// After Got it, wait for the hub and its 0.7 s entry (a tap during the scale-in can land on the button beside it).
+const hubIn = async () => { for (let i = 0; i < 60; i++) { if (await ev(`!!document.querySelector('[data-mode="solo"]')`)) { await sleep(900); return true; } await sleep(100); } return false; };
+// With ?pilot (the scripted decisions) closing How to play starts the run itself; without it, the hub's PLAY does.
+out.steps.menus = (await tap('[data-act="howto-close"]')) && ((await waitPhase(['play'], 4000)) || ((await hubIn()) && (await tap('[data-mode="solo"]')) && (await sleep(300), await tap('#playbtn')) && (await waitPhase(['play'], 20000))));
 // Stick bases (stage coordinates, landscape): where thumbs rest on a phone held sideways.
+// The solo results titles (src/ui/screens.ts practiceResultsHtml).
+const RESULT_TITLE = /^(Room cleared|Run over)$/;
 const L0 = { x: S.w * 0.18, y: S.h * 0.72 }, R0 = { x: S.w * 0.72, y: S.h * 0.55 };
 const stat = { samples: 0, moveSamples: 0, fireSamples: 0, reloadTaps: 0, abilityTaps: 0, maxVisible: 0, offscreenMarks: 0, shotWithEnemy: false };
 let lastReloadTap = 0, lastAbilityTap = 0;
@@ -85,11 +93,11 @@ out.steps.play = stat; out.steps.result = res;
 await sleep(1000); // past the 0.75 s summary lock
 await ev('window.__w0=__chog.world');
 out.steps.again = (await tap('[data-go="restart"]')) && (await waitPhase(['play'], 10000)) && (await ev('__chog.world!==window.__w0&&__chog.world.tick<600'));
-const recs = await ev(`JSON.parse(localStorage.getItem('chog-room-zero:records:v1')||'null')`);
-out.steps.records = recs?.heroes?.[hero] ?? null;
+// Owner 2026-10-14: a guest run keeps no history on the device (localStorage holds preferences only): none expected.
+out.steps.localRecords = await ev(`localStorage.getItem('chog-room-zero:records:v1')`);
 out.consoleErrors = errors;
 out.pass = S.w >= S.h && !!out.steps.menus && stat.moveSamples > 0 && stat.fireSamples > 0 && res.shots > 0 && res.phase === 'results' && ['won', 'dead'].includes(res.outcome)
-  && /Room cleared|Run over/.test(res.h2 ?? '') && !!out.steps.again && (out.steps.records?.runs ?? 0) >= 1 && errors.length === 0;
+  && RESULT_TITLE.test(res.h2 ?? '') && !!out.steps.again && out.steps.localRecords === null && errors.length === 0;
 fs.writeFileSync(outFile, JSON.stringify(out, null, 1));
 console.log(`${out.pass ? 'PASS' : 'FAIL'} ${size} ${hero}: ${res.outcome} at ${res.simSeconds}s, kills ${res.kills}/5, shots ${res.shots}, hits ${res.hits}/${res.bullets}, reload taps ${stat.reloadTaps}, ability taps ${stat.abilityTaps}, max visible ${stat.maxVisible}, offscreen marks ${stat.offscreenMarks}; results "${res.h2}"; Again -> new run ${out.steps.again}; best ${JSON.stringify(out.steps.records)}; console errors ${errors.length}`);
 chrome.kill(); process.exit(0);
