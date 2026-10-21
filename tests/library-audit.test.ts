@@ -73,8 +73,9 @@ describe('no stale claims', () => {
 
 describe('controls match the input code', () => {
   it('desktop: ability Space or Q, pause Esc or P, map M; the map closes with M, Esc or RETURN', () => {
-    expect(docs).toContain('Ability Space or Q');
-    expect(docs).toContain('Pause Esc or P');
+    // In-game docs print the live (rebindable, Claude H40+) bindings; with the defaults: "Space / Q", "Esc / P".
+    expect(docs).toContain('Ability Space / Q');
+    expect(docs).toContain('Pause Esc / P');
     expect(docs).toMatch(/M, Esc or RETURN closes it/);
     expect(text('controls')).toMatch(/Space or Q Ability/);
     expect(text('controls')).toMatch(/Esc or P Pause/);
