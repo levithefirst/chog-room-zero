@@ -616,3 +616,34 @@ Locked decisions touched : none
 Next smallest task : owner opens the preview on a phone: "is PLAY the first thing you see; can you still find Squad?"; then approves production
                   (merge into ccr-e7fadb8f-qtochk, push, deploy Vercel at that sha); files: none.
 ```
+
+```
+HANDOFF H41  2026-10-21  claude -> owner
+Branch @ commit : claude/uix2-hub-loading @ 6f297d7 (code), merged fast-forward into ccr-e7fadb8f-qtochk with this handoff; pushed: yes
+Task            : owner 2026-10-21 FINAL PRE-SUBMISSION QA (free player, CHOG holder, 1v1/3v3/5v5, mobile, regression), then release
+                  the hub + loading pass (H40) with the fixes. No features, no redesign, no balance change.
+Product bugs    : P2 FIXED first-run How to play: on 320x568-375x667 phones Got it sat below the fold (card scrolls) -> pinned in view.
+                  P2 FIXED results with new medals on a short phone: Continue / Again below the fold -> pinned in view (index.html CSS).
+                  P2 OPEN 320x568 phone: the natural right-thumb spot is the Ability button (fire works from the free area; moving the
+                  touch controls is a layout change, out of scope). No P0, no P1 found.
+Test bugs fixed : debugging ports collided (random) -> two client handles drove one page, PLAY twice = Cancel, 3v3 stuck at 4/6
+                  (reproduced 2 in 7; after the fix 12/12 matchmaking runs); results sampled at a fixed 1.5 s (one slow frame at 10 fps) ->
+                  waits, timed (all clients 0.17-0.59 s); holds measured in wall time while headless software rendering runs the sim at
+                  3-5 ticks/s -> game ticks; rc5-touchplay stale menus/records; qa-journey loading check raced a fast boot; stale local DB.
+                  tools/mi-journey.mjs left stale (asserts the hub leaderboard panel removed in H40); its journeys are in qa-journey.
+Added checks    : rc8-online HOLDERS=1 5v5 of ten verified test holders (every power, no power, a 1:1) through the real ticket check;
+                  a 4 s network drop mid-1v1 (no reload) returns to the same match; tools/qa-final-mobile.mjs (6 views, HUD fit, touch
+                  move/fire, no auto-fire, reload, ability, map, pause); /tmp ticket adversarial script (10 checks, in HANDOFFS only).
+Tests run       : npx tsc --noEmit clean; env -u DATABASE_URL npx vitest run 1124/1124; npm run build ok (744.3 / 242.8 kB gz).
+                  Final batch on 6f297d7 (headless Chrome, emulated, local stack): qa-journey 39/39, gp-ui 34/34, master-ui pass, qa-rewards 13/13,
+                  sp-training 21/21, sp-online 8/8, id-maps 39/39, tm-map 105/105, h34-blink 40/40, qa-screens 65 screens 0 problems, qa-errors 7/7,
+                  library-qa 9 views 0 problems, uix2 111/111, qa-final-mobile 66/66, fs-wallet 29/29, rc5 touch matches 4/4 (320x568, 375x667,
+                  390x844, 844x390), online 1v1 14/14 (reload resume + network drop) 3v3 12/12, 5v5 holders 13/13, ticket adversarial 10/10.
+Holder evidence : powers online: laser/visor/bubble/drool/aura holders 150 health with their power; no-power holders 200 with the operator
+                  ability; the 1:1 keeps its signature at 200. Guest, Google-only, no-Chog wallet and wrong-token requests get free tickets;
+                  a forged ticket is refused. All on the faked chain: NOT a real wallet.
+Known failures  : none in the final run.
+Not verified    : real phones; a real CHOG wallet (no key available; never simulated in production); real-GPU frame rates.
+Locked decisions touched : none
+Next smallest task : owner plays the free journey and the holder journey with a real wallet on a phone; files: none.
+```
