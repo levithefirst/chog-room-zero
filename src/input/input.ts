@@ -3,11 +3,17 @@ import type { Vec2 } from '../sim/sim';
 import type { ActorInput } from '../sim/world';
 import { TUNING } from '../config/tuning';
 import { stage, toStage } from '../ui/stage';
+import { actionOf, bindings, type Action, type Bindings } from './bindings';
 
-/** Pure: held KeyboardEvent.code values -> move vector. Opposites cancel; diagonals normalized. +y is down. */
-export function keysToMove(held: ReadonlySet<string>): Vec2 {
-  const x = (held.has('KeyD') ? 1 : 0) - (held.has('KeyA') ? 1 : 0);
-  const y = (held.has('KeyS') ? 1 : 0) - (held.has('KeyW') ? 1 : 0);
+/** Pure: held KeyboardEvent.code values (and Mouse0-2) -> is any binding of the action held? */
+export const actionHeld = (held: ReadonlySet<string>, a: Action, b: Readonly<Bindings> = bindings) => b[a].some((c) => held.has(c));
+
+/** Pure: held KeyboardEvent.code values -> move vector (src/input/bindings.ts: WASD by default). Opposites cancel;
+ *  diagonals normalized. +y is down. */
+export function keysToMove(held: ReadonlySet<string>, b: Readonly<Bindings> = bindings): Vec2 {
+  const on = (a: Action) => (actionHeld(held, a, b) ? 1 : 0);
+  const x = on('right') - on('left');
+  const y = on('down') - on('up');
   if (x !== 0 && y !== 0) return { x: x * Math.SQRT1_2, y: y * Math.SQRT1_2 };
   return { x, y };
 }
@@ -65,6 +71,8 @@ export interface Input {
   /** Is the ability key physically held right now (Space or Q)? The touch button is a tap. */
   abilityHeld(): boolean;
   takePause(): boolean;
+  /** A mouse button bound to the tactical map was pressed (keys are handled by the page, src/main.ts). */
+  onMap: (() => void) | null;
   /**
    * Entering play from a menu (Resume, Deploy, Again): drop any fire in progress and ignore fire until the
    * pointer is released and pressed again, so the click that closed the menu can never also shoot.
@@ -89,7 +97,9 @@ export function typing(e: Event): boolean {
   return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || !!t.isContentEditable);
 }
 
-const MOVE_CODES = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ShiftLeft', 'ShiftRight', 'KeyR', 'Space', 'KeyQ']);
+/** Settings > Controls is waiting for a key or button to bind: game input ignores keys until it is done. */
+let capturing = false;
+export function captureKeys(on: boolean): void { capturing = on; }
 
 export function createInput(el: HTMLElement): Input {
   const held = new Set<string>();
@@ -125,9 +135,9 @@ export function createInput(el: HTMLElement): Input {
 
   const inp: Input = {
     mode: matchMedia('(pointer: coarse)').matches ? 'touch' : 'pc',
-    left, right, mouseX: 0, mouseY: 0,
+    left, right, mouseX: 0, mouseY: 0, onMap: null,
     read(ax, ay, pxPerUnit) {
-      const out: ActorInput = { moveX: 0, moveY: 0, quiet: false, aim: lastAim, firing: false, reload: reloadQueued, ability: abilityQueued || held.has('Space') || held.has('KeyQ'), grenade: grenadeQueued };
+      const out: ActorInput = { moveX: 0, moveY: 0, quiet: false, aim: lastAim, firing: false, reload: reloadQueued, ability: abilityQueued || actionHeld(held, 'ability'), grenade: grenadeQueued };
       reloadQueued = false;
       abilityQueued = false;
       grenadeQueued = false;
@@ -137,7 +147,7 @@ export function createInput(el: HTMLElement): Input {
         const m = keysToMove(held);
         out.moveX = m.x;
         out.moveY = m.y;
-        out.quiet = held.has('ShiftLeft') || held.has('ShiftRight');
+        out.quiet = actionHeld(held, 'creep');
         lastAim = out.aim = Math.atan2(inp.mouseY - ay, inp.mouseX - ax);
         // PC grenades land at the cursor (clamped in the sim); touch ones fly the default distance along the aim.
         if (out.grenade && pxPerUnit) out.throwDist = Math.hypot(inp.mouseX - ax, inp.mouseY - ay) / pxPerUnit;
@@ -189,7 +199,7 @@ export function createInput(el: HTMLElement): Input {
       return null;
     },
     abilityHeld() {
-      return held.has('Space') || held.has('KeyQ');
+      return actionHeld(held, 'ability');
     },
     fireHeld() {
       if (inp.mode === 'pc') return firing;
@@ -236,26 +246,33 @@ export function createInput(el: HTMLElement): Input {
     },
   };
 
+  // Keys go through the bindings (src/input/bindings.ts, rebindable in Settings > Controls): one code, one action.
   const down = (e: KeyboardEvent) => {
     if (typing(e)) return; // the callsign field: letters, Space and Enter are text, not game input
-    if (MOVE_CODES.has(e.code)) held.add(e.code);
-    if (e.code === 'KeyR') reloadQueued = true;
-    // R is reload only; it never restarts a run (CHOG-FLOW-001). Enter confirms menus.
+    if (capturing) return; // Settings is waiting for a key to bind: it is not game input
+    held.add(e.code);
+    const a = actionOf(e.code);
+    // Reload is reload only; it never restarts a run (CHOG-FLOW-001). Enter confirms menus.
+    if (a === 'reload') reloadQueued = true;
     // Space also confirms menus (consumed and dropped during play). Not on a focused button or link: there the key
     // presses that control (the browser clicks it), never the screen's default action behind it.
     if ((e.code === 'Enter' || e.code === 'Space') && !e.repeat && !onControl(e)) action = true;
-    if (e.code === 'Escape' || e.code === 'KeyP') pauseQueued = true;
-    if (e.code === 'Space' || e.code === 'KeyQ') {
+    if (a === 'pause') pauseQueued = true;
+    if (a === 'ability') {
       e.preventDefault();
       abilityQueued = true;
     }
-    // CF: hold G to see where it lands (the ring at the cursor), release to throw.
-    if (e.code === 'KeyG' && !e.repeat) nadeHeld = true;
+    // A key bound to fire fires while held, like the mouse button.
+    if (a === 'fire' && !e.repeat) firing = fireLatched = true;
+    // CF: hold the grenade key to see where it lands (the ring at the cursor), release to throw.
+    if (a === 'grenade' && !e.repeat) nadeHeld = true;
     inp.mode = 'pc';
   };
   const up = (e: KeyboardEvent) => {
     held.delete(e.code);
-    if (e.code === 'KeyG' && nadeHeld) { nadeHeld = false; grenadeQueued = true; }
+    const a = actionOf(e.code);
+    if (a === 'grenade' && nadeHeld) { nadeHeld = false; grenadeQueued = true; }
+    if (a === 'fire') firing = false;
   };
   const clear = () => {
     held.clear();
@@ -281,9 +298,19 @@ export function createInput(el: HTMLElement): Input {
       if (s === right && blocked.has(e.pointerId)) return; // the menu touch never becomes the aim/fire thumb
       Object.assign(s, { active: true, id: e.pointerId, baseX: pt.x, baseY: pt.y, x: pt.x, y: pt.y });
     } else {
+      // Mouse buttons go through the bindings too (Mouse0 fire, Mouse2 grenade by default).
       inp.mode = 'pc';
-      if (e.button === 0 && !blocked.has(e.pointerId)) firing = fireLatched = true;
-      if (e.button === 2 && !blocked.has(e.pointerId)) grenadeQueued = true;
+      const code = `Mouse${e.button}`;
+      held.add(code);
+      if (!blocked.has(e.pointerId)) {
+        const a = actionOf(code);
+        if (a === 'fire') firing = fireLatched = true;
+        else if (a === 'grenade') grenadeQueued = true; // a mouse grenade lands at the cursor at once
+        else if (a === 'reload') reloadQueued = true;
+        else if (a === 'ability') abilityQueued = true;
+        else if (a === 'pause') pauseQueued = true;
+        else if (a === 'map') inp.onMap?.();
+      }
     }
     e.preventDefault();
   };
@@ -293,6 +320,8 @@ export function createInput(el: HTMLElement): Input {
     if (e.pointerType !== 'touch') {
       inp.mouseX = pt.x;
       inp.mouseY = pt.y;
+      // A real mouse moving (not a pen hovering) switches the prompts back to keyboard + mouse.
+      if (e.pointerType === 'mouse' && (e.movementX || e.movementY)) inp.mode = 'pc';
       return;
     }
     for (const s of [left, right]) {
@@ -324,7 +353,8 @@ export function createInput(el: HTMLElement): Input {
     pointersDown.delete(e.pointerId);
     blocked.delete(e.pointerId); // released: the next press may fire
     if (e.pointerType !== 'touch') {
-      if (e.button === 0) firing = false;
+      held.delete(`Mouse${e.button}`);
+      if (actionOf(`Mouse${e.button}`) === 'fire') firing = false;
       return;
     }
     for (const s of [left, right]) if (s.id === e.pointerId) s.active = false;

@@ -3,6 +3,7 @@
 // describes. One searchable list of short sections; each opens in place (details/summary: keyboard and screen reader
 // friendly, no script needed to read it). Pure: tests/gp-docs.test.ts.
 import { TUNING } from '../config/tuning';
+import { allKeys, mainKey, moveKeys } from '../input/bindings';
 import { BASE_HP, GRENADES, UPGRADES, UPGRADE_IDS } from '../config/power';
 import { MAPS, MAP_IDS } from '../config/maps';
 import { PRACTICE_REWARDS, REWARDS } from '../config/progression';
@@ -39,7 +40,7 @@ ${li([`Everyone has ${BASE_HP.free} health and up to ${TUNING.combat.armorCap} a
   ]) },
   { id: 'movement', title: 'Movement', html: (t) => li([
     'Movement has weight: a short run-up, a quick stop, faster reversals.',
-    `Creep to move quietly at ${Math.round(TUNING.movement.quietSpeedScale * 100)}% speed (${t ? 'a half push on the left stick' : 'hold Shift'}).`,
+    `Creep to move quietly at ${Math.round(TUNING.movement.quietSpeedScale * 100)}% speed (${t ? 'a half push on the left stick' : `hold ${allKeys('creep')}`}).`,
     'Stand still for a moment and you are steady: tight aim, a longer lamp, silent feet.',
     'Brush a crate corner and you slide round it instead of sticking.',
   ]) },
@@ -153,7 +154,7 @@ ${li(UPGRADE_IDS.map((id) => `<b>${esc(UPGRADES[id].name)}</b>: ${esc(UPGRADES[i
   ]) },
   { id: 'controls', title: 'Controls', html: (t) => `<table class="howto">${t
     ? '<tr><td>Move</td><td>Left thumb (half push: creep)</td></tr><tr><td>Aim and fire</td><td>Right thumb; push past the ring to fire, back inside to stop</td></tr><tr><td>Ability</td><td>Ability button</td></tr><tr><td>Grenade</td><td>Grenade button (drag it to aim the throw)</td></tr><tr><td>Reload</td><td>Reload button</td></tr><tr><td>Tactical map</td><td>MAP button under your health; RETURN closes it. Pinch to zoom, drag to pan</td></tr>'
-    : '<tr><td>Move</td><td>WASD (Shift: creep)</td></tr><tr><td>Aim</td><td>Mouse</td></tr><tr><td>Fire</td><td>Left click</td></tr><tr><td>Ability</td><td>Space</td></tr><tr><td>Grenade</td><td>Hold G and release, or right click: lands at the cursor</td></tr><tr><td>Reload</td><td>R</td></tr><tr><td>Tactical map</td><td>M or the MAP button (Esc or M closes it). Wheel to zoom, drag to pan</td></tr><tr><td>Pause</td><td>Esc</td></tr>'}</table>` },
+    : `<tr><td>Move</td><td>${esc(moveKeys())} (${esc(allKeys('creep'))}: creep)</td></tr><tr><td>Aim</td><td>Mouse</td></tr><tr><td>Fire</td><td>${esc(allKeys('fire'))}</td></tr><tr><td>Ability</td><td>${esc(allKeys('ability'))}</td></tr><tr><td>Grenade</td><td>${esc(allKeys('grenade'))}: hold the key and release, or click: lands at the cursor</td></tr><tr><td>Reload</td><td>${esc(allKeys('reload'))}</td></tr><tr><td>Tactical map</td><td>${esc(allKeys('map'))} or the MAP button (Esc or ${esc(mainKey('map'))} closes it). Wheel to zoom, drag to pan</td></tr><tr><td>Pause</td><td>${esc(allKeys('pause'))}</td></tr><tr><td>Change keys</td><td>Settings, Controls</td></tr>`}</table>` },
   { id: 'modes', title: 'Game Modes', html: () => li([
     '<b>Vs bots</b>: you and 2 AI teammates against 5 hostiles. No sign-in needed.',
     '<b>1v1</b> and <b>3v3</b>: online against people, open to everyone.',

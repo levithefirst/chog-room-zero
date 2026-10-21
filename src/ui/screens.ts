@@ -13,6 +13,7 @@ import { displayName, HUD_SCALES, NICK_MAX, STICK_PX, type Profile, type Setting
 import { controlsSvg, medalSvg, portraitSvg, RARITY_LABEL } from './art';
 import type { AcctView } from './account';
 import type { NetProfile } from '../net/protocol';
+import { ACTIONS, SLOTS, allKeys, bindings, keyLabel, mainKey, moveKeys, type Action } from '../input/bindings';
 import { rewardHtml, type RewardView } from './rewards';
 
 export function esc(s: string): string {
@@ -67,11 +68,11 @@ export function howtoHtml(c: ScreenCtx): string {
   return `<div class="card howto-card"><div class="kicker">How to play</div><h2>Clear Room Zero</h2>
 <div class="howto-grid">${controlsSvg(t)}
 <table class="howto">
-<tr><td>Move</td><td>${t ? 'Left thumb' : 'WASD'}</td></tr>
-<tr><td>Aim / shoot</td><td>${t ? 'Right thumb; push past the ring to fire' : 'Mouse; hold left click'}</td></tr>
-<tr><td>Creep (quiet)</td><td>${t ? 'Half push on the left stick' : 'Hold Shift'}</td></tr>
-<tr><td>Ability</td><td>${t ? 'Ability button' : 'Space'} · reload ${t ? 'button' : 'R'}</td></tr>
-<tr><td>Grenade</td><td>${t ? 'Grenade button: thrown along your aim' : 'G or right click: lands at the cursor'}</td></tr>
+<tr><td>Move</td><td>${t ? 'Left thumb' : esc(moveKeys())}</td></tr>
+<tr><td>Aim / shoot</td><td>${t ? 'Right thumb; push past the ring to fire' : `Mouse; hold ${esc(mainKey('fire'))}`}</td></tr>
+<tr><td>Creep (quiet)</td><td>${t ? 'Half push on the left stick' : `Hold ${esc(allKeys('creep'))}`}</td></tr>
+<tr><td>Ability</td><td>${t ? 'Ability button' : esc(allKeys('ability'))} · reload ${t ? 'button' : esc(allKeys('reload'))}</td></tr>
+<tr><td>Grenade</td><td>${t ? 'Grenade button: thrown along your aim' : `${esc(allKeys('grenade'))}: lands at the cursor`}</td></tr>
 <tr><td>Heard marks</td><td>Footprints, a burst (shot), two dots (reload): noises you heard, not saw. A tick around you: through a wall.</td></tr>
 <tr><td>Red dotted ring</td><td>Where a hostile you lost could be by now. It grows as they could have moved and fades as you forget.</td></tr>
 <tr><td>Your ring</td><td>The dashed ring when you move is how far you are heard. Creep and it shrinks; stand still and it is gone.</td></tr>
@@ -153,6 +154,7 @@ export function settingsHtml(c: ScreenCtx, confirmReset: boolean): string {
 <div class="row2"><span>Sound</span>${toggle('sound', !c.muted)}</div>
 </section>
 <section><h3>Controls</h3>
+<div class="row2"><span>Keyboard &amp; mouse<small class="sub">${esc(moveKeys())} · ${esc(mainKey('reload'))} reload · ${esc(mainKey('grenade'))} grenade</small></span><button class="btn small" data-act="controls" id="controlsbtn">Change keys</button></div>
 <div class="row2"><span>Touch stick size</span>${seg('stick', s.stick, [['small', `S · ${STICK_PX.small}`], ['medium', `M · ${STICK_PX.medium}`], ['large', `L · ${STICK_PX.large}`]])}</div>
 <div class="row2"><span>Vibration</span>${toggle('vibration', s.vibration && c.canVibrate, !c.canVibrate)}</div>
 
@@ -175,6 +177,32 @@ ${accountRows(c)}</section>
 </section>
 <section><h3>About</h3><p class="note">Chog: Room Zero · build <span class="num" id="buildsha">${esc(c.build)}</span></p></section>
 </div></div>`;
+}
+
+// ---- Controls (owner 2026-10-21): every keyboard + mouse binding, changeable; the touch controls beside them ----
+export function controlsHtml(capture: { action: Action; slot: number } | null, note: string): string {
+  const chip = (a: Action, slot: number) => {
+    const code = bindings[a][slot];
+    if (capture && capture.action === a && capture.slot === slot) return `<button class="btn small bindchip capturing" data-act="bind-cancel" aria-live="polite">Press a key or button… (Esc cancels)</button>`;
+    // Escape is pause's main key for good: it also closes every screen and cancels a rebind.
+    if (a === 'pause' && code === 'Escape') return '<span class="bindchip fixed"><kbd>Esc</kbd></span>';
+    if (!code) return slot < SLOTS && bindings[a].length === slot ? `<button class="btn small bindchip add" data-act="bind" data-bind="${a}:${slot}" aria-label="Add a key for ${a}">+ Add</button>` : '';
+    return `<span class="bindchip"><button class="btn small" data-act="bind" data-bind="${a}:${slot}" aria-label="Change ${a} key ${esc(keyLabel(code))}"><kbd>${esc(keyLabel(code))}</kbd></button>${slot > 0 ? `<button class="icon-btn small" data-act="bind-clear" data-bind="${a}:${slot}" aria-label="Remove ${esc(keyLabel(code))}">×</button>` : ''}</span>`;
+  };
+  const rows = ACTIONS.map(({ id, label }) => `<tr data-action="${id}"><td>${label}</td><td>${chip(id, 0)}</td><td>${chip(id, 1)}</td></tr>`).join('');
+  return `<div class="screen settings controls-screen">${topbar('Controls')}
+<div class="set-body">
+<section><h3>Keyboard &amp; mouse</h3>
+<p class="note small">Click a key to change it, then press the new key or mouse button. A key already in use swaps over. Kept on this device.</p>
+${note ? `<p class="status warn small" id="bindnote">${esc(note)}</p>` : ''}
+<table class="howto binds" id="binds"><tr><th>Action</th><th>Key</th><th>Alternate</th></tr>${rows}
+<tr><td>Aim</td><td><span class="bindchip fixed"><kbd>Mouse</kbd></span></td><td></td></tr></table>
+<div class="row2"><span>Default keys</span><button class="btn small" data-act="bind-reset" id="bindreset">Reset to defaults</button></div>
+</section>
+<section><h3>Touch</h3>
+<table class="howto"><tr><td>Move</td><td>Left thumb (half push: creep)</td></tr><tr><td>Aim and fire</td><td>Right thumb; push past the ring to fire, back inside to stop</td></tr><tr><td>Ability</td><td>Ability button</td></tr><tr><td>Grenade</td><td>Grenade button (drag it to aim the throw)</td></tr><tr><td>Reload</td><td>Reload button</td></tr><tr><td>Tactical map</td><td>MAP button</td></tr><tr><td>Pause</td><td>Pause button</td></tr></table>
+<p class="note small">The game switches between keyboard + mouse and touch by itself: the controls on screen follow what you use.</p>
+</section></div></div>`;
 }
 
 // ---- Results ----

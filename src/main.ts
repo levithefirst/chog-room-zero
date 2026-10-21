@@ -1,5 +1,6 @@
 import { createRenderer, createFx, COVER_FLASH_SECONDS, COLLECT_SECONDS, RING_SECONDS, HIT_SECONDS, KILL_SECONDS, DMG_BATCH, DMG_SECONDS } from './render/render';
-import { createInput, touchStick, typing } from './input/input';
+import { captureKeys, createInput, touchStick, typing } from './input/input';
+import { ACTIONS, allKeys, isBound, keyLabel, loadBindings, mainKey, moveKeys, onBindingsChange, rebind, resetBindings, unbind, type Action } from './input/bindings';
 import { createSummaryGate, overlayInputAllowed } from './input/gate';
 import { createAudio } from './audio/audio';
 import { fixedSteps } from './sim/sim';
@@ -33,7 +34,7 @@ import { fmtTime, loadRecords, recordBest, type Records } from './ui/records';
 import { DEFAULT_SETTINGS, QUALITY_DPR, SETTINGS_KEY, STICK_PX, displayName, loadProfile, loadSettings, saveSettings, togglePin, validateNickname, type Profile, type Settings, HUD_SCALES, type HudScale } from './ui/profile';
 import { MEDALS, awardMedals, loadMedals, type MedalDef, type Unlocked } from './ui/medals';
 import { TIPS_KEY, loadShownTips, nextTip, saveShownTips, tipText, type TipId } from './ui/tips';
-import { esc, howtoHtml, medalCard, nickHtml, resultsHtml, selectHtml, settingsHtml, type AuthView } from './ui/screens';
+import { controlsHtml, esc, howtoHtml, medalCard, nickHtml, resultsHtml, selectHtml, settingsHtml, type AuthView } from './ui/screens';
 import { authHtml, chogHtml, chogPanel, boardScreenHtml, careerHtml, classOf, hubHtml, mapsSheetHtml, medalsScreenHtml, onlineResultsHtml, squadScreenHtml, topbar, upgradesHtml, upgradesReady, type HubCtx, type NetView, type PlayMode } from './ui/hub';
 import { docsHtml, filterDocs } from './ui/docs';
 import { CHOG_ERRORS, chogConnect, chogEligibility, chogNetwork, chogPickAccount, chogSign, discoverWallets, fetchAuthConfig, fetchSession, googleSignIn, isMobileBrowser, signOut, walletSignIn, watchWallet, MONAD_CHAIN_HEX, type ChogStep } from './ui/auth';
@@ -187,7 +188,7 @@ async function start() {
   const ONBOARD_KEY = 'chog.onboarded';
   const YOURCHOG_KEY = 'chog.yourchog';
   let yourChogDue = false;
-  type TitleView = 'main' | 'howto' | 'docs' | 'demo' | 'settings' | 'nick' | 'upgrades' | 'ranks' | 'career' | 'medals' | 'auth' | 'chog' | 'yourchog' | 'maps' | 'squad';
+  type TitleView = 'main' | 'howto' | 'docs' | 'demo' | 'settings' | 'controls' | 'nick' | 'upgrades' | 'ranks' | 'career' | 'medals' | 'auth' | 'chog' | 'yourchog' | 'maps' | 'squad';
   // GP Game Docs: the section opened when the screen is shown (the search box filters the rest live).
   let docsOpen: string | null = null;
   document.addEventListener('input', (e) => {
@@ -450,10 +451,60 @@ async function start() {
   let hintLeft = 0;
   function showHint(html: string, seconds: number) {
     hint.innerHTML = html;
+    delete hint.dataset.controls;
     hintLeft = seconds;
     sinceHint = 0;
     hint.style.opacity = seconds > 0 ? '1' : '0';
   }
+  // Key prompts (src/input/bindings.ts): the HUD's key labels, tooltips and the controls hint follow the bindings and
+  // the input in use (keyboard + mouse or touch; the CSS hides the key labels on touch).
+  let paintedMode = '';
+  function paintKeys() {
+    paintedMode = input.mode;
+    const set = (sel: string, t: string) => { const e = document.querySelector<HTMLElement>(sel); if (e) e.textContent = t; };
+    set('#reload .keyhint', mainKey('reload'));
+    set('#nade .keyhint', mainKey('grenade'));
+    set('#abl .keyhint', mainKey('ability'));
+    set('#mapbtn .keyhint', mainKey('map'));
+    set('#tm-close .keyhint', mainKey('map'));
+    $('reload').title = `Reload (${allKeys('reload')})`;
+    $('nade').title = `Grenade: ${allKeys('grenade')} (hold the key, release to throw at the cursor)`;
+    $('ability').title = `Ability (${allKeys('ability')})`;
+  }
+  function controlsHint() {
+    return input.mode === 'touch'
+      ? 'Left thumb: move · Right thumb: aim and fire · Grenade button: throw'
+      : `${esc(moveKeys())} move · Mouse aim · ${esc(mainKey('fire'))} fire · ${esc(mainKey('ability'))} ability · ${esc(mainKey('grenade'))} grenade · ${esc(mainKey('reload'))} reload · ${esc(mainKey('map'))} map`;
+  }
+  // Settings > Controls: the rebind waiting for its key, and what the last attempt said.
+  let capturingKey: { action: Action; slot: number } | null = null;
+  let bindNote = '';
+  const ACTION_IDS = new Set<string>(ACTIONS.map((a) => a.id));
+  function stopCapture() { capturingKey = null; captureKeys(false); }
+  function bindPress(code: string) {
+    const c = capturingKey;
+    if (!c) return;
+    stopCapture();
+    bindNote = rebind(c.action, c.slot, code) ? '' : `${keyLabel(code)} is kept for menus: pick another key.`;
+    render();
+  }
+  // Capture phase, before the game and the menus see the press.
+  window.addEventListener('keydown', (e) => {
+    if (!capturingKey) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (e.code === 'Escape') { stopCapture(); render(); return; }
+    bindPress(e.code);
+  }, { capture: true });
+  window.addEventListener('pointerdown', (e) => {
+    if (!capturingKey || e.pointerType === 'touch') return;
+    if ((e.target as HTMLElement).closest?.('[data-act="bind-cancel"], [data-act="back"]')) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    bindPress(`Mouse${e.button}`);
+  }, { capture: true });
+  loadBindings();
+  onBindingsChange(() => paintKeys());
   // First-match explanation of sound rings, shown once ever (persisted).
   const RING_HINT_KEY = 'chog.hint.rings';
   let ringHintDone = (() => { try { return localStorage.getItem(RING_HINT_KEY) === '1'; } catch { return true; } })();
@@ -603,6 +654,7 @@ async function start() {
       case 'demo': return showDemo();
       case 'yourchog': return show(`<div class="screen yourchog"><div class="yc-in">${chogPanel(c)}<div class="btns"><button class="btn" data-act="back" id="yourchog-close">Continue</button></div></div></div>`);
       case 'settings': return show(settingsHtml(c, confirmReset));
+      case 'controls': return show(controlsHtml(capturingKey, bindNote));
       case 'upgrades': return show(upgradesHtml(c));
       case 'ranks': return show(boardScreenHtml(c));
       case 'maps': return show(mapsSheetHtml({ ...c, map: mapId }));
@@ -694,7 +746,7 @@ async function start() {
     const foes = world.actors.filter((a) => a.team === 'bot');
     const where = training ? 'CHOG Training' : MAPS[mapId].name;
     const stat = (k: string, v: string) => `<div class="rw"><span>${k}</span><b class="num">${v}</b></div>`;
-    const keys = input.mode === 'touch' ? '' : `<ul class="keys">${[['WASD', 'Move'], ['Shift', 'Creep'], ['Mouse', 'Aim'], ['Click', 'Fire'], ['R', 'Reload'], ['Space', 'Ability'], ['G', 'Grenade'], ['M', 'Map'], ['Esc', 'Resume']].map(([k, v]) => `<li><kbd>${k}</kbd>${v}</li>`).join('')}</ul>`;
+    const keys = input.mode === 'touch' ? '' : `<ul class="keys">${[[moveKeys(), 'Move'], [allKeys('creep'), 'Creep'], ['Mouse', 'Aim'], [allKeys('fire'), 'Fire'], [allKeys('reload'), 'Reload'], [allKeys('ability'), 'Ability'], [allKeys('grenade'), 'Grenade'], [allKeys('map'), 'Map'], ['Esc', 'Resume']].map(([k, v]) => `<li><kbd>${esc(k)}</kbd>${v}</li>`).join('')}</ul>`;
     card(`<div class="kicker">${training ? 'Training' : 'Vs bots'} · ${esc(where)}</div><h2>Paused</h2>
       <div class="reward-grid pause-grid">${stat('Time', fmtTime(Math.round(playTime)))}${stat('Hostiles left', `${foes.filter((a) => a.alive).length}/${foes.length}`)}${stat('Health', String(Math.max(0, Math.ceil(p.hp))))}${stat('Your kills', String(p.kills))}</div>
       <div class="btns"><button class="btn primary" data-go="resume">Resume</button><button class="btn" data-go="restart">Restart</button><button class="btn" data-go="quit">Quit</button>${fsButton()}</div>
@@ -804,7 +856,7 @@ async function start() {
     joinOnline(playMode);
   }
 
-  function menuAct(a: string) {
+  function menuAct(a: string, arg?: string) {
     switch (a) {
       case 'howto': titleView = 'howto'; break;
       case 'docs':
@@ -854,7 +906,20 @@ async function start() {
       case 'maps': titleView = 'maps'; break;
       case 'settings': titleView = 'settings'; confirmReset = false; refreshAuth(); break;
       case 'nick': nickReturn = titleView === 'nick' ? nickReturn : titleView; titleView = 'nick'; nickError = ''; nickSaved = false; break;
-      case 'back': if (titleView === 'chog') chogStop(); titleView = titleView === 'nick' ? nickReturn : titleView === 'auth' ? authReturn : 'main'; confirmReset = false; acct.message = ''; break;
+      case 'back': if (titleView === 'chog') chogStop(); stopCapture(); titleView = titleView === 'nick' ? nickReturn : titleView === 'auth' ? authReturn : titleView === 'controls' ? 'settings' : 'main'; confirmReset = false; acct.message = ''; break;
+      // Settings > Controls (src/input/bindings.ts): pick a key, then the next key or mouse button pressed binds it.
+      case 'controls': titleView = 'controls'; bindNote = ''; break;
+      case 'bind': {
+        const [action, slot] = (arg ?? '').split(':');
+        if (!ACTION_IDS.has(action)) return;
+        capturingKey = { action: action as Action, slot: Number(slot) || 0 };
+        captureKeys(true);
+        bindNote = '';
+        break;
+      }
+      case 'bind-cancel': stopCapture(); break;
+      case 'bind-clear': { const [action, slot] = (arg ?? '').split(':'); if (ACTION_IDS.has(action)) unbind(action as Action, Number(slot) || 0); bindNote = ''; break; }
+      case 'bind-reset': stopCapture(); resetBindings(); bindNote = 'Default keys restored.'; break;
       case 'signin':
         if (titleView !== 'auth') authReturn = titleView;
         titleView = 'auth'; pickWallet = false; auth.message = ''; auth.busy = false;
@@ -941,7 +1006,7 @@ async function start() {
       // Apply is a submit button: the form's submit event saves (Enter in the field does too).
       if (act.dataset.act === 'nick-save') return;
       e.preventDefault();
-      menuAct(act.dataset.act!);
+      menuAct(act.dataset.act!, act.dataset.bind);
       return;
     }
     const md = t.closest('[data-mode]') as HTMLElement | null;
@@ -1201,12 +1266,11 @@ async function start() {
     const cls = dp.metadataId ? `${esc(chogName(dp.metadataId))} · ${esc(TIER_DEFS[dp.tier].label)}` : dp.tier !== 'free' ? esc(TIER_DEFS[dp.tier].label) : 'Free class';
     $('hero').innerHTML = `${esc(h.name)} · Vs bots · ${dp.demo ? '<span class="demo">DEMO</span> ' : ''}${cls}`;
     $('wname').textContent = world.actors[0].weapon.name;
-    $('abl').innerHTML = `${esc(world.actors[0].ability.name)}<small class="keyhint">Space</small>`;
+    $('abl').innerHTML = `${esc(world.actors[0].ability.name)}<small class="keyhint"></small>`;
     $('pips').innerHTML = world.actors.filter((a) => a.team === 'bot').map(() => '<i></i>').join('');
-    hint.innerHTML = input.mode === 'touch'
-      ? 'Left thumb: move · Right thumb: aim and fire · Grenade button: throw'
-      : 'WASD move · Mouse aim · Click fire · Space ability · G grenade · R reload';
-    showHint(hint.innerHTML, runIndex === 1 ? 6 : 0);
+    paintKeys();
+    showHint(controlsHint(), runIndex === 1 ? 6 : 0);
+    hint.dataset.controls = '1';
     if (training?.run) {
       const sp = world.actors[0].ability, d = training.run.drill;
       $('hero').innerHTML = `${esc(h.name)} · Training · ${training.power.demo ? '<span class="demo">DEMO</span> ' : ''}${esc(sp.name)} (${esc(TIER_DEFS[sp.rank ?? 'common'].label)})`;
@@ -1422,7 +1486,7 @@ async function start() {
     const me = world.actors[0];
     $('hero').innerHTML = `${esc(me.hero.name)} · <b>Online ${esc(onlineMode)}</b>${net?.match?.demo ? ' · <span class="demo">DEMO</span>' : ''}`;
     $('wname').textContent = me.weapon.name;
-    $('abl').innerHTML = `${esc(me.ability.name)}<small class="keyhint">Space</small>`;
+    $('abl').innerHTML = `${esc(me.ability.name)}<small class="keyhint"></small>`;
     $('pips').innerHTML = world.actors.filter((a) => a.team !== me.team).map(() => '<i></i>').join('');
     lastHud = '';
     const others = (net?.match?.roster ?? []).filter((r) => r.team !== me.team && r.tier !== 'free');
@@ -1648,7 +1712,7 @@ async function start() {
   } catch { /* storage blocked: no resume */ }
   // The auth server is asked only when Settings opens or Google sends the player back: no request on a normal launch.
   window.addEventListener('popstate', () => {
-    if (phase === 'title' && titleView !== 'main') { titleView = titleView === 'nick' ? nickReturn : 'main'; confirmReset = false; render(); }
+    if (phase === 'title' && titleView !== 'main') { stopCapture(); titleView = titleView === 'nick' ? nickReturn : titleView === 'controls' ? 'settings' : 'main'; confirmReset = false; render(); }
     else if (phase === 'play') go('pause');
     // Back again on the pause card: keep a guard entry, so only the card's own Leave leaves the match.
     if (phase === 'pause') { try { history.pushState({ rz: 1 }, ''); } catch { /* ignore */ } }
@@ -1704,10 +1768,13 @@ async function start() {
   window.addEventListener('keydown', (e) => {
     if (!e.repeat) summaryGate.press(performance.now());
   }, { capture: true });
-  // Tactical map (owner 2026-10-20): M opens and closes it during a match (Esc closes it: see takePause below).
+  // Tactical map (owner 2026-10-20): its key (M by default, src/input/bindings.ts) opens and closes it during a match
+  // (Esc closes it: see takePause below). A mouse button bound to it comes through input.onMap.
+  const mapKey = () => { if (phase === 'play' || tmap.open) tmap.toggle(); };
+  input.onMap = mapKey;
   window.addEventListener('keydown', (e) => {
-    if (e.code !== 'KeyM' || e.repeat || typing(e)) return;
-    if (phase === 'play' || tmap.open) { e.preventDefault(); tmap.toggle(); }
+    if (!isBound(e.code, 'map') || e.repeat || typing(e) || capturingKey) return;
+    if (phase === 'play' || tmap.open) { e.preventDefault(); mapKey(); }
   });
   // Hero select: 1-4 pick the matching card (CHOG-UI-001). Enter deploys (existing handler).
   window.addEventListener('keydown', (e) => {
@@ -2058,6 +2125,8 @@ async function start() {
       fpsFrames = 0;
     }
     document.body.classList.toggle('touch', input.mode === 'touch');
+    // Switching between touch and keyboard + mouse mid-match: the prompts follow (the CSS swaps the controls).
+    if (input.mode !== paintedMode) { paintKeys(); if (phase === 'play' && hintLeft > 0 && hint.dataset.controls) hint.innerHTML = controlsHint(); }
     if (tmap.open && phase !== 'play') tmap.close();
     const action = input.takeAction();
     if (input.takePause()) {

@@ -2,6 +2,7 @@
 // hint pill (never over the play centre). Pure: main.ts feeds what is true this frame, this picks at most one tip.
 // Shown tips are remembered on this device; Settings can turn tips off or replay them.
 import type { KeyValueStore } from '../nft/history';
+import { mainKey } from '../input/bindings';
 import type { AbilityKind } from '../config/heroes';
 import type { PickupKind } from '../sim/world';
 import { TUNING } from '../config/tuning';
@@ -54,13 +55,13 @@ const P = TUNING.pickups;
 
 /** Tip text. `touch` picks the control words; `ability` is the operator's own ability. */
 export function tipText(id: TipId, touch: boolean, ability: { kind: AbilityKind; name: string; text?: string }): string {
-  const abilityKey = touch ? 'the ability button' : 'Space';
+  const abilityKey = touch ? 'the ability button' : mainKey('ability');
   switch (id) {
     case 'pickup-health': return `<b>Health</b> pack: walk over it to heal ${P.health.amount}.`;
     case 'pickup-armor': return `<b>Armour</b> soaks damage before health. Walk over it for +${P.armor.amount}.`;
     case 'pickup-ammo': return `<b>Ammo</b>: walk over it for ${P.ammo.mags} spare magazines.`;
     case 'pickup-grenade': return `<b>Grenade</b>: walk over it for +${P.grenade.amount}, up to what you can carry.`;
-    case 'reload': return `Magazine low. Reload with ${touch ? 'the <b>Reload</b> button' : '<b>R</b>'} before the next fight.`;
+    case 'reload': return `Magazine low. Reload with ${touch ? 'the <b>Reload</b> button' : `<b>${mainKey('reload')}</b>`} before the next fight.`;
     case 'hurt': return 'Hit! The <b>red arc</b> points at the shooter. Break line of sight behind a wall.';
     case 'cover': return 'Crates and slabs <b>stop bullets</b>. Shoot over them from right behind.';
     case 'callout': return 'Your teammates <b>call</b> what they see and hear. A red diamond is where they saw it.';

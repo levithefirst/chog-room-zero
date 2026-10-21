@@ -2,7 +2,8 @@
 // is shown on the HUD with its key and actually works in a solo match. WASD moves, the mouse aims, left click fires,
 // R and the Reload key on the HUD reload, G (hold, release) and right click and the grenade button throw, Space uses the
 // ability. Touch (844x390) keeps its own round buttons, without key labels, and its Reload and grenade buttons still work.
-// Usage: node tools/pc-controls.mjs http://localhost:8790 <shotDir>   (VIEWS=d1280,t844 to pick)
+// Then Settings > Controls: rebinding takes effect on the HUD and in a match, and device switching swaps the controls.
+// Usage: node tools/pc-controls.mjs http://localhost:8790 <shotDir>   (VIEWS=d1280,t844,rebind to pick)
 import { browser, sleep } from './cdp.mjs';
 const [base, shotDir] = process.argv.slice(2);
 const ALL = [
@@ -116,11 +117,24 @@ try {
         const g3 = await b.until(`__chog.world.actors[0].thrown > ${a.thrown}`, 8000);
         check(`${v.name}: a click on the HUD grenade button throws one`, g3, JSON.stringify({ thrown: a.thrown, grenades: a.grenades }));
       } else check(`${v.name}: a click on the HUD grenade button throws one`, false, 'no grenades left to test with');
-      // Ability: Space.
+      // Ability: Space. Benja's ability is Ping: it reveals hostiles around him for a moment (the game's ping).
       a = await b.ev(ME);
       await tap('Space', ' ');
       const ab = await b.until(`__chog.world.actors[0].abilityCd > 0`, 8000);
-      check(`${v.name}: Space uses the ability`, a.abilityCd === 0 && ab, JSON.stringify({ before: a.abilityCd }));
+      const ping = await b.ev(`({ name: __chog.world.actors[0].ability.name, reveal: __chog.world.actors[0].revealLeft })`);
+      check(`${v.name}: Space uses the ability (Benja: Ping reveals around him)`, a.abilityCd === 0 && ab && ping.name === 'Ping' && ping.reveal > 0, JSON.stringify({ before: a.abilityCd, ping }));
+      // Tactical map: M opens it over the running match and M closes it; Esc pauses and resumes.
+      await tap('KeyM', 'm');
+      const mo = await b.until(`__chog.tmap().open`, 5000);
+      await tap('KeyM', 'm');
+      const mc = await b.until(`!__chog.tmap().open && __chog.phase === 'play'`, 5000);
+      check(`${v.name}: M opens and closes the tactical map`, mo && mc);
+      await tap('Escape', 'Escape');
+      const pz = await b.until(`__chog.phase === 'pause'`, 5000);
+      const keysShown = await b.ev(`[...document.querySelectorAll('#overlay .keys li')].map((li) => li.innerText.replace(/\\s+/g, ' ')).join(' | ')`);
+      await tap('Escape', 'Escape');
+      const rs = await b.until(`__chog.phase === 'play'`, 5000);
+      check(`${v.name}: Esc pauses (the pause card lists the keys) and resumes`, pz && rs && /R Reload/i.test(keysShown) && /G \/ Right click Grenade/i.test(keysShown) && /M Map/i.test(keysShown), keysShown);
     } else {
       check(`${v.name}: touch HUD keeps its round Reload and grenade buttons, without key labels`,
         hud.touch && hud.reload?.shown && hud.reload.on && !hud.reloadKey?.shown && hud.nade?.shown && hud.nade.on && !hud.nadeKey?.shown && !hud.overlaps.length, JSON.stringify(hud));
@@ -142,6 +156,72 @@ try {
     }
     await b.shot('end');
     check(`${v.name}: no page errors`, b.errors.length === 0, b.errors.slice(0, 3).join(' | '));
+    await b.close(); open.splice(open.indexOf(b), 1);
+  }
+  // Settings > Controls: rebind Reload to T and the grenade to H; the HUD shows the new keys, the new keys work in a
+  // match and the old ones do nothing; Reset to defaults brings R and G back. Then device switching mid-match.
+  if (!pick || pick.includes('rebind')) {
+    const b = await browser('pc-rebind', { base, shotDir, w: 1440, h: 900 });
+    open.push(b);
+    const key = async (code, k, type) => b.cmd('Input.dispatchKeyEvent', { type, code, key: k, windowsVirtualKeyCode: k.toUpperCase().charCodeAt(0) });
+    const tap = async (code, k) => { await key(code, k, 'keyDown'); await sleep(100); await key(code, k, 'keyUp'); };
+    await b.go('/?debug'); await b.until(`document.readyState !== 'loading'`, 20000);
+    await b.ev(`localStorage.clear(); localStorage.setItem('chog.onboarded','1')`); await b.go('/?debug'); await b.hub();
+    await b.click('[data-act="settings"]'); await b.until(`!!document.getElementById('controlsbtn')`, 5000);
+    await b.click('#controlsbtn');
+    const shown = await b.until(`document.querySelectorAll('#binds tr[data-action]').length === 11 ? [...document.querySelectorAll('#binds tr[data-action]')].map((r) => r.innerText.replace(/\\s+/g, ' ').trim()) : null`, 5000);
+    await b.shot('controls');
+    check('Controls screen lists every action with its keys (Reload R, Grenade G / Right click, Ability Space / Q, Map M, Pause Esc / P)', shown && shown.some((r) => /^Reload R \+ Add$/i.test(r)) && shown.some((r) => /^Grenade G Right click/i.test(r)) && shown.some((r) => /^Ability Space Q/i.test(r)) && shown.some((r) => /^Tactical map M/i.test(r)) && shown.some((r) => /^Pause Esc P/i.test(r)), JSON.stringify(shown));
+    await b.click('[data-bind="reload:0"]');
+    const waiting = await b.until(`!!document.querySelector('.bindchip.capturing')`, 3000);
+    await tap('KeyT', 't');
+    await b.until(`!document.querySelector('.bindchip.capturing')`, 3000);
+    await b.click('[data-bind="grenade:0"]'); await tap('KeyH', 'h');
+    // Enter is kept for menus: refused, with a note, and the key stays.
+    await b.click('[data-bind="ability:0"]'); await tap('Enter', 'Enter');
+    const after = await b.ev(`({ reload: document.querySelector('#binds tr[data-action="reload"]').innerText.replace(/\\s+/g, ' ').trim(), nade: document.querySelector('#binds tr[data-action="grenade"]').innerText.replace(/\\s+/g, ' ').trim(), ability: document.querySelector('#binds tr[data-action="ability"]').innerText.replace(/\\s+/g, ' ').trim(), note: document.getElementById('bindnote')?.innerText ?? '', stored: localStorage.getItem('chog.bindings') })`);
+    check('rebinding: Reload -> T, Grenade -> H take effect and are kept; Enter is refused with a note', waiting && /^Reload T /i.test(after.reload) && /^Grenade H Right click/i.test(after.nade) && /^Ability Space Q/i.test(after.ability) && /menus/.test(after.note) && /KeyT/.test(after.stored ?? ''), JSON.stringify(after));
+    await b.click('[data-act="back"]'); await b.click('[data-act="back"]'); await b.hub();
+    await b.click('[data-mode="solo"]'); await b.click('#playbtn');
+    await b.until(`__chog.phase === 'play' && __chog.world.tick > 30`, 30000);
+    await b.cmd('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 1000, y: 450, button: 'none' });
+    await sleep(400);
+    const hud = await b.ev(`({ reload: document.querySelector('#reload .keyhint').innerText, nade: document.querySelector('#nade .keyhint').innerText, hint: document.getElementById('hint').innerText })`);
+    check('the HUD and the controls hint show the new keys (T reload, H grenade)', hud.reload === 'T' && hud.nade === 'H' && /T reload/.test(hud.hint) && /H grenade/.test(hud.hint), JSON.stringify(hud));
+    await b.cmd('Input.dispatchMouseEvent', { type: 'mousePressed', x: 1000, y: 450, button: 'left', clickCount: 1 }); await sleep(600);
+    await b.cmd('Input.dispatchMouseEvent', { type: 'mouseReleased', x: 1000, y: 450, button: 'left', clickCount: 1 });
+    await b.until(`__chog.world.actors[0].reloadLeft <= 0`, 20000);
+    const am = await b.ev(`__chog.world.actors[0].ammo`);
+    await tap('KeyR', 'r'); await sleep(600);
+    const oldR = await b.ev(`__chog.world.actors[0].reloadLeft > 0`);
+    await tap('KeyT', 't');
+    const newT = await b.until(`__chog.world.actors[0].reloadLeft > 0`, 5000);
+    const th = await b.ev(`__chog.world.actors[0].thrown`);
+    await tap('KeyG', 'g'); await sleep(600);
+    const oldG = await b.ev(`__chog.world.actors[0].thrown > ${th}`);
+    await tap('KeyH', 'h');
+    const newH = await b.until(`__chog.world.actors[0].thrown > ${th}`, 8000);
+    check('in the match: T reloads and H throws; R and G do nothing any more', am < 24 && !oldR && newT && !oldG && newH, JSON.stringify({ ammo: am, oldR, newT: !!newT, oldG, newH: !!newH }));
+    // Device switching: a touch shows the touch controls and touch prompts; moving the mouse brings the keys back.
+    await b.cmd('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+    await b.cmd('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 300, y: 600, id: 3 }] });
+    await sleep(150);
+    await b.cmd('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await sleep(500);
+    const t1 = await b.ev(`({ touch: document.body.classList.contains('touch'), reloadKey: getComputedStyle(document.querySelector('#reload .keyhint')).display, reloadRound: getComputedStyle(document.getElementById('reload')).borderRadius, nadeKey: getComputedStyle(document.querySelector('#nade .keyhint')).display })`);
+    await b.cmd('Emulation.setTouchEmulationEnabled', { enabled: false });
+    await b.cmd('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 900, y: 400, button: 'none' });
+    await b.cmd('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 960, y: 420, button: 'none' });
+    await sleep(500);
+    const t2 = await b.ev(`({ touch: document.body.classList.contains('touch'), reloadKey: getComputedStyle(document.querySelector('#reload .keyhint')).display, reload: document.querySelector('#reload .keyhint').innerText })`);
+    check('switching devices mid-match: a touch swaps to the touch controls (no key labels), the mouse swaps back to the keys', t1.touch && t1.reloadKey === 'none' && t1.reloadRound === '50%' && t1.nadeKey === 'none' && !t2.touch && t2.reloadKey !== 'none' && t2.reload === 'T', JSON.stringify({ t1, t2 }));
+    // Reset to defaults from Settings brings R and G back.
+    await tap('Escape', 'Escape'); await b.until(`__chog.phase === 'pause'`, 5000);
+    await b.ev(`__chog.go('quit')`); await b.hub();
+    await b.click('[data-act="settings"]'); await b.click('#controlsbtn'); await b.click('#bindreset');
+    const reset = await b.ev(`({ reload: document.querySelector('#binds tr[data-action="reload"]').innerText.replace(/\\s+/g, ' ').trim(), stored: localStorage.getItem('chog.bindings') })`);
+    check('Reset to defaults restores R (and clears the saved keys)', /^Reload R /i.test(reset.reload) && reset.stored === null, JSON.stringify(reset));
+    check('rebind: no page errors', b.errors.length === 0, b.errors.slice(0, 3).join(' | '));
     await b.close(); open.splice(open.indexOf(b), 1);
   }
 } catch (e) { check('run', false, e?.stack ?? e); }

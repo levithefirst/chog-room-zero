@@ -16,9 +16,10 @@ describe('every legitimate completed match pays, in the order the owner asked fo
       expect(pay(t, false, 0, 0)).toBeGreaterThan(0);
       expect(pay(t, false, 1, 0)).toBeGreaterThan(pay(t, false, 0, 0));
       expect(pay(t, false, 1, 300)).toBeGreaterThan(pay(t, false, 1, 0));
-      // The win bonus is meaningful: the worst win beats the best loss, and is worth at least 2x a bare loss.
+      // The win bonus is meaningful: the worst win beats the best loss, and is worth at least 2x a bare loss. A solo
+      // practice loss has at most 4 kills (all five hostiles down is a clear): owner 2026-10-21 table 3 / 3 / 18.
       let bestLoss = 0;
-      for (let k = 0; k <= 8; k++) for (const d of [0, 100, 300, 1000, 5000]) bestLoss = Math.max(bestLoss, pay(t, false, k, d));
+      for (let k = 0; k <= (name === 'practice' ? 4 : 8); k++) for (const d of [0, 100, 300, 1000, 5000]) bestLoss = Math.max(bestLoss, pay(t, false, k, d));
       expect(pay(t, true, 0, 0)).toBeGreaterThan(bestLoss);
       expect(pay(t, true, 0, 0)).toBeGreaterThanOrEqual(2 * pay(t, false, 0, 0));
     });
@@ -26,10 +27,13 @@ describe('every legitimate completed match pays, in the order the owner asked fo
 });
 
 describe('against the upgrade costs and the daily limits', () => {
-  it('the first rank comes in the first session: one online match or three practice losses', () => {
+  it('the first rank comes in the first session: one online match, or four practice losses (two with a kill each)', () => {
     const cheapest = Math.min(...UPGRADE_IDS.map((id) => UPGRADES[id].costs[0]));
     expect(pay(REWARDS, false, 0, 0)).toBeGreaterThanOrEqual(cheapest);
-    expect(3 * pay(PRACTICE_REWARDS, false, 0, 0)).toBeGreaterThanOrEqual(cheapest);
+    // Owner 2026-10-21 practice table (3 a run): three bare losses pay 9, so four; a kill each makes it two.
+    expect(4 * pay(PRACTICE_REWARDS, false, 0, 0)).toBeGreaterThanOrEqual(cheapest);
+    expect(2 * pay(PRACTICE_REWARDS, false, 1, 0)).toBeGreaterThanOrEqual(cheapest);
+    expect(pay(PRACTICE_REWARDS, true, 0, 0)).toBeGreaterThanOrEqual(cheapest);
   });
   it('not trivially farmable: even playing to every daily cap with perfect results takes days to max out', () => {
     const maxOnline = REWARDS.dailyCap * pay(REWARDS, true, 99, 99999);

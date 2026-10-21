@@ -26,9 +26,10 @@ export const REWARDS = {
 
 /**
  * Solo practice vs bots (owner 2026-10-17: "players need to earn progression even when they lose"). The run is simulated
- * in the browser, so a day's practice is capped (PRACTICE_SHARDS_PER_DAY in api/_lib/career.ts). Owner 2026-10-21: a
- * run pays 3 shards, each kill 5, a clear 12; kills now pay most, so a loss with several kills can out-pay a clear with
- * none (the "any win beats any loss" rule holds online only).
+ * in the browser, so it pays less than a validated online match and a day's practice is capped (PRACTICE_SHARDS_PER_DAY
+ * in api/_lib/career.ts). Owner 2026-10-21: a run pays 3 shards, each kill 3 (the online rate), a clear 18. A clear with
+ * no kills (21) ties the theoretical best loss (3 + 5 kills + 3 damage = 21); in solo a loss never has 5 kills (all five
+ * hostiles down is a clear), so every real clear still out-pays every real loss.
  */
 export const PRACTICE_REWARDS = {
   xpPlay: 20,
@@ -36,8 +37,8 @@ export const PRACTICE_REWARDS = {
   xpPerKill: 5,
   maxKills: 5,
   shardsPlay: 3,
-  shardsWin: 12,
-  shardsPerKill: 5,
+  shardsWin: 18,
+  shardsPerKill: 3,
   damagePerShard: 100,
   damageShardsMax: 3,
   minSeconds: 20,

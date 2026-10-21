@@ -212,7 +212,7 @@ No job is ever crept. A near one is walked (steps heard about 6 u off); a hunt o
 
 ## 7. Economy (tests/fs-economy.test.ts)
 
-**Payouts.** Every legitimate completed match pays. A loss pays least, kills add, damage adds, and a win adds most. The worst win beats the best loss and is worth at least twice a bare loss online. Practice (owner 2026-10-21): 3 shards a run, 5 a kill, 12 a clear, so kills pay most and a loss with several kills can out-pay a clear with none.
+**Payouts.** Every legitimate completed match pays. A loss pays least, kills add, damage adds, and a win adds most. The worst win beats the best loss and is worth at least twice a bare loss online. Practice (owner 2026-10-21): 3 shards a run, 3 a kill, 18 a clear; a clear with no kills (21) ties the theoretical best loss (21), and in solo a loss never has five kills, so every real clear out-pays every real loss.
 
 **Against the upgrade costs** (3,250 shards to max everything):
 - The first rank comes in the first session: one online match, or three practice losses.

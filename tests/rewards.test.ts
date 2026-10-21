@@ -153,17 +153,30 @@ describe('practice rewards: ticketed, capped, paid once', () => {
     const p = (await call('GET', 'profile', c)).j.profile;
     expect(p).toMatchObject({ xp: want.xp, shards: want.shards, rating: 1000, matches: 0 });
   });
-  it('practice pays 3 a run, 5 a kill (up to 5), 12 a clear (owner 2026-10-21), line by line', () => {
-    expect([PRACTICE_REWARDS.shardsPlay, PRACTICE_REWARDS.shardsPerKill, PRACTICE_REWARDS.shardsWin]).toEqual([3, 5, 12]);
+  it('practice pays 3 a run, 3 a kill (up to 5), 18 a clear (owner 2026-10-21), line by line', () => {
+    expect([PRACTICE_REWARDS.shardsPlay, PRACTICE_REWARDS.shardsPerKill, PRACTICE_REWARDS.shardsWin]).toEqual([3, 3, 18]);
     const win = rewardBreakdown(facts({ won: true, kills: 3 }), PRACTICE_REWARDS);
-    expect(win.lines.map((l) => [l.id, l.shards])).toEqual([['played', 3], ['win', 12], ['kills', 15]]);
+    expect(win.lines.map((l) => [l.id, l.shards])).toEqual([['played', 3], ['win', 18], ['kills', 9]]);
     expect(win.shards).toBe(30);
     const loss = rewardBreakdown(facts({ kills: 2, damage: 260 }), PRACTICE_REWARDS);
-    expect(loss.lines.map((l) => [l.id, l.shards])).toEqual([['played', 3], ['kills', 10], ['damage', 2]]);
-    expect(loss.shards).toBe(15);
+    expect(loss.lines.map((l) => [l.id, l.shards])).toEqual([['played', 3], ['kills', 6], ['damage', 2]]);
+    expect(loss.shards).toBe(11);
     // Kills past the cap pay nothing more; XP is unchanged by this pass.
-    expect(rewardBreakdown(facts({ kills: 9 }), PRACTICE_REWARDS).shards).toBe(3 + 25);
+    expect(rewardBreakdown(facts({ kills: 9 }), PRACTICE_REWARDS).shards).toBe(3 + 15);
     expect(win.xp).toBe(PRACTICE_REWARDS.xpPlay + PRACTICE_REWARDS.xpWin + 3 * PRACTICE_REWARDS.xpPerKill);
+  });
+  it('practice: a 0-kill clear against high-kill losses (a solo loss has at most 4 kills: five down is a clear)', () => {
+    const zeroKillWin = rewardBreakdown(facts({ won: true, kills: 0, damage: 0 }), PRACTICE_REWARDS);
+    expect(zeroKillWin.shards).toBe(21);
+    expect(zeroKillWin.lines.map((l) => l.id)).toEqual(['played', 'win']);
+    // The most a real solo loss pays: 4 kills and the damage cap.
+    const bestRealLoss = rewardBreakdown(facts({ kills: 4, damage: 1e6 }), PRACTICE_REWARDS);
+    expect(bestRealLoss.shards).toBe(3 + 12 + 3);
+    expect(zeroKillWin.shards).toBeGreaterThan(bestRealLoss.shards);
+    // The theoretical bound (5 kills in a loss) ties a 0-kill clear: never above it.
+    expect(lossCeiling(PRACTICE_REWARDS).shards).toBe(21);
+    expect(winFloor(PRACTICE_REWARDS).shards).toBeGreaterThanOrEqual(lossCeiling(PRACTICE_REWARDS).shards);
+    expect(winFloor(PRACTICE_REWARDS).xp).toBeGreaterThan(lossCeiling(PRACTICE_REWARDS).xp);
   });
   it('a win in practice pays more than a practice loss with the same kills and damage, and less than the same online win', () => {
     for (const k of [0, 1, 3, 5]) {
@@ -171,8 +184,13 @@ describe('practice rewards: ticketed, capped, paid once', () => {
       const loss = rewardBreakdown(facts({ kills: k, damage: 300 }), PRACTICE_REWARDS);
       expect(win.shards - loss.shards).toBe(PRACTICE_REWARDS.shardsWin);
       expect(win.xp).toBeGreaterThan(loss.xp);
+      expect(win.shards).toBeLessThan(rewardBreakdown(facts({ won: true, kills: k, damage: 300 })).shards);
     }
-    expect(rewardBreakdown(facts({ won: true }), PRACTICE_REWARDS).shards).toBeLessThan(rewardBreakdown(facts({ won: true })).shards);
+  });
+  it('online is unchanged and stays consistent: 10 a match, 3 a kill (same as practice), 25 a win; any win beats any loss', () => {
+    expect([REWARDS.shardsPlay, REWARDS.shardsPerKill, REWARDS.shardsWin]).toEqual([10, 3, 25]);
+    expect(REWARDS.shardsPerKill).toBe(PRACTICE_REWARDS.shardsPerKill);
+    expect(winFloor(REWARDS).shards).toBeGreaterThan(lossCeiling(REWARDS).shards);
   });
   it('refuses to pay a run that claims more time than passed, has no ticket, or carries another run or account', async () => {
     const c = await cookie('p2'), other = await cookie('p3');
