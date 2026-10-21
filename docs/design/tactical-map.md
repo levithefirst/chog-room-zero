@@ -53,12 +53,12 @@ The map shows exactly what the HUD already knows:
 |---|---|---|
 | You (position, facing) | your actor | your predicted actor |
 | Teammates (position, facing, downed) | your side's actors | the server always sends your side |
-| A hostile, live | contact intel VISIBLE now (your light, its flash, your Ping) | sent only when the server says you see it |
+| A hostile, live | contact intel VISIBLE now (your light, its flash, your Ping, a Marker hit by your side; the same bodies the game view draws) | sent only when the server says you see it |
 | A hostile, last known | contact intel weaker than VISIBLE: a fading circle at the believed spot, never the body | teammate-spotted reports arrive blurred by the server |
 | Visor marks | `visorDots()`, the same list as the HUD tracker | the server's `vt` list, sent to the holder alone |
 | Danger zone, stocked supplies | shared match state | sent to everyone |
 
-Solo, the client sim holds every bot, but the map never reads a hostile position unless intel says VISIBLE.
+Solo, the client sim holds every bot, but the map never reads a hostile position unless intel says VISIBLE (or a Ping or Marker reveal).
 
 Online, the client only holds what `server/room.ts` snapshot chose to send. A modified client gains nothing from the map. No protocol change was needed.
 

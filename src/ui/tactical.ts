@@ -4,8 +4,9 @@
 //
 // Information rule (LAW 1, V2 information integrity): the map knows exactly what the HUD knows, never more.
 // - You and your own side: always (the server sends your team's bodies; solo they are your AI squad).
-// - Hostiles: only the player's contact intel (src/sim/intel.ts), the same beliefs the game view draws. VISIBLE is the
-//   live body; anything weaker (heard, last known, spotted by a teammate) is a fading area, never the body.
+// - Hostiles: only the player's contact intel (src/sim/intel.ts), the same beliefs the game view draws. VISIBLE (and a
+//   Ping or Marker reveal, which the game view also draws as the body) is the live body; anything weaker (heard, last
+//   known, spotted by a teammate) is a fading area, never the body.
 // - The Visor holder's tracker dots (visorDots below, the HUD tracker uses the same function).
 // - Shared state everyone has: the danger zone and which supply points are stocked.
 // It never reads a hostile's position from world.actors unless intel says it is VISIBLE now. Online the client only
@@ -53,7 +54,9 @@ export function mapMarkers(w: World, p: Actor, intel: Intel, dots: readonly { id
   for (const c of intel.contacts.values()) {
     const a = w.actors[c.id];
     if (!a || a.team === p.team) continue;
-    if (c.state === 'visible' && a.alive && a.x > -50) {
+    // Live: in your light (or its muzzle flash), or revealed by a Ping / Marker. The game view draws these bodies
+    // (src/render/render.ts), so the map does too (final QA 2026-10-21: a pinged hostile showed only as a '?').
+    if ((c.state === 'visible' || (c.state === 'partial' && c.source === 'ping')) && a.alive && a.x > -50) {
       live.add(a.id);
       continue;
     }

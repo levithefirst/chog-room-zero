@@ -158,16 +158,22 @@ try {
         await b.click('#mapbtn'); opens++; await sleep(600);
         // Only while the map is open: the run can end between the loop check and the click (MAP does nothing outside
         // play), and then last() still holds the markers of the previous open, seconds old (a bot that has since died).
-        const r = await b.ev(`(() => { const t = __chog.tmap(), w = __chog.world; if (!t.open || __chog.phase !== 'play') return null; return t.markers.filter((m) => m.kind === 'hostile').map((m) => { const a = w.actors[m.id]; return { id: m.id, alive: a.alive, team: a.team, d: Math.hypot(a.x - m.x, a.y - m.y) }; }); })()`);
+        // Each live mark must be a hostile you know live now (contact VISIBLE, or a Ping/Marker reveal), and each such
+        // hostile must be on the map (final QA 2026-10-21: the owner saw no hostile marks).
+        const r = await b.ev(`(() => { const t = __chog.tmap(), w = __chog.world, c = __chog.intel().contacts; if (!t.open || __chog.phase !== 'play') return null;
+          const live = (id) => { const k = c.get(id); return !!k && (k.state === 'visible' || (k.state === 'partial' && k.source === 'ping')); };
+          const marks = t.markers.filter((m) => m.kind === 'hostile');
+          const missing = w.actors.filter((a) => a.team === 'bot' && a.alive && live(a.id) && !marks.some((m) => m.id === a.id)).map((a) => a.id);
+          return { missing, marks: marks.map((m) => { const a = w.actors[m.id]; return { id: m.id, alive: a.alive, team: a.team, known: live(m.id), d: Math.hypot(a.x - m.x, a.y - m.y) }; }) }; })()`);
         if (!r) break;
         fpsOpen.push(await b.ev(`__chog.fps`));
-        seen += r.length;
-        wrong.push(...r.filter((x) => !x.alive || x.team !== 'bot' || x.d > 0.6));
+        seen += r.marks.length;
+        wrong.push(...r.marks.filter((x) => !x.alive || x.team !== 'bot' || !x.known || x.d > 0.6), ...r.missing.map((id) => ({ missing: id })));
         await b.click('#tm-close');
       }
       await b.shot(`combat-${id}`);
       const avg = (a) => a.reduce((x, y) => x + y, 0) / Math.max(1, a.length);
-      check(`desk combat ${id}: ${opens} opens mid-fight; ${seen} live hostile marks, each a living bot at its real spot`, opens >= 5 && wrong.length === 0, JSON.stringify({ seen, wrong: wrong.slice(0, 5) }));
+      check(`desk combat ${id}: ${opens} opens mid-fight; ${seen} live hostile marks (at least one), each a known living bot at its real spot, none known missing`, opens >= 5 && seen > 0 && wrong.length === 0, JSON.stringify({ seen, wrong: wrong.slice(0, 5) }));
       check(`desk combat ${id}: frame rate with the map open holds (>= 80% of closed)`, avg(fpsOpen) >= 0.8 * avg(fpsShut), JSON.stringify({ open: Math.round(avg(fpsOpen)), shut: Math.round(avg(fpsShut)) }));
       if ((await b.ev(`__chog.phase`)) === 'play') await quit(b); else { await b.go('/?debug'); await b.hub(); }
     }

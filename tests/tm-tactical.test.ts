@@ -39,7 +39,9 @@ function behindWall(w: World, x: number, y: number, r: number) {
   for (let d = 3; d <= r; d++) for (let k = 0; k < 16; k++) {
     const a = (k / 16) * Math.PI * 2, px = x + Math.cos(a) * d, py = y + Math.sin(a) * d;
     const t = l.tiles[Math.floor(py) * l.w + Math.floor(px)];
-    if (t !== undefined && walkable(t) && !sightClear(l, x, y, px, py)) return { x: Math.floor(px) + 0.5, y: Math.floor(py) + 0.5 };
+    // The tile centre is the spot used, so it is the one that must be out of sight.
+    const c = { x: Math.floor(px) + 0.5, y: Math.floor(py) + 0.5 };
+    if (t !== undefined && walkable(t) && !sightClear(l, x, y, c.x, c.y)) return c;
   }
   throw new Error('no spot behind a wall');
 }
@@ -204,6 +206,142 @@ function clientMarkers(s: OnlineSession) {
   senseFor(w, p, intel, 0);
   return { w, p, m: mapMarkers(w, p, intel, visorDots(w, p, s.tracks)) };
 }
+
+// Final QA 2026-10-21 (owner: "the tactical map must show a hostile you legitimately detected"): detection -> marker ->
+// update -> expiry / death, through the real intel (src/sim/intel.ts), never more than the player knows.
+describe('hostile markers follow what you know (detection, update, expiry, death)', () => {
+  const kinds = (m: ReturnType<typeof mapMarkers>, id: number) => m.filter((x) => x.id === id).map((x) => x.kind);
+  /** A floor spot `d` u behind `a` (opposite its facing) with a clear line but outside its view cone. */
+  function behindBack(w: World, a: Actor) {
+    for (let d = 2; d <= 6; d += 0.5) for (let k = -6; k <= 6; k++) {
+      const ang = a.facing + Math.PI + k * 0.1, x = a.x + Math.cos(ang) * d, y = a.y + Math.sin(ang) * d;
+      if (walkable(w.level.tiles[Math.floor(y) * w.level.w + Math.floor(x)]) && sightClear(w.level, a.x, a.y, x, y) && !canSee(w.level, a.x, a.y, a.facing, a.view, x, y)) return { x, y };
+    }
+    throw new Error('no spot behind');
+  }
+  const setup = (allies = false) => {
+    const w = createWorld({ mapId: 'office', seed: 4, ...(allies ? { allies: [{ name: 'A', hero: 'toad' }, { name: 'B', hero: 'ray' }] } : {}) });
+    const p = w.actors[0], intel = createIntel();
+    for (const a of w.actors) if (a.team === 'bot') park(a, { x: -100, y: -100 + a.id });
+    const bot = w.actors.find((a) => a.team === 'bot')!;
+    return { w, p, intel, bot };
+  };
+
+  it('seen: shown live at its real spot; it moves in view: the marker follows', () => {
+    const { w, p, intel, bot } = setup();
+    const [s1, s2] = sightSpots(w, p, 2);
+    park(bot, s1); senseFor(w, p, intel, DT);
+    expect(mapMarkers(w, p, intel, []).find((x) => x.id === bot.id)).toMatchObject({ kind: 'hostile', x: s1.x, y: s1.y });
+    park(bot, s2); senseFor(w, p, intel, DT);
+    expect(mapMarkers(w, p, intel, []).find((x) => x.id === bot.id)).toMatchObject({ kind: 'hostile', x: s2.x, y: s2.y });
+  });
+
+  it('lost from view: a fading trace where it was last seen (never its new spot), then it expires', () => {
+    const { w, p, intel, bot } = setup();
+    const s1 = sightSpots(w, p, 1)[0];
+    park(bot, s1); senseFor(w, p, intel, DT);
+    park(bot, behindWall(w, p.x, p.y, 20)); senseFor(w, p, intel, DT);
+    let m = mapMarkers(w, p, intel, []);
+    expect(kinds(m, bot.id)).toEqual(['trace']);
+    const t0 = m.find((x) => x.id === bot.id)!;
+    expect(Math.hypot(t0.x - s1.x, t0.y - s1.y)).toBeLessThan(0.01);
+    for (let i = 0; i < 60; i++) senseFor(w, p, intel, DT);
+    const t1 = mapMarkers(w, p, intel, []).find((x) => x.id === bot.id)!;
+    expect(t1.conf!).toBeLessThan(t0.conf!);
+    // Out of sight long enough, the belief runs out: nothing of it left on the map.
+    for (let i = 0; i < 60 / DT; i++) senseFor(w, p, intel, DT);
+    m = mapMarkers(w, p, intel, []);
+    expect(kinds(m, bot.id)).toEqual([]);
+  });
+
+  it('dead: removed at once, live or traced', () => {
+    const { w, p, intel, bot } = setup();
+    park(bot, sightSpots(w, p, 1)[0]); senseFor(w, p, intel, DT);
+    expect(kinds(mapMarkers(w, p, intel, []), bot.id)).toEqual(['hostile']);
+    bot.alive = false; bot.hp = 0; senseFor(w, p, intel, DT);
+    expect(kinds(mapMarkers(w, p, intel, []), bot.id)).toEqual([]);
+    // Lost first (a trace), then killed out of sight: the trace goes too.
+    const { w: w2, p: p2, intel: i2, bot: b2 } = setup();
+    park(b2, sightSpots(w2, p2, 1)[0]); senseFor(w2, p2, i2, DT);
+    park(b2, behindWall(w2, p2.x, p2.y, 20)); senseFor(w2, p2, i2, DT);
+    expect(kinds(mapMarkers(w2, p2, i2, []), b2.id)).toEqual(['trace']);
+    b2.alive = false; senseFor(w2, p2, i2, DT);
+    expect(kinds(mapMarkers(w2, p2, i2, []), b2.id)).toEqual([]);
+  });
+
+  it('heard: a trace near the sound (behind you) or a bearing area (through a wall), never the body', () => {
+    const { w, p, intel, bot } = setup();
+    const back = behindBack(w, p);
+    park(bot, back);
+    senseFor(w, p, intel, DT);
+    expect(kinds(mapMarkers(w, p, intel, []), bot.id)).toEqual([]); // silent and unseen: nothing
+    senseFor(w, p, intel, DT, [{ type: 'step', x: bot.x, y: bot.y, radius: 12, sourceId: bot.id, team: 'bot', tick: w.tick }]);
+    const m = mapMarkers(w, p, intel, []);
+    expect(kinds(m, bot.id)).toEqual(['trace']);
+    const wall = behindWall(w, p.x, p.y, 8);
+    const { w: w2, p: p2, intel: i2, bot: b2 } = setup();
+    park(b2, wall);
+    senseFor(w2, p2, i2, DT, [{ type: 'shot', x: b2.x, y: b2.y, radius: 30, sourceId: b2.id, team: 'bot', tick: w2.tick }]);
+    const m2 = mapMarkers(w2, p2, i2, []);
+    expect(kinds(m2, b2.id).every((k) => k === 'trace')).toBe(true);
+    expect(m2.some((x) => x.id === b2.id && x.kind === 'hostile')).toBe(false);
+    // Its muzzle flash in a clear line (even behind you) shows the shooter live, as in the game view.
+    const { w: w3, p: p3, intel: i3, bot: b3 } = setup();
+    park(b3, behindBack(w3, p3));
+    senseFor(w3, p3, i3, DT, [{ type: 'shot', x: b3.x, y: b3.y, radius: 30, sourceId: b3.id, team: 'bot', tick: w3.tick }]);
+    expect(kinds(mapMarkers(w3, p3, i3, []), b3.id)).toEqual(['hostile']);
+  });
+
+  it('a teammate sees it: a blurred trace on your map, never the live body', () => {
+    const { w, p, intel, bot } = setup(true);
+    const mate = w.actors.find((a) => a.team === p.team && a !== p)!;
+    let spot: { x: number; y: number } | null = null;
+    for (const s of sightSpots(w, mate, 30)) if (!canSee(w.level, p.x, p.y, p.facing, p.view, s.x, s.y)) { spot = s; break; }
+    if (!spot) { mate.facing = p.facing + Math.PI; for (const s of sightSpots(w, mate, 30)) if (!canSee(w.level, p.x, p.y, p.facing, p.view, s.x, s.y)) { spot = s; break; } }
+    expect(spot).not.toBeNull();
+    park(bot, spot!); senseFor(w, p, intel, DT);
+    expect(kinds(mapMarkers(w, p, intel, []), bot.id)).toEqual(['trace']);
+  });
+
+  it('Ping: a hostile it reveals is shown live (as the game view draws it), even through a wall; when it ends, a trace', () => {
+    const { w, p, intel, bot } = setup();
+    const R = p.ability.radius ?? TUNING.abilities.sonarRadius;
+    park(bot, behindWall(w, p.x, p.y, Math.min(R - 1, 10)));
+    senseFor(w, p, intel, DT);
+    expect(kinds(mapMarkers(w, p, intel, []), bot.id)).toEqual([]);
+    p.revealLeft = 1;
+    senseFor(w, p, intel, DT);
+    expect(mapMarkers(w, p, intel, []).find((x) => x.id === bot.id)).toMatchObject({ kind: 'hostile', x: bot.x, y: bot.y });
+    p.revealLeft = 0;
+    senseFor(w, p, intel, DT);
+    expect(kinds(mapMarkers(w, p, intel, []), bot.id)).toEqual(['trace']);
+  });
+
+  it('Marker: a hostile your team marked is shown live while the mark lasts', () => {
+    const { w, p, intel, bot } = setup();
+    park(bot, behindWall(w, p.x, p.y, 12));
+    bot.markLeft = 2; bot.markTeam = p.team;
+    senseFor(w, p, intel, DT);
+    expect(kinds(mapMarkers(w, p, intel, []), bot.id)).toEqual(['hostile']);
+  });
+
+  it('never omniscient: across a whole solo run every hostile on the map is one the intel holds, and a live one is a living bot at its real spot', () => {
+    const w = createWorld({ mapId: 'office', seed: 9, allies: [{ name: 'A', hero: 'toad' }, { name: 'B', hero: 'ray' }] });
+    const p = w.actors[0], intel = createIntel();
+    for (let i = 0; i < 1800 && !w.outcome; i++) {
+      stepWorld(w, { ...IDLE_INPUT, aim: p.facing + 0.002 * i, moveX: Math.cos(i / 200), moveY: Math.sin(i / 260) });
+      senseFor(w, p, intel, DT);
+      for (const m of mapMarkers(w, p, intel, visorDots(w, p, null))) {
+        if (m.kind === 'hostile') {
+          const a = w.actors[m.id], c = intel.contacts.get(m.id);
+          expect(a.alive && a.team === 'bot' && a.x === m.x && a.y === m.y).toBe(true);
+          expect(c && (c.state === 'visible' || (c.state === 'partial' && c.source === 'ping'))).toBe(true);
+        }
+        if (m.kind === 'trace') expect(intel.contacts.has(m.id)).toBe(true);
+      }
+    }
+  });
+});
 
 describe('information rules online (real Lobby, real client)', () => {
   it('1v1: an opponent behind walls is not on your map; in your light it is, at its real spot', async () => {
