@@ -4,10 +4,11 @@
 //
 // Trust model for practice (solo vs bots, simulated in the browser): the run is self-reported, so it is checked against
 // hard bounds, rate limited and stored once per run id. Owner 2026-10-17: practice pays XP and shards so a loss still
-// moves you forward, at a smaller, capped rate (PRACTICE_REWARDS): a run is paid only with a start ticket signed here
+// moves you forward (PRACTICE_REWARDS; owner 2026-10-21: the same shards as online for playing, kills and a clear,
+// 10 / 10 / 30, with less XP and a smaller damage bonus): a run is paid only with a start ticket signed here
 // (account, run id, start time) and only when at least the claimed play time has passed since that start; one payment
-// per run id (ledger unique key); at most PRACTICE_REWARDS.dailyCap paid runs and PRACTICE_SHARDS_PER_DAY shards per
-// rolling 24 h. One practice run is open per account: each start replaces the account's open run id (accounts.practice_rid),
+// per run id (ledger unique key); at most PRACTICE_REWARDS.dailyCap (25) paid runs and PRACTICE_SHARDS_PER_DAY (1,000)
+// shards per rolling 24 h; a run that would pass the shard limit pays nothing. One practice run is open per account: each start replaces the account's open run id (accounts.practice_rid),
 // so starting many runs in parallel and posting them later pays only the last. A run must also be plausible for its
 // length (PRACTICE_WIN_MIN_SECONDS, PRACTICE_SECONDS_PER_KILL). A forged run is worth no more than an honest one.
 // Practice never changes rating and never touches the leaderboard; it feeds the practice career and medals, awarded
