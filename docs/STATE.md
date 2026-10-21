@@ -62,7 +62,7 @@ Core Feel Gate: BLOCKED on owner playtests. G10: automated PASS; playtest not ru
 | TM | claude | ccr-e7fadb8f-qtochk | see H37 | Owner 2026-10-20 TACTICAL MAP | live; owner plays it on a phone |
 | MP, H34/ID/SP | claude | same | see H32-H36 | Owner 2026-10-18/19 | live; owner: 1v1s, server plan |
 | UIX | claude (from grokbot) | ccr-e7fadb8f-qtochk | see H38/H39 | Owner 2026-10-20 UI release | live (PR #12 head in branch) |
-| UIX2 | claude | claude/uix2-hub-loading | see H40 | Owner 2026-10-20 hub + loading | preview only; owner approves production |
+| UIX2 | claude | claude/uix2-hub-loading | see H40 | Owner 2026-10-20 hub+loading | preview; owner approves prod |
 | RC-8 | claude | PR #10 | see H16 | Owner RC-8 mandate | PR #10 not merged (owner decides) |
 
 ## Handoffs
