@@ -112,8 +112,8 @@ describe('account-owned profile', () => {
     const browserB = await cookie(ident);
     const a = (await call('GET', 'profile', browserA)).j.profile, b = (await call('GET', 'profile', browserB)).j.profile;
     expect(b).toEqual(a);
-    // Online win with 1 kill and 120 damage: 10 played + 25 win + 3 kill + 2 damage shards, plus the ticketed practice run.
-    expect(b).toMatchObject({ callsign: 'Nomad', xp: 110 + paid.xp, shards: 40 + paid.shards, level: 2, matches: 1, wins: 1 });
+    // Online win with 1 kill and 120 damage: 10 played + 30 win + 10 kill + 2 damage shards, plus the ticketed practice run.
+    expect(b).toMatchObject({ callsign: 'Nomad', xp: 110 + paid.xp, shards: 52 + paid.shards, level: 2, matches: 1, wins: 1 });
     expect(b.online).toMatchObject({ matches: 1, wins: 1, kills: 1, survived: 1, heroes: { benja: { matches: 1, wins: 1, kills: 1 } } });
     expect(Object.keys(b.medals).length).toBeGreaterThan(0);
     const board = (await call('GET', 'leaderboard', browserB)).j;

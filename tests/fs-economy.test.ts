@@ -12,15 +12,21 @@ const totalCost = UPGRADE_IDS.reduce((s, id) => s + UPGRADES[id].costs.reduce((a
 
 describe('every legitimate completed match pays, in the order the owner asked for', () => {
   for (const [name, t] of [['online', REWARDS], ['practice', PRACTICE_REWARDS]] as const) {
-    it(`${name}: a loss pays; kills pay more; damage more; a win most (any kills and damage)`, () => {
+    it(`${name}: a loss pays; kills pay more; damage more; a win more than the same loss`, () => {
       expect(pay(t, false, 0, 0)).toBeGreaterThan(0);
       expect(pay(t, false, 1, 0)).toBeGreaterThan(pay(t, false, 0, 0));
       expect(pay(t, false, 1, 300)).toBeGreaterThan(pay(t, false, 1, 0));
-      // The win bonus is meaningful: the worst win beats the best loss, and is worth at least 2x a bare loss. A solo
-      // practice loss has at most 4 kills (all five hostiles down is a clear): owner 2026-10-21 table 3 / 3 / 18.
-      let bestLoss = 0;
-      for (let k = 0; k <= (name === 'practice' ? 4 : 8); k++) for (const d of [0, 100, 300, 1000, 5000]) bestLoss = Math.max(bestLoss, pay(t, false, k, d));
-      expect(pay(t, true, 0, 0)).toBeGreaterThan(bestLoss);
+      if (name === 'practice') {
+        // Practice (Claude, owner 2026-10-21 table 3 / 3 / 18): the worst clear beats the best loss. A solo practice
+        // loss has at most 4 kills (all five hostiles down is a clear).
+        let bestLoss = 0;
+        for (let k = 0; k <= 4; k++) for (const d of [0, 100, 300, 1000, 5000]) bestLoss = Math.max(bestLoss, pay(t, false, k, d));
+        expect(pay(t, true, 0, 0)).toBeGreaterThan(bestLoss);
+      } else {
+        // Online (owner 2026-10-21: shards 10 / 10 / 30; the old "worst win beats the best loss" rule is superseded):
+        // a win pays more than the same match lost.
+        for (let k = 0; k <= 8; k++) for (const d of [0, 100, 300, 1000, 5000]) expect(pay(t, true, k, d)).toBeGreaterThan(pay(t, false, k, d));
+      }
       expect(pay(t, true, 0, 0)).toBeGreaterThanOrEqual(2 * pay(t, false, 0, 0));
     });
   }

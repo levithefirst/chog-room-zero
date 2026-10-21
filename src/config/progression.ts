@@ -13,8 +13,8 @@ export const REWARDS = {
   // Shards buy upgrades (src/config/power.ts UPGRADES). A first saved match always pays enough for a first rank (10).
   shardsPlay: 10,
   /** Owner 2026-10-17: kills and damage pay too, so a loss where you fought still moves you forward. */
-  shardsWin: 25,
-  shardsPerKill: 3,
+  shardsWin: 30,
+  shardsPerKill: 10,
   /** One shard per this much damage dealt to opponents, up to damageShardsMax. */
   damagePerShard: 50,
   damageShardsMax: 5,
@@ -27,7 +27,7 @@ export const REWARDS = {
 /**
  * Solo practice vs bots (owner 2026-10-17: "players need to earn progression even when they lose"). The run is simulated
  * in the browser, so it pays less than a validated online match and a day's practice is capped (PRACTICE_SHARDS_PER_DAY
- * in api/_lib/career.ts). Owner 2026-10-21: a run pays 3 shards, each kill 3 (the online rate), a clear 18. A clear with
+ * in api/_lib/career.ts). Owner 2026-10-21: a run pays 3 shards, each kill 3 (the online rate before 2026-10-21's 10), a clear 18. A clear with
  * no kills (21) ties the theoretical best loss (3 + 5 kills + 3 damage = 21); in solo a loss never has 5 kills (all five
  * hostiles down is a clear), so every real clear still out-pays every real loss.
  */
