@@ -48,7 +48,7 @@ Last verified: 2026-10-23 by claude (H46: upgrades, medal goals; HANDOFFS H46).
 - H46 (owner 2026-10-23): upgrades Vitality +10 health x12, Plating +5 armour x12, Firepower +35% damage x7, Focus -8% cooldown x8; prices +25% (Firepower x2); caps = maxed, online too; old ranks kept (`docs/design/power.md`). Medal goals in `src/ui/medals.ts`.
 
 ## Automated tests (EVIDENCE, Node 22.22)
-H46: vitest 1196/1196, tsc, qa-rewards 13/13. H45: vitest 1192/1192, tsc, build. Older: HANDOFFS.
+H46: vitest 1196/1196, tsc, qa-rewards 13/13. Older: HANDOFFS.
 
 ## Not performed (needs the owner)
 - Human play (all five locations), real phones (BLOCKED), real-GPU FPS, audio by ear, a real wallet, hosted 5v5 with a holder, art rights, demo video.
