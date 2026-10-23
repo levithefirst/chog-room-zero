@@ -1,8 +1,8 @@
 // RC-1 NFT DEMO: deterministic traits, sidegrades only, and duel parity (seeded) vs the standard kit.
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { traitsFor, sampleTokens, TRAIT_INFO, DEMO_COPY, isTokenId } from '../src/nft/traits';
-import { SIDEGRADES, NO_SIDEGRADE, type Sidegrade } from '../src/sim/operators';
-import { createWorld, stepWorld, IDLE_INPUT, type Actor, type ActorInput } from '../src/sim/world';
+import { SIDEGRADES, type Sidegrade } from '../src/sim/operators';
+import { createWorld, stepWorld, viewFor, weaponFor, IDLE_INPUT, type Actor, type ActorInput } from '../src/sim/world';
 import { TUNING } from '../src/config/tuning';
 
 describe('RC-1 NFT DEMO traits', () => {
@@ -21,18 +21,22 @@ describe('RC-1 NFT DEMO traits', () => {
 // Seeded duel parity: hero X with a sidegrade vs the same hero standard, mirrored, strafing, 3 ranges.
 const HALL = ['##############################', ...Array.from({ length: 7 }, () => '#............................#'), '##############################'];
 function duel(hero: string, sg: Sidegrade, d: number, seed: number, swap: boolean): 'A' | 'B' | 'draw' {
-  // A = the sidegraded side. Swap which slot (player/bot) it occupies to cancel slot bias.
-  const w = createWorld({ seed, hero, map: HALL, sidegrade: swap ? NO_SIDEGRADE : sg, bots: [{ name: 'B', hero, patrol: [[1, 4]], flanker: false }] });
-  const P = w.actors[0], B = w.actors[1];
-  if (swap) { const ws = createWorld({ seed, hero, sidegrade: sg }); B.weapon = ws.actors[0].weapon; B.ammo = B.weapon.magazine; } 
-  P.x = 15 - d / 2; P.y = 4.5; B.x = 15 + d / 2; B.y = 4.5;
-  let dp = 1, db = -1;
-  const steer = (me: Actor, foe: Actor, dir: number): ActorInput => ({ ...IDLE_INPUT, firing: true, reload: me.ammo === 0, aim: Math.atan2(foe.y - me.y, foe.x - me.x), moveY: dir });
+  // A = the sidegraded side. Two equal players (no bot-only rules such as the bot fire gate, which turned a longer
+  // lamp into a disadvantage once fights lasted longer at 150 health); swap which slot it occupies to cancel slot bias.
+  const w = createWorld({ seed, map: HALL, zone: false, versus: [
+    { name: 'L', hero, team: 'alpha', x: 15 - d / 2, y: 4.5, facing: 0 },
+    { name: 'R', hero, team: 'bravo', x: 15 + d / 2, y: 4.5, facing: Math.PI },
+  ] });
+  const [A, B] = swap ? [w.actors[1], w.actors[0]] : [w.actors[0], w.actors[1]];
+  A.weapon = weaponFor(A.hero, sg); A.ammo = A.weapon.magazine; A.reserve = A.weapon.reserve;
+  A.view = viewFor(A.hero, sg); A.baseView = viewFor(A.hero, sg);
+  const L = w.actors[0], R = w.actors[1];
+  const dir = new Map<number, number>([[0, 1], [1, -1]]);
+  const steer = (me: Actor, foe: Actor): ActorInput => ({ ...IDLE_INPUT, firing: true, reload: me.ammo === 0, aim: Math.atan2(foe.y - me.y, foe.x - me.x), moveY: dir.get(me.id)! });
   for (let i = 0; i < 60 * 15; i++) {
-    if (i % 36 === 0 || P.y > 6.5 || P.y < 2.5) dp = P.y > 6.5 ? -1 : P.y < 2.5 ? 1 : -dp;
-    if (i % 27 === 0 || B.y > 6.5 || B.y < 2.5) db = B.y > 6.5 ? -1 : B.y < 2.5 ? 1 : -db;
-    stepWorld(w, steer(P, B, dp), undefined, (a) => (a.id === B.id ? steer(B, P, db) : null));
-    if (!P.alive || !B.alive) { const sgWon = swap ? B.alive : P.alive; return P.alive === B.alive ? 'draw' : sgWon ? 'A' : 'B'; }
+    for (const [me, period] of [[L, 36], [R, 27]] as const) if (i % period === 0 || me.y > 6.5 || me.y < 2.5) dir.set(me.id, me.y > 6.5 ? -1 : me.y < 2.5 ? 1 : -dir.get(me.id)!);
+    stepWorld(w, (a) => (a.id === 0 ? steer(L, R) : steer(R, L)));
+    if (!A.alive || !B.alive) return A.alive === B.alive ? 'draw' : A.alive ? 'A' : 'B';
   }
   return 'draw';
 }

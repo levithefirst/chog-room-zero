@@ -1,0 +1,264 @@
+{
+ "description": "A sample of the OpenSea listing for Chog Genesis, read from the collection page sorted by price low to high. Third-party marketplace data, used only to cross-check. tokenId comes from the item URL, displayNumber from the card title (CHOG #n), openseaRank from the rarity badge on the card (OpenSea ranks 1 as rarest).",
+ "source": "https://opensea.io/collection/chog-genesis",
+ "retrievedAt": "2026-10-13",
+ "retrievedVia": "Firecrawl scrape (scrapeId 01a1361a-c9e1-7222-9ef5-d97cfeeacd5d)",
+ "rarityMethodology": {
+  "name": "OpenRarity",
+  "source": "https://support.opensea.io/en/articles/8867099-what-is-openrarity",
+  "note": "OpenSea Help Center: rankings follow the OpenRarity standard with Double Sort and Trait Count updates, computed from the creator-published trait data and can change if metadata changes. Exact formula not reproduced here."
+ },
+ "collectionItemsShown": 1969,
+ "rows": [
+  {
+   "tokenId": 68,
+   "displayNumber": 1529,
+   "openseaRank": 1301
+  },
+  {
+   "tokenId": 101,
+   "displayNumber": 1562,
+   "openseaRank": 574
+  },
+  {
+   "tokenId": 107,
+   "displayNumber": 1568,
+   "openseaRank": 1885
+  },
+  {
+   "tokenId": 110,
+   "displayNumber": 1571,
+   "openseaRank": 377
+  },
+  {
+   "tokenId": 260,
+   "displayNumber": 1721,
+   "openseaRank": 1768
+  },
+  {
+   "tokenId": 285,
+   "displayNumber": 1746,
+   "openseaRank": 154
+  },
+  {
+   "tokenId": 286,
+   "displayNumber": 1747,
+   "openseaRank": 1928
+  },
+  {
+   "tokenId": 299,
+   "displayNumber": 1760,
+   "openseaRank": 754
+  },
+  {
+   "tokenId": 333,
+   "displayNumber": 1794,
+   "openseaRank": 806
+  },
+  {
+   "tokenId": 344,
+   "displayNumber": 1805,
+   "openseaRank": 1807
+  },
+  {
+   "tokenId": 379,
+   "displayNumber": 1840,
+   "openseaRank": 606
+  },
+  {
+   "tokenId": 424,
+   "displayNumber": 1885,
+   "openseaRank": 405
+  },
+  {
+   "tokenId": 425,
+   "displayNumber": 1886,
+   "openseaRank": 1124
+  },
+  {
+   "tokenId": 432,
+   "displayNumber": 1893,
+   "openseaRank": 245
+  },
+  {
+   "tokenId": 445,
+   "displayNumber": 1906,
+   "openseaRank": 789
+  },
+  {
+   "tokenId": 449,
+   "displayNumber": 1910,
+   "openseaRank": 1399
+  },
+  {
+   "tokenId": 451,
+   "displayNumber": 1912,
+   "openseaRank": 1313
+  },
+  {
+   "tokenId": 460,
+   "displayNumber": 1921,
+   "openseaRank": 1432
+  },
+  {
+   "tokenId": 478,
+   "displayNumber": 1939,
+   "openseaRank": 1851
+  },
+  {
+   "tokenId": 490,
+   "displayNumber": 1951,
+   "openseaRank": 1244
+  },
+  {
+   "tokenId": 500,
+   "displayNumber": 1961,
+   "openseaRank": 1670
+  },
+  {
+   "tokenId": 567,
+   "displayNumber": 59,
+   "openseaRank": 218
+  },
+  {
+   "tokenId": 747,
+   "displayNumber": 239,
+   "openseaRank": 773
+  },
+  {
+   "tokenId": 755,
+   "displayNumber": 247,
+   "openseaRank": 396
+  },
+  {
+   "tokenId": 808,
+   "displayNumber": 300,
+   "openseaRank": 1643
+  },
+  {
+   "tokenId": 885,
+   "displayNumber": 377,
+   "openseaRank": 1278
+  },
+  {
+   "tokenId": 1004,
+   "displayNumber": 496,
+   "openseaRank": 830
+  },
+  {
+   "tokenId": 1170,
+   "displayNumber": 662,
+   "openseaRank": 1123
+  },
+  {
+   "tokenId": 1269,
+   "displayNumber": 761,
+   "openseaRank": 895
+  },
+  {
+   "tokenId": 1292,
+   "displayNumber": 784,
+   "openseaRank": 252
+  },
+  {
+   "tokenId": 1413,
+   "displayNumber": 905,
+   "openseaRank": 1934
+  },
+  {
+   "tokenId": 1469,
+   "displayNumber": 961,
+   "openseaRank": 1071
+  },
+  {
+   "tokenId": 1472,
+   "displayNumber": 964,
+   "openseaRank": 584
+  },
+  {
+   "tokenId": 1474,
+   "displayNumber": 966,
+   "openseaRank": 1546
+  },
+  {
+   "tokenId": 1482,
+   "displayNumber": 974,
+   "openseaRank": 802
+  },
+  {
+   "tokenId": 1488,
+   "displayNumber": 980,
+   "openseaRank": 392
+  },
+  {
+   "tokenId": 1533,
+   "displayNumber": 1025,
+   "openseaRank": 500
+  },
+  {
+   "tokenId": 1581,
+   "displayNumber": 1073,
+   "openseaRank": 294
+  },
+  {
+   "tokenId": 1725,
+   "displayNumber": 1217,
+   "openseaRank": 749
+  },
+  {
+   "tokenId": 1754,
+   "displayNumber": 1246,
+   "openseaRank": 325
+  },
+  {
+   "tokenId": 1762,
+   "displayNumber": 1254,
+   "openseaRank": 1637
+  },
+  {
+   "tokenId": 1769,
+   "displayNumber": 1261,
+   "openseaRank": 1559
+  },
+  {
+   "tokenId": 1787,
+   "displayNumber": 1279,
+   "openseaRank": 195
+  },
+  {
+   "tokenId": 1820,
+   "displayNumber": 1312,
+   "openseaRank": 1652
+  },
+  {
+   "tokenId": 1878,
+   "displayNumber": 1370,
+   "openseaRank": 1455
+  },
+  {
+   "tokenId": 1886,
+   "displayNumber": 1378,
+   "openseaRank": 993
+  },
+  {
+   "tokenId": 1925,
+   "displayNumber": 1417,
+   "openseaRank": 1720
+  },
+  {
+   "tokenId": 1931,
+   "displayNumber": 1423,
+   "openseaRank": 370
+  },
+  {
+   "tokenId": 1937,
+   "displayNumber": 1429,
+   "openseaRank": 1942
+  },
+  {
+   "tokenId": 1969,
+   "displayNumber": 1461,
+   "openseaRank": 133
+  }
+ ]
+}

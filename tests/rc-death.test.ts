@@ -27,6 +27,8 @@ describe('RC-1 death screen protection', () => {
   }
   it('other screens are never gated', () => {
     const g = createSummaryGate();
-    for (const p of ['title', 'select', 'pause', 'play']) expect(overlayInputAllowed(p, g)).toBe(true);
+    for (const p of ['title', 'select', 'pause']) expect(overlayInputAllowed(p, g)).toBe(true);
+    // V2: play is the one exception: the overlay is hidden then, so nothing on it may act (tests/v2-input-routing).
+    expect(overlayInputAllowed('play', g)).toBe(false);
   });
 });

@@ -1,7 +1,9 @@
 // MAP-001 spawn-crate evaluation: current layout vs "crates one tile west". Deterministic.
 // Writes the full metrics to $MAP_EVAL_OUT when set. Asserts the safety invariants for the SHIPPED layout.
 import { describe, expect, it } from 'vitest';
-import { ROOM_ZERO, BOT_SPAWNS } from '../src/config/map';
+// MAP-001 was decided on the RC-8 map (its spawn crates); the 68 x 42 venue keeps that map for the lab, and this
+// evaluation stays pinned to it. The new venue's spawn safety, reach and crate snags: tests/venue.test.ts.
+import { ROOM_ZERO_RC8 as ROOM_ZERO, BOT_SPAWNS_RC8 as BOT_SPAWNS } from '../src/config/map';
 import { parseLevel, findPath, sightClear, shotClear, walkable, type Level } from '../src/sim/level';
 import { createWorld, stepWorld, IDLE_INPUT, type World } from '../src/sim/world';
 import { canSee } from '../src/sim/vision';
@@ -75,7 +77,7 @@ function crateSnags(map: string[], assist: number) {
 
 /** Scripted player: walk the A* route spawn -> the concourse centre (27.5, 8.5); first mutual-sight tick. */
 function firstContact(map: string[], seed: number, tx = 27.5, ty = 8.5) {
-  const w: World = createWorld({ seed, map });
+  const w: World = createWorld({ seed, map, bots: BOT_SPAWNS });
   const p = w.actors[0];
   p.hp = 1e9;
   const route = findPath(w.level, p.x, p.y, tx, ty);

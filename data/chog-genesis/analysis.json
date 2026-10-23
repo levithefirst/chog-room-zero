@@ -1,0 +1,1760 @@
+{
+ "generatedBy": "tools/nft/build-catalogue.ts",
+ "traitCountDistribution": {
+  "2": 10,
+  "9": 34,
+  "10": 203,
+  "11": 950,
+  "12": 699,
+  "13": 73
+ },
+ "tierByBase": {
+  "1:1/Legendary": 10,
+  "Origin/Common": 1279,
+  "Origin/Uncommon": 590,
+  "Radioactive/Epic": 30,
+  "Skull/Rare": 60
+ },
+ "distinctFullCombinations": 1960,
+ "twinsIgnoring": [
+  {
+   "ignored": [],
+   "distinctCombinations": 1960,
+   "groups": 1,
+   "tokensInGroups": 10,
+   "largest": 10
+  },
+  {
+   "ignored": [
+    "Side"
+   ],
+   "distinctCombinations": 1960,
+   "groups": 1,
+   "tokensInGroups": 10,
+   "largest": 10
+  },
+  {
+   "ignored": [
+    "Background"
+   ],
+   "distinctCombinations": 1957,
+   "groups": 3,
+   "tokensInGroups": 15,
+   "largest": 10
+  },
+  {
+   "ignored": [
+    "Side",
+    "Background"
+   ],
+   "distinctCombinations": 1957,
+   "groups": 3,
+   "tokensInGroups": 15,
+   "largest": 10
+  },
+  {
+   "ignored": [
+    "Side",
+    "Background",
+    "Aura"
+   ],
+   "distinctCombinations": 1946,
+   "groups": 12,
+   "tokensInGroups": 35,
+   "largest": 10
+  }
+ ],
+ "twinGroupsIgnoringSideBackgroundAura": [
+  {
+   "skipped": [
+    "Side",
+    "Background",
+    "Aura"
+   ],
+   "groupSize": 2,
+   "metadataIds": [
+    829,
+    1617
+   ]
+  },
+  {
+   "skipped": [
+    "Side",
+    "Background",
+    "Aura"
+   ],
+   "groupSize": 2,
+   "metadataIds": [
+    713,
+    1630
+   ]
+  },
+  {
+   "skipped": [
+    "Side",
+    "Background",
+    "Aura"
+   ],
+   "groupSize": 2,
+   "metadataIds": [
+    333,
+    1908
+   ]
+  },
+  {
+   "skipped": [
+    "Side",
+    "Background",
+    "Aura"
+   ],
+   "groupSize": 3,
+   "metadataIds": [
+    197,
+    747,
+    1910
+   ]
+  },
+  {
+   "skipped": [
+    "Side",
+    "Background",
+    "Aura"
+   ],
+   "groupSize": 2,
+   "metadataIds": [
+    88,
+    594
+   ]
+  },
+  {
+   "skipped": [
+    "Side",
+    "Background",
+    "Aura"
+   ],
+   "groupSize": 3,
+   "metadataIds": [
+    117,
+    627,
+    1041
+   ]
+  },
+  {
+   "skipped": [
+    "Side",
+    "Background",
+    "Aura"
+   ],
+   "groupSize": 2,
+   "metadataIds": [
+    411,
+    1218
+   ]
+  },
+  {
+   "skipped": [
+    "Side",
+    "Background",
+    "Aura"
+   ],
+   "groupSize": 2,
+   "metadataIds": [
+    414,
+    1389
+   ]
+  },
+  {
+   "skipped": [
+    "Side",
+    "Background",
+    "Aura"
+   ],
+   "groupSize": 2,
+   "metadataIds": [
+    465,
+    882
+   ]
+  },
+  {
+   "skipped": [
+    "Side",
+    "Background",
+    "Aura"
+   ],
+   "groupSize": 2,
+   "metadataIds": [
+    481,
+    537
+   ]
+  },
+  {
+   "skipped": [
+    "Side",
+    "Background",
+    "Aura"
+   ],
+   "groupSize": 3,
+   "metadataIds": [
+    584,
+    724,
+    861
+   ]
+  }
+ ],
+ "labelCouplings": [
+  {
+   "when": "Base=Origin",
+   "always": "Form=Chog",
+   "tokens": 1869
+  },
+  {
+   "when": "Base=Skull",
+   "always": "Mouth=(absent)",
+   "tokens": 60
+  },
+  {
+   "when": "Base=Skull",
+   "always": "Accessory=(absent)",
+   "tokens": 60
+  },
+  {
+   "when": "Base=Skull",
+   "always": "Form=Skull",
+   "tokens": 60
+  },
+  {
+   "when": "Base=Skull",
+   "always": "Tier=Rare",
+   "tokens": 60
+  },
+  {
+   "when": "Base=Radioactive",
+   "always": "Background=Radioactive",
+   "tokens": 30
+  },
+  {
+   "when": "Base=Radioactive",
+   "always": "Side=Left",
+   "tokens": 30
+  },
+  {
+   "when": "Base=Radioactive",
+   "always": "Mouth=(absent)",
+   "tokens": 30
+  },
+  {
+   "when": "Base=Radioactive",
+   "always": "Accessory=(absent)",
+   "tokens": 30
+  },
+  {
+   "when": "Base=Radioactive",
+   "always": "Form=Chog",
+   "tokens": 30
+  },
+  {
+   "when": "Base=Radioactive",
+   "always": "Tier=Epic",
+   "tokens": 30
+  },
+  {
+   "when": "Base=1:1",
+   "always": "Background=(absent)",
+   "tokens": 10
+  },
+  {
+   "when": "Base=1:1",
+   "always": "Aura=(absent)",
+   "tokens": 10
+  },
+  {
+   "when": "Base=1:1",
+   "always": "Skin=(absent)",
+   "tokens": 10
+  },
+  {
+   "when": "Base=1:1",
+   "always": "Side=(absent)",
+   "tokens": 10
+  },
+  {
+   "when": "Base=1:1",
+   "always": "Body=(absent)",
+   "tokens": 10
+  },
+  {
+   "when": "Base=1:1",
+   "always": "Mouth=(absent)",
+   "tokens": 10
+  },
+  {
+   "when": "Base=1:1",
+   "always": "Eyes=(absent)",
+   "tokens": 10
+  },
+  {
+   "when": "Base=1:1",
+   "always": "Head=(absent)",
+   "tokens": 10
+  },
+  {
+   "when": "Base=1:1",
+   "always": "Accessory=(absent)",
+   "tokens": 10
+  },
+  {
+   "when": "Base=1:1",
+   "always": "Form=(absent)",
+   "tokens": 10
+  },
+  {
+   "when": "Base=1:1",
+   "always": "Tier=Legendary",
+   "tokens": 10
+  },
+  {
+   "when": "Base=1:1",
+   "always": "Naked=(absent)",
+   "tokens": 10
+  },
+  {
+   "when": "Form=Skull",
+   "always": "Base=Skull",
+   "tokens": 60
+  },
+  {
+   "when": "Form=Skull",
+   "always": "Mouth=(absent)",
+   "tokens": 60
+  },
+  {
+   "when": "Form=Skull",
+   "always": "Accessory=(absent)",
+   "tokens": 60
+  },
+  {
+   "when": "Form=Skull",
+   "always": "Tier=Rare",
+   "tokens": 60
+  },
+  {
+   "when": "Tier=Uncommon",
+   "always": "Base=Origin",
+   "tokens": 590
+  },
+  {
+   "when": "Tier=Uncommon",
+   "always": "Side=Left",
+   "tokens": 590
+  },
+  {
+   "when": "Tier=Uncommon",
+   "always": "Form=Chog",
+   "tokens": 590
+  },
+  {
+   "when": "Tier=Common",
+   "always": "Base=Origin",
+   "tokens": 1279
+  },
+  {
+   "when": "Tier=Common",
+   "always": "Side=Right",
+   "tokens": 1279
+  },
+  {
+   "when": "Tier=Common",
+   "always": "Accessory=(absent)",
+   "tokens": 1279
+  },
+  {
+   "when": "Tier=Common",
+   "always": "Form=Chog",
+   "tokens": 1279
+  },
+  {
+   "when": "Tier=Rare",
+   "always": "Base=Skull",
+   "tokens": 60
+  },
+  {
+   "when": "Tier=Rare",
+   "always": "Mouth=(absent)",
+   "tokens": 60
+  },
+  {
+   "when": "Tier=Rare",
+   "always": "Accessory=(absent)",
+   "tokens": 60
+  },
+  {
+   "when": "Tier=Rare",
+   "always": "Form=Skull",
+   "tokens": 60
+  },
+  {
+   "when": "Tier=Epic",
+   "always": "Background=Radioactive",
+   "tokens": 30
+  },
+  {
+   "when": "Tier=Epic",
+   "always": "Base=Radioactive",
+   "tokens": 30
+  },
+  {
+   "when": "Tier=Epic",
+   "always": "Side=Left",
+   "tokens": 30
+  },
+  {
+   "when": "Tier=Epic",
+   "always": "Mouth=(absent)",
+   "tokens": 30
+  },
+  {
+   "when": "Tier=Epic",
+   "always": "Accessory=(absent)",
+   "tokens": 30
+  },
+  {
+   "when": "Tier=Epic",
+   "always": "Form=Chog",
+   "tokens": 30
+  },
+  {
+   "when": "Tier=Legendary",
+   "always": "Background=(absent)",
+   "tokens": 10
+  },
+  {
+   "when": "Tier=Legendary",
+   "always": "Aura=(absent)",
+   "tokens": 10
+  },
+  {
+   "when": "Tier=Legendary",
+   "always": "Base=1:1",
+   "tokens": 10
+  },
+  {
+   "when": "Tier=Legendary",
+   "always": "Skin=(absent)",
+   "tokens": 10
+  },
+  {
+   "when": "Tier=Legendary",
+   "always": "Side=(absent)",
+   "tokens": 10
+  },
+  {
+   "when": "Tier=Legendary",
+   "always": "Body=(absent)",
+   "tokens": 10
+  },
+  {
+   "when": "Tier=Legendary",
+   "always": "Mouth=(absent)",
+   "tokens": 10
+  },
+  {
+   "when": "Tier=Legendary",
+   "always": "Eyes=(absent)",
+   "tokens": 10
+  },
+  {
+   "when": "Tier=Legendary",
+   "always": "Head=(absent)",
+   "tokens": 10
+  },
+  {
+   "when": "Tier=Legendary",
+   "always": "Accessory=(absent)",
+   "tokens": 10
+  },
+  {
+   "when": "Tier=Legendary",
+   "always": "Form=(absent)",
+   "tokens": 10
+  },
+  {
+   "when": "Tier=Legendary",
+   "always": "Naked=(absent)",
+   "tokens": 10
+  },
+  {
+   "when": "Naked=Yes",
+   "always": "Body=(absent)",
+   "tokens": 54
+  },
+  {
+   "when": "Naked=Yes",
+   "always": "Head=(absent)",
+   "tokens": 54
+  },
+  {
+   "when": "Naked=Yes",
+   "always": "Accessory=(absent)",
+   "tokens": 54
+  }
+ ],
+ "backgroundFamiliesOfOriginBase": [
+  {
+   "sides": [
+    "Left",
+    "Right"
+   ],
+   "tiers": [
+    "Common",
+    "Uncommon"
+   ],
+   "accessoryPossible": true,
+   "backgrounds": [
+    {
+     "value": "Light Purple",
+     "tokens": 181
+    },
+    {
+     "value": "Lemon",
+     "tokens": 138
+    },
+    {
+     "value": "Aqua",
+     "tokens": 129
+    },
+    {
+     "value": "Lemon Yellow",
+     "tokens": 129
+    },
+    {
+     "value": "Mon",
+     "tokens": 126
+    },
+    {
+     "value": "Sunlight",
+     "tokens": 125
+    },
+    {
+     "value": "Rosie",
+     "tokens": 122
+    },
+    {
+     "value": "Coral Pink",
+     "tokens": 115
+    },
+    {
+     "value": "Mint",
+     "tokens": 109
+    }
+   ],
+   "tokens": 1174
+  },
+  {
+   "sides": [
+    "Right"
+   ],
+   "tiers": [
+    "Common"
+   ],
+   "accessoryPossible": false,
+   "backgrounds": [
+    {
+     "value": "Peach Pink",
+     "tokens": 95
+    },
+    {
+     "value": "Light Magenta",
+     "tokens": 92
+    },
+    {
+     "value": "Soft Lavender",
+     "tokens": 86
+    },
+    {
+     "value": "Sky Blue",
+     "tokens": 85
+    },
+    {
+     "value": "Fresh Green",
+     "tokens": 85
+    },
+    {
+     "value": "Aqua Mint",
+     "tokens": 69
+    }
+   ],
+   "tokens": 512
+  },
+  {
+   "sides": [
+    "Left"
+   ],
+   "tiers": [
+    "Uncommon"
+   ],
+   "accessoryPossible": true,
+   "backgrounds": [
+    {
+     "value": "Rosy Pink",
+     "tokens": 47
+    },
+    {
+     "value": "Deep Aqua",
+     "tokens": 46
+    },
+    {
+     "value": "Lime Green",
+     "tokens": 45
+    },
+    {
+     "value": "Deep Blue",
+     "tokens": 45
+    }
+   ],
+   "tokens": 183
+  }
+ ],
+ "uniqueValueHolders": [
+  {
+   "category": "Background",
+   "value": "Afternoon Orange",
+   "metadataId": 1889,
+   "tokenId": 428
+  },
+  {
+   "category": "Background",
+   "value": "Aqua Blue",
+   "metadataId": 993,
+   "tokenId": 1501
+  },
+  {
+   "category": "Background",
+   "value": "Blood Red",
+   "metadataId": 483,
+   "tokenId": 991
+  },
+  {
+   "category": "Background",
+   "value": "Noble Blue",
+   "metadataId": 1642,
+   "tokenId": 181
+  },
+  {
+   "category": "Background",
+   "value": "Rose Pink",
+   "metadataId": 1214,
+   "tokenId": 1722
+  },
+  {
+   "category": "Aura",
+   "value": "White Aura",
+   "metadataId": 1808,
+   "tokenId": 347
+  },
+  {
+   "category": "Body",
+   "value": "Blue Holed Jacket",
+   "metadataId": 1723,
+   "tokenId": 262
+  },
+  {
+   "category": "Body",
+   "value": "Blue Mafia",
+   "metadataId": 1289,
+   "tokenId": 1797
+  },
+  {
+   "category": "Body",
+   "value": "Orange Holed Jacket",
+   "metadataId": 1221,
+   "tokenId": 1729
+  },
+  {
+   "category": "Body",
+   "value": "Purple Tank",
+   "metadataId": 1009,
+   "tokenId": 1517
+  },
+  {
+   "category": "Body",
+   "value": "White Tank",
+   "metadataId": 275,
+   "tokenId": 783
+  },
+  {
+   "category": "Eyes",
+   "value": "Blue Flat",
+   "metadataId": 1657,
+   "tokenId": 196
+  },
+  {
+   "category": "Eyes",
+   "value": "Blue Happy",
+   "metadataId": 1200,
+   "tokenId": 1708
+  },
+  {
+   "category": "Eyes",
+   "value": "Blue Smirk",
+   "metadataId": 1281,
+   "tokenId": 1789
+  },
+  {
+   "category": "Eyes",
+   "value": "Green Retard",
+   "metadataId": 1100,
+   "tokenId": 1608
+  },
+  {
+   "category": "Eyes",
+   "value": "Green Round Eye",
+   "metadataId": 31,
+   "tokenId": 539
+  },
+  {
+   "category": "Eyes",
+   "value": "Green Smirk",
+   "metadataId": 473,
+   "tokenId": 981
+  },
+  {
+   "category": "Eyes",
+   "value": "Mixed Round Eye",
+   "metadataId": 1192,
+   "tokenId": 1700
+  },
+  {
+   "category": "Eyes",
+   "value": "Red Retard",
+   "metadataId": 1849,
+   "tokenId": 388
+  },
+  {
+   "category": "Head",
+   "value": "8 Ball Beanie",
+   "metadataId": 388,
+   "tokenId": 896
+  },
+  {
+   "category": "Head",
+   "value": "Blue Laser",
+   "metadataId": 772,
+   "tokenId": 1280
+  },
+  {
+   "category": "Head",
+   "value": "devil horn",
+   "metadataId": 1225,
+   "tokenId": 1733
+  },
+  {
+   "category": "Head",
+   "value": "Head Wrap",
+   "metadataId": 1861,
+   "tokenId": 400
+  },
+  {
+   "category": "Head",
+   "value": "Jeet Cap",
+   "metadataId": 1221,
+   "tokenId": 1729
+  },
+  {
+   "category": "Head",
+   "value": "Mafia Hat",
+   "metadataId": 1311,
+   "tokenId": 1819
+  },
+  {
+   "category": "Head",
+   "value": "Peace Cap",
+   "metadataId": 1642,
+   "tokenId": 181
+  },
+  {
+   "category": "Head",
+   "value": "Poison Shroom",
+   "metadataId": 1100,
+   "tokenId": 1608
+  }
+ ],
+ "vocabularyOverlapCommonVsUncommon": [
+  {
+   "category": "Background",
+   "sharedValues": 9,
+   "onlyCommon": 6,
+   "onlyUncommon": 4,
+   "commonTokensInSharedValues": 767,
+   "commonTokens": 1279,
+   "uncommonTokensInSharedValues": 407,
+   "uncommonTokens": 590
+  },
+  {
+   "category": "Aura",
+   "sharedValues": 0,
+   "onlyCommon": 11,
+   "onlyUncommon": 5,
+   "commonTokensInSharedValues": 0,
+   "commonTokens": 605,
+   "uncommonTokensInSharedValues": 0,
+   "uncommonTokens": 279
+  },
+  {
+   "category": "Skin",
+   "sharedValues": 2,
+   "onlyCommon": 3,
+   "onlyUncommon": 0,
+   "commonTokensInSharedValues": 495,
+   "commonTokens": 1279,
+   "uncommonTokensInSharedValues": 590,
+   "uncommonTokens": 590
+  },
+  {
+   "category": "Body",
+   "sharedValues": 2,
+   "onlyCommon": 38,
+   "onlyUncommon": 44,
+   "commonTokensInSharedValues": 56,
+   "commonTokens": 1145,
+   "uncommonTokensInSharedValues": 27,
+   "uncommonTokens": 541
+  },
+  {
+   "category": "Mouth",
+   "sharedValues": 6,
+   "onlyCommon": 4,
+   "onlyUncommon": 5,
+   "commonTokensInSharedValues": 732,
+   "commonTokens": 1214,
+   "uncommonTokensInSharedValues": 323,
+   "uncommonTokens": 590
+  },
+  {
+   "category": "Eyes",
+   "sharedValues": 4,
+   "onlyCommon": 16,
+   "onlyUncommon": 19,
+   "commonTokensInSharedValues": 280,
+   "commonTokens": 1279,
+   "uncommonTokensInSharedValues": 118,
+   "uncommonTokens": 590
+  },
+  {
+   "category": "Head",
+   "sharedValues": 2,
+   "onlyCommon": 24,
+   "onlyUncommon": 18,
+   "commonTokensInSharedValues": 87,
+   "commonTokens": 1111,
+   "uncommonTokensInSharedValues": 49,
+   "uncommonTokens": 529
+  },
+  {
+   "category": "Accessory",
+   "sharedValues": 0,
+   "onlyCommon": 0,
+   "onlyUncommon": 9,
+   "commonTokensInSharedValues": 0,
+   "commonTokens": 0,
+   "uncommonTokensInSharedValues": 0,
+   "uncommonTokens": 195
+  }
+ ],
+ "tierAssociationAmongOriginTokens": [
+  {
+   "category": "Background",
+   "cramersV": 0.6016,
+   "nullMeanV": 0.0968,
+   "nullP95V": 0.1256,
+   "tiedToTier": true
+  },
+  {
+   "category": "Aura",
+   "cramersV": 0.6877,
+   "nullMeanV": 0.0911,
+   "nullP95V": 0.1171,
+   "tiedToTier": true
+  },
+  {
+   "category": "Skin",
+   "cramersV": 0.5774,
+   "nullMeanV": 0.043,
+   "nullP95V": 0.0708,
+   "tiedToTier": true
+  },
+  {
+   "category": "Side",
+   "cramersV": 1,
+   "nullMeanV": 0.0197,
+   "nullP95V": 0.044,
+   "tiedToTier": true
+  },
+  {
+   "category": "Body",
+   "cramersV": 0.9309,
+   "nullMeanV": 0.2116,
+   "nullP95V": 0.238,
+   "tiedToTier": true
+  },
+  {
+   "category": "Mouth",
+   "cramersV": 0.6721,
+   "nullMeanV": 0.0881,
+   "nullP95V": 0.1154,
+   "tiedToTier": true
+  },
+  {
+   "category": "Eyes",
+   "cramersV": 0.8917,
+   "nullMeanV": 0.1415,
+   "nullP95V": 0.1697,
+   "tiedToTier": true
+  },
+  {
+   "category": "Head",
+   "cramersV": 0.9009,
+   "nullMeanV": 0.1526,
+   "nullP95V": 0.1775,
+   "tiedToTier": true
+  },
+  {
+   "category": "Accessory",
+   "cramersV": 0.5025,
+   "nullMeanV": 0.0667,
+   "nullP95V": 0.0955,
+   "tiedToTier": true
+  },
+  {
+   "category": "Naked",
+   "cramersV": 0.0209,
+   "nullMeanV": 0.0175,
+   "nullP95V": 0.0448,
+   "tiedToTier": false
+  }
+ ],
+ "starterPartition": [
+  {
+   "axis": "vision profile",
+   "category": "Eyes",
+   "families": [
+    {
+     "family": "lens",
+     "tokens": 434,
+     "pctOfCollection": 22.04,
+     "byTier": {
+      "Uncommon": 68,
+      "Common": 351,
+      "Rare": 15,
+      "Epic": 0,
+      "Legendary": 0
+     },
+     "pctOfTier": {
+      "Uncommon": 11.53,
+      "Common": 27.44,
+      "Rare": 25,
+      "Epic": 0,
+      "Legendary": 0
+     }
+    },
+    {
+     "family": "frames",
+     "tokens": 212,
+     "pctOfCollection": 10.77,
+     "byTier": {
+      "Uncommon": 89,
+      "Common": 120,
+      "Rare": 3,
+      "Epic": 0,
+      "Legendary": 0
+     },
+     "pctOfTier": {
+      "Uncommon": 15.08,
+      "Common": 9.38,
+      "Rare": 5,
+      "Epic": 0,
+      "Legendary": 0
+     }
+    },
+    {
+     "family": "standard",
+     "tokens": 1323,
+     "pctOfCollection": 67.19,
+     "byTier": {
+      "Uncommon": 433,
+      "Common": 808,
+      "Rare": 42,
+      "Epic": 30,
+      "Legendary": 10
+     },
+     "pctOfTier": {
+      "Uncommon": 73.39,
+      "Common": 63.17,
+      "Rare": 70,
+      "Epic": 100,
+      "Legendary": 100
+     }
+    }
+   ],
+   "unknownValues": [],
+   "overlappingValues": [],
+   "note": "eyewear that suggests a focused view versus a framed view; everything else keeps the standard view",
+   "families_defined": [
+    {
+     "id": "lens",
+     "values": [
+      "Purple laser",
+      "fire laser",
+      "Green laser",
+      "cyan laser",
+      "Gradient visor",
+      "Sunset visor",
+      "Plasma visor"
+     ]
+    },
+    {
+     "id": "frames",
+     "values": [
+      "Anime Glass",
+      "Retro Glass",
+      "3D Glass",
+      "BTC Glass",
+      "Modern VR",
+      "Classic VR"
+     ]
+    }
+   ]
+  },
+  {
+   "axis": "weapon rhythm",
+   "category": "Mouth",
+   "families": [
+    {
+     "family": "steady",
+     "tokens": 475,
+     "pctOfCollection": 24.12,
+     "byTier": {
+      "Uncommon": 223,
+      "Common": 252,
+      "Rare": 0,
+      "Epic": 0,
+      "Legendary": 0
+     },
+     "pctOfTier": {
+      "Uncommon": 37.8,
+      "Common": 19.7,
+      "Rare": 0,
+      "Epic": 0,
+      "Legendary": 0
+     }
+    },
+    {
+     "family": "burst",
+     "tokens": 554,
+     "pctOfCollection": 28.14,
+     "byTier": {
+      "Uncommon": 215,
+      "Common": 339,
+      "Rare": 0,
+      "Epic": 0,
+      "Legendary": 0
+     },
+     "pctOfTier": {
+      "Uncommon": 36.44,
+      "Common": 26.51,
+      "Rare": 0,
+      "Epic": 0,
+      "Legendary": 0
+     }
+    },
+    {
+     "family": "standard",
+     "tokens": 940,
+     "pctOfCollection": 47.74,
+     "byTier": {
+      "Uncommon": 152,
+      "Common": 688,
+      "Rare": 60,
+      "Epic": 30,
+      "Legendary": 10
+     },
+     "pctOfTier": {
+      "Uncommon": 25.76,
+      "Common": 53.79,
+      "Rare": 100,
+      "Epic": 100,
+      "Legendary": 100
+     }
+    }
+   ],
+   "unknownValues": [],
+   "overlappingValues": [],
+   "note": "composed mouths versus loud, messy mouths; the rest and the missing keep the standard rhythm",
+   "families_defined": [
+    {
+     "id": "steady",
+     "values": [
+      "normal smile",
+      "Smile",
+      "Flat",
+      "Grit"
+     ]
+    },
+    {
+     "id": "burst",
+     "values": [
+      "Rainbow Puke",
+      "Bubblegum",
+      "Drooling",
+      "Clown Mouth"
+     ]
+    }
+   ]
+  }
+ ],
+ "topAndBottomByM5": {
+  "rarest": [
+   {
+    "tokenId": 561,
+    "metadataId": 53,
+    "tier": "Legendary",
+    "icBits": 71.893,
+    "rankIc": 2,
+    "icPresentBits": 15.243,
+    "rankIcPresent": 1960,
+    "inverseScore": 393.8,
+    "rankInverse": 309,
+    "rarestTraitPct": 0.5079,
+    "rankRarest": 154,
+    "icCountBits": 79.514,
+    "rankIcCount": 1,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 900,
+    "metadataId": 392,
+    "tier": "Legendary",
+    "icBits": 71.893,
+    "rankIc": 2,
+    "icPresentBits": 15.243,
+    "rankIcPresent": 1960,
+    "inverseScore": 393.8,
+    "rankInverse": 309,
+    "rarestTraitPct": 0.5079,
+    "rankRarest": 154,
+    "icCountBits": 79.514,
+    "rankIcCount": 1,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 942,
+    "metadataId": 434,
+    "tier": "Legendary",
+    "icBits": 71.893,
+    "rankIc": 2,
+    "icPresentBits": 15.243,
+    "rankIcPresent": 1960,
+    "inverseScore": 393.8,
+    "rankInverse": 309,
+    "rarestTraitPct": 0.5079,
+    "rankRarest": 154,
+    "icCountBits": 79.514,
+    "rankIcCount": 1,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 1002,
+    "metadataId": 494,
+    "tier": "Legendary",
+    "icBits": 71.893,
+    "rankIc": 2,
+    "icPresentBits": 15.243,
+    "rankIcPresent": 1960,
+    "inverseScore": 393.8,
+    "rankInverse": 309,
+    "rarestTraitPct": 0.5079,
+    "rankRarest": 154,
+    "icCountBits": 79.514,
+    "rankIcCount": 1,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 1481,
+    "metadataId": 973,
+    "tier": "Legendary",
+    "icBits": 71.893,
+    "rankIc": 2,
+    "icPresentBits": 15.243,
+    "rankIcPresent": 1960,
+    "inverseScore": 393.8,
+    "rankInverse": 309,
+    "rarestTraitPct": 0.5079,
+    "rankRarest": 154,
+    "icCountBits": 79.514,
+    "rankIcCount": 1,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 1514,
+    "metadataId": 1006,
+    "tier": "Legendary",
+    "icBits": 71.893,
+    "rankIc": 2,
+    "icPresentBits": 15.243,
+    "rankIcPresent": 1960,
+    "inverseScore": 393.8,
+    "rankInverse": 309,
+    "rarestTraitPct": 0.5079,
+    "rankRarest": 154,
+    "icCountBits": 79.514,
+    "rankIcCount": 1,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 1667,
+    "metadataId": 1159,
+    "tier": "Legendary",
+    "icBits": 71.893,
+    "rankIc": 2,
+    "icPresentBits": 15.243,
+    "rankIcPresent": 1960,
+    "inverseScore": 393.8,
+    "rankInverse": 309,
+    "rarestTraitPct": 0.5079,
+    "rankRarest": 154,
+    "icCountBits": 79.514,
+    "rankIcCount": 1,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 1798,
+    "metadataId": 1290,
+    "tier": "Legendary",
+    "icBits": 71.893,
+    "rankIc": 2,
+    "icPresentBits": 15.243,
+    "rankIcPresent": 1960,
+    "inverseScore": 393.8,
+    "rankInverse": 309,
+    "rarestTraitPct": 0.5079,
+    "rankRarest": 154,
+    "icCountBits": 79.514,
+    "rankIcCount": 1,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 1881,
+    "metadataId": 1373,
+    "tier": "Legendary",
+    "icBits": 71.893,
+    "rankIc": 2,
+    "icPresentBits": 15.243,
+    "rankIcPresent": 1960,
+    "inverseScore": 393.8,
+    "rankInverse": 309,
+    "rarestTraitPct": 0.5079,
+    "rankRarest": 154,
+    "icCountBits": 79.514,
+    "rankIcCount": 1,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 1884,
+    "metadataId": 1376,
+    "tier": "Legendary",
+    "icBits": 71.893,
+    "rankIc": 2,
+    "icPresentBits": 15.243,
+    "rankIcPresent": 1960,
+    "inverseScore": 393.8,
+    "rankInverse": 309,
+    "rarestTraitPct": 0.5079,
+    "rankRarest": 154,
+    "icCountBits": 79.514,
+    "rankIcCount": 1,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 1729,
+    "metadataId": 1221,
+    "tier": "Rare",
+    "icBits": 73.011,
+    "rankIc": 1,
+    "icPresentBits": 69.283,
+    "rankIcPresent": 1,
+    "inverseScore": 5179.88,
+    "rankInverse": 2,
+    "rarestTraitPct": 0.0508,
+    "rankRarest": 1,
+    "icCountBits": 74.062,
+    "rankIcCount": 11,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 181,
+    "metadataId": 1642,
+    "tier": "Rare",
+    "icBits": 70.705,
+    "rankIc": 12,
+    "icPresentBits": 66.978,
+    "rankIcPresent": 2,
+    "inverseScore": 5436.91,
+    "rankInverse": 1,
+    "rarestTraitPct": 0.0508,
+    "rankRarest": 1,
+    "icCountBits": 71.757,
+    "rankIcCount": 12,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 896,
+    "metadataId": 388,
+    "tier": "Rare",
+    "icBits": 70.181,
+    "rankIc": 13,
+    "icPresentBits": 66.454,
+    "rankIcPresent": 3,
+    "inverseScore": 4304.13,
+    "rankInverse": 7,
+    "rarestTraitPct": 0.0508,
+    "rankRarest": 1,
+    "icCountBits": 71.233,
+    "rankIcCount": 13,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 1587,
+    "metadataId": 1079,
+    "tier": "Rare",
+    "icBits": 68.896,
+    "rankIc": 14,
+    "icPresentBits": 65.169,
+    "rankIcPresent": 4,
+    "inverseScore": 3248.63,
+    "rankInverse": 17,
+    "rarestTraitPct": 0.1016,
+    "rankRarest": 25,
+    "icCountBits": 69.947,
+    "rankIcCount": 14,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 1819,
+    "metadataId": 1311,
+    "tier": "Rare",
+    "icBits": 68.796,
+    "rankIc": 15,
+    "icPresentBits": 65.069,
+    "rankIcPresent": 5,
+    "inverseScore": 4746.14,
+    "rankInverse": 4,
+    "rarestTraitPct": 0.0508,
+    "rankRarest": 1,
+    "icCountBits": 69.847,
+    "rankIcCount": 15,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 428,
+    "metadataId": 1889,
+    "tier": "Rare",
+    "icBits": 68.017,
+    "rankIc": 16,
+    "icPresentBits": 64.289,
+    "rankIcPresent": 6,
+    "inverseScore": 4746.56,
+    "rankInverse": 3,
+    "rarestTraitPct": 0.0508,
+    "rankRarest": 1,
+    "icCountBits": 69.068,
+    "rankIcCount": 16,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 926,
+    "metadataId": 418,
+    "tier": "Rare",
+    "icBits": 67.651,
+    "rankIc": 17,
+    "icPresentBits": 63.923,
+    "rankIcPresent": 7,
+    "inverseScore": 2206.88,
+    "rankInverse": 36,
+    "rarestTraitPct": 0.1524,
+    "rankRarest": 50,
+    "icCountBits": 68.702,
+    "rankIcCount": 17,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 1797,
+    "metadataId": 1289,
+    "tier": "Rare",
+    "icBits": 67.332,
+    "rankIc": 18,
+    "icPresentBits": 63.605,
+    "rankIcPresent": 8,
+    "inverseScore": 3409.93,
+    "rankInverse": 15,
+    "rarestTraitPct": 0.0508,
+    "rankRarest": 1,
+    "icCountBits": 68.384,
+    "rankIcCount": 18,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 1832,
+    "metadataId": 1324,
+    "tier": "Rare",
+    "icBits": 66.918,
+    "rankIc": 19,
+    "icPresentBits": 63.191,
+    "rankIcPresent": 9,
+    "inverseScore": 2970.58,
+    "rankInverse": 19,
+    "rarestTraitPct": 0.1016,
+    "rankRarest": 25,
+    "icCountBits": 67.97,
+    "rankIcCount": 19,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 1517,
+    "metadataId": 1009,
+    "tier": "Epic",
+    "icBits": 66.894,
+    "rankIc": 20,
+    "icPresentBits": 63.167,
+    "rankIcPresent": 10,
+    "inverseScore": 4410.14,
+    "rankInverse": 6,
+    "rarestTraitPct": 0.0508,
+    "rankRarest": 1,
+    "icCountBits": 67.945,
+    "rankIcCount": 20,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 1280,
+    "metadataId": 772,
+    "tier": "Epic",
+    "icBits": 66.834,
+    "rankIc": 21,
+    "icPresentBits": 63.106,
+    "rankIcPresent": 11,
+    "inverseScore": 4092.5,
+    "rankInverse": 8,
+    "rarestTraitPct": 0.0508,
+    "rankRarest": 1,
+    "icCountBits": 67.885,
+    "rankIcCount": 21,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 991,
+    "metadataId": 483,
+    "tier": "Rare",
+    "icBits": 66.741,
+    "rankIc": 22,
+    "icPresentBits": 63.013,
+    "rankIcPresent": 12,
+    "inverseScore": 2906.02,
+    "rankInverse": 23,
+    "rarestTraitPct": 0.0508,
+    "rankRarest": 1,
+    "icCountBits": 67.792,
+    "rankIcCount": 22,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 1821,
+    "metadataId": 1313,
+    "tier": "Rare",
+    "icBits": 66.357,
+    "rankIc": 23,
+    "icPresentBits": 62.63,
+    "rankIcPresent": 13,
+    "inverseScore": 3589.29,
+    "rankInverse": 12,
+    "rarestTraitPct": 0.1016,
+    "rankRarest": 25,
+    "icCountBits": 67.409,
+    "rankIcCount": 23,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 783,
+    "metadataId": 275,
+    "tier": "Epic",
+    "icBits": 66.215,
+    "rankIc": 24,
+    "icPresentBits": 62.488,
+    "rankIcPresent": 14,
+    "inverseScore": 3863.4,
+    "rankInverse": 9,
+    "rarestTraitPct": 0.0508,
+    "rankRarest": 1,
+    "icCountBits": 67.267,
+    "rankIcCount": 24,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 715,
+    "metadataId": 207,
+    "tier": "Rare",
+    "icBits": 65.903,
+    "rankIc": 25,
+    "icPresentBits": 62.175,
+    "rankIcPresent": 15,
+    "inverseScore": 1848.17,
+    "rankInverse": 45,
+    "rarestTraitPct": 0.1524,
+    "rankRarest": 50,
+    "icCountBits": 66.954,
+    "rankIcCount": 25,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 1700,
+    "metadataId": 1192,
+    "tier": "Epic",
+    "icBits": 65.215,
+    "rankIc": 26,
+    "icPresentBits": 61.488,
+    "rankIcPresent": 16,
+    "inverseScore": 3666.5,
+    "rankInverse": 10,
+    "rarestTraitPct": 0.0508,
+    "rankRarest": 1,
+    "icCountBits": 66.267,
+    "rankIcCount": 26,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 767,
+    "metadataId": 259,
+    "tier": "Rare",
+    "icBits": 64.74,
+    "rankIc": 27,
+    "icPresentBits": 61.013,
+    "rankIcPresent": 17,
+    "inverseScore": 1469.01,
+    "rankInverse": 55,
+    "rarestTraitPct": 0.1524,
+    "rankRarest": 50,
+    "icCountBits": 65.792,
+    "rankIcCount": 27,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 1733,
+    "metadataId": 1225,
+    "tier": "Epic",
+    "icBits": 64.678,
+    "rankIc": 28,
+    "icPresentBits": 60.95,
+    "rankIcPresent": 18,
+    "inverseScore": 3617.64,
+    "rankInverse": 11,
+    "rarestTraitPct": 0.0508,
+    "rankRarest": 1,
+    "icCountBits": 65.729,
+    "rankIcCount": 28,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 352,
+    "metadataId": 1813,
+    "tier": "Epic",
+    "icBits": 64.548,
+    "rankIc": 29,
+    "icPresentBits": 60.821,
+    "rankIcPresent": 19,
+    "inverseScore": 2685.17,
+    "rankInverse": 25,
+    "rarestTraitPct": 0.1016,
+    "rankRarest": 25,
+    "icCountBits": 65.6,
+    "rankIcCount": 29,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 262,
+    "metadataId": 1723,
+    "tier": "Rare",
+    "icBits": 64.529,
+    "rankIc": 30,
+    "icPresentBits": 60.802,
+    "rankIcPresent": 20,
+    "inverseScore": 3324.57,
+    "rankInverse": 16,
+    "rarestTraitPct": 0.0508,
+    "rankRarest": 1,
+    "icCountBits": 65.58,
+    "rankIcCount": 30,
+    "openseaRank": null
+   }
+  ],
+  "commonest": [
+   {
+    "tokenId": 626,
+    "metadataId": 118,
+    "tier": "Common",
+    "icBits": 26.7,
+    "rankIc": 1891,
+    "icPresentBits": 25.565,
+    "rankIcPresent": 1795,
+    "inverseScore": 146.83,
+    "rankInverse": 1805,
+    "rarestTraitPct": 1.676,
+    "rankRarest": 1397,
+    "icCountBits": 27.752,
+    "rankIcCount": 1969,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 485,
+    "metadataId": 1946,
+    "tier": "Common",
+    "icBits": 27.037,
+    "rankIc": 1876,
+    "icPresentBits": 25.902,
+    "rankIcPresent": 1783,
+    "inverseScore": 142.3,
+    "rankInverse": 1837,
+    "rarestTraitPct": 2.4886,
+    "rankRarest": 1898,
+    "icCountBits": 28.089,
+    "rankIcCount": 1968,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 1460,
+    "metadataId": 952,
+    "tier": "Common",
+    "icBits": 27.079,
+    "rankIc": 1874,
+    "icPresentBits": 25.944,
+    "rankIcPresent": 1780,
+    "inverseScore": 142.08,
+    "rankInverse": 1839,
+    "rarestTraitPct": 2.387,
+    "rankRarest": 1885,
+    "icCountBits": 28.131,
+    "rankIcCount": 1967,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 877,
+    "metadataId": 369,
+    "tier": "Common",
+    "icBits": 27.11,
+    "rankIc": 1873,
+    "icPresentBits": 25.975,
+    "rankIcPresent": 1779,
+    "inverseScore": 142.83,
+    "rankInverse": 1833,
+    "rarestTraitPct": 1.9807,
+    "rankRarest": 1707,
+    "icCountBits": 28.161,
+    "rankIcCount": 1966,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 1749,
+    "metadataId": 1241,
+    "tier": "Common",
+    "icBits": 27.125,
+    "rankIc": 1872,
+    "icPresentBits": 25.99,
+    "rankIcPresent": 1778,
+    "inverseScore": 155.32,
+    "rankInverse": 1746,
+    "rarestTraitPct": 1.5744,
+    "rankRarest": 1284,
+    "icCountBits": 28.176,
+    "rankIcCount": 1965,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 1005,
+    "metadataId": 497,
+    "tier": "Common",
+    "icBits": 27.127,
+    "rankIc": 1871,
+    "icPresentBits": 25.991,
+    "rankIcPresent": 1777,
+    "inverseScore": 141.2,
+    "rankInverse": 1842,
+    "rarestTraitPct": 2.387,
+    "rankRarest": 1885,
+    "icCountBits": 28.178,
+    "rankIcCount": 1964,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 810,
+    "metadataId": 302,
+    "tier": "Common",
+    "icBits": 27.135,
+    "rankIc": 1870,
+    "icPresentBits": 26,
+    "rankIcPresent": 1776,
+    "inverseScore": 149.94,
+    "rankInverse": 1781,
+    "rarestTraitPct": 1.8283,
+    "rankRarest": 1619,
+    "icCountBits": 28.187,
+    "rankIcCount": 1963,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 1440,
+    "metadataId": 932,
+    "tier": "Common",
+    "icBits": 24.94,
+    "rankIc": 1968,
+    "icPresentBits": 20.555,
+    "rankIcPresent": 1939,
+    "inverseScore": 84.3,
+    "rankInverse": 1969,
+    "rarestTraitPct": 3.5551,
+    "rankRarest": 1968,
+    "icCountBits": 28.218,
+    "rankIcCount": 1962,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 1672,
+    "metadataId": 1164,
+    "tier": "Common",
+    "icBits": 27.194,
+    "rankIc": 1864,
+    "icPresentBits": 26.059,
+    "rankIcPresent": 1775,
+    "inverseScore": 142.3,
+    "rankInverse": 1838,
+    "rarestTraitPct": 2.2854,
+    "rankRarest": 1858,
+    "icCountBits": 28.246,
+    "rankIcCount": 1961,
+    "openseaRank": null
+   },
+   {
+    "tokenId": 1144,
+    "metadataId": 636,
+    "tier": "Common",
+    "icBits": 27.206,
+    "rankIc": 1863,
+    "icPresentBits": 26.071,
+    "rankIcPresent": 1774,
+    "inverseScore": 145.26,
+    "rankInverse": 1815,
+    "rarestTraitPct": 2.0315,
+    "rankRarest": 1733,
+    "icCountBits": 28.258,
+    "rankIcCount": 1960,
+    "openseaRank": null
+   }
+  ]
+ }
+}

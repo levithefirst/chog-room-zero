@@ -1,6 +1,8 @@
-// The portrait "rotate your phone" prompt (index.html: @media (orientation: portrait) and (max-width: 820px)).
-// Kept in sync with that CSS rule; main.ts pauses play while it is shown, so nobody dies behind the prompt.
-export const ROTATE_QUERY = '(orientation: portrait) and (max-width: 820px)';
-export function rotatePromptShown(w: number, h: number): boolean {
-  return h > w && w <= 820;
+// Orientation of the browser viewport. The game itself is landscape (owner 2026-10-13): a touch device held upright
+// gets the landscape stage turned 90 deg (src/ui/stage.ts). A flip mid-run still pauses the run (main.ts) and
+// releases held input, because every thumb position on the glass moves with it.
+export const ORIENTATION_QUERY = '(orientation: portrait)';
+/** 'portrait' or 'landscape', for detecting a flip (a square viewport counts as landscape). */
+export function orientationOf(w: number, h: number): 'portrait' | 'landscape' {
+  return h > w ? 'portrait' : 'landscape';
 }

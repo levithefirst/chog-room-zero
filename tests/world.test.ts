@@ -22,15 +22,15 @@ const DEG = Math.PI / 180;
 
 describe('Room Zero map', () => {
   const l = parseLevel(ROOM_ZERO);
-  it('is 44x26, closed, with spawns, pickups and patrol points on walkable floor', () => {
-    expect(l.w).toBe(44);
-    expect(l.h).toBe(26);
+  it('is 68x42 (FS venue), closed, with spawns, pickups and patrol points on walkable floor', () => {
+    expect(l.w).toBe(68);
+    expect(l.h).toBe(42);
     for (let x = 0; x < l.w; x++) expect(tileAt(l, x + 0.5, 0.5)).not.toBe(FLOOR);
     expect(tileAt(l, l.playerSpawn.x, l.playerSpawn.y)).toBe(FLOOR);
     for (const b of BOT_SPAWNS) for (const [x, y] of b.patrol) expect(walkable(tileAt(l, x + 0.5, y + 0.5)), `${b.name} ${x},${y}`).toBe(true);
-    expect(l.pickupSpawns.filter((p) => p.kind === 'health').length).toBeGreaterThanOrEqual(3);
-    expect(l.pickupSpawns.filter((p) => p.kind === 'armor').length).toBeGreaterThanOrEqual(2);
-    expect(l.pickupSpawns.filter((p) => p.kind === 'ammo').length).toBeGreaterThanOrEqual(2);
+    // Pickups are laid out by zone (tests/pickup-layout.test.ts covers the rules); the map itself has no fixed ones. GP: 4 more ammo.
+    const pk = createWorld().pickups;
+    for (const [k, n] of [['health', 10], ['armor', 8], ['ammo', 12], ['grenade', 8]] as const) expect(pk.filter((p) => p.kind === k).length).toBe(n);
   });
   it('every walkable tile and every pickup is reachable from the player spawn', () => {
     const seen = new Uint8Array(l.w * l.h);
@@ -41,11 +41,17 @@ describe('Room Zero map', () => {
       for (const n of [i + 1, i - 1, i + l.w, i - l.w]) if (!seen[n] && walkable(l.tiles[n])) { seen[n] = 1; q.push(n); }
     }
     for (let i = 0; i < l.tiles.length; i++) if (walkable(l.tiles[i])) expect(seen[i], `tile ${i % l.w},${Math.floor(i / l.w)}`).toBe(1);
-    for (const p of l.pickupSpawns) expect(findPath(l, l.playerSpawn.x, l.playerSpawn.y, p.x, p.y, 8000).length).toBeGreaterThan(0);
+    for (const p of createWorld().pickups) expect(findPath(l, l.playerSpawn.x, l.playerSpawn.y, p.x, p.y, 8000).length).toBeGreaterThan(0);
   });
-  it('has chokepoints (doorways) and at least one long sightline of 25+ u', () => {
-    expect(Array.from(l.tiles).filter((t) => t === 4).length).toBeGreaterThanOrEqual(10);
-    expect(sightClear(l, 1.5, 8.5, 42.5, 8.5)).toBe(true);
+  it('has chokepoints (doorways) and no straight open lane longer than 28 u on the 68 u venue (FS; CF-F was 15 on 44)', () => {
+    expect(Array.from(l.tiles).filter((t) => t === 4).length).toBeGreaterThanOrEqual(24);
+    // No lane runs the full width: the corridors and the atrium are broken by pillars (tests/venue.test.ts).
+    for (const y of [10, 11, 20, 21, 30, 31]) expect(sightClear(l, 1.5, y + 0.5, 66.5, y + 0.5)).toBe(false);
+    const open = (x: number, y: number) => l.tiles[y * l.w + x] !== 1;
+    let longest = 0;
+    for (let y = 0; y < l.h; y++) for (let x = 0, run = 0; x <= l.w; x++) { run = x < l.w && open(x, y) ? run + 1 : 0; longest = Math.max(longest, run); }
+    for (let x = 0; x < l.w; x++) for (let y = 0, run = 0; y <= l.h; y++) { run = y < l.h && open(x, y) ? run + 1 : 0; longest = Math.max(longest, run); }
+    expect(longest).toBeLessThanOrEqual(28);
   });
   it('every bot spawn is reachable from the player spawn', () => {
     for (const b of BOT_SPAWNS) {
@@ -82,6 +88,7 @@ describe('collision', () => {
 describe('projectiles', () => {
   it('travel over several ticks (no hitscan)', () => {
     const w = createWorld({ map: TEST_MAP, bots: [] });
+    player(w).facing = Math.PI / 2; // already facing the aim (GP: a pull waits for the body to turn)
     stepWorld(w, input({ aim: Math.PI / 2, firing: true }));
     const b = w.bullets[0];
     const d1 = Math.hypot(b.x - b.ox, b.y - b.oy);
@@ -175,6 +182,7 @@ describe('bot perception limits', () => {
     const step: SoundEvent = { type: 'quietStep', x: 2.5, y: 2.5, radius: TUNING.sound.quietStep, sourceId: 0, team: 'player', tick: 0 };
     expect(hears(l, 8.5, 2.5, step)).toBe(false);
     const w = createWorld({ map: TEST_MAP, bots: BOT_RIGHT });
+    player(w).facing = Math.PI; // already facing the aim (GP: a pull waits for the body to turn)
     stepWorld(w, input({ aim: Math.PI, firing: true }));
     stepWorld(w, IDLE_INPUT);
     expect(w.brains.get(1)!.state).toBe('investigate');

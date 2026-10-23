@@ -15,9 +15,11 @@ const rows = [];
 for (let i = 0; i < +n; i++) {
   const o = `/tmp/ring-once-${process.pid}-${i}.json`;
   spawnSync('node', [tmp, base, o], { stdio: 'ignore', timeout: 120000 });
-  let r = null; try { r = JSON.parse(fs.readFileSync(o, 'utf8')).find((x) => x.name.startsWith('Ring hint')); } catch {}
-  rows.push({ run: i + 1, pass: !!r?.pass });
-  console.log(`run ${i + 1}: ${r?.pass ? 'PASS' : 'FAIL'}`);
+  // RC-3: the ring check and its setup precondition (desktop mode, facing west) must both pass.
+  let rs = []; try { rs = JSON.parse(fs.readFileSync(o, 'utf8')).filter((x) => x.name.startsWith('Ring hint')); } catch {}
+  const pass = rs.length === 2 && rs.every((x) => x.pass);
+  rows.push({ run: i + 1, pass, checks: rs.map((x) => ({ name: x.name.slice(0, 40), pass: x.pass, data: x.data })) });
+  console.log(`run ${i + 1}: ${pass ? 'PASS' : 'FAIL'}`);
 }
 fs.writeFileSync(out, JSON.stringify({ pass: rows.filter((r) => r.pass).length, of: rows.length, rows }, null, 1));
 console.log(`ring hint: ${rows.filter((r) => r.pass).length}/${rows.length}`);

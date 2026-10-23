@@ -1,7 +1,7 @@
 // CHOG-DES-001 camera lead: no snap at spawn, no whip on aim flicks, little jitter from noisy touch aim, and a
 // steady lead that converges. Units: world u; at 844x390 ppu ~= 35 px/u.
 import { describe, expect, it } from 'vitest';
-import { createCamera, stepCamera } from '../src/render/camera';
+import { createCamera, leadTarget, stepCamera } from '../src/render/camera';
 import { TUNING } from '../src/config/tuning';
 
 const DT = 1 / 60, PPU = 35;
@@ -33,7 +33,7 @@ export function metrics(stepper: (px: number, py: number, f: number) => { x: num
   return { spawnPx, maxStep, jitterPx, steadyPx };
 }
 export const OLD = (() => { const m = oldModel(); return metrics((px, py, f) => { m.step(px, py, f); return m.c; }); })();
-export const NEW = (() => { const cam = createCamera(0, 0); return metrics((px, py, f) => { stepCamera(cam, px, py, f, DT, TUNING.render); return cam; }); })();
+export const NEW = (() => { const cam = createCamera(0, 0); return metrics((px, py, f) => { stepCamera(cam, px, py, leadTarget(f, TUNING.render), DT, TUNING.render); return cam; }); })();
 
 describe('DES-001 camera lead', () => {
   it('no snap at spawn: < 10 px offset after 0.1 s (old model: ~' + OLD.spawnPx.toFixed(0) + ' px)', () => {
@@ -50,9 +50,9 @@ describe('DES-001 camera lead', () => {
   });
   it('never overshoots the lead target (monotone approach on a flick)', () => {
     const cam = createCamera(0, 0);
-    for (let i = 0; i < 240; i++) stepCamera(cam, 0, 0, 0, DT, TUNING.render);
+    for (let i = 0; i < 240; i++) stepCamera(cam, 0, 0, leadTarget(0, TUNING.render), DT, TUNING.render);
     let minX = Infinity;
-    for (let i = 0; i < 240; i++) { stepCamera(cam, 0, 0, Math.PI, DT, TUNING.render); minX = Math.min(minX, cam.x); }
+    for (let i = 0; i < 240; i++) { stepCamera(cam, 0, 0, leadTarget(Math.PI, TUNING.render), DT, TUNING.render); minX = Math.min(minX, cam.x); }
     expect(minX).toBeGreaterThanOrEqual(-TUNING.render.lookahead - 1e-6);
   });
 });

@@ -6,7 +6,7 @@
 import { spawn } from 'node:child_process'; import fs from 'node:fs';
 const [base, outFile, maxArg = '30', heroArg = 'kettle,mop,brick,wick'] = process.argv.slice(2);
 const port = 9600 + Math.floor(Math.random() * 50);
-const chrome = spawn('google-chrome', ['--headless=new', '--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', `--remote-debugging-port=${port}`, 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(process.env.CHROME_BIN ?? 'google-chrome', ['--headless=new', '--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', `--remote-debugging-port=${port}`, 'about:blank'], { stdio: 'ignore' });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms)); let t;
 for (let i = 0; i < 50 && !t; i++) { await sleep(200); try { t = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find((x) => x.type === 'page'); } catch {} }
 const ws = new WebSocket(t.webSocketDebuggerUrl); await new Promise((r) => (ws.onopen = r));
@@ -16,18 +16,26 @@ ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.id && P.has(m.id)) {
   if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') errors.push(m.params.args.map((a) => a.value ?? a.description).join(' ')); };
 const cmd = (method, params = {}) => new Promise((r) => { const i = ++id; P.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
 const ev = async (e) => (await cmd('Runtime.evaluate', { expression: e, returnByValue: true, awaitPromise: true })).result?.value;
+// VIEWPORT=820x1180 TOUCH=1 (RC-4): play at that size with touch emulation; menus are pressed with taps.
+const [VW, VH] = (process.env.VIEWPORT ?? '1280x720').split('x').map(Number);
+const TOUCH = process.env.TOUCH === '1';
 const click = async (sel) => { const r = await ev(`(()=>{const e=document.querySelector(${JSON.stringify(sel)});if(!e)return null;const b=e.getBoundingClientRect();return [b.left+b.width/2,b.top+b.height/2]})()`); if (!r) return false;
+  if (TOUCH) { await cmd('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: r[0], y: r[1] }] }); await cmd('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); return true; }
   await cmd('Input.dispatchMouseEvent', { type: 'mouseMoved', x: r[0], y: r[1] });
   await cmd('Input.dispatchMouseEvent', { type: 'mousePressed', x: r[0], y: r[1], button: 'left', buttons: 1, clickCount: 1 }); await cmd('Input.dispatchMouseEvent', { type: 'mouseReleased', x: r[0], y: r[1], button: 'left', clickCount: 1 }); return true; };
 const phase = () => ev('__chog.phase');
 async function waitPhase(want, ms) { const t0 = Date.now(); while (Date.now() - t0 < ms) { const p = await phase(); if (want.includes(p)) return p; await sleep(250); } return null; }
 await cmd('Runtime.enable');
-await cmd('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
+await cmd('Emulation.setDeviceMetricsOverride', { width: VW, height: VH, deviceScaleFactor: TOUCH ? 2 : 1, mobile: TOUCH });
+if (TOUCH) await cmd('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
 // Fresh device: no records yet.
 await cmd('Page.navigate', { url: `${base}/?debug&nooverlay` }); await sleep(2500); await ev(`localStorage.clear(); localStorage.setItem('chog.onboarded','1')`);
-const out = { base, label: 'SCRIPTED (autopilot), headless Chrome; human wins UNVERIFIED', heroes: [] };
+const out = { base, label: 'SCRIPTED (autopilot), headless Chrome; human wins UNVERIFIED', seedOverrides: process.env.SEEDS ?? null, viewport: `${VW}x${VH}${TOUCH ? ' touch' : ''}`, heroes: [] };
 for (const hero of heroArg.split(',')) {
-  const seed = 1000 + hero.length * 7;
+  // SEEDS=mop:2001 overrides a hero's autopilot seed base (RC-3). Disclose any override with the results: a seed
+  // picked because the sim predicts an early win shows the browser flow works, not how often a hero wins.
+  const over = Object.fromEntries((process.env.SEEDS ?? '').split(',').filter(Boolean).map((x) => x.split(':')));
+  const seed = over[hero] ? +over[hero] : 1000 + hero.length * 7;
   await cmd('Page.navigate', { url: `${base}/?debug&nooverlay&autoplay=${seed}&hero=${hero}` }); await sleep(3000);
   await click('[data-go="start"]'); await sleep(400);
   await click('[data-go="pick"]');
@@ -44,8 +52,11 @@ for (const hero of heroArg.split(',')) {
     console.log(hero, JSON.stringify(attempts.at(-1)));
     if (s.outcome === 'won') { won = s; won.pb = await ev(`document.getElementById('resultpb')?.textContent`); break; }
     if (end !== 'results') { // stalled or wall-capped: pause with a real Esc key, then a real click on Restart
-      await cmd('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
-      await cmd('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+      if (TOUCH) await click('#pause');
+      else {
+        await cmd('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+        await cmd('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+      }
       await waitPhase(['pause'], 5000); await sleep(400);
     } else await sleep(1000); // past the 0.75 s summary gate, then a fresh real click
     await click('[data-go="restart"]');

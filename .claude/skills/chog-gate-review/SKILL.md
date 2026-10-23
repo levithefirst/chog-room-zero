@@ -22,7 +22,7 @@ IF FAIL     <the one most valuable fix, and whether it is a feel problem or a ti
 5. Record status and evidence in `docs/STATE.md` (gate table, test results, playtest results) in the handoff commit.
 
 ## Core Feel Gate
-Before anything NFT, wallet, or database: G1, G2, G3, G4, G6, G7 PASS, G8 baseline recorded, owner playtest on the Pixel 7 and iPhone 13. If asked to start NFT work earlier, refuse and cite the rule.
+Before NFT combat power is switched on for real holders in production: G1, G2, G3, G4, G6, G7 PASS, G8 baseline recorded, owner playtest on the Pixel 7 and iPhone 13. Never mark the human half passed for the owner.
 
 ## Honesty
 Green tests do not pass a feel gate. If the owner has not played the build since the last relevant change, the playtest is BLOCKED. Numbers in GATES.md are provisional until the G8 baseline is approved. If measurements miss a provisional target but the owner says it feels right, record both and keep the owner's call.

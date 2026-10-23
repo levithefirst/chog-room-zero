@@ -1,6 +1,6 @@
-// Token history. Guest runs write nothing (LOCKED). A bound run writes one result at match end.
-// Today the store is localStorage on this device. A server store (Vercel route + Neon) is BLOCKED:
-// it needs server-side ownership verification, which needs the UNKNOWN contract details.
+// Token history helpers (RC-1). The game no longer writes token history on the device (master integration pass): real
+// token history is server-side, bound to the token and kept apart from the account (room_zero.token_history, written
+// at settlement for verified holders). Kept for the KeyValueStore type and its unit tests.
 
 export interface RunResult {
   won: boolean;

@@ -2,7 +2,7 @@
 // you type maps deterministically to traits (Option B in docs/design/nft.md). Real Chog metadata is not read.
 import { markingFor, operatorFor, SIDEGRADES, type Sidegrade } from '../sim/operators';
 
-export const DEMO_COPY = 'DEMO: no wallet is connected and no ownership is checked. Traits come only from the token number.';
+export const DEMO_COPY = 'DEMO: no wallet is connected and no ownership is checked.';
 
 export interface TraitInfo { id: string; name: string; effect: string; counterplay: string }
 

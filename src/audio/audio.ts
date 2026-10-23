@@ -3,12 +3,15 @@
 // Positional: pan by direction, volume by distance within the event's radius, muffled through walls.
 import type { SoundType } from '../sim/world';
 
-export type CueType = SoundType | 'hurt' | 'ui' | 'blocked';
+export type CueType = SoundType | 'hurt' | 'ui' | 'blocked' | 'confirm' | 'kill' | 'ready' | 'comm';
 
 export interface Audio {
   unlock(): void;
-  play(type: CueType, dx: number, dy: number, radius: number, muffled: boolean, own: boolean, weapon?: string): void;
+  /** sig: a 1:1's metadata id, which layers that Chog's own voice over the ability cue. */
+  play(type: CueType, dx: number, dy: number, radius: number, muffled: boolean, own: boolean, weapon?: string, sig?: number): void;
   muted: boolean;
+  /** Master volume 0..1 (Settings, RC-7). Applied to the sum before the limiter. */
+  volume: number;
 }
 
 // Mix: per-cue level so guns sit on top, feet under, UI quiet.
@@ -16,8 +19,12 @@ export interface Audio {
 const MIX: Partial<Record<CueType, number>> = { step: 0.8, quietStep: 0.8, shot: 0.9, pickup: 0.7, ui: 0.4, hurt: 0.9, blocked: 0.6 };
 const MUTE_KEY = 'chog.muted';
 
-// Simultaneous voice cap; extra sounds are dropped (lowest priority first is approximated by arrival).
+// Simultaneous voice cap; extra sounds are dropped. SB: never the ones that decide a fight. Danger and confirmation
+// (a shot, your hurt, your hit, a blast, a teammate's call) get PRIORITY_EXTRA voices past the cap, so a crowd of
+// footsteps can never swallow the gunshot that tells you where the shooter is.
 const MAX_VOICES = 24;
+const PRIORITY = new Set<CueType>(['shot', 'hurt', 'confirm', 'kill', 'boom', 'comm', 'downed', 'windup', 'sonar']);
+const PRIORITY_EXTRA = 8;
 
 export function createAudio(): Audio {
   let ctx: AudioContext | null = null;
@@ -25,6 +32,8 @@ export function createAudio(): Audio {
   let voices = 0;
   // Master limiter (RC-1): up to 24 voices can stack in a firefight; a compressor keeps the sum from clipping.
   let master: AudioNode | null = null;
+  let level: GainNode | null = null;
+  let volume = 1;
 
   let muted = false;
   try {
@@ -44,13 +53,23 @@ export function createAudio(): Audio {
         /* ignore */
       }
     },
+    get volume() {
+      return volume;
+    },
+    set volume(v: number) {
+      volume = Math.max(0, Math.min(1, v));
+      if (level && ctx) level.gain.setTargetAtTime(volume, ctx.currentTime, 0.02);
+    },
     unlock() {
       if (!ctx) {
         ctx = new AudioContext({ latencyHint: 'interactive' });
         const comp = ctx.createDynamicsCompressor();
         comp.threshold.value = -10; comp.knee.value = 6; comp.ratio.value = 12; comp.attack.value = 0.003; comp.release.value = 0.15;
         comp.connect(ctx.destination);
-        master = comp;
+        level = ctx.createGain();
+        level.gain.value = volume;
+        level.connect(comp);
+        master = level;
         noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
         const d = noise.getChannelData(0);
         // Fixed LCG so the noise texture is the same every session.
@@ -62,8 +81,8 @@ export function createAudio(): Audio {
       }
       if (ctx.state === 'suspended') void ctx.resume();
     },
-    play(type, dx, dy, radius, muffled, own, weapon) {
-      if (!ctx || !noise || a.muted || ctx.state !== 'running' || voices >= MAX_VOICES) return;
+    play(type, dx, dy, radius, muffled, own, weapon, sig) {
+      if (!ctx || !noise || a.muted || ctx.state !== 'running' || voices >= MAX_VOICES + (PRIORITY.has(type) ? PRIORITY_EXTRA : 0)) return;
       const dist = Math.hypot(dx, dy);
       if (!own && dist > radius) return;
       const t = ctx.currentTime;
@@ -164,6 +183,89 @@ export function createAudio(): Audio {
           burst(0.15, 0.3, 'bandpass', 1200, 1.5, 0.25);
           len = 0.5;
           break;
+        // 1:1 signatures: each has its own sound, loud enough that the other side can react.
+        case 'windup': // a rising hiss: a burst is coming, get out of its ring
+          burst(0, 0.5, 'bandpass', 700, 0.6, 0.4);
+          thump(0, 0.5, 90, 220, 0.4);
+          len = 0.55;
+          break;
+        case 'burst': // the burst going off
+          thump(0, 0.35, 70, 30, 1);
+          burst(0, 0.25, 'lowpass', 1200, 0.7, 0.8);
+          len = 0.4;
+          break;
+        case 'scream': // a harsh wail
+          thump(0, 0.5, 900, 420, 0.45);
+          burst(0, 0.4, 'bandpass', 1800, 2, 0.35);
+          len = 0.55;
+          break;
+        // Grenades: a soft swish when thrown, a metal clink when it hits a wall, a deep boom with a crack on top.
+        case 'throw':
+          burst(0, 0.14, 'bandpass', 1300, 1.4, 0.25);
+          len = 0.18;
+          break;
+        case 'bounce':
+          thump(0, 0.07, 2600, 2300, 0.22);
+          thump(0.03, 0.06, 3300, 3100, 0.12);
+          len = 0.12;
+          break;
+        case 'boom':
+          thump(0, 0.7, 95, 32, 1);
+          burst(0, 0.12, 'highpass', 2500, 0.7, 0.6);
+          burst(0.02, 0.8, 'lowpass', 900, 0.8, 0.9);
+          len = 0.85;
+          break;
+        case 'shield': // a bright bell
+          thump(0, 0.6, 1320, 1300, 0.3);
+          thump(0, 0.6, 1980, 1960, 0.15);
+          len = 0.65;
+          break;
+        // CHOG superpowers: each has its own cue, loud enough that the side it is used on can react.
+        case 'charge': // a rising whine: a beam is charging along a line
+          thump(0, 0.45, 600, 1800, 0.3);
+          burst(0, 0.4, 'bandpass', 2400, 3, 0.15);
+          len = 0.5;
+          break;
+        case 'beam': // the beam burning: a buzzing tone
+          thump(0, 0.6, 220, 200, 0.45);
+          thump(0, 0.6, 330, 300, 0.25);
+          len = 0.65;
+          break;
+        case 'orb': // a wet blow: a bubble or a glob launched
+          burst(0, 0.18, 'lowpass', 700, 1.2, 0.4);
+          thump(0, 0.15, 300, 180, 0.3);
+          len = 0.22;
+          break;
+        case 'caged': // a pop and a rubbery ring
+          thump(0, 0.08, 1400, 600, 0.5);
+          thump(0.05, 0.4, 520, 500, 0.25);
+          len = 0.45;
+          break;
+        case 'pinned': // a wet splat
+          burst(0, 0.2, 'lowpass', 500, 0.8, 0.6);
+          len = 0.25;
+          break;
+        case 'aura': // a chime that hangs
+          thump(0, 0.9, 880, 880, 0.25);
+          thump(0, 0.9, 1320, 1320, 0.18);
+          thump(0, 0.9, 1760, 1760, 0.1);
+          len = 0.95;
+          break;
+        case 'frenzy': // a low growl
+          thump(0, 0.4, 70, 110, 0.6);
+          burst(0, 0.3, 'lowpass', 500, 1.2, 0.4);
+          len = 0.45;
+          break;
+        case 'downed': // a teammate or foe is down, not out: a falling two-note call that says "rescue me"
+          thump(0, 0.25, 520, 380, 0.5);
+          thump(0.28, 0.4, 380, 260, 0.5);
+          len = 0.7;
+          break;
+        case 'revive': // back up: the same two notes rising
+          thump(0, 0.2, 380, 400, 0.45);
+          thump(0.22, 0.3, 520, 560, 0.45);
+          len = 0.55;
+          break;
         case 'hurt': // you were hit: close, low, unmistakable
           thump(0, 0.16, 120, 55, 0.9);
           burst(0, 0.1, 'lowpass', 420, 1, 0.7);
@@ -171,6 +273,27 @@ export function createAudio(): Audio {
         case 'ui':
           burst(0, 0.02, 'bandpass', 1800, 3, 0.4);
           len = 0.05;
+          break;
+        case 'confirm': // CF: your bullet landed (heard at any range, in your ear): a short dry tick
+          burst(0, 0.018, 'bandpass', 2900, 7, 0.55);
+          thump(0, 0.04, 900, 600, 0.18);
+          len = 0.06;
+          break;
+        case 'kill': // CF: you took them out: a two-step drop, lower and longer than the tick
+          thump(0, 0.09, 700, 420, 0.5);
+          thump(0.09, 0.18, 420, 160, 0.55);
+          burst(0, 0.03, 'bandpass', 2200, 5, 0.4);
+          len = 0.3;
+          break;
+        case 'comm': // SB: a teammate's call-out: a short radio squelch from their side, then a click
+          burst(0, 0.045, 'bandpass', 2400, 2.5, 0.35);
+          thump(0.05, 0.08, 1180, 1180, 0.16);
+          burst(0.14, 0.02, 'bandpass', 3000, 5, 0.3);
+          len = 0.18;
+          break;
+        case 'ready': // CF: your ability is back: one soft rising note
+          thump(0, 0.14, 520, 780, 0.22);
+          len = 0.16;
           break;
         case 'step': // run: brighter heel strike
           burst(0, 0.05, 'bandpass', 900, 1.2, 0.35);
@@ -203,6 +326,22 @@ export function createAudio(): Audio {
           burst(0.22, 0.025, 'bandpass', 2400, 4, 0.5);
           len = 0.3;
           break;
+      }
+      // Each 1:1 has its own voice on top of its ability cue, so you know WHICH legend just acted before you see it.
+      if (sig) {
+        switch (sig) {
+          case 53: for (let i = 0; i < 4; i++) burst(i * 0.07, 0.05, 'highpass', 3000 + i * 400, 0.8, 0.4); thump(0, 0.3, 200, 600, 0.3); break; // Blaze: crackle
+          case 392: thump(0, 1, 55, 38, 0.9); burst(0, 0.8, 'lowpass', 260, 0.7, 0.6); break; // Burning Skully: deep roar
+          case 434: thump(0, 0.7, 1400, 700, 0.4); thump(0.05, 0.6, 1750, 900, 0.2); break; // Chog Scream: shriek
+          case 494: thump(0, 0.2, 60, 35, 1); thump(0.22, 0.25, 55, 30, 1); break; // Chogbomination: double slam
+          case 973: thump(0, 0.09, 190, 120, 0.6); thump(0.12, 0.12, 170, 100, 0.6); break; // Frogger: croak
+          case 1006: thump(0, 1.4, 220, 218, 0.45); thump(0, 1.2, 440, 437, 0.2); break; // Grim: toll
+          case 1159: for (const f of [523, 659, 784]) thump(0, 0.9, f, f, 0.18); break; // Halo: choir chord
+          case 1290: burst(0, 0.06, 'bandpass', 2600, 8, 0.7); thump(0, 0.3, 300, 180, 0.5); break; // Krown: plate clank
+          case 1373: for (const [i, f] of [2637, 3136, 3520].entries()) thump(i * 0.06, 0.35, f, f, 0.14); break; // Midas: coin shimmer
+          case 1376: thump(0, 0.6, 90, 55, 0.8); burst(0, 0.5, 'lowpass', 300, 1.5, 0.5); break; // Redd: growl
+        }
+        len = Math.max(len, 1.4);
       }
       setTimeout(() => voices--, len * 1000 + 50);
     },
