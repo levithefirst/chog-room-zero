@@ -4,17 +4,18 @@
 //
 // Trust model for practice (solo vs bots, simulated in the browser): the run is self-reported, so it is checked against
 // hard bounds, rate limited and stored once per run id. Owner 2026-10-17: practice pays XP and shards so a loss still
-// moves you forward, at a smaller, capped rate (PRACTICE_REWARDS): a run is paid only with a start ticket signed here
+// moves you forward (PRACTICE_REWARDS; owner 2026-10-21: the same shards as online for playing, kills and a clear,
+// 10 / 10 / 30, with less XP and a smaller damage bonus): a run is paid only with a start ticket signed here
 // (account, run id, start time) and only when at least the claimed play time has passed since that start; one payment
-// per run id (ledger unique key); at most PRACTICE_REWARDS.dailyCap paid runs and PRACTICE_SHARDS_PER_DAY shards per
-// rolling 24 h. One practice run is open per account: each start replaces the account's open run id (accounts.practice_rid),
+// per run id (ledger unique key); at most PRACTICE_REWARDS.dailyCap (25) paid runs and PRACTICE_SHARDS_PER_DAY (1,000)
+// shards per rolling 24 h; a run that would pass the shard limit pays nothing. One practice run is open per account: each start replaces the account's open run id (accounts.practice_rid),
 // so starting many runs in parallel and posting them later pays only the last. A run must also be plausible for its
 // length (PRACTICE_WIN_MIN_SECONDS, PRACTICE_SECONDS_PER_KILL). A forged run is worth no more than an honest one.
 // Practice never changes rating and never touches the leaderboard; it feeds the practice career and medals, awarded
 // here from the stored VERIFIED runs only (an unticketed or implausible run is stored, pays nothing, counts for nothing).
 import type { Db, Tx } from './db.js';
 import { b64url, sign, unsign } from './auth.js';
-import { PRACTICE_REWARDS, rewardBreakdown, type RewardLine, type NoReward } from '../../src/config/progression.js';
+import { PRACTICE_REWARDS, PRACTICE_SHARDS_PER_DAY, rewardBreakdown, type RewardLine, type NoReward } from '../../src/config/progression.js';
 import { MEDALS, medalsDue, type OnlineTotals, type RunFacts } from '../../src/ui/medals.js';
 import type { Best, Records } from '../../src/ui/records.js';
 import { validateNickname } from '../../src/ui/profile.js';
@@ -31,8 +32,8 @@ export const PRACTICE_PER_MINUTE = 6;
 export const PRACTICE_TICKET_SECONDS = 30 * 60;
 /** Slack between the browser's play clock and the site's wall clock (seconds). */
 const CLOCK_SLACK = 3;
-/** Practice shards paid per account per rolling 24 h (25 max-value wins would be 600). */
-export const PRACTICE_SHARDS_PER_DAY = 300;
+/** Practice shards paid per account per rolling 24 h: 1,000 (src/config/progression.ts; 25 max-value runs would be 2,325). */
+export { PRACTICE_SHARDS_PER_DAY };
 /**
  * A practice win shorter than this is not paid. Measured 2026-10-17 (autopilot, 168 runs, 7 heroes, seeds 1-12, with and
  * without AI teammates, zone on): the fastest of 42 wins took 35.2 s.

@@ -43,7 +43,7 @@
     "y": 641,
     "w": 74,
     "h": 74,
-    "t": "Ability and its cooldown (Space)"
+    "t": "Ability and its cooldown (Space or Q)"
    },
    {
     "x": 1114,
@@ -122,7 +122,7 @@
  "tactical-map": {
   "w": 1280,
   "h": 720,
-  "alt": "The tactical map open over a match on Office: the whole floor with area names and what you know, zoom buttons on the right.",
+  "alt": "The tactical map open over a match on Office: the whole floor with area names, your squad and every living hostile at its live position, zoom buttons on the right.",
   "callouts": [
    {
     "x": 22,
@@ -171,31 +171,31 @@
  "tmap-room-zero": {
   "w": 1280,
   "h": 720,
-  "alt": "The in-game tactical map of this location, opened at the start of a solo match: the floor plan with area names and the squad's position.",
+  "alt": "The in-game tactical map of this location, opened at the start of a solo match: the floor plan with area names, the squad's position and every hostile's live position.",
   "callouts": []
  },
  "tmap-office": {
   "w": 1280,
   "h": 720,
-  "alt": "The in-game tactical map of this location, opened at the start of a solo match: the floor plan with area names and the squad's position.",
+  "alt": "The in-game tactical map of this location, opened at the start of a solo match: the floor plan with area names, the squad's position and every hostile's live position.",
   "callouts": []
  },
  "tmap-supermarket": {
   "w": 1280,
   "h": 720,
-  "alt": "The in-game tactical map of this location, opened at the start of a solo match: the floor plan with area names and the squad's position.",
+  "alt": "The in-game tactical map of this location, opened at the start of a solo match: the floor plan with area names, the squad's position and every hostile's live position.",
   "callouts": []
  },
  "tmap-metro": {
   "w": 1280,
   "h": 720,
-  "alt": "The in-game tactical map of this location, opened at the start of a solo match: the floor plan with area names and the squad's position.",
+  "alt": "The in-game tactical map of this location, opened at the start of a solo match: the floor plan with area names, the squad's position and every hostile's live position.",
   "callouts": []
  },
  "tmap-construction": {
   "w": 1280,
   "h": 720,
-  "alt": "The in-game tactical map of this location, opened at the start of a solo match: the floor plan with area names and the squad's position.",
+  "alt": "The in-game tactical map of this location, opened at the start of a solo match: the floor plan with area names, the squad's position and every hostile's live position.",
   "callouts": []
  },
  "touch-hud": {

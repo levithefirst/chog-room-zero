@@ -6,13 +6,15 @@ import { MAPS } from '../config/maps';
 import type { Actor, World } from '../sim/world';
 import type { Intel } from '../sim/intel';
 import { stage, toStage } from './stage';
-import { clampView, drawTactical, fitView, mapMarkers, panBy, visorDots, zoomAt, type MapView, type Marker } from './tactical';
+import { clampView, drawTactical, fitView, mapHostiles, mapMarkers, panBy, visorDots, zoomAt, type MapView, type Marker } from './tactical';
 
 export interface TacticalDeps {
   world: () => World;
   intel: () => Intel;
   /** The Visor list the server sent this client online, or null solo. */
   netTracks: () => readonly { id: number; x: number; y: number }[] | null;
+  /** Online: the server's map-only list of every living hostile you are not shown (snapshot `mh`), or null solo. */
+  netHostiles: () => readonly { id: number; x: number; y: number }[] | null;
   /** What the header says under the location name (mode, side). */
   subtitle: () => string;
   onOpen: () => void;
@@ -128,6 +130,7 @@ export function createTacticalMap(d: TacticalDeps): TacticalMap {
       if (!open) return;
       open = false;
       el.hidden = true;
+      markers = []; // nothing of the map (hostile bodies included) outlives closing it
       pointers.clear(); pinch = null;
       // Nothing of this view may show on the next open (stale positions for a frame): clear the picture and the list.
       markers = [];
@@ -142,7 +145,7 @@ export function createTacticalMap(d: TacticalDeps): TacticalMap {
       refit();
       const w = d.world();
       const dots = visorDots(w, p, d.netTracks());
-      markers = mapMarkers(w, p, d.intel(), dots);
+      markers = mapMarkers(w, p, d.intel(), dots, mapHostiles(w, p, d.netHostiles()));
       drawTactical(g, { w, def: w.mapId ? MAPS[w.mapId] : null, markers, view: view!, vw: size.w, vh: size.h, dpr: size.dpr, visorR: p.ability.kind === 'visor' ? p.ability.radius : undefined });
     },
     last: () => ({ markers, view }),

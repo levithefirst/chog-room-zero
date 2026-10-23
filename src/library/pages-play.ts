@@ -1,5 +1,5 @@
 // Game modes, multiplayer, progression, rewards, medals, controls, FAQ. Numbers from facts.ts.
-import { TUNING, MODES, SERVER, INPUT, REWARDS, PRACTICE_REWARDS, RATING, xpForNext, UPGRADES, UPGRADE_IDS, MEDALS, PERKS, PERK_IDS, GRENADES, soloHostiles } from './facts';
+import { TUNING, MODES, SERVER, INPUT, REWARDS, PRACTICE_REWARDS, PRACTICE_SHARDS_PER_DAY, RATING, xpForNext, rewardBreakdown, UPGRADES, UPGRADE_IDS, MEDALS, PERKS, PERK_IDS, GRENADES, soloHostiles } from './facts';
 import type { Page } from './types';
 import { esc, n, table, facts, note, ul, ol, link, shot } from './html';
 import { medalSvg, RARITY_LABEL } from '../ui/art';
@@ -11,7 +11,7 @@ export const gameModes: Page = {
   keywords: ['modes', 'solo', 'pvp', 'online', '1v1', '3v3', '5v5'],
   sections: [
     { id: 'modes', title: 'All modes', html: table(['Mode', 'Who', 'Online', 'Needs'], MODES.map((m) => [esc(m.label), esc(m.players), m.online ? 'Yes' : 'No (plays in your browser)', m.holders ? 'Every player a verified Chog holder (server-enforced)' : m.online ? 'The game server to be reachable' : 'Nothing: works without signing in'])) },
-    { id: 'solo', title: 'Vs bots (solo)', keywords: ['solo', 'bots', 'offline', 'practice', 'how do i win'], html: `<p>The default game: you and two AI teammates against ${soloHostiles('room-zero')} hostile bots in the location you picked. Your side wins when every hostile is down; you lose when you are eliminated. Your AI teammates are other roster operators from different departments, and the squad changes between rooms. Hostile bots each start with a perk.</p>${note('Signed in, a solo run pays practice rewards (smaller than online, capped per day). See ' + link('rewards', 'Rewards') + '.')}` },
+    { id: 'solo', title: 'Vs bots (solo)', keywords: ['solo', 'bots', 'offline', 'practice', 'how do i win'], html: `<p>The default game: you and two AI teammates against ${soloHostiles('room-zero')} hostile bots in the location you picked. Your side wins when every hostile is down; you lose when you are eliminated. Your AI teammates are other roster operators from different departments, and the squad changes between rooms. Hostile bots each start with a perk.</p>${note('Signed in, a solo run pays practice rewards (the same shards as online for playing, kills and a clear; less XP and a smaller damage bonus; capped per day). See ' + link('rewards', 'Rewards') + '.')}` },
     { id: '1v1', title: '1v1', keywords: ['duel', '1v1'], html: `<p>One player each side. There are no revives in 1v1: 0 health eliminates at once. The last side standing wins.</p>` },
     { id: '3v3', title: '3v3', keywords: ['3v3', 'team'], html: `<p>Three players each side. A downed player can be revived by a teammate. Squads of friends can queue together (see ${link('multiplayer', 'Multiplayer')}).</p>` },
     { id: '5v5', title: '5v5 (holders only)', keywords: ['5v5', 'holders', 'nft', 'verified'], html: `<p>Five each side, for verified Chog holders only. The server checks it for every player in the room, and for every member of a squad that queues. A labelled DEMO token only plays in demo rooms and earns nothing.</p>${note('The library does not verify anyone. Holder status is decided on the game server when you queue.', 'rule')}` },
@@ -45,7 +45,7 @@ export const multiplayer: Page = {
       `A connection that sends nothing for ${SERVER.idleTimeoutSec} s is closed.`,
       'Leaving while still standing counts as a quit: the match pays no rewards.',
     ])}` },
-    { id: 'netcode', title: 'Fair play', keywords: ['server', 'authoritative', 'cheat', 'wallhack'], html: `<p>Online matches run on the game server; it sends each player only what that player may know (hostiles they can see, teammates' spots, their own Visor dots). The tactical map and HUD draw only that, so nothing on screen shows a hostile through walls. The server sends ${60 / SERVER.snapEvery} updates a second.</p>` },
+    { id: 'netcode', title: 'Fair play', keywords: ['server', 'authoritative', 'cheat', 'wallhack'], html: `<p>Online matches run on the game server; for the game view it sends each player only what that player may know (hostiles they can see, teammates' spots, their own Visor dots), so the game view and HUD never show a hostile through walls. The tactical map is the one exception: it also gets every living hostile's position. The server sends ${60 / SERVER.snapEvery} updates a second.</p>` },
   ],
   related: ['game-modes', 'progression', 'rewards'],
 };
@@ -58,24 +58,27 @@ export const progression: Page = {
     { id: 'account', title: 'Your account', html: `<p>Progression lives on your account: sign in to keep it. As a guest you can play Vs bots; your medals last for the session. Ownership of a Chog never moves XP or currency.</p>` },
     { id: 'levels', title: 'XP and levels', keywords: ['xp', 'level'], html: `<p>Each level needs 50 XP more than the last: ${xpForNext(1)} XP from level 1 to 2, then ${xpForNext(2)}, ${xpForNext(3)} and so on, up to level 99.</p>${table(['Level', 'XP needed'], xpRows, 'XP per level')}` },
     { id: 'upgrades', title: 'Shards and upgrades', keywords: ['shards', 'upgrades', 'currency', 'buy'], html: `<p>Shards are earned by playing and spent on upgrades. The same upgrades are open to every player; nothing is sold for money.</p>${table(['Upgrade', 'Effect', 'Ranks', 'Cost per rank (shards)'], UPGRADE_IDS.map((id) => [esc(UPGRADES[id].name), esc(UPGRADES[id].text), UPGRADES[id].ranks, UPGRADES[id].costs.join(', ')]), 'Upgrades')}` },
-    { id: 'rating', title: 'Rating', keywords: ['rating', 'elo', 'mmr', 'ranked'], html: `<p>Online matches that pay rewards also move your rating: it starts at ${RATING.start} and changes Elo-style (K = ${RATING.k}) on your side's average against the other side's. A Chog tier counts as slightly stronger when the change is worked out (${Object.entries(RATING.tierOffset).filter(([, v]) => v).map(([k, v]) => `${k === 'legendary' ? '1:1' : k} +${v}`).join(', ')}), so beating a weaker profile earns less.</p>` },
+    { id: 'rating', title: 'Rating', keywords: ['rating', 'elo', 'mmr', 'ranked'], html: `<p>Online matches of at least ${REWARDS.minSeconds} s outside private rooms move your rating, also after the daily reward cap (a quit counts as a loss): it starts at ${RATING.start} and changes Elo-style (K = ${RATING.k}) on your side's average against the other side's. A Chog tier counts as slightly stronger when the change is worked out (${Object.entries(RATING.tierOffset).filter(([, v]) => v).map(([k, v]) => `${k === 'legendary' ? '1:1' : k} +${v}`).join(', ')}), so beating a weaker profile earns less.</p>` },
     { id: 'unlocks', title: 'What is unlocked', html: `<p>All five locations, all seven operators and every mode except 5v5 are open from the start. There are no loot boxes or season passes. Medals record what you have done; they do not unlock gear.</p>` },
   ],
   related: ['rewards', 'medals', 'multiplayer'],
 };
 
 const R = REWARDS, PR = PRACTICE_REWARDS;
+const EXAMPLES: [string, boolean, number][] = [['Win, 0 kills', true, 0], ['Win, 1 kill', true, 1], ['Win, 3 kills', true, 3], ['Win, 5 kills', true, 5], [`Win, 7 kills (counts ${REWARDS.maxKills})`, true, 7], ['Loss, 0 kills', false, 0], ['Loss, 3 kills', false, 3], ['Loss, 5 kills', false, 5]];
 export const rewards: Page = {
   slug: 'rewards', title: 'Rewards', group: 'Account', summary: 'What a match pays, line by line, online and in solo practice.',
-  keywords: ['rewards', 'xp', 'shards', 'earn', 'payout'],
+  keywords: ['rewards', 'xp', 'shards', 'earn', 'payout', 'shard rewards'],
   sections: [
     { id: 'table', title: 'What a match pays', html: table(['Line', 'Online XP', 'Online shards', 'Practice XP', 'Practice shards'], [
       ['Match played', R.xpPlay, R.shardsPlay, PR.xpPlay, PR.shardsPlay], ['Victory', `+${R.xpWin}`, `+${R.shardsWin}`, `+${PR.xpWin}`, `+${PR.shardsWin}`],
-      ['Per kill (up to 5)', `+${R.xpPerKill}`, `+${R.shardsPerKill}`, `+${PR.xpPerKill}`, `+${PR.shardsPerKill}`],
+      [`Per kill (up to ${R.maxKills})`, `+${R.xpPerKill}`, `+${R.shardsPerKill}`, `+${PR.xpPerKill}`, `+${PR.shardsPerKill}`],
       ['Damage dealt', '0', `1 per ${R.damagePerShard} (up to ${R.damageShardsMax})`, '0', `1 per ${PR.damagePerShard} (up to ${PR.damageShardsMax})`],
-    ], 'Rewards per match') + `<p>A win always pays more than any loss. The results screen shows exactly these lines.</p>` },
+    ], 'Rewards per match') + `<p>Kills past ${R.maxKills} in one match pay nothing more, and damage adds at most ${R.damageShardsMax} shards online (${PR.damageShardsMax} in practice). The results screen shows exactly these lines.</p>` },
+    { id: 'examples', title: 'Online shards, worked out', keywords: ['shards', 'how many shards', 'shard rewards', 'kill reward', 'victory reward', 'online rewards'], html: `${table(['Match (no damage dealt)', 'Online shards', 'Online XP'], EXAMPLES.map(([label, won, kills]) => { const b = rewardBreakdown({ won, kills, damage: 0, seconds: 60, leftEarly: false, capped: false }); return [label, `${b.shards}`, `${b.xp}`]; }), 'Online shards by result')}<p>Each line is ${R.shardsPlay} for the match${R.shardsPerKill ? `, ${R.shardsPerKill} a kill` : ''} and ${R.shardsWin} for the win, from the same rule the server pays with. Damage dealt adds 1 shard per ${R.damagePerShard} up to ${R.damageShardsMax} on top. A win always adds the victory bonus, but a loss with many kills can pay more than a win with none.</p>` },
     { id: 'limits', title: 'When a match pays nothing', keywords: ['no reward', 'cap', 'daily'], html: ul([
       `Shorter than ${R.minSeconds} s.`, 'You left while still standing.', `Over the daily cap: ${R.dailyCap} rewarded online matches and ${PR.dailyCap} rewarded practice runs per rolling 24 h (later ones still count for history and medals).`,
+      `Over the practice shard limit: ${PRACTICE_SHARDS_PER_DAY.toLocaleString('en-US')} practice shards per rolling 24 h. A run that would pass it pays no XP or shards (it is still stored for your career).`,
       'Private room codes, DEMO tokens and Training.', 'A practice run without a valid start ticket, or one that claims more time than passed.',
     ]) },
   ],
@@ -94,7 +97,7 @@ export const medals: Page = {
   related: ['progression', 'rewards', 'faq'],
 };
 
-const KEY_ROWS: [string, string][] = [['W A S D', 'Move'], ['Shift (hold)', 'Creep: quieter, slower'], ['Mouse', 'Aim'], ['Left click (hold)', 'Fire'], ['R', 'Reload'], ['Space or Q', 'Ability'], ['G (hold, release) or right click', 'Throw a grenade at the cursor'], ['M', 'Tactical map'], ['Esc or P', 'Pause'], ['Enter or Space', 'Confirm on menus']];
+const KEY_ROWS: [string, string][] = [['W A S D', 'Move'], ['Shift (hold)', 'Creep: quieter, slower'], ['Mouse', 'Aim'], ['Left click (hold)', 'Fire'], ['R', 'Reload'], ['Space or Q', 'Ability'], ['G (hold, release) or right click', 'Throw a grenade at the cursor'], ['M', 'Tactical map (M or Esc closes it)'], ['Esc or P', 'Pause'], ['Enter or Space', 'Confirm on menus']];
 function keyboardSvg(): string {
   const k = (x: number, y: number, t: string, w = 44, hi = false) => `<rect class="${hi ? 'k hi' : 'k'}" x="${x}" y="${y}" width="${w}" height="40" rx="6"/><text class="kt" x="${x + w / 2}" y="${y + 26}" text-anchor="middle">${t}</text>`;
   return `<svg class="dg kb" viewBox="0 0 640 230" width="640" height="230" role="img" aria-label="Keyboard: W A S D move, Shift creep, Space or Q ability, R reload, G grenade, M map, Esc pause; mouse aims, left click fires, right click throws a grenade.">
@@ -123,7 +126,7 @@ export const controls: Page = {
       `Ability button: tap. Grenade button: tap to throw ${TUNING.grenade.touchThrow} m along your aim, or drag from it to aim the throw. Reload button: R.`,
       'MAP opens the tactical map; the pause button is top right.'])}${shot('touch-hud', 'The touch HUD on an 844 x 390 landscape phone (emulated).')}` },
     { id: 'tablet', title: 'Tablet', keywords: ['ipad', 'tablet'], html: `<p>Tablets use the touch controls above. With a keyboard and mouse attached, the desktop controls work too.</p>` },
-    { id: 'settings', title: 'Settings that change controls', keywords: ['settings', 'stick size', 'hud size', 'motion'], html: ul(['Stick size for touch.', 'HUD size (85% to 130%) and Motion (System, Reduced or Full: Reduced removes screen shake, pulses and entrances).']) },
+    { id: 'settings', title: 'Settings that change controls', keywords: ['settings', 'stick size', 'hud size', 'motion', 'rebind', 'change keys', 'key bindings'], html: ul(['PC keys: Settings, Change keys lets you rebind each action; the keys above are the defaults, and Reset to defaults restores them.', 'Stick size for touch.', 'HUD size (85% to 130%) and Motion (System, Reduced or Full: Reduced removes screen shake, pulses and entrances).']) },
   ],
   related: ['start-here', 'movement-sound', 'faq'],
 };
@@ -142,7 +145,7 @@ export const faq: Page = {
     { id: 'leave', title: 'What happens if I disconnect?', keywords: ['disconnect', 'reconnect'], html: `<p>Your operator waits ${SERVER.reconnectGraceSec} s for you while the game reconnects. ${link('multiplayer', 'Disconnects', 'reconnect')}.</p>` },
     { id: 'pay', title: 'Why did a match pay nothing?', keywords: ['no rewards'], html: `<p>It was under ${REWARDS.minSeconds} s, you left while standing, you were over the daily cap, or it was private, DEMO or Training. ${link('rewards', 'Rewards', 'limits')}.</p>` },
     { id: 'buy', title: 'Can I buy anything?', keywords: ['buy', 'purchase', 'pay to win', 'shop'], html: `<p>No. There are no purchases in the game: upgrades cost shards earned by playing, and are the same for everyone.</p>` },
-    { id: 'map', title: 'Is there a minimap?', keywords: ['map', 'minimap', 'tactical map'], html: `<p>There is a full-screen tactical map: press <kbd>M</kbd> or MAP. It shows only what you know. ${link('how-to-play', 'The tactical map', 'tactical-map')}.</p>` },
+    { id: 'map', title: 'Is there a minimap?', keywords: ['map', 'minimap', 'tactical map', 'enemies on map', 'see enemies'], html: `<p>There is a full-screen tactical map: press <kbd>M</kbd> or MAP. It shows every living hostile on the whole map while it is open. ${link('how-to-play', 'The tactical map', 'tactical-map')}.</p>` },
   ],
   related: ['start-here', 'controls', 'combat'],
 };

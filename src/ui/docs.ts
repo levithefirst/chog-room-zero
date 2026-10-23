@@ -6,7 +6,7 @@ import { TUNING } from '../config/tuning';
 import { allKeys, mainKey, moveKeys } from '../input/bindings';
 import { BASE_HP, GRENADES, UPGRADES, UPGRADE_IDS } from '../config/power';
 import { MAPS, MAP_IDS } from '../config/maps';
-import { PRACTICE_REWARDS, REWARDS } from '../config/progression';
+import { PRACTICE_REWARDS, PRACTICE_SHARDS_PER_DAY, REWARDS } from '../config/progression';
 import { MEDALS } from './medals';
 import { HEROES } from '../config/heroes';
 import { THREAT_RANGE } from './downed';
@@ -21,10 +21,13 @@ export interface DocSection { id: string; title: string; html: (touch: boolean) 
 const P = TUNING.pickups, R = TUNING.revive, L = TUNING.loot, Z = TUNING.zone;
 const li = (items: string[]) => `<ul>${items.map((x) => `<li>${x}</li>`).join('')}</ul>`;
 const rarityCount = (r: string) => MEDALS.filter((m) => m.rarity === r).length;
+/** Hostile bots in a default (Vs bots) room: every location has the same count. */
+const BOTS = Math.min(...MAP_IDS.map((id) => MAPS[id].botSpawns.length));
+const SNARE = HEROES.find((h) => h.ability.kind === 'scream')!.ability;
 
 export const DOCS: DocSection[] = [
   { id: 'how-to-play', title: 'How to Play', html: () => `<p>Room Zero is a dark, top-down room where every bullet travels and every wall blocks sight and shots.
-In the default game it is <b>you and 2 AI teammates against 5 hostiles</b>. Your side wins when all five are down. You lose when you are out.</p>
+In the default game it is <b>you and 2 AI teammates against ${BOTS} hostiles</b>. Your side wins when all of them are down. You lose when you are out.</p>
 ${li([`Everyone has ${BASE_HP.free} health and up to ${TUNING.combat.armorCap} armour (a verified Chog without a mapped superpower: ${BASE_HP.chog} health).`,
     `About ${Z.safeSeconds} s in, a danger zone starts closing. Outside it you lose health every second, and the HUD says <b>Outside zone</b>. Its stages warn for ${Z.stages.map((s) => s.warn).join(' / ')} s and close over ${Z.stages.map((s) => s.shrink).join(' / ')} s (every interval 20% longer than before 2026-10-18).`,
     'Light is information: you only see what your lamp and the room let you see. Sound tells you the rest.',
@@ -36,7 +39,7 @@ ${li([`Everyone has ${BASE_HP.free} health and up to ${TUNING.combat.armorCap} a
     `Your body turns at a set speed. A new shot waits until you face within ${TUNING.combat.fireMaxLagDeg}° of where you aim, so a flick behind you fires that way, a moment later, never the wrong way.`,
     'Damage falls off with distance; every gun has its own range, spread and reload.',
     `Grenades: ${GRENADES.free} for free players (more by verified Chog tier, up to ${GRENADES.legendary}). They roll, bounce off walls, fly over low cover, and explode on a fuse; a wall between you and the blast blocks it.`,
-    'Getting hit nudges you, it never stops you. Only two things slow you: a Snare (60% for 2 s, shown under your health) and being downed (a crawl).',
+    `Getting hit nudges you, it never stops you. Only two things slow you: a Snare (to ${Math.round((SNARE.amount ?? 1) * 100)}% speed for ${SNARE.seconds} s, shown under your health) and being downed (a crawl).`,
   ]) },
   { id: 'movement', title: 'Movement', html: (t) => li([
     'Movement has weight: a short run-up, a quick stop, faster reversals.',
@@ -50,7 +53,7 @@ ${li([`Everyone has ${BASE_HP.free} health and up to ${TUNING.combat.armorCap} a
     'Heard marks show noises you heard, not saw: footprints (steps), a burst (a shot), two dots (a reload). A tick around you means it came through a wall.',
     'A red dotted ring is where a hostile you lost could be by now. It grows as they could have moved and fades as you forget.',
     'AI teammates call what they see and hear ("Contact, north", "Lost him", "Behind us!"), and when they come to get you up.',
-    'Nobody sees through walls, including the bots: every bot decision comes from what it saw, heard or was told.',
+    'In the game view nobody sees through walls, including the bots: every bot decision comes from what it saw, heard or was told. The tactical map is the one exception: while it is open it shows every living hostile on the whole map.',
     'Top right, the feed lists the last knock-outs and downs (✸ for a grenade) for a few seconds. Online it never says where they happened.',
   ]) },
   { id: 'sound', title: 'Sound', html: () => li([
@@ -61,7 +64,7 @@ ${li([`Everyone has ${BASE_HP.free} health and up to ${TUNING.combat.armorCap} a
     'Reloading, pickups, revives and grenades all make noise. So does a downed player.',
   ]) },
   { id: 'squads', title: 'Squads', html: () => li([
-    'Create a squad on the hub and share its 5-letter code; friends join with it. The leader queues for the squad.',
+    'Create a squad on the hub and share its 5-character code (letters and digits); friends join with it. The leader queues for the squad.',
     'Up to 5 in a squad. Everyone plays on the same side.',
     'In the default game your two AI teammates are your squad: they cover the arcs you are not watching, revive you and take what they need.',
     `When you are below ${Math.round(TUNING.bots.guard.hpBelow * 100)}% health and one of them knows of a threat near you, the nearest stands between you and where it thinks the threat is (your HUD says who is covering you). It guards against what it heard or saw, never where the hostile really is.`,
@@ -75,7 +78,7 @@ ${li([`Everyone has ${BASE_HP.free} health and up to ${TUNING.combat.armorCap} a
     'To revive someone: stand next to them and stop shooting. AI teammates go when it is safe and they can make it in time.',
   ]) },
   { id: 'enemies', title: 'Enemy Teams', html: () => li([
-    'The five hostiles play as a squad: they patrol, search the rooms they have not checked, hold angles, regroup, and go for pickups when they need them.',
+    `The ${BOTS} hostiles play as a squad: they patrol, search the rooms they have not checked, hold angles, regroup, and go for pickups when they need them.`,
     'When one of them sees you, it tells the others where it saw you (a moment later). They come to that spot, never straight to where you are now.',
     'They use cover, break line of sight, investigate sounds and back off when hurt. They never get to shoot you from further than you can see.',
     'They walk their jobs, so you can hear them coming.',
@@ -128,8 +131,8 @@ ${li(['Signed in, medals are awarded and kept on your account (any device). As a
 ${li(UPGRADE_IDS.map((id) => `<b>${esc(UPGRADES[id].name)}</b>: ${esc(UPGRADES[id].text)}, ${UPGRADES[id].ranks} ranks, first rank ${UPGRADES[id].costs[0]} shards.`))}` },
   { id: 'rewards', title: 'Rewards', html: () => li([
     `Daily: three challenges a day (the same for everyone, new at 00:00 UTC), easy, medium and hard, paying ${CHALLENGE_REWARDS[1].shards}, ${CHALLENGE_REWARDS[2].shards} and ${CHALLENGE_REWARDS[3].shards} shards once each. They count your verified solo runs and online matches of the day (the hub card shows how far you are). Nothing carries over and nothing is lost if you skip a day.`,
-    `Online match: ${REWARDS.xpPlay} XP and ${REWARDS.shardsPlay} shards for playing, more for kills and damage, ${REWARDS.xpWin} XP and ${REWARDS.shardsWin} shards for a win.`,
-    `Solo (signed in): ${PRACTICE_REWARDS.xpPlay} XP and ${PRACTICE_REWARDS.shardsPlay} shards a run, ${PRACTICE_REWARDS.shardsPerKill} shards a kill (up to ${PRACTICE_REWARDS.maxKills}), ${PRACTICE_REWARDS.shardsWin} for a clear, a little for damage; up to ${PRACTICE_REWARDS.dailyCap} paid runs a day.`,
+    `Online match: ${REWARDS.shardsPlay} shards and ${REWARDS.xpPlay} XP for a completed match, ${REWARDS.shardsPerKill} shards and ${REWARDS.xpPerKill} XP per kill (up to ${REWARDS.maxKills} kills), ${REWARDS.shardsWin} shards and ${REWARDS.xpWin} XP for a win, and 1 shard per ${REWARDS.damagePerShard} damage dealt (up to ${REWARDS.damageShardsMax}). Up to ${REWARDS.dailyCap} paid matches a day; a match under ${REWARDS.minSeconds} s pays nothing.`,
+    `Solo (signed in): ${PRACTICE_REWARDS.shardsPlay} shards and ${PRACTICE_REWARDS.xpPlay} XP a run, ${PRACTICE_REWARDS.shardsPerKill} shards and ${PRACTICE_REWARDS.xpPerKill} XP per kill (up to ${PRACTICE_REWARDS.maxKills}), ${PRACTICE_REWARDS.shardsWin} shards and ${PRACTICE_REWARDS.xpWin} XP for a clear, 1 shard per ${PRACTICE_REWARDS.damagePerShard} damage (up to ${PRACTICE_REWARDS.damageShardsMax}); up to ${PRACTICE_REWARDS.dailyCap} paid runs and ${PRACTICE_SHARDS_PER_DAY.toLocaleString('en-US')} practice shards a day.`,
     'A loss where you fought still moves you forward. Quitting, private rooms and demo play pay nothing.',
     'The results screen shows every line, your new totals and the upgrades your shards already cover.',
   ]) },
@@ -154,9 +157,9 @@ ${li(UPGRADE_IDS.map((id) => `<b>${esc(UPGRADES[id].name)}</b>: ${esc(UPGRADES[i
   ]) },
   { id: 'controls', title: 'Controls', html: (t) => `<table class="howto">${t
     ? '<tr><td>Move</td><td>Left thumb (half push: creep)</td></tr><tr><td>Aim and fire</td><td>Right thumb; push past the ring to fire, back inside to stop</td></tr><tr><td>Ability</td><td>Ability button</td></tr><tr><td>Grenade</td><td>Grenade button (drag it to aim the throw)</td></tr><tr><td>Reload</td><td>Reload button</td></tr><tr><td>Tactical map</td><td>MAP button under your health; RETURN closes it. Pinch to zoom, drag to pan</td></tr>'
-    : `<tr><td>Move</td><td>${esc(moveKeys())} (${esc(allKeys('creep'))}: creep)</td></tr><tr><td>Aim</td><td>Mouse</td></tr><tr><td>Fire</td><td>${esc(allKeys('fire'))}</td></tr><tr><td>Ability</td><td>${esc(allKeys('ability'))}</td></tr><tr><td>Grenade</td><td>${esc(allKeys('grenade'))}: hold the key and release, or click: lands at the cursor</td></tr><tr><td>Reload</td><td>${esc(allKeys('reload'))}</td></tr><tr><td>Tactical map</td><td>${esc(allKeys('map'))} or the MAP button (Esc or ${esc(mainKey('map'))} closes it). Wheel to zoom, drag to pan</td></tr><tr><td>Pause</td><td>${esc(allKeys('pause'))}</td></tr><tr><td>Change keys</td><td>Settings, Controls</td></tr>`}</table>` },
+    : `<tr><td>Move</td><td>${esc(moveKeys())} (${esc(allKeys('creep'))}: creep)</td></tr><tr><td>Aim</td><td>Mouse</td></tr><tr><td>Fire</td><td>${esc(allKeys('fire'))}</td></tr><tr><td>Ability</td><td>${esc(allKeys('ability'))}</td></tr><tr><td>Grenade</td><td>${esc(allKeys('grenade'))}: hold the key and release, or click: lands at the cursor</td></tr><tr><td>Reload</td><td>${esc(allKeys('reload'))}</td></tr><tr><td>Tactical map</td><td>${esc(allKeys('map'))} or the MAP button (${esc(mainKey('map'))}, Esc or RETURN closes it). Wheel to zoom, drag to pan</td></tr><tr><td>Pause</td><td>${esc(allKeys('pause'))}</td></tr><tr><td>Change keys</td><td>Settings, Controls</td></tr>`}</table>` },
   { id: 'modes', title: 'Game Modes', html: () => li([
-    '<b>Vs bots</b>: you and 2 AI teammates against 5 hostiles. No sign-in needed.',
+    `<b>Vs bots</b>: you and 2 AI teammates against ${BOTS} hostiles. No sign-in needed.`,
     '<b>1v1</b> and <b>3v3</b>: online against people, open to everyone.',
     '<b>5v5</b>: online, verified Chog holders only (every player on both sides).',
     `Seven free operators (${HEROES.map((h) => esc(h.name)).join(', ')}), each with one ability.`,
@@ -166,7 +169,7 @@ ${li(UPGRADE_IDS.map((id) => `<b>${esc(UPGRADES[id].name)}</b>: ${esc(UPGRADES[i
 <dt>Why is my health going down?</dt><dd>You are outside the danger zone (the HUD says Outside zone and the screen edge pulses red), or you are downed and bleeding out. Nothing else takes health without a hit.</dd>
 <dt>Why didn't my shot fire straight away?</dt><dd>You turned a long way: the shot waits until your body faces where you aim (a fraction of a second), so it goes where you meant.</dd>
 <dt>Why can't I move?</dt><dd>A Bubble caged you or Drool glued you to a wall (the status under your health says which and for how long). You can still aim and shoot.</dd>
-<dt>What does the tactical map show?</dt><dd>The whole location as it is played: walls, doors, cover, rails, decks and stairs, the named areas, stocked supplies and the danger zone. You and your side always. A hostile only while you see it, as a fading "last known" circle after you lose it, or as a Visor mark if you hold the Visor: the map never shows what your own eyes, team and powers do not. The match keeps running while it is open, and your operator stands still.</dd>
+<dt>What does the tactical map show?</dt><dd>The whole location as it is played: walls, doors, cover, rails, decks and stairs, the named areas, stocked supplies and the danger zone. You and your side always, and every living hostile on the whole map at its current spot while the map is open, seen or not. A "last known" circle still marks where you lost one, and Visor marks still show if you hold the Visor. The game view itself still hides hostiles behind walls. The match keeps running while it is open, and your operator stands still.</dd>
 <dt>Can I play without a wallet?</dt><dd>Yes: solo, 1v1 and 3v3 never need one.</dd>
 <dt>Where is my rank?</dt><dd>Leaderboard, at the top: sign in and finish a run (Solo) or a match (Online).</dd>
 <dt>Do I lose my progress as a guest?</dt><dd>A guest's runs last for the session. Sign in (Google or wallet) to keep XP, shards, upgrades, medals and your rank.</dd>

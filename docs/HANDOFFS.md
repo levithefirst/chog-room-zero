@@ -698,23 +698,62 @@ Next smallest task : owner plays a match on a phone with Benja, uses Ping near a
 ```
 
 ```
-HANDOFF H44  2026-10-23  claude -> owner
-Branch @ commit : ccr-e7fadb8f-qtochk @ this handoff commit (on top of e51a74b)   pushed: yes
-Task            : (1) released earlier this session without a handoff: PC controls as a first-class input (rebindable keys,
-                  Controls screen, live prompts), matchmaking origin + "Players found" status, practice rewards 3 played /
-                  3 kill / 18 win; deployed at e9fac04 (Vercel dpl_9JnuCPEi2jQ5B7o712DEJuxtxkZb, Render e9fac04), prod smoke passed.
-                  (2) owner 2026-10-23 upgrades + medal goals.
+HANDOFF H44  2026-10-21  grokbot -> owner
+Branch @ commit : grokbot/release-e9fac04-shards-map from ccr-e7fadb8f-qtochk @ e9fac04 (H43 + 0c0e504 rebindable keys, practice 3/3/18), fast-forwarded to ccr at this handoff's release commit.
+Task            : owner 2026-10-21 t26u: layer grokbot's local work (082f76d f00f8d5 7e8a803 75c1af7 24f4045 ade159f c6f12e8 9330664, was a local "H39") on Claude's live work; keep both sides; release.
+Rewards         : online REWARDS shards 10 played / 10 per kill / 30 victory (was 10/3/25). XP 40/60/10, maxKills 5, damage +1 per 50 up to +5, minSeconds 20, quit pays nothing, dailyCap 20 unchanged. Practice is Claude's 3/3/18 (XP 20/30/5, cap 25) unchanged. Online shards, no damage: win 0/1/3/5 kills = 40/50/70/90; loss 0/3/5 = 10/40/60. Owner superseded "every win beats every loss" ONLINE only; practice keeps Claude's worst clear > best loss test. 2-day max-out test retired (> 1 day, cap 20).
+Tactical map    : while open, every living hostile at its live spot, whole map, unconditionally (src/ui/tactical.ts mapHostiles). Claude's Ping/Marker fix kept: a revealed hostile is "live", so no trace or Visor dot under it. Traces, Visor dots, you, team, zone, supplies, areas unchanged. Online: snapshot `mh` (living hostiles not in `actors`, id/x/y), read only by the map; sent every update, so a modified client could read it. Game view, HUD, intel and snapshot privacy unchanged. No protocol bump.
+Conflicts       : tests/rewards.test.ts, tests/fs-economy.test.ts (online rules ours, practice Claude's; Claude's online "10/3/25" test now 10/10/30 > practice); src/ui/tactical.ts (header comment); tests/tm-tactical.test.ts (Claude's detection tests also expect the live body); src/ui/docs.ts (rewards ours; controls Claude's live bindings + "M, Esc or RETURN closes it"); docs/STATE.md (merged); docs/HANDOFFS.md (Claude's H39-H43 untouched, this entry appended).
+Docs            : Library and Game Docs audited (rewards from config, map rule, keys). Library Controls now names Settings, Change keys (Claude's rebinding). Shots: tactical map x6 and hud-desktop (callout Space or Q) regenerated before the merge; captions still true.
+Tests run       : tsc clean; env -u DATABASE_URL vitest 1187/1187 (109 files); npm run build OK (20 library pages).
+Deploy          : this commit pushed to ccr (Render) and promoted on Vercel; results in the owner report, not re-recorded here.
+Rollback        : Vercel dpl_9JnuCPEi2jQ5B7o712DEJuxtxkZb (e9fac04, H43) and point Render at e9fac04; no migration.
+Not verified    : real phones (Pixel 7, iPhone 13: BLOCKED); human play of the map rule; real GPUs; a real CHOG wallet.
+Locked decisions touched : none (rewards and map rule are owner decisions of 2026-10-21).
+Next smallest task : owner plays one Vs bots run and one 1v1, opens MAP: every hostile shown, Ping still live; files: none.
+```
+
+```
+HANDOFF H45  2026-10-21  grokbot -> owner
+Branch @ commit : grokbot/practice-shards-10-10-30 from ccr-e7fadb8f-qtochk @ 164e9db (production: H44 + red hostile markers ce058d9 and 6 regenerated map shots 164e9db); local commits a0097a0 + this handoff commit; not pushed.
+Task            : owner 2026-10-21 t30u: practice shards 10 a run / 10 a kill / 30 a clear (was 3/3/18); t31u: practice daily shard limit 1,000 (was 300). Everything else unchanged.
+Rewards         : PRACTICE_REWARDS shards 10/10/30; XP 20/30/5, kill cap 5, damage +1 per 100 up to +3, minSeconds 20, 25 paid runs/24 h, win-length and seconds-per-kill checks and exclusions unchanged. Online unchanged (10/10/30, cap 20/day, no shard limit). PRACTICE_SHARDS_PER_DAY moved to src/config/progression.ts (1000; api/_lib/career.ts re-exports it) so Library and Game Docs read it. A run that would pass the limit pays nothing, XP included (still stored).
+Economy         : practice shards (no damage): clear 0/1/3/5/7 kills = 40/50/70/90/90; loss 0/3/5 = 10/40/60; damage max +3 (best run 93). "Every clear beats every loss" superseded in practice as online (4-kill full-damage loss 53 > 0-kill clear 40); a clear beats the same run lost. Runs fully paid per day at 1,000 (was 300): 93-shard runs 10 (3), 90-shard clears 11 (3), 70-shard clears 14 (4), 1-kill losses 25 of 25 (14). Days to buy all upgrades (3,250): perfect online + practice 1.12 (1.48); practice losses only 6.2 (10.8).
+Docs            : Library solo note (same shards as online; less XP, smaller damage bonus) and Rewards limits list (1,000 practice shards/day); Game Docs solo line (10 shards per kill; 1,000 practice shards a day). Screenshots: none show practice numbers; none regenerated.
+Tests run       : tsc clean; env -u DATABASE_URL vitest 1192/1192 (109 files); npm run build OK. Database-backed reward files run one at a time (a combined run timed out under load in t30u).
+Deploy          : none. Production stays 164e9db (Vercel dpl_6HTRrYUcD7usX4JPtfYo3bc31T3j, Render 164e9db).
+Rollback        : nothing live to roll back; production rollback target remains dpl_7fEx2vkeiFkKwmbANPJ7wbfEhjj1 (0de58c6).
+Not verified    : real phones (BLOCKED); a real practice payout against the live database; human play.
+Locked decisions touched : none (owner decisions of 2026-10-21 recorded here).
+Next smallest task : owner says push; then production smoke incl. the Library Rewards page (practice 10/10/30, 1,000/day).
+```
+
+```
+HANDOFF H46  2026-10-23  claude -> owner
+Branch @ commit : ccr-e7fadb8f-qtochk @ this merge commit (4dd8163, 870427c, e51a74b, 7166235 merged with grokbot H44/H45
+                  at a1d5c4b; grokbot's live changes kept as they are)   pushed: yes
+Task            : owner 2026-10-23 upgrades + medal goals. Also recorded: PC controls as a first-class input (rebindable keys,
+                  Controls screen, live prompts) and matchmaking origin + "Players found" status, released at e9fac04 earlier
+                  (Vercel dpl_9JnuCPEi2jQ5B7o712DEJuxtxkZb, Render e9fac04); its practice rewards 3/3/18 were then replaced by
+                  grokbot H45 (10/10/30, owner 2026-10-21 t30u), which this merge keeps.
 Values (owner)  : Vitality +10 health/rank, 12 ranks; Plating +5 armour/rank, 12; Firepower +35% weapon damage/rank (multiplier,
                   not flat), 7; Focus -8% ability cooldown/rank, 8. Prices: earlier price per rank +25% rounded to 5 (Firepower x2
                   instead): Vit/Plat 15..740, Firepower 300..1500, Focus 40..825; all ranks 16,390 shards. Caps raised to the maxed
                   values, online too (armour +60, damage x3.45, cooldown x0.36, health x2). Bought ranks kept, nothing reset.
                   Medals: Regular 20, Committed 40, Pin Puller 20, Body Count 20, Heavy Hitter 3,000, Scavenger 10, Hoarder 20,
                   Pack Rat 30, Looter 10 kits in total; Debut 1, Toolkit 4, Survivor 2 min unchanged; no other goal changed.
+Economy (merged): first rank 15: one online or practice win, a loss with a kill, or two bare matches (a bare loss pays 10).
+                  Practice losses with a kill only: 525 shards/day, 16,390 / 525 = 31 days to buy every rank.
 Files changed   : src/config/power.ts, src/ui/hub.ts (Health row in points), src/ui/medals.ts, docs/design/power.md; tests:
-                  power, fs-economy, gp-progress, rc7-profile-medals, mi-account, account-ui, game-api, master-online,
-                  progression, rewards; tools/qa-rewards.mjs; docs/STATE.md, docs/HANDOFFS.md.
-Tests run       : npx tsc --noEmit clean; npx vitest run 1160/1160; node tools/qa-rewards.mjs (local stack, headless Chrome)
-                  19/19; upgrades screen screenshots desk 1440x900, phone 844x390, p390: 12/12/7/8 pips fit.
+                  power, fs-economy (merge: grokbot 10/10/30 rewards against the new prices), gp-progress, rc7-profile-medals,
+                  mi-account, account-ui, game-api, master-online, progression, rewards, library-audit; tools/qa-rewards.mjs; STATE, HANDOFFS.
+Tests run       : npx tsc --noEmit clean; env -u DATABASE_URL npx vitest run 1196/1196 (109 files); node tools/qa-rewards.mjs
+                  (local stack, headless Chrome, emulated) 13/13: the same checks as 19/19 before the merge, with fewer repeats of
+                  "run N is paid too" now a practice run pays 10; values check of the built bundle 25/25; upgrades screen
+                  screenshots desk 1440x900, phone 844x390, p390: 12/12/7/8 pips fit.
+Merge fixes     : tests/fs-economy.test.ts conflict (first rank under 10/10/30, 31 days to max); tests/library-audit.test.ts
+                  looked for any "300 shards" (the retired limit) and now hit the Firepower 1 price: matches the limit wording;
+                  tools/qa-rewards.mjs still checked practice 3/3/18: now 10/10/30.
 Known failures  : none.
 Not verified    : Hoarder 20 / Pack Rat 30 reachable in one run (84 autopilot runs: Scavenger 10 earned 6 times, the other two
                   never; the autopilot does not seek pickups); human play with maxed upgrades online; real phones.

@@ -162,7 +162,7 @@ describe('settlement pulled from the game server', () => {
       { acc: b, team: 'bravo', tier: 'free', tok: null, mid: null, own: null, kills: 0, damage: 50, left: false }] });
     const cookie = await cookieFor([{ provider: 'google', subject: 'a', label: 'a' }]);
     const s1 = await call('POST', 'settle', { cookie, body: { matchId: '0123456789abcdef' } });
-    expect(s1.j).toMatchObject({ ok: true, already: false, mine: { acc: a, xp: 110, shards: 40 } }); // 10 played + 25 win + 3 kill + 2 for 100 damage
+    expect(s1.j).toMatchObject({ ok: true, already: false, mine: { acc: a, xp: 110, shards: 52 } }); // 10 played + 30 win + 10 kill + 2 for 100 damage
     expect(s1.j.players).toBeUndefined();
     const s2 = await call('POST', 'settle', { cookie, body: { matchId: '0123456789abcdef' } });
     expect(s2.j.already).toBe(true);

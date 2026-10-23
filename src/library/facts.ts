@@ -8,12 +8,12 @@ import { WEAPONS, damageAt, type WeaponDef } from '../config/weapons';
 import { HEROES, ABILITIES, DEPARTMENTS, type HeroDef, type AbilityDef } from '../config/heroes';
 import { SUPERPOWERS, SUPERPOWER_IDS, RANKS, BEAM, ORB } from '../config/superpowers';
 import { GRENADES, BASE_HP, UPGRADES, UPGRADE_IDS, CAPS, TIERS, TIER_DEFS } from '../config/power';
-import { REWARDS, PRACTICE_REWARDS, RATING, xpForNext } from '../config/progression';
+import { REWARDS, PRACTICE_REWARDS, PRACTICE_SHARDS_PER_DAY, RATING, xpForNext, rewardBreakdown } from '../config/progression';
 import { PERKS, PERK_IDS } from '../config/perks';
 import { MAPS, MAP_IDS, type MapId } from '../config/maps';
 import { MEDALS } from '../ui/medals';
 
-export { TUNING, WEAPONS, HEROES, ABILITIES, DEPARTMENTS, SUPERPOWERS, SUPERPOWER_IDS, RANKS, BEAM, ORB, GRENADES, BASE_HP, UPGRADES, UPGRADE_IDS, CAPS, TIERS, TIER_DEFS, REWARDS, PRACTICE_REWARDS, RATING, xpForNext, PERKS, PERK_IDS, MAPS, MAP_IDS, MEDALS, damageAt };
+export { TUNING, WEAPONS, HEROES, ABILITIES, DEPARTMENTS, SUPERPOWERS, SUPERPOWER_IDS, RANKS, BEAM, ORB, GRENADES, BASE_HP, UPGRADES, UPGRADE_IDS, CAPS, TIERS, TIER_DEFS, REWARDS, PRACTICE_REWARDS, PRACTICE_SHARDS_PER_DAY, RATING, xpForNext, rewardBreakdown, PERKS, PERK_IDS, MAPS, MAP_IDS, MEDALS, damageAt };
 export type { MapId, WeaponDef, HeroDef, AbilityDef };
 
 /** Copied from server/room.ts (Lobby defaults, squads) and src/net/client.ts; tests/library-data.test.ts checks each. */

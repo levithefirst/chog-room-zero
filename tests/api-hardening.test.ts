@@ -125,16 +125,18 @@ describe('2: practice farming', () => {
   it(`practice shards per rolling 24 h stop at ${PRACTICE_SHARDS_PER_DAY}`, async () => {
     const c = await cookieFor([g('p3')]);
     const acc = (await call('GET', 'profile', { cookie: c })).j.profile.account as string;
-    for (let i = 0; i < 13; i++) {
+    expect(PRACTICE_SHARDS_PER_DAY).toBe(1000);
+    for (let i = 0; i < 10; i++) {
       await db.query(`INSERT INTO room_zero.practice_runs (account_id, run_id, hero, won, seconds, kills, bullets, hits, damage_dealt, damage_taken, pickups, abilities, hp_left, xp, shards, created_at)
-        VALUES ($1, $2, 'benja', true, 60, 5, 0, 0, 0, 0, 0, 0, 0, 75, 21, now() - interval '2 hours')`, [acc, `old-run-${i}-xx`]);
+        VALUES ($1, $2, 'benja', true, 60, 5, 0, 0, 0, 0, 0, 0, 0, 75, 93, now() - interval '2 hours')`, [acc, `old-run-${i}-xx`]);
     }
-    // 273 paid: a max win (3 + 18 + 15 + 3 = 39) would pass 300 and is capped; a small loss (3 + 6 + 2 = 11) still fits.
+    // 930 paid by ten max runs (owner 2026-10-21: table 10 / 10 / 30, limit 1,000): an eleventh max win
+    // (10 + 30 + 50 + 3 = 93) would pass 1,000 and pays nothing, XP included; a small loss (10 + 20 + 2 = 32) still fits.
     let t = await start(c); clock += 70_000;
-    expect((await call('POST', 'practice', { cookie: c, body: { ...maxWin, runId: t.runId, ticket: t.ticket } })).j.reward.none).toBe('cap');
+    expect((await call('POST', 'practice', { cookie: c, body: { ...maxWin, runId: t.runId, ticket: t.ticket } })).j.reward).toMatchObject({ none: 'cap', xp: 0, shards: 0 });
     t = await start(c); clock += 70_000;
     const loss = await call('POST', 'practice', { cookie: c, body: { ...maxWin, won: false, kills: 2, damageDealt: 260, runId: t.runId, ticket: t.ticket } });
-    expect(loss.j.reward).toMatchObject({ none: null, shards: 11 });
+    expect(loss.j.reward).toMatchObject({ none: null, shards: 32 });
   });
   it('8: an unticketed run is stored and answered as before, but earns no medals, bests or career', async () => {
     const c = await cookieFor([g('p4')]);

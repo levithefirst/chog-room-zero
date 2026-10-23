@@ -54,7 +54,7 @@ async function solo(b, map, { hero, touch = false, deployShot } = {}) {
 }
 
 const D = { w: 1600, h: 900 };
-const HUD = [['#vitals', 'Health (green) and armour (blue)'], ['#mapbtn', 'Tactical map (M)'], ['#foes', 'Hostiles left and the danger-zone timer'], ['#nade', 'Grenades left (G)'], ['#ability', 'Ability and its cooldown (Space)'], ['#weapon', 'Weapon, magazine and reserve, reload ring']];
+const HUD = [['#vitals', 'Health (green) and armour (blue)'], ['#mapbtn', 'Tactical map (M)'], ['#foes', 'Hostiles left and the danger-zone timer'], ['#nade', 'Grenades left (G)'], ['#ability', 'Ability and its cooldown (Space or Q)'], ['#weapon', 'Weapon, magazine and reserve, reload ring']];
 
 // ---- Desktop: one solo run on Office covers the HUD states ----
 if (['deploy', 'hud-desktop', 'sound-rings', 'reload', 'ability-cd', 'low-health', 'armour-break', 'tactical-map', 'death', 'victory'].some(want)) {
@@ -83,7 +83,7 @@ if (['deploy', 'hud-desktop', 'sound-rings', 'reload', 'ability-cd', 'low-health
   await save(b, 'low-health', { staged: true, vw: D.w, outW: OUT_W, alt: 'Low health: the health bar is short and the screen edges warn.', callouts: [['#vitals', 'Health low']] });
   await b.ev(`(() => { const p = ${player}; p.hp = p.maxHp; })()`);
   await key(b, 'm', 'KeyM', 77); await sleep(900);
-  await save(b, 'tactical-map', { vw: D.w, outW: OUT_W, alt: 'The tactical map open over a match on Office: the whole floor with area names and what you know, zoom buttons on the right.', callouts: [['#tm-name', 'Location'], ['#tm-in', 'Zoom in'], ['#tm-fit', 'Fit the whole map'], ['#tm-close', 'Return to the match (M)']] });
+  await save(b, 'tactical-map', { vw: D.w, outW: OUT_W, alt: 'The tactical map open over a match on Office: the whole floor with area names, your squad and every living hostile at its live position, zoom buttons on the right.', callouts: [['#tm-name', 'Location'], ['#tm-in', 'Zoom in'], ['#tm-fit', 'Fit the whole map'], ['#tm-close', 'Return to the match (M)']] });
   await key(b, 'm', 'KeyM', 77); await sleep(500);
   await b.ev(`(() => { const w = __chog.world; for (const a of w.actors) if (a.team === 'player' && !a.ai) { a.hp = 0; a.alive = false; } w.outcome = 'dead'; w.playerKill = { cause: 'shot', killerId: w.actors.findIndex((a) => a.team === 'bot'), weapon: 'Rifle', fromX: 0, fromY: 0, toX: 0, toY: 0, tick: w.tick }; })()`);
   if (await b.until(`__chog.phase === 'results'`, 15000)) { await sleep(1300); await save(b, 'death', { staged: true, vw: D.w, outW: OUT_W, alt: 'RUN OVER: the results screen after losing a solo match, with time, hostiles downed, kills and accuracy.' }); }
@@ -101,7 +101,7 @@ for (const id of ['room-zero', 'office', 'supermarket', 'metro', 'construction']
   const b = await browser(`lib-${id}`, { base, ...D });
   await solo(b, id);
   await key(b, 'm', 'KeyM', 77); await sleep(1000);
-  await save(b, `tmap-${id}`, { vw: D.w, outW: OUT_W, alt: `The in-game tactical map of this location, opened at the start of a solo match: the floor plan with area names and the squad's position.` });
+  await save(b, `tmap-${id}`, { vw: D.w, outW: OUT_W, alt: `The in-game tactical map of this location, opened at the start of a solo match: the floor plan with area names, the squad's position and every hostile's live position.` });
   await b.close();
 }
 

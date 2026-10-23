@@ -27,14 +27,14 @@ try {
     check(`${view.label}: practice results list what the run paid (Match played, a total, what the shards buy) and offer Upgrades`, done && /Match played/.test(r.text) && /Earned/.test(r.text) && /shards/.test(r.use) && r.up, JSON.stringify(r));
     const paid = Number(r.shards?.replace('+', '')), xp = Number(r.xp?.replace(/[^0-9]/g, ''));
     check(`${view.label}: a new account was paid exactly the lines shown (server ledger), once`, p0.shards === 0 && p1.shards - p0.shards === paid && p1.xp - p0.xp === xp && paid > 0 && p1.runs === p0.runs + 1, JSON.stringify({ p0, p1, paid, xp }));
-    // Owner 2026-10-21 practice table: each line shown is 3 a run, 3 a kill (up to 5), 18 a clear; the total is their
+    // Owner 2026-10-21 (t30u) practice table: each line shown is 10 a run, 10 a kill (up to 5), 30 a clear; the total is their
     // sum and is what the ledger paid (checked above).
     const L = await S.ev(`[...document.querySelectorAll('#rewards .rw-lines li:not(.head):not(.total)')].map((li) => ({ label: li.querySelector('span')?.innerText ?? '', shards: Number((li.querySelector('b')?.innerText || '0').replace('+', '')) }))`);
     const line = (re) => L.find((l) => re.test(l.label));
     const kills = line(/kill/i), win = line(/victory/i);
     const k = kills ? Number(/(\d+)/.exec(kills.label)[1]) : 0;
-    check(`${view.label}: the lines are the new practice table (Match played +3, +3 a kill, Victory +18) and add up to the total`,
-      line(/match played/i)?.shards === 3 && (!kills || kills.shards === 3 * Math.min(5, k)) && (!win || win.shards === 18) && L.reduce((a, l) => a + l.shards, 0) === paid && k === Math.min(5, r.run),
+    check(`${view.label}: the lines are the new practice table (Match played +10, +10 a kill, Victory +30) and add up to the total`,
+      line(/match played/i)?.shards === 10 && (!kills || kills.shards === 10 * Math.min(5, k)) && (!win || win.shards === 30) && L.reduce((a, l) => a + l.shards, 0) === paid && k === Math.min(5, r.run),
       JSON.stringify({ lines: L, paid, runKills: r.run }));
     // Replaying the same run report pays nothing more (the run id and its ticket are spent).
     const replay = await S.ev(`fetch('/api/game/practice', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ runId: 'forged-' + Date.now().toString(36), hero: 'benja', won: true, seconds: 60, kills: 5, bullets: 10, hits: 5, damageDealt: 900, damageTaken: 10, hpLeft: 50, pickups: 0, abilities: 0 }) }).then((x) => x.json())`);
