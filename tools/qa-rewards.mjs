@@ -41,7 +41,7 @@ try {
     check(`${view.label}: a forged run without a start ticket is stored and pays nothing`, replay.ok && replay.reward?.none === 'unverified' && replay.reward?.shards === 0, JSON.stringify(replay.reward));
     // Not enough for a rank yet: the cheapest one is shown as not affordable, then Again plays the next run (paid too).
     let runs = 1;
-    while ((await prof(S)).shards < 10 && runs < 6) {
+    while ((await prof(S)).shards < 15 && runs < 8) {
       const prev = await prof(S);
       await S.click('[data-go="restart"]'); await S.until(`__chog.phase === 'play'`, 20000);
       await S.until(`__chog.phase === 'results' && /Earned|no reward/i.test(document.getElementById('rewards')?.innerText ?? '')`, 300000);
@@ -57,7 +57,7 @@ try {
     const before = (await prof(S)).shards;
     await S.click('[data-upgrade="vitality"]'); await sleep(1500);
     const after = await prof(S);
-    check(`${view.label}: Upgrades from the results; buying Vitality 1 spends 10 shards`, inUp && after.up.vitality === 1 && before - after.shards === 10, JSON.stringify({ inUp, before, after }));
+    check(`${view.label}: Upgrades from the results; buying Vitality 1 spends 15 shards (owner 2026-10-23 price)`, inUp && after.up.vitality === 1 && before - after.shards === 15, JSON.stringify({ inUp, before, after }));
     await S.close(); open.splice(open.indexOf(S), 1);
   }
   // Guest: the same breakdown as a preview, and "sign in to keep".
