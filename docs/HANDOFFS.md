@@ -696,3 +696,28 @@ Not verified    : real phones; a real CHOG wallet in production (never simulated
 Locked decisions touched : none
 Next smallest task : owner plays a match on a phone with Benja, uses Ping near a hidden hostile, opens MAP; files: none.
 ```
+
+```
+HANDOFF H44  2026-10-23  claude -> owner
+Branch @ commit : ccr-e7fadb8f-qtochk @ this handoff commit (on top of e51a74b)   pushed: yes
+Task            : (1) released earlier this session without a handoff: PC controls as a first-class input (rebindable keys,
+                  Controls screen, live prompts), matchmaking origin + "Players found" status, practice rewards 3 played /
+                  3 kill / 18 win; deployed at e9fac04 (Vercel dpl_9JnuCPEi2jQ5B7o712DEJuxtxkZb, Render e9fac04), prod smoke passed.
+                  (2) owner 2026-10-23 upgrades + medal goals.
+Values (owner)  : Vitality +10 health/rank, 12 ranks; Plating +5 armour/rank, 12; Firepower +35% weapon damage/rank (multiplier,
+                  not flat), 7; Focus -8% ability cooldown/rank, 8. Prices: earlier price per rank +25% rounded to 5 (Firepower x2
+                  instead): Vit/Plat 15..740, Firepower 300..1500, Focus 40..825; all ranks 16,390 shards. Caps raised to the maxed
+                  values, online too (armour +60, damage x3.45, cooldown x0.36, health x2). Bought ranks kept, nothing reset.
+                  Medals: Regular 20, Committed 40, Pin Puller 20, Body Count 20, Heavy Hitter 3,000, Scavenger 10, Hoarder 20,
+                  Pack Rat 30, Looter 10 kits in total; Debut 1, Toolkit 4, Survivor 2 min unchanged; no other goal changed.
+Files changed   : src/config/power.ts, src/ui/hub.ts (Health row in points), src/ui/medals.ts, docs/design/power.md; tests:
+                  power, fs-economy, gp-progress, rc7-profile-medals, mi-account, account-ui, game-api, master-online,
+                  progression, rewards; tools/qa-rewards.mjs; docs/STATE.md, docs/HANDOFFS.md.
+Tests run       : npx tsc --noEmit clean; npx vitest run 1160/1160; node tools/qa-rewards.mjs (local stack, headless Chrome)
+                  19/19; upgrades screen screenshots desk 1440x900, phone 844x390, p390: 12/12/7/8 pips fit.
+Known failures  : none.
+Not verified    : Hoarder 20 / Pack Rat 30 reachable in one run (84 autopilot runs: Scavenger 10 earned 6 times, the other two
+                  never; the autopilot does not seek pickups); human play with maxed upgrades online; real phones.
+Locked decisions touched : power caps (docs/design/power.md) raised, approved by the owner 2026-10-23.
+Next smallest task : owner plays a pickup-heavy run to judge Hoarder 20 / Pack Rat 30; files: none (src/ui/medals.ts if lowered).
+```

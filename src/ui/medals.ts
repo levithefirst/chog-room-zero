@@ -98,7 +98,7 @@ export const MEDALS: MedalDef[] = [
   { id: 'ten-clears', name: 'Room Service', rarity: 'uncommon', text: 'Clear a room 13 times.', goal: 13, progress: (r) => r.overall.wins },
   { id: 'second-wind', name: 'Second Wind', rarity: 'uncommon', text: 'Get revived, then clear the room with 2 or more downs of your own.', goal: 1,
     progress: (_r, run) => (won(run) && (run!.revived ?? 0) > 0 && run!.kills >= 2 ? 1 : 0) },
-  // H34 new: twelve pickups in one run (Hoarder's next step); thirty downs across settled online matches.
+  // H34 new: Hoarder's next step, pickups in one run (owner 2026-10-23: 30, was 12); thirty downs across settled online matches.
   { id: 'pack-rat', name: 'Pack Rat', rarity: 'uncommon', text: 'Collect 30 pickups in one run.', goal: 30, progress: (_r, run) => run?.pickups ?? 0 },
   { id: 'online-hunter', name: 'Hunter', rarity: 'uncommon', text: 'Down 30 players in online matches.', goal: 30, progress: (_r, _run, o) => o?.kills ?? 0 },
   // ---- rare (7) ----

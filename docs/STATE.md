@@ -1,11 +1,11 @@
 # Chog: Room Zero - shared state
 
 Source of truth. Rules: `docs/RULES.md`. Edit only in a handoff commit. Under 8,000 characters.
-Last verified: 2026-10-21 by claude (H43: H42 map fix live; prod smoke; HANDOFFS H43).
+Last verified: 2026-10-23 by claude (H44: upgrades, medal goals, PC controls; HANDOFFS H44).
 
 ## Snapshot (EVIDENCE)
 - Repo `levithefirst/chog-room-zero`. Base branch `setup/skill-system` (LOCKED 2026-10-11: no `main`); never merge without owner. PR #10 = ccr-e7fadb8f-qtochk (live; claude/h34-maps holds H34-H36). Client and server ship from one commit.
-- Vercel project `chog-room-zero`. Production `chogroomzero.xyz`: H43 (HANDOFFS H43). Rollback: `dpl_EQfyjLNtTN63fKhBYxGALyjF3E9B` (1cd9f96, H41) with Render on 1cd9f96; no migration since H33. No `NFT_COMBAT` (power on). Game server: Render Free `https://room-zero-game.onrender.com` (redeploys on every push to the branch); `ALLOWED_ORIGINS` = production + branch preview.
+- Vercel project `chog-room-zero`. Production `chogroomzero.xyz`: H44 commit (HANDOFFS H44). Rollback: `dpl_9JnuCPEi2jQ5B7o712DEJuxtxkZb` (e9fac04) with Render on e9fac04; no migration since H33. No `NFT_COMBAT` (power on). Game server: Render Free `https://room-zero-game.onrender.com` (redeploys on every push to the branch; origins in render.yaml).
 - Chog Genesis (NFT-R1, EVIDENCE): Monad 143, contract `0xc96d31F8626c6D03Fae5dCD3d61e3FB9F4a73763` (ChogMint, Sourcify), ERC-721, supply 1,969, catalogue in `data/chog-genesis/`; token id is NOT the displayed number. `/api/game/chain` checks it live.
 - Chogathon 2026 (`docs/SUBMISSION.md`): "the Chog NFT must be essential".
 
@@ -42,13 +42,12 @@ Last verified: 2026-10-21 by claude (H43: H42 map fix live; prod smoke; HANDOFFS
 ## Implemented (EVIDENCE)
 - H34/H35 (live): five locations, 40 medals, protocol 2 (`docs/design/maps.md`).
 - H37 (live): tactical map (MAP, M): the live level, areas, zone, supplies; your side always, hostiles only from your intel, Visor dots; no protocol change. `docs/design/tactical-map.md`.
-- H36: human 1v1 fixed, queue rejoins (`docs/MULTIPLAYER.md`).
-- H40/H41: hub menu (Leaderboard, Squad as buttons), cinematic loading (`docs/design/ui-audit.md`); H41 QA fixes.
-- UIX + Library (H38, H39, live): UI scale, briefing loading, HUD states, combat feedback, pause card, motion setting, 12 px floor (`docs/design/ui-audit.md`); game Library at /library (20 prerendered pages from game data, search), linked from Game Docs.
+- H36 1v1 fix, H40/H41 hub + loading: `docs/MULTIPLAYER.md`, `docs/design/ui-audit.md`.
+- H44 (owner 2026-10-23): upgrades Vitality +10 health x12, Plating +5 armour x12, Firepower +35% damage x7, Focus -8% cooldown x8; prices +25% (Firepower x2); caps = maxed, online too; old ranks kept (`src/config/power.ts`, `docs/design/power.md`). New medal goals (`src/ui/medals.ts`). PC rebindable keys; practice rewards 3/3/18.
+- UIX + Library (H38, H39, live): UI pass (`docs/design/ui-audit.md`); game Library at /library (20 prerendered pages), linked from Game Docs.
 
 ## Automated tests (EVIDENCE, Node 22.22)
-H42 (655269f): vitest 1132/1132, tsc clean, tm-map 105/105. H43 prod: smoke 25, gate 8, mp 10, 1v1 8.
-H41 (6f297d7): vitest 1124/1124, 22 browser suites 647/647 (tm-map 105, uix2 111, mobile 66), online 1v1/3v3/5v5-holders PASS.
+H44: vitest 1160/1160, tsc clean, qa-rewards 19/19; prod smoke: HANDOFFS H44. Older: H41-H43.
 
 ## Not performed (needs the owner)
 - Human play of CF to H34 (all five locations), real phones, real-GPU FPS, audio by ear, a real wallet, hosted 5v5 with a holder, art rights, demo video.
@@ -63,7 +62,8 @@ Core Feel Gate: BLOCKED on owner playtests. G10: automated PASS; playtest not ru
 | MP, H34/ID/SP | claude | same | see H32-H36 | Owner 2026-10-18/19 | live; owner: 1v1s, server plan |
 | UIX | claude (from grokbot) | ccr-e7fadb8f-qtochk | see H38/H39 | Owner 2026-10-20 UI release | live (PR #12 head in branch) |
 | UIX2+QA | claude | ccr-e7fadb8f-qtochk | see H40-H43 | Owner 2026-10-21 final QA | live (H43) |
+| UP | claude | same | see H44 | Owner 2026-10-23 upgrades, medals | live; Hoarder/Pack Rat reach unproven |
 | RC-8 | claude | PR #10 | see H16 | Owner RC-8 mandate | PR #10 not merged (owner decides) |
 
 ## Handoffs
-Latest: H43 (claude; map fix live, prod smoke). History: `docs/HANDOFFS.md`.
+Latest: H44 (claude; upgrades, medals, PC controls live). History: `docs/HANDOFFS.md`.
