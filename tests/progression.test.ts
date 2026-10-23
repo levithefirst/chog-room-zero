@@ -53,21 +53,30 @@ describe('accounts', () => {
 describe('upgrades', () => {
   it('cost shards, rise one rank at a time, stop at the cap, and refuse without shards', async () => {
     const acc = (await accountFor(db, [g('u')]))!;
-    await db.query('UPDATE room_zero.accounts SET shards = 1000 WHERE id = $1', [acc]);
-    expect(await buyUpgrade(db, acc, 'firepower')).toEqual({ ok: true, rank: 1, shards: 850 });
-    await buyUpgrade(db, acc, 'firepower');
-    await buyUpgrade(db, acc, 'firepower');
+    // Owner 2026-10-23: Firepower has 7 ranks at 300 ... 1500 (6,300 in all).
+    await db.query('UPDATE room_zero.accounts SET shards = 7000 WHERE id = $1', [acc]);
+    expect(await buyUpgrade(db, acc, 'firepower')).toEqual({ ok: true, rank: 1, shards: 6700 });
+    for (let i = 2; i <= 7; i++) expect(await buyUpgrade(db, acc, 'firepower')).toMatchObject({ ok: true, rank: i });
     expect(await buyUpgrade(db, acc, 'firepower')).toEqual({ ok: false, reason: 'maxed' });
+    expect(await buyUpgrade(db, acc, 'focus')).toEqual({ ok: true, rank: 1, shards: 7000 - 6300 - 40 });
     expect(await buyUpgrade(db, acc, 'speed')).toEqual({ ok: false, reason: 'unknown' });
     const p = (await profileOf(db, acc))!;
-    expect(p.upgrades.firepower).toBe(3);
-    expect(p.shards).toBe(1000 - 150 - 250 - 350);
+    expect(p.upgrades.firepower).toBe(7);
+    expect(p.shards).toBe(7000 - 6300 - 40);
     const l = await db.query<{ delta: number }>(`SELECT delta FROM room_zero.ledger WHERE account_id = $1 ORDER BY id`, [acc]);
-    expect(l.map((r) => r.delta)).toEqual([-150, -250, -350]);
+    expect(l.map((r) => r.delta)).toEqual([-300, -500, -700, -900, -1100, -1300, -1500, -40]);
+  });
+  it('ranks bought before 2026-10-23 stay, and the 4 new ranks can be bought on top (Vitality 8/8 -> 9/12)', async () => {
+    const acc = (await accountFor(db, [g('old-max')]))!;
+    await db.query(`INSERT INTO room_zero.upgrades (account_id, upgrade_id, rank) VALUES ($1, 'vitality', 8), ($1, 'plating', 6), ($1, 'firepower', 3), ($1, 'focus', 4)`, [acc]);
+    await db.query('UPDATE room_zero.accounts SET shards = 500 WHERE id = $1', [acc]);
+    expect((await profileOf(db, acc))!.upgrades).toEqual({ vitality: 8, plating: 6, firepower: 3, focus: 4 });
+    expect(await buyUpgrade(db, acc, 'vitality')).toEqual({ ok: true, rank: 9, shards: 60 });
+    expect((await profileOf(db, acc))!.upgrades.vitality).toBe(9);
   });
   it('two purchases at once cannot spend the same shards twice', async () => {
     const acc = (await accountFor(db, [g('race')]))!;
-    await db.query('UPDATE room_zero.accounts SET shards = 150 WHERE id = $1', [acc]);
+    await db.query('UPDATE room_zero.accounts SET shards = 300 WHERE id = $1', [acc]); // Firepower 1 costs 300
     const r = await Promise.all([buyUpgrade(db, acc, 'firepower'), buyUpgrade(db, acc, 'firepower')]);
     expect(r.filter((x) => x.ok).length).toBe(1);
     expect((await profileOf(db, acc))!.shards).toBe(0);

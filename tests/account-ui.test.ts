@@ -137,7 +137,7 @@ describe('hub', () => {
 describe('sub-screens', () => {
   it('upgrades: guest is told to sign in; signed in shows ranks, costs and the class table', () => {
     expect(upgradesHtml(ctx(guest()))).toMatch(/data-act="signin">Sign in/);
-    const u = upgradesHtml(ctx(signed({ profile: prof({ upgrades: { ...NO_UPGRADES, vitality: 8 } }), justBought: 'plating' })));
+    const u = upgradesHtml(ctx(signed({ profile: prof({ upgrades: { ...NO_UPGRADES, vitality: 12 } }), justBought: 'plating' })));
     expect(u).toMatch(/MAX/);
     expect(u).toMatch(/data-upgrade="plating"/);
     expect(u).toMatch(/class="up-grid"/);
@@ -176,7 +176,7 @@ describe('sub-screens', () => {
     expect(html).toMatch(/\+12/);
     expect(html).toMatch(/LEVEL UP/);
     // 40 shards after the match: every rank they buy now, by name and cost.
-    expect(html).toMatch(/3 upgrades ready: Vitality 1 \(10\) · Plating 1 \(10\) · Focus 1 \(30\)/);
+    expect(html).toMatch(/3 upgrades ready: Vitality 1 \(15\) · Plating 1 \(15\) · Focus 1 \(40\)/);
     expect(html).toMatch(/id="toupgrades">Upgrades/);
     expect(html).toMatch(/data-go="menu" id="continuebtn">Continue/);
     expect(html).toMatch(/data-act="online-again"/);

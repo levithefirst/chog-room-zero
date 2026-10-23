@@ -230,7 +230,7 @@ describe('upgrades endpoint', () => {
     expect((await call('POST', 'upgrade', { cookie, body: { id: 'focus' }, origin: 'https://evil.example' })).status).toBe(403);
     expect((await call('POST', 'upgrade', { cookie, body: { id: 'focus' } })).j).toEqual({ ok: false, reason: 'shards' });
     const acc = (await accountFor(db!, [{ provider: 'google', subject: 'u', label: 'u' }]))!;
-    await db!.query('UPDATE room_zero.accounts SET shards = 30 WHERE id = $1', [acc]);
+    await db!.query('UPDATE room_zero.accounts SET shards = 40 WHERE id = $1', [acc]); // Focus 1 costs 40 (owner 2026-10-23)
     expect((await call('POST', 'upgrade', { cookie, body: { id: 'focus' } })).j).toEqual({ ok: true, rank: 1, shards: 0 });
   });
 });

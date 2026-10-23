@@ -106,7 +106,7 @@ describe('power from the ticket, visible to both sides, and the match record', (
     // The ticket's tier brings the 1:1's signature, never rarity health; a Chog without a mapped superpower (a 1:1 among
     // them) has the CHOG baseline of 200 (owner 2026-10-18 IDENTITY pass); upgrades still count (actor 1).
     expect(room.world.actors[0].maxHp).toBe(200);
-    expect(room.world.actors[1].maxHp).toBe(Math.round(kettle.maxHp * 1.09));
+    expect(room.world.actors[1].maxHp).toBe(kettle.maxHp + 30); // Vitality 3: +10 health a rank (owner 2026-10-23)
     run(3.1); // past the countdown: a leave before the start voids the match (no record)
     b.say({ t: 'leave' });
     run(0.1);

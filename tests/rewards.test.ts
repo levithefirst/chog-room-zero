@@ -129,10 +129,16 @@ describe('online settlement applies the rule from the server record', () => {
     await settleMatch(db, rec({ players: [pl(w, 'alpha'), pl(farmer, 'bravo', { kills: 5, damage: 900 })] }));
     expect((await profileOf(db, w))!.shards).toBeGreaterThan((await profileOf(db, farmer))!.shards);
   });
-  it('rewards feed the upgrade system: a loser can buy the first rank after one match', async () => {
-    const [a, b] = [await acct('ua'), await acct('ub')];
-    await settleMatch(db, rec({ players: [pl(a, 'alpha'), pl(b, 'bravo')] }));
+  it('rewards feed the upgrade system: the first rank (15) after one win, one loss with 2 kills, or two bare losses', async () => {
+    const [a, b, c] = [await acct('ua'), await acct('ub'), await acct('uc')];
+    await settleMatch(db, rec({ players: [pl(a, 'alpha'), pl(b, 'bravo', { kills: 2 })] }));
+    expect(await buyUpgrade(db, a, 'vitality')).toMatchObject({ ok: true, rank: 1 });
     expect(await buyUpgrade(db, b, 'vitality')).toMatchObject({ ok: true, rank: 1 });
+    // One bare loss pays 10: not yet; the second makes it.
+    await settleMatch(db, rec({ id: 'b0b0b0b0b0b0b001', players: [pl(a, 'alpha'), pl(c, 'bravo')] }));
+    expect(await buyUpgrade(db, c, 'vitality')).toEqual({ ok: false, reason: 'shards' });
+    await settleMatch(db, rec({ id: 'b0b0b0b0b0b0b002', players: [pl(a, 'alpha'), pl(c, 'bravo')] }));
+    expect(await buyUpgrade(db, c, 'vitality')).toMatchObject({ ok: true, rank: 1 });
   });
 });
 
