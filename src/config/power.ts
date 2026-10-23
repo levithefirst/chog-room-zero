@@ -34,21 +34,44 @@ export const TIER_DEFS: Record<Tier, TierDef> = {
 /** Shard upgrades. Free players and holders buy the same ones, at the same prices, to the same caps. */
 export type UpgradeId = 'vitality' | 'plating' | 'firepower' | 'focus';
 export interface UpgradeDef { name: string; text: string; ranks: number; costs: readonly number[] }
+/**
+ * Owner 2026-10-23: bigger steps and 4 more ranks on every upgrade. Prices are the earlier price per rank (the ranks it
+ * had, then the same curve continued for the 4 new ones) x1.25, Firepower x2 instead (never both), rounded to the
+ * nearest 5 shards. Ranks already bought keep their meaning: an account at Vitality 6/8 is now at 6/12.
+ */
+const BASE_COSTS: Record<UpgradeId, readonly number[]> = {
+  vitality: [10, 40, 70, 100, 140, 180, 230, 290, 350, 420, 500, 590],
+  plating: [10, 40, 70, 100, 140, 180, 230, 290, 350, 420, 500, 590],
+  firepower: [150, 250, 350, 450, 550, 650, 750],
+  focus: [30, 60, 110, 180, 270, 380, 510, 660],
+};
+export const PRICE_MUL: Record<UpgradeId, number> = { vitality: 1.25, plating: 1.25, firepower: 2, focus: 1.25 };
+const priced = (id: UpgradeId) => BASE_COSTS[id].map((c) => Math.round((c * PRICE_MUL[id]) / 5) * 5);
+/** What one rank adds: Vitality +10 health, Plating +5 armour, Firepower +35% weapon damage, Focus -8% ability cooldown. */
+export const UPGRADE_STEP = { vitality: 10, plating: 5, firepower: 0.35, focus: 0.08 } as const;
 export const UPGRADES: Record<UpgradeId, UpgradeDef> = {
-  // The first rank costs 10 so a new account can buy something after its first saved match.
-  vitality: { name: 'Vitality', text: '+3% health per rank', ranks: 8, costs: [10, 40, 70, 100, 140, 180, 230, 290] },
-  plating: { name: 'Plating', text: '+2 armour per rank', ranks: 8, costs: [10, 40, 70, 100, 140, 180, 230, 290] },
-  firepower: { name: 'Firepower', text: '+1% weapon damage per rank', ranks: 3, costs: [150, 250, 350] },
-  focus: { name: 'Focus', text: '-5% ability cooldown per rank', ranks: 4, costs: [30, 60, 110, 180] },
+  // The first rank (15) is still within one saved online match (10 played + kills), so a new account buys early.
+  vitality: { name: 'Vitality', text: `+${UPGRADE_STEP.vitality} health per rank`, ranks: 12, costs: priced('vitality') },
+  plating: { name: 'Plating', text: `+${UPGRADE_STEP.plating} armour per rank`, ranks: 12, costs: priced('plating') },
+  firepower: { name: 'Firepower', text: `+${Math.round(UPGRADE_STEP.firepower * 100)}% weapon damage per rank`, ranks: 7, costs: priced('firepower') },
+  focus: { name: 'Focus', text: `-${Math.round(UPGRADE_STEP.focus * 100)}% ability cooldown per rank`, ranks: 8, costs: priced('focus') },
 };
 export const UPGRADE_IDS = Object.keys(UPGRADES) as UpgradeId[];
-export const UPGRADE_STEP = { vitality: 0.03, plating: 2, firepower: 0.01, focus: 0.05 } as const;
 export type Upgrades = Record<UpgradeId, number>;
 export const NO_UPGRADES: Upgrades = { vitality: 0, plating: 0, firepower: 0, focus: 0 };
-export const MAX_UPGRADES: Upgrades = { vitality: 8, plating: 8, firepower: 3, focus: 4 };
+export const MAX_UPGRADES: Upgrades = Object.fromEntries(UPGRADE_IDS.map((id) => [id, UPGRADES[id].ranks])) as Upgrades;
 
-/** Hard caps (docs/design/power.md). A profile outside them is a bug; tests check every tier at max upgrades. */
-export const CAPS = { hpMul: 2, armor: 52, damageMul: 1.15, cooldownMul: 0.8 } as const;
+/**
+ * Hard caps (docs/design/power.md). A profile outside them is a bug; tests check every tier at max upgrades. Owner
+ * 2026-10-23 raised them to exactly the maxed upgrades: health x2 (a maxed free profile is 150 + 120 = 270, x1.8),
+ * armour +60, damage x3.45, ability cooldown x0.36.
+ */
+export const CAPS = {
+  hpMul: 2,
+  armor: MAX_UPGRADES.plating * UPGRADE_STEP.plating,
+  damageMul: +(1 + MAX_UPGRADES.firepower * UPGRADE_STEP.firepower).toFixed(4),
+  cooldownMul: +(1 - MAX_UPGRADES.focus * UPGRADE_STEP.focus).toFixed(4),
+} as const;
 
 /** Grenade capacity by tier (owner 2026-10-14): free 3, +2 per holder tier, 13 for Legendary and the 1:1s. Upgrades
  * never change it; online the server sets it from the verified ticket. */
@@ -104,10 +127,12 @@ export function powerFor(tier: Tier, upgrades: Partial<Upgrades> | null = null, 
   const sig = tier === 'legendary' ? signature : null;
   const own = metadataId ? tierOfMetadataId(metadataId) : null;
   const sp = tier !== 'free' && !sig && own && own !== 'free' ? pickPower(metadataId, choice) : null;
+  const baseHp = tier !== 'free' && own && !sp ? BASE_HP.chog : BASE_HP.free;
   return {
     tier,
-    baseHp: tier !== 'free' && own && !sp ? BASE_HP.chog : BASE_HP.free,
-    hpMul: Math.min(CAPS.hpMul, t.hpMul + u.vitality * UPGRADE_STEP.vitality),
+    baseHp,
+    // Vitality is flat health (+10 a rank) on top of the base, carried as the multiplier the sim applies to the base.
+    hpMul: Math.min(CAPS.hpMul, t.hpMul + (u.vitality * UPGRADE_STEP.vitality) / baseHp),
     armor: Math.min(CAPS.armor, t.armor + u.plating * UPGRADE_STEP.plating),
     damageMul: Math.min(CAPS.damageMul, t.damageMul + u.firepower * UPGRADE_STEP.firepower),
     cooldownMul: Math.max(CAPS.cooldownMul, 1 - u.focus * UPGRADE_STEP.focus),

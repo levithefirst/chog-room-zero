@@ -66,21 +66,21 @@ export const MEDALS: MedalDef[] = [
   // ---- common (19) ----
   { id: 'first-blood', name: 'First Blood', rarity: 'common', text: 'Down your first hostile.', goal: 1, progress: (r, _run, o) => allKills(r, o) },
   { id: 'cleared', name: 'Lights On', rarity: 'common', text: 'Clear a room.', goal: 1, progress: (r) => r.overall.wins },
-  { id: 'regular', name: 'Regular', rarity: 'common', text: 'Play 13 runs.', goal: 13, progress: (r) => r.overall.runs },
-  { id: 'scavenger', name: 'Scavenger', rarity: 'common', text: 'Collect 4 pickups in one run.', goal: 4, progress: (_r, run) => run?.pickups ?? 0 },
+  { id: 'regular', name: 'Regular', rarity: 'common', text: 'Play 20 runs.', goal: 20, progress: (r) => r.overall.runs },
+  { id: 'scavenger', name: 'Scavenger', rarity: 'common', text: 'Collect 10 pickups in one run.', goal: 10, progress: (_r, run) => run?.pickups ?? 0 },
   { id: 'toolkit', name: 'Toolkit', rarity: 'common', text: 'Use your ability 4 times in one run.', goal: 4, progress: (_r, run) => run?.abilities ?? 0 },
   { id: 'survivor', name: 'Survivor', rarity: 'common', text: 'Stay alive for 2 minutes in one run.', goal: 120, progress: (_r, run) => run?.seconds ?? 0 },
-  { id: 'looter', name: 'Looter', rarity: 'common', text: 'Take a fallen hostile\'s kit.', goal: 1, progress: (r, run) => Math.max(r.overall.loots, run?.loots ?? 0) },
+  { id: 'looter', name: 'Looter', rarity: 'common', text: 'Take 10 kits from the fallen in total.', goal: 10, progress: (r) => r.overall.loots },
   { id: 'medic', name: 'Medic', rarity: 'common', text: 'Revive a teammate.', goal: 1, progress: (r, run) => Math.max(r.overall.revives, run?.revives ?? 0) },
   { id: 'back-up', name: 'Back Up', rarity: 'common', text: 'Get revived by a teammate.', goal: 1, progress: (_r, run) => run?.revived ?? 0 },
-  { id: 'pin-puller', name: 'Pin Puller', rarity: 'common', text: 'Throw 13 grenades in total.', goal: 13, progress: (r) => r.overall.thrown },
+  { id: 'pin-puller', name: 'Pin Puller', rarity: 'common', text: 'Throw 20 grenades in total.', goal: 20, progress: (r) => r.overall.thrown },
   { id: 'hat-trick', name: 'Hat Trick', rarity: 'common', text: 'Down 3 hostiles in one run without ever going down.', goal: 3,
     progress: (_r, run) => (run && (run.revived ?? 0) === 0 && run.hpLeft > 0 ? run.kills : 0) },
-  { id: 'ten-down', name: 'Body Count', rarity: 'common', text: 'Down 13 hostiles in total.', goal: 13, progress: (r, _run, o) => allKills(r, o) },
-  { id: 'committed', name: 'Committed', rarity: 'common', text: 'Play 33 runs.', goal: 33, progress: (r) => r.overall.runs },
-  { id: 'hoarder', name: 'Hoarder', rarity: 'common', text: 'Collect 8 pickups in one run.', goal: 8, progress: (_r, run) => run?.pickups ?? 0 },
+  { id: 'ten-down', name: 'Body Count', rarity: 'common', text: 'Down 20 hostiles in total.', goal: 20, progress: (r, _run, o) => allKills(r, o) },
+  { id: 'committed', name: 'Committed', rarity: 'common', text: 'Play 40 runs.', goal: 40, progress: (r) => r.overall.runs },
+  { id: 'hoarder', name: 'Hoarder', rarity: 'common', text: 'Collect 20 pickups in one run.', goal: 20, progress: (_r, run) => run?.pickups ?? 0 },
   { id: 'three-faces', name: 'Many Faces', rarity: 'common', text: 'Clear a room with 4 different characters.', goal: 4, progress: (r) => clearsWith(r) },
-  { id: 'heavy-hitter', name: 'Heavy Hitter', rarity: 'common', text: 'Deal 2,600 damage in total.', goal: 2600, progress: (r) => r.overall.damageDealt },
+  { id: 'heavy-hitter', name: 'Heavy Hitter', rarity: 'common', text: 'Deal 3,000 damage in total.', goal: 3000, progress: (r) => r.overall.damageDealt },
   { id: 'online-debut', name: 'Debut', rarity: 'common', text: 'Finish an online match.', goal: 1, progress: (_r, _run, o) => o?.finished ?? 0 },
   { id: 'online-win', name: 'Taken', rarity: 'common', text: 'Win an online match.', goal: 1, progress: (_r, _run, o) => o?.wins ?? 0 },
   // H34 new: three grenades in one run (the run's own count, stored with it).
@@ -99,7 +99,7 @@ export const MEDALS: MedalDef[] = [
   { id: 'second-wind', name: 'Second Wind', rarity: 'uncommon', text: 'Get revived, then clear the room with 2 or more downs of your own.', goal: 1,
     progress: (_r, run) => (won(run) && (run!.revived ?? 0) > 0 && run!.kills >= 2 ? 1 : 0) },
   // H34 new: twelve pickups in one run (Hoarder's next step); thirty downs across settled online matches.
-  { id: 'pack-rat', name: 'Pack Rat', rarity: 'uncommon', text: 'Collect 12 pickups in one run.', goal: 12, progress: (_r, run) => run?.pickups ?? 0 },
+  { id: 'pack-rat', name: 'Pack Rat', rarity: 'uncommon', text: 'Collect 30 pickups in one run.', goal: 30, progress: (_r, run) => run?.pickups ?? 0 },
   { id: 'online-hunter', name: 'Hunter', rarity: 'uncommon', text: 'Down 30 players in online matches.', goal: 30, progress: (_r, _run, o) => o?.kills ?? 0 },
   // ---- rare (7) ----
   // GP: under 30 s (was 60); H34: under 25 s.

@@ -29,23 +29,29 @@ Speed never changes with tier or upgrade. Armour is added to both the starting a
 
 ## Upgrades (shards, earned only in saved online matches; never sold)
 
+**Owner 2026-10-23: bigger steps, 4 more ranks each, prices x1.25 (Firepower x2 instead), caps raised to the new maxima.** Ranks already bought stay as they are (an account at Vitality 6/8 is at 6/12). Source of truth: `UPGRADES`, `UPGRADE_STEP`, `CAPS` in `src/config/power.ts`.
+
 | Upgrade | Per rank | Ranks | Costs |
 |---|---|---|---|
-| Vitality | +3% health | 8 | 10, 40, 70, 100, 140, 180, 230, 290 |
-| Plating | +2 armour | 8 | 10, 40, 70, 100, 140, 180, 230, 290 |
-| Firepower | +1% damage | 3 | 150, 250, 350 |
-| Focus | -5% ability cooldown | 4 | 30, 60, 110, 180 |
+| Vitality | +10 health | 12 | 15, 50, 90, 125, 175, 225, 290, 365, 440, 525, 625, 740 |
+| Plating | +5 armour | 12 | 15, 50, 90, 125, 175, 225, 290, 365, 440, 525, 625, 740 |
+| Firepower | +35% weapon damage | 7 | 300, 500, 700, 900, 1100, 1300, 1500 |
+| Focus | -8% ability cooldown | 8 | 40, 75, 140, 225, 340, 475, 640, 825 |
 
-Everything costs 3,250 shards: about 160 wins or 325 losses (10 shards a saved match, 10 more for a win). The first rank costs 10, so one saved match always buys something. A maxed free profile has x1.24 health, +16 armour, x1.03 damage: past Uncommon starting power, below Rare (tested). Holders can buy upgrades too; "my NFT decides my starting class, my account decides how far I developed it".
+Prices: the earlier price per rank (with the same curve continued for the 4 new ranks) x1.25, Firepower x2 instead, rounded to the nearest 5. Everything costs 16,390 shards (was 3,250): a player who only loses in practice (one kill a run, at the daily cap) maxes out in about 94 days; the first rank (15) comes with one online win, two online matches, or five practice runs. A maxed profile has +120 health (free: 270), +60 armour, x3.45 damage and x0.36 ability cooldown, online too. Holders buy the same upgrades; "my NFT decides my starting class, my account decides how far I developed it".
+
+Before 2026-10-23: Vitality +3% health x8, Plating +2 armour x8, Firepower +1% damage x3, Focus -5% cooldown x4; 3,250 shards in all.
 
 ## Caps (an automatic CUT outside them, `docs/RULES.md` section 6)
 
+Owner 2026-10-23 raised them to exactly the maxed upgrades (were x2.00 / +52 / x1.15 / x0.80).
+
 | | Cap |
 |---|---|
-| Health multiplier | 2.00 |
-| Armour bonus | +52 |
-| Damage multiplier | 1.15 |
-| Cooldown multiplier | 0.80 |
+| Health multiplier | 2.00 (maxed Vitality is +120: x1.80 on 150, x1.60 on 200) |
+| Armour bonus | +60 |
+| Damage multiplier | 3.45 |
+| Cooldown multiplier | 0.36 |
 | Speed | never changed |
 
 ## Measured duels (before 2026-10-18; the tier stats are gone, see superpowers.md for the current bands)

@@ -12,7 +12,7 @@ import { WEAPONS } from '../config/weapons';
 import { levelOf, type RewardBreakdown } from '../config/progression';
 import { rewardHtml } from './rewards';
 import {
-  BASE_HP, CAPS, ONE_OF_ONE, TIER_DEFS, UPGRADES, UPGRADE_IDS, powerFor, signatureFor, tierOfMetadataId, type Power, type Tier, type Upgrades,
+  BASE_HP, CAPS, MAX_UPGRADES, ONE_OF_ONE, TIER_DEFS, UPGRADES, UPGRADE_IDS, UPGRADE_STEP, powerFor, signatureFor, tierOfMetadataId, type Power, type Tier, type Upgrades,
 } from '../config/power';
 import type { BoardRow, Reward } from '../net/account';
 import type { PartyMember } from '../net/protocol';
@@ -101,7 +101,9 @@ export function classOf(a: AcctView): ClassView {
 /** One line per number the sim applies: health, armour, damage, cooldown. */
 function powerRows(p: Power): string {
   const row = (k: string, v: string, share: number) => `<div class="pw"><span>${k}</span><s style="--v:${Math.round(Math.max(0.04, Math.min(1, share)) * 100)}%"></s><b class="num">${v}</b></div>`;
-  return row('Health', `+${Math.round((p.hpMul - 1) * 100)}%`, (p.hpMul - 1) / (CAPS.hpMul - 1))
+  // Vitality is flat health (owner 2026-10-23): shown in health points, against the most upgrades can add.
+  const hp = Math.round(p.baseHp * (p.hpMul - 1));
+  return row('Health', `+${hp}`, hp / (MAX_UPGRADES.vitality * UPGRADE_STEP.vitality))
     + row('Armour', `+${p.armor}`, p.armor / CAPS.armor)
     + row('Damage', `+${Math.round((p.damageMul - 1) * 100)}%`, (p.damageMul - 1) / (CAPS.damageMul - 1))
     + row('Ability', `-${Math.round((1 - p.cooldownMul) * 100)}%`, (1 - p.cooldownMul) / (1 - CAPS.cooldownMul));

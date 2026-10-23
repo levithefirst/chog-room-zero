@@ -26,7 +26,7 @@ async function call(method: string, action: string, c?: string, body?: object) {
 }
 const bots = BOT_SPAWNS.length;
 let n = 0;
-const run = (o: Partial<Record<string, unknown>> = {}) => ({ runId: `run-${++n}-abcdef`, hero: 'benja', won: true, seconds: 70, kills: bots, bullets: 40, hits: 25, damageDealt: 500, damageTaken: 60, hpLeft: 40, pickups: 4, abilities: 4, ...o });
+const run = (o: Partial<Record<string, unknown>> = {}) => ({ runId: `run-${++n}-abcdef`, hero: 'benja', won: true, seconds: 70, kills: bots, bullets: 40, hits: 25, damageDealt: 500, damageTaken: 60, hpLeft: 40, pickups: 10, abilities: 4, ...o }); // 10 pickups: Scavenger (owner 2026-10-23: was 4)
 /** A practice run as the game posts it: start ticket first, the run's time passes, then the result with that run id. */
 async function ticketed(c: string, r: ReturnType<typeof run>) {
   const t = (await call('POST', 'practice-start', c)).j as { ticket: string; runId: string };

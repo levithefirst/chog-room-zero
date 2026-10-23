@@ -86,7 +86,7 @@ describe('RC-7 medals', () => {
   });
   it('one-run medals check the run that just ended', () => {
     const s = mem();
-    const r = finish(s, run({ won: true, kills: 5, seconds: 24, bullets: 20, hits: 12, damageTaken: 0, hpLeft: 100, pickups: 4, abilities: 4, thrown: 3 }));
+    const r = finish(s, run({ won: true, kills: 5, seconds: 24, bullets: 20, hits: 12, damageTaken: 0, hpLeft: 100, pickups: 10, abilities: 4, thrown: 3 }));
     // H34: 40 medals; this run also makes Hat Trick (never down), Brawler (a clear), Grenadier, Iron Wall and Ace.
     expect(r.earned.map((m) => m.id).sort()).toEqual(['ace', 'brawler', 'cleared', 'first-blood', 'grenadier', 'hat-trick', 'in-and-out', 'iron-wall', 'scavenger', 'steady-hand', 'toolkit', 'untouched'].sort());
     expect(r.unlocked['close-call']).toBeUndefined();
@@ -115,8 +115,11 @@ describe('RC-7 medals', () => {
     expect(finish(mem(), run({ kills: 4, won: true })).unlocked.brawler).toBeDefined();
     expect(finish(mem(), run({ won: true, kills: 1, revived: 1 })).unlocked['second-wind']).toBeUndefined();
     expect(finish(mem(), run({ won: true, kills: 2, revived: 1 })).unlocked['second-wind']).toBeDefined();
-    expect(finish(mem(), run({ pickups: 11 })).unlocked['pack-rat']).toBeUndefined();
-    expect(finish(mem(), run({ pickups: 12 })).unlocked['pack-rat']).toBeDefined();
+    // Owner 2026-10-23 pickup medals in one run: Scavenger 10, Hoarder 20, Pack Rat 30.
+    for (const [id, goal] of [['scavenger', 10], ['hoarder', 20], ['pack-rat', 30]] as const) {
+      expect(finish(mem(), run({ pickups: goal - 1 })).unlocked[id], id).toBeUndefined();
+      expect(finish(mem(), run({ pickups: goal })).unlocked[id], id).toBeDefined();
+    }
   });
   it('a loss never awards a clear medal; Survivor counts time alive even in a loss', () => {
     const r = finish(mem(), run({ won: false, seconds: 125, damageTaken: 0, hpLeft: 0 }));
@@ -132,7 +135,7 @@ describe('RC-7 medals', () => {
     const squad = MEDALS.find((m) => m.id === 'full-squad')!;
     expect(medalProgress(squad, recs, loadMedals(s))).toBe(6);
     expect(medalProgress(MEDALS.find((m) => m.id === 'exterminator')!, recs, loadMedals(s))).toBe(30); // 30 kills of 33 (H34)
-    expect(medalProgress(MEDALS.find((m) => m.id === 'ten-down')!, recs, loadMedals(s))).toBe(13); // capped at the goal
+    expect(medalProgress(MEDALS.find((m) => m.id === 'ten-down')!, recs, loadMedals(s))).toBe(20); // capped at the goal (20, owner 2026-10-23)
     expect(loadMedals(s)['full-squad']).toBeUndefined();
     const r = finish(s, run({ hero: ids[6], won: true, kills: 5 }));
     expect(r.earned.map((m) => m.id)).toContain('full-squad');

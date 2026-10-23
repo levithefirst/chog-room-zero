@@ -54,8 +54,39 @@ describe('ladder and caps', () => {
       expect(p.damageMul).toBeLessThanOrEqual(CAPS.damageMul);
       expect(p.cooldownMul).toBeGreaterThanOrEqual(CAPS.cooldownMul);
     }
-    expect(clampUpgrades({ vitality: 99, plating: -4, focus: Infinity })).toEqual({ vitality: 8, plating: 0, firepower: 0, focus: 0 });
+    expect(clampUpgrades({ vitality: 99, plating: -4, focus: Infinity })).toEqual({ vitality: 12, plating: 0, firepower: 0, focus: 0 });
     for (const id of UPGRADE_IDS) expect(UPGRADES[id].costs.length).toBe(UPGRADES[id].ranks);
+    // The caps are exactly the maxed upgrades (owner 2026-10-23): a maxed profile sits on them.
+    const m = powerFor('free', MAX_U);
+    expect([Math.round(m.baseHp * m.hpMul), m.armor, m.damageMul, m.cooldownMul]).toEqual([270, CAPS.armor, expect.closeTo(CAPS.damageMul, 6), expect.closeTo(CAPS.cooldownMul, 6)]);
+    expect(CAPS).toEqual({ hpMul: 2, armor: 60, damageMul: 3.45, cooldownMul: 0.36 });
+  });
+  it('owner 2026-10-23 upgrades: +10 health, +5 armour, +35% damage, -8% cooldown a rank; 12 / 12 / 7 / 8 ranks', () => {
+    expect(UPGRADE_IDS.map((id) => UPGRADES[id].ranks)).toEqual([12, 12, 7, 8]);
+    expect(MAX_U).toEqual({ vitality: 12, plating: 12, firepower: 7, focus: 8 });
+    expect(UPGRADE_IDS.map((id) => UPGRADES[id].text)).toEqual(['+10 health per rank', '+5 armour per rank', '+35% weapon damage per rank', '-8% ability cooldown per rank']);
+    // Vitality is flat: +10 health a rank on the free base (150) and on a no-power Chog base (200) alike.
+    for (const v of [0, 1, 6, 12]) {
+      const f = powerFor('free', { vitality: v });
+      expect(Math.round(f.baseHp * f.hpMul)).toBe(150 + 10 * v);
+    }
+    const chog = powerForToken(ONE_OF_ONE_IDS[0], { vitality: 12 }, false);
+    expect(Math.round(chog.baseHp * chog.hpMul)).toBe(chog.baseHp + 120);
+    expect(powerFor('free', { plating: 7 }).armor).toBe(35);
+    expect(powerFor('free', { firepower: 3 }).damageMul).toBeCloseTo(2.05, 6);
+    expect(powerFor('free', { focus: 5 }).cooldownMul).toBeCloseTo(0.6, 6);
+  });
+  it('owner 2026-10-23 prices: earlier prices x1.25 (Firepower x2, never both), nearest 5; ranks already bought stay', () => {
+    expect(UPGRADES.vitality.costs).toEqual([15, 50, 90, 125, 175, 225, 290, 365, 440, 525, 625, 740]);
+    expect(UPGRADES.plating.costs).toEqual(UPGRADES.vitality.costs);
+    // The old 150 / 250 / 350 doubled; x1.25 on top would be 375 / 625 / 875.
+    expect(UPGRADES.firepower.costs).toEqual([300, 500, 700, 900, 1100, 1300, 1500]);
+    expect(UPGRADES.focus.costs).toEqual([40, 75, 140, 225, 340, 475, 640, 825]);
+    for (const id of UPGRADE_IDS) for (const c of UPGRADES[id].costs) expect(c % 5, id).toBe(0);
+    // An account bought at the old maximum (6/8, 6/8, 3/3, 4/4) keeps every rank and can buy on.
+    const old = { vitality: 6, plating: 6, firepower: 3, focus: 4 };
+    expect(clampUpgrades(old)).toEqual(old);
+    for (const id of UPGRADE_IDS) expect(old[id]).toBeLessThan(UPGRADES[id].ranks);
   });
   it('a free player and a holder buy the same upgrades to the same numbers', () => {
     for (const t of TIERS) {
@@ -76,11 +107,11 @@ describe('ladder and caps', () => {
     const p = powerFor('rare', { focus: 2, vitality: 2, plating: 3 });
     const a = createWorld({ hero: 'benja', power: p }).actors[0];
     const k = HEROES.find((h) => h.id === 'benja')!;
-    expect(a.maxHp).toBe(Math.round(k.maxHp * 1.06));
+    expect(a.maxHp).toBe(k.maxHp + 20);
     expect(a.hp).toBe(a.maxHp);
-    expect(a.armor).toBe(k.maxArmor + 6);
-    expect(a.maxArmor).toBe(TUNING.combat.armorCap + 6);
-    expect(a.ability.cooldown).toBeCloseTo(k.ability.cooldown * 0.9, 6);
+    expect(a.armor).toBe(k.maxArmor + 15);
+    expect(a.maxArmor).toBe(TUNING.combat.armorCap + 15);
+    expect(a.ability.cooldown).toBeCloseTo(k.ability.cooldown * 0.84, 6);
     expect(createWorld({ hero: 'benja' }).actors[0].maxHp).toBe(k.maxHp);
   });
 });

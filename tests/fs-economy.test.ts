@@ -27,12 +27,16 @@ describe('every legitimate completed match pays, in the order the owner asked fo
 });
 
 describe('against the upgrade costs and the daily limits', () => {
-  it('the first rank comes in the first session: one online match, or four practice losses (two with a kill each)', () => {
+  it('the first rank comes in the first session: one online win or two online matches, or five practice losses (three with a kill each)', () => {
+    // Owner 2026-10-23 prices: the cheapest rank is 15 (was 10).
     const cheapest = Math.min(...UPGRADE_IDS.map((id) => UPGRADES[id].costs[0]));
-    expect(pay(REWARDS, false, 0, 0)).toBeGreaterThanOrEqual(cheapest);
-    // Owner 2026-10-21 practice table (3 a run): three bare losses pay 9, so four; a kill each makes it two.
-    expect(4 * pay(PRACTICE_REWARDS, false, 0, 0)).toBeGreaterThanOrEqual(cheapest);
-    expect(2 * pay(PRACTICE_REWARDS, false, 1, 0)).toBeGreaterThanOrEqual(cheapest);
+    expect(cheapest).toBe(15);
+    expect(pay(REWARDS, true, 0, 0)).toBeGreaterThanOrEqual(cheapest);
+    expect(pay(REWARDS, false, 2, 0)).toBeGreaterThanOrEqual(cheapest);
+    expect(2 * pay(REWARDS, false, 0, 0)).toBeGreaterThanOrEqual(cheapest);
+    // Practice (3 a run, 3 a kill, 18 a clear): five bare losses, three with a kill each, or one clear.
+    expect(5 * pay(PRACTICE_REWARDS, false, 0, 0)).toBeGreaterThanOrEqual(cheapest);
+    expect(3 * pay(PRACTICE_REWARDS, false, 1, 0)).toBeGreaterThanOrEqual(cheapest);
     expect(pay(PRACTICE_REWARDS, true, 0, 0)).toBeGreaterThanOrEqual(cheapest);
   });
   it('not trivially farmable: even playing to every daily cap with perfect results takes days to max out', () => {
@@ -40,9 +44,13 @@ describe('against the upgrade costs and the daily limits', () => {
     const maxPractice = Math.min(PRACTICE_SHARDS_PER_DAY, PRACTICE_REWARDS.dailyCap * pay(PRACTICE_REWARDS, true, 99, 99999));
     expect(totalCost / (maxOnline + maxPractice)).toBeGreaterThanOrEqual(2);
   });
-  it('nobody is stuck: a player who only loses in practice (one kill a run) still maxes out in about three weeks', () => {
+  it('nobody is stuck: a player who only loses in practice (one kill a run) still maxes everything out (about 94 days at the daily cap)', () => {
+    // Owner 2026-10-23: 41 ranks and higher prices (16,390 shards in all, was 3,250) make maxing out a long goal; the
+    // first ranks still come in a session (above). Each rank stays reachable at any pace.
+    expect(totalCost).toBe(16390);
     const perDay = Math.min(PRACTICE_SHARDS_PER_DAY, PRACTICE_REWARDS.dailyCap * pay(PRACTICE_REWARDS, false, 1, 100));
-    expect(totalCost / perDay).toBeLessThanOrEqual(25);
+    expect(totalCost / perDay).toBeLessThanOrEqual(100);
+    expect(Math.max(...UPGRADE_IDS.flatMap((id) => UPGRADES[id].costs))).toBeLessThanOrEqual(perDay * 10);
   });
 });
 
@@ -51,10 +59,10 @@ describe('the results say what the shards buy', () => {
   it('every rank ready now, by name and cost', () => {
     expect(affordable(40, NO_UPGRADES).map((r) => `${r.name} ${r.rank}`)).toEqual(['Vitality 1', 'Plating 1', 'Focus 1']);
     const h = view(40).replace(/<[^>]+>/g, '');
-    expect(h).toMatch(/40 shards · 3 upgrades ready: Vitality 1 \(10\) · Plating 1 \(10\) · Focus 1 \(30\)/);
+    expect(h).toMatch(/40 shards · 3 upgrades ready: Vitality 1 \(15\) · Plating 1 \(15\) · Focus 1 \(40\)/);
   });
   it('one ready, or the cheapest and how far off it is', () => {
-    expect(view(10).replace(/<[^>]+>/g, '')).toMatch(/10 shards · Vitality 1 \(10\) · Plating 1 \(10\) ready|10 shards · 2 upgrades ready/);
-    expect(view(6).replace(/<[^>]+>/g, '')).toMatch(/6 shards · Vitality 1 costs 10, 4 to go/);
+    expect(view(15).replace(/<[^>]+>/g, '')).toMatch(/15 shards · 2 upgrades ready: Vitality 1 \(15\) · Plating 1 \(15\)/);
+    expect(view(6).replace(/<[^>]+>/g, '')).toMatch(/6 shards · Vitality 1 costs 15, 9 to go/);
   });
 });
