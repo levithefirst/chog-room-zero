@@ -65,6 +65,11 @@ describe('owner shard override: the pure rule (2x, then clamp to what is left to
     expect(PRACTICE_SHARDS_PER_DAY).toBe(1000);
     expect(OVERRIDE_SHARDS_PER_DAY).toBe(10_000);
   });
+  it('the allowlisted id is a 16-character server account id whose Settings id (src/main.ts) is the owner\'s 71D9VIPM', () => {
+    expect(SHARD_OVERRIDE_ACCOUNTS).toHaveLength(1);
+    expect(OWNER).toMatch(/^[A-Za-z0-9_-]{16}$/);
+    expect(OWNER.replace(/[^A-Za-z0-9]/g, '').slice(0, 8).toUpperCase()).toBe('71D9VIPM');
+  });
   it('exactly 2x shards; XP, lines and the no-pay reason unchanged; lines still add up', () => {
     const o = overrideShards(normalOnline, 0);
     expect(o.shards).toBe(normalOnline.shards * 2);

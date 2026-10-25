@@ -8,13 +8,12 @@ import type { RewardBreakdown, RewardLine } from '../../src/config/progression.j
 import type { Tx } from './db.js';
 
 /**
- * Server account ids (room_zero.accounts.id) with the override. Single place to change it.
- * NOTE: '7J2D9V17PM' is the id as the owner typed it. Server account ids are 16-character base64url
- * (api/_lib/game.ts newId); the 8-character "Account ID" in Settings is the browser-local profile id
- * (src/ui/profile.ts) and is never sent to the server, so this value matches no account until it is
- * replaced with the owner's real room_zero.accounts.id.
+ * Server account ids (room_zero.accounts.id, 16-character base64url from api/_lib/game.ts newId) with the override.
+ * Single place to change it. Owner 2026-10-25 (t39u): '71d9vIPmgAT3RVbD' is the owner's Google-linked account. Settings
+ * shows a signed-in account's id as its first 8 letters/digits upper-cased (src/main.ts curProfile), and the owner's
+ * Settings (signed in with Google) shows 71D9VIPM; this is the only account of the 20 whose id gives that.
  */
-export const SHARD_OVERRIDE_ACCOUNTS: readonly string[] = ['7J2D9V17PM'];
+export const SHARD_OVERRIDE_ACCOUNTS: readonly string[] = ['71d9vIPmgAT3RVbD'];
 export const OVERRIDE_SHARD_MULTIPLIER = 2;
 export const OVERRIDE_SHARDS_PER_DAY = 10_000;
 
