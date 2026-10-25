@@ -15,6 +15,7 @@
 // here from the stored VERIFIED runs only (an unticketed or implausible run is stored, pays nothing, counts for nothing).
 import type { Db, Tx } from './db.js';
 import { b64url, sign, unsign } from './auth.js';
+import { hasShardOverride, gameplayShardsToday, overrideShards, OVERRIDE_SHARDS_PER_DAY } from './shard-override.js';
 import { PRACTICE_REWARDS, PRACTICE_SHARDS_PER_DAY, rewardBreakdown, type RewardLine, type NoReward } from '../../src/config/progression.js';
 import { MEDALS, medalsDue, type OnlineTotals, type RunFacts } from '../../src/ui/medals.js';
 import type { Best, Records } from '../../src/ui/records.js';
@@ -228,7 +229,11 @@ export async function recordPractice(db: Db, acc: string, raw: Record<string, un
       WHERE account_id = $1 AND xp > 0 AND created_at > now() - interval '24 hours'`, [acc]);
     const facts = { won: run.won, kills: run.kills, damage: run.damageDealt, seconds: run.seconds, leftEarly: false, demo: raw.demo === true, unverified: !verified };
     let r = rewardBreakdown({ ...facts, capped: Number(paid[0].n) >= PRACTICE_REWARDS.dailyCap }, PRACTICE_REWARDS);
-    if (r.shards && Number(paid[0].s) + r.shards > PRACTICE_SHARDS_PER_DAY) r = rewardBreakdown({ ...facts, capped: true }, PRACTICE_REWARDS);
+    if (hasShardOverride(acc)) {
+      // Owner override (api/_lib/shard-override.ts): 2x shards, clamped to what is left of 10,000 a day; a run once the
+      // day is used up pays nothing, as the normal limit does.
+      if (r.shards) { const today = await gameplayShardsToday(tx, acc); r = today >= OVERRIDE_SHARDS_PER_DAY ? rewardBreakdown({ ...facts, capped: true }, PRACTICE_REWARDS) : overrideShards(r, today); }
+    } else if (r.shards && Number(paid[0].s) + r.shards > PRACTICE_SHARDS_PER_DAY) r = rewardBreakdown({ ...facts, capped: true }, PRACTICE_REWARDS);
     const ins = await tx.query(`INSERT INTO room_zero.practice_runs (account_id, run_id, hero, won, seconds, kills, bullets, hits, damage_dealt, damage_taken, pickups, abilities, hp_left, xp, shards, verified, revives, revived, loots, thrown, allies_lost)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21) ON CONFLICT DO NOTHING RETURNING run_id`,
       [acc, run.runId, run.hero, run.won, run.seconds, run.kills, run.bullets, run.hits, run.damageDealt, run.damageTaken, run.pickups, run.abilities, run.hpLeft, r.xp, r.shards, verified,

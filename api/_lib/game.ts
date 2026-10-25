@@ -14,6 +14,7 @@ import { MAX_SUPPLY } from './chain.js';
 import { heroIdOf } from '../../src/config/heroes.js';
 import { NO_UPGRADES, TIERS, UPGRADES, UPGRADE_IDS, clampUpgrades, tierOfMetadataId, type Tier, type UpgradeId, type Upgrades } from '../../src/config/power.js';
 import type { SuperpowerId } from '../../src/config/superpowers.js';
+import { hasShardOverride, gameplayShardsToday, overrideShards } from './shard-override.js';
 import { PRACTICE_REWARDS, RATING, levelOf, rewardBreakdown, ratingDelta, REWARDS, type RewardLine, type NoReward } from '../../src/config/progression.js';
 
 export const TICKET_SECONDS = 10 * 60;
@@ -250,7 +251,9 @@ export async function settleMatch(db: Db, m: MatchRecord): Promise<SettleResult>
       const before = ratings.get(acc)!;
       const recent = await tx.query<{ n: string }>(`SELECT count(*) AS n FROM room_zero.match_players mp JOIN room_zero.matches mt ON mt.id = mp.match_id
         WHERE mp.account_id = $1 AND mp.xp > 0 AND mt.settled_at > now() - interval '24 hours'`, [acc]);
-      const r = rewardBreakdown(factsOf(m, p, Number(recent[0].n) >= REWARDS.dailyCap));
+      let r = rewardBreakdown(factsOf(m, p, Number(recent[0].n) >= REWARDS.dailyCap));
+      // Owner override (api/_lib/shard-override.ts): acc is the ticket-verified account, so only shards change.
+      if (r.shards && hasShardOverride(acc)) r = overrideShards(r, await gameplayShardsToday(tx, acc));
       await tx.query(`UPDATE room_zero.accounts SET xp = xp + $2, shards = shards + $3, rating = rating + $4, matches = matches + $5, wins = wins + $6,
         display_name = coalesce($7, display_name) WHERE id = $1`,
         [acc, r.xp, r.shards, delta, rewarded ? 1 : 0, won && rewarded ? 1 : 0, cleanName(p.name)]);
