@@ -1,7 +1,7 @@
 # Chog: Room Zero - shared state
 
 Source of truth. Rules: `docs/RULES.md`. Edit only in a handoff commit. Under 8,000 characters.
-Last verified: 2026-10-23 by claude (H46: upgrades, medal goals; HANDOFFS H46).
+Last verified: 2026-10-26 by grokbot (H47: README only; HANDOFFS H47).
 
 ## Snapshot (EVIDENCE)
 - Repo `levithefirst/chog-room-zero`. Base branch `setup/skill-system` (LOCKED 2026-10-11: no `main`); never merge without owner. PR #10 = ccr-e7fadb8f-qtochk (live; claude/h34-maps holds H34-H36). Client and server ship from one commit.
@@ -59,13 +59,12 @@ Core Feel Gate: BLOCKED on owner playtests. G10: automated PASS; playtest not ru
 ## Current task
 | Id | Owner | Branch | Files | Done when | Status |
 |---|---|---|---|---|---|
-| TM | claude | ccr-e7fadb8f-qtochk | see H37 | Owner 2026-10-20 TACTICAL MAP | live; owner plays it on a phone |
-| MP, H34/ID/SP | claude | same | see H32-H36 | Owner 2026-10-18/19 | live; owner: 1v1s, server plan |
-| UIX | claude (from grokbot) | same | see H38/H39 | Owner 2026-10-20 UI release | live (PR #12 head in branch) |
+| MP, H34/ID/SP | claude | ccr-e7fadb8f-qtochk | see H32-H36 | Owner 2026-10-18/19 | live; owner: 1v1s, server plan |
 | UIX2+QA | claude | same | see H40-H43 | Owner 2026-10-21 final QA | live (H43) |
 | SHARDS/MAP | grokbot | same | see H44/H45 | Owner 2026-10-21 | live (a1d5c4b) |
 | UP | claude | same | see H46 | Owner 2026-10-23 | H46; Hoarder/Pack Rat reach unproven |
+| DOCS | grokbot | grokbot/readme-overhaul | README.md, STATE, HANDOFFS | Owner 2026-10-26: overhaul every README | H47; PR open, not merged |
 | RC-8 | claude | PR #10 | see H16 | Owner RC-8 mandate | PR #10 not merged (owner decides) |
 
 ## Handoffs
-Latest: H46 (claude; upgrades, medals). History: `docs/HANDOFFS.md`.
+Latest: H47 (grokbot; README overhaul, docs only). History: `docs/HANDOFFS.md`.

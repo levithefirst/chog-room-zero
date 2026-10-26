@@ -760,3 +760,20 @@ Not verified    : Hoarder 20 / Pack Rat 30 reachable in one run (84 autopilot ru
 Locked decisions touched : power caps (docs/design/power.md) raised, approved by the owner 2026-10-23.
 Next smallest task : owner plays a pickup-heavy run to judge Hoarder 20 / Pack Rat 30; files: none (src/ui/medals.ts if lowered).
 ```
+
+```
+HANDOFF H47  2026-10-26  grokbot -> owner
+Branch @ commit : grokbot/readme-overhaul (from ccr-e7fadb8f-qtochk @ fa1704a)   pushed: yes   PR: into ccr-e7fadb8f-qtochk, not merged
+Task            : owner 2026-10-26: overhaul every repo README. Docs only; no application code, no new images.
+Files changed   : README.md (rewritten to describe the live game: modes, controls, Chog Genesis, stack, run, config, tests,
+                  deploy, status); docs/STATE.md (DOCS card, Latest line; TM and UIX rows moved here); docs/HANDOFFS.md.
+Moved from STATE: | TM | claude | ccr-e7fadb8f-qtochk | see H37 | Owner 2026-10-20 TACTICAL MAP | live; owner plays it on a phone |
+                  | UIX | claude (from grokbot) | same | see H38/H39 | Owner 2026-10-20 UI release | live (PR #12 head in branch) |
+Tests run       : npx tsc --noEmit clean; env -u DATABASE_URL npx vitest run 1203/1208 (110 files): 5 PGlite hook timeouts under
+                  load (admin-shard-override, api-hardening, game-api, progression, rewards), each passes alone (12/21/16/16/26).
+                  README links and images all resolve; chogroomzero.xyz, /library, /api/game/config, Render server answer 200.
+Deploy          : none. Merging this PR into ccr-e7fadb8f-qtochk would redeploy Vercel and Render (README-only change).
+Not verified    : repo homepage chog-room-zero.vercel.app answers 404 (owner: update the GitHub homepage field).
+Locked decisions touched : none.
+Next smallest task : owner reviews and merges (or not) the README PR.
+```
