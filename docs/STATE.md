@@ -1,7 +1,7 @@
 # Chog: Room Zero - shared state
 
 Source of truth. Rules: `docs/RULES.md`. Edit only in a handoff commit. Under 8,000 characters.
-Last verified: 2026-10-20 by claude (H36 multiplayer reliability, live from ccr-e7fadb8f-qtochk).
+Last verified: 2026-10-20 by grokbot (UIX H37, PR #11 preview); production still claude H36 (d98ef8d).
 
 ## Snapshot (EVIDENCE)
 - Repo `levithefirst/chog-room-zero`. Base branch `setup/skill-system` (LOCKED 2026-10-11: no `main`); never merge without owner. PR #10 = ccr-e7fadb8f-qtochk (= d98ef8d, live); docs-only commits stay on claude/h34-maps (no Render restart). Client and server ship from one commit.
@@ -44,7 +44,8 @@ Last verified: 2026-10-20 by claude (H36 multiplayer reliability, live from ccr-
 ## Implemented (EVIDENCE)
 - H34 (live): five locations, RAIL/DECK/STAIRS tiles, lit areas, surfaces, hub leaderboard, map picker, 40 medals, device layer, protocol 2 (`docs/design/maps.md`, HANDOFFS H34).
 - H35 (live): hub blink fixed (ping time redrew the hub).
-- H36 (live): human 1v1 fixed (saved locations split the queue); dead sockets never seated; queue rejoins after a drop; a failing room stops alone; rooms build 3x faster. `docs/MULTIPLAYER.md`.
+- H36 (live): human 1v1 queue fix, dead sockets never seated, queue rejoins, a failing room stops alone (`docs/MULTIPLAYER.md`).
+- UIX (H37, PR #11, not live): `docs/design/ui-audit.md`.
 - ID (H33) and earlier: `docs/HANDOFFS.md`.
 
 ## Automated tests (EVIDENCE, Node 22.22)
@@ -59,9 +60,9 @@ Core Feel Gate: BLOCKED on owner playtests. G10: automated PASS; playtest not ru
 ## Current task
 | Id | Owner | Branch | Files | Done when | Status |
 |---|---|---|---|---|---|
-| MP | claude | claude/h34-maps -> ccr-e7fadb8f-qtochk | see H36 | Owner P0 multiplayer reliability | live; owner: 10 human 1v1s, server plan |
-| H34/ID/SP | claude | same | see H32-H35 | Owner 2026-10-18/19 | live; owner plays five maps; open items above |
+| MP, H34/ID/SP | claude | claude/h34-maps -> ccr-e7fadb8f-qtochk | see H32-H36 | Owner 2026-10-18/19 | live; owner: 10 human 1v1s, server plan, five maps |
+| UIX | grokbot | PR #11 -> claude/h34-maps | see H37 | Owner UI/UX brief 2026-10-20 | owner reviews #11 |
 | RC-8 | claude | PR #10 | see H16 | Owner RC-8 mandate | PR #10 not merged (owner decides) |
 
 ## Handoffs
-Latest: H36 (2026-10-20, claude -> owner; multiplayer reliability live). History: `docs/HANDOFFS.md`.
+Latest: H37 (2026-10-20, grokbot -> owner; UIX on PR #11, not live). H36 live. History: `docs/HANDOFFS.md`.

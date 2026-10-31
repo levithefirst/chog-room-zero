@@ -9,7 +9,7 @@ import { HEROES, type HeroDef } from '../config/heroes';
 import { WEAPONS } from '../config/weapons';
 import { fmtTime, type Records } from './records';
 import { medalProgress, type MedalDef, type Unlocked } from './medals';
-import { displayName, NICK_MAX, STICK_PX, type Profile, type Settings } from './profile';
+import { displayName, HUD_SCALES, NICK_MAX, STICK_PX, type Profile, type Settings } from './profile';
 import { controlsSvg, medalSvg, portraitSvg, RARITY_LABEL } from './art';
 import type { AcctView } from './account';
 import type { NetProfile } from '../net/protocol';
@@ -161,6 +161,8 @@ export function settingsHtml(c: ScreenCtx, confirmReset: boolean): string {
 <div class="row2"><span>Tutorial</span><button class="btn small" data-act="replay">Replay tutorial</button></div></section>
 <section><h3>Display</h3>
 <div class="row2"><span>Graphics quality</span>${seg('quality', s.quality, [['low', 'Low'], ['medium', 'Medium'], ['high', 'High']])}</div>
+<div class="row2"><span>HUD size</span>${seg('hudscale', String(s.hudScale), HUD_SCALES.map((v) => [String(v), `${v}%`] as [string, string]))}</div>
+<div class="row2 wrap"><span>Motion<small class="sub">Shake, pulses, screen entrances</small></span>${seg('motion', s.motion, [['auto', 'System'], ['reduced', 'Reduced'], ['full', 'Full']])}</div>
 
 ${c.canFs && c.touch ? '<div class="row2"><span>Full screen</span><button class="btn small" data-fs>Full screen</button></div>' : ''}</section>
 <section><h3>Account</h3>

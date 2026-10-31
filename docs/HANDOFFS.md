@@ -536,3 +536,19 @@ Not verified    : any human 1v1 (two people, two devices, two networks); the 10-
 Data written    : none (probe matches left early; no accounts, no results stored).
 Locked decisions touched : none. The location-as-preference rule is a PROPOSAL in STATE for the owner to confirm (anyMapAfterSec Infinity restores strict H33 queues).
 Next smallest task : owner and one friend, on two devices with different saved locations, play 10 consecutive 1v1s and count how many start (target 10/10), then confirm the location rule and choose the game server plan; files: none.
+
+HANDOFF H37  2026-10-20  grokbot -> owner
+Branch @ commit : grokbot/uix-world-class @ bfe3125 (code; the next commit is this handoff, docs only), PR #11 -> claude/h34-maps (b0bc19d = production d98ef8d + tools/docs)   pushed: yes
+Task            : owner "WORLD-CLASS UI/UX AUDIT + IMPLEMENTATION" (2026-10-20). UI only: no sim, net, AI, maps or mechanics changed.
+Audit           : docs/design/ui-audit.md (P0 3, P1 11, P2 8; comms ping N/A). Biggest gaps: fixed-pixel UI at 1080p/1440p, engine step chips on loading, no hit/damage numbers, no HUD scale or motion setting.
+Changes         : 38283b6 UI scale (desktop 1080p 1.5x, 1440p 2x, CSS zoom on #overlay/#boot/#hud; phones and tablets 1x), Settings HUD size 85-130% and Motion System/Reduced/Full (no shake, pulses, entrances). ec61308 boot briefing (last location from its real tiles + operator, chips gone) and deploy briefing (map, objective, real ability + cooldown, class/DEMO, tip); HUD states (25-HP ticks, low health words + pulse, armour break, ammo low/out + RELOAD, ability seconds). 98bf53c hit marker 0.28 s / kill 0.6 s, reticle hit-confirm, batched damage numbers on visible targets only; pause card with run state + PC keycaps. 33cc3f2 blueprint map preview. bfe3125 no text under 12 px, lighter HUD fill. tools/uix-shots.mjs.
+Files changed   : index.html; src/main.ts; src/ui/{stage,profile,screens,mapPreview (new)}.ts; src/render/render.ts; tests/rc7-profile-medals.test.ts (two new settings fields in the round-trip); tools/{uix-shots (new),cf-visual}.mjs; docs/design/ui-audit.md (new); docs/{STATE,HANDOFFS}.md
+Tests run       : tsc clean. env -u DATABASE_URL npx vitest run -> 1030/1030 (102 files), host load 2.0-3.6 on 8 cores (the shared box sets DATABASE_URL; with it rc7-auth fails 2 tests on b0bc19d too). npm run build OK (JS 732.6 kB / 238.1 kB gz, was 726.0 / 235.7). No lint script. Browser (headless Chrome, emulated): qa-screens no layout problems; qa-errors 7/7; h34-blink 31/34 and qa-journey 9/12 on BOTH b0bc19d and this branch (squad session and wallet steps: this environment). uix-shots 10 viewports: no layout problems, 0 page errors.
+Deploy          : Vercel PREVIEW only (GitHub auto-preview of this branch). Production untouched.
+Rollback        : close PR #11 (nothing merged or live).
+Known failures  : none new.
+Blockers        : none
+Not verified    : real phones (Pixel 7, iPhone 13); real-GPU FPS (SwiftShader numbers are relative); online modes on the preview (game server origins = production + its own branch preview); human play.
+Data written    : none.
+Locked decisions touched : none (landscape stage kept, LOCKED 4).
+Next smallest task : owner opens the PR #11 preview at 1080p and on a phone, plays one solo run, and answers "is the HUD readable at a glance, and do hits feel confirmed?"; files: none.

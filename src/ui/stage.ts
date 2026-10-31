@@ -43,6 +43,23 @@ export function rectToStage(L: StageLayout, r: { left: number; top: number; widt
   return { x: r.top, y: L.screenW - (r.left + r.width), w: r.height, h: r.width };
 }
 
+/**
+ * UIX: the interface scale for a stage. The menus and HUD are drawn for a 1280x720 stage; a bigger desktop window
+ * scales them up (1920x1080 -> 1.5, 2560x1440 -> 2) so text and controls keep their size relative to the game, the way
+ * a console game's HUD scales with the output resolution. Phones and tablets keep 1 (their layouts are sized for
+ * the glass and the thumbs). The HUD then takes the player's HUD scale setting on top (85-130%).
+ */
+export function uiScale(w: number, h: number, form: 'phone' | 'tablet' | 'desktop'): number {
+  if (form !== 'desktop') return 1;
+  const s = Math.min(w / 1280, h / 720);
+  return Math.round(Math.max(1, Math.min(2, s)) * 20) / 20;
+}
+let hudPct = 100;
+/** The HUD scale setting (percent). Call layoutStage after changing it. */
+export function setHudScale(pct: number): void { hudPct = pct; }
+/** The scales in force: menus and HUD (the HUD includes the setting). */
+export let scales = { ui: 1, hud: 1 };
+
 const coarse = () => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 let current: StageLayout | null = null;
 
@@ -69,9 +86,22 @@ export function layoutStage(el: HTMLElement): StageLayout {
   b.toggle('narrow', L.h > L.w && L.w < 600);
   // H34: a small landscape phone (stage under 720 px wide): the top band has no room for full words.
   b.toggle('slim', L.w < 720 && L.h <= 460);
-  applyDevice(currentDevice());
+  const dev = currentDevice();
+  applyDevice(dev);
   document.body.style.setProperty('--vw', `${L.w / 100}px`);
   document.body.style.setProperty('--vh', `${L.h / 100}px`);
+  // CSS zoom lays each layer out as if the stage were w/z by h/z: its percentages and --vw/--vh follow that size.
+  const ui = uiScale(L.w, L.h, coarse() ? (dev.form === 'desktop' ? 'tablet' : dev.form) : dev.form);
+  const hud = Math.round(ui * hudPct) / 100;
+  scales = { ui, hud };
+  for (const [id, z] of [['overlay', ui], ['boot', ui], ['hud', hud]] as const) {
+    const layer = typeof document.getElementById === 'function' ? document.getElementById(id) : null;
+    if (!layer) continue;
+    layer.style.setProperty('zoom', z === 1 ? '' : String(z));
+    layer.style.setProperty('--vw', `${L.w / z / 100}px`);
+    layer.style.setProperty('--vh', `${L.h / z / 100}px`);
+  }
+  document.body.style.setProperty('--ui', String(ui));
   return L;
 }
 

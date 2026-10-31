@@ -38,14 +38,21 @@ export interface Settings {
   tips: boolean;
   /** V2: send the anonymous end-of-match record (src/sim/report.ts). */
   shareStats: boolean;
+  /** UIX: HUD size on top of the automatic resolution scale, in percent (85, 100, 115, 130). */
+  hudScale: HudScale;
+  /** UIX: screen shake, pulses and screen entrances. 'auto' follows the system's reduce-motion setting. */
+  motion: MotionPref;
 }
+export type HudScale = 85 | 100 | 115 | 130;
+export type MotionPref = 'auto' | 'reduced' | 'full';
+export const HUD_SCALES: HudScale[] = [85, 100, 115, 130];
 
 export const PROFILE_KEY = 'chog-room-zero:profile:v1';
 export const SETTINGS_KEY = 'chog-room-zero:settings:v1';
 export const QUALITY_DPR: Record<Quality, number> = { low: 1, medium: 1.5, high: 2 };
 // Full-push stick travel in px: 44 for small thumbs or short pushes, 56 default (RC-1 tuning), 72 for big phones.
 export const STICK_PX: Record<StickSize, number> = { small: 44, medium: 56, large: 72 };
-export const DEFAULT_SETTINGS: Settings = { volume: 1, vibration: true, quality: 'medium', stick: 'medium', tips: true, shareStats: true };
+export const DEFAULT_SETTINGS: Settings = { volume: 1, vibration: true, quality: 'medium', stick: 'medium', tips: true, shareStats: true, hudScale: 100, motion: 'auto' };
 
 // Crockford base32 without I, L, O, U: readable aloud, no lookalikes.
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -115,6 +122,8 @@ export function loadSettings(store: KeyValueStore): Settings {
     stick: s?.stick === 'small' || s?.stick === 'medium' || s?.stick === 'large' ? s.stick : d.stick,
     tips: typeof s?.tips === 'boolean' ? s.tips : d.tips,
     shareStats: typeof s?.shareStats === 'boolean' ? s.shareStats : d.shareStats,
+    hudScale: HUD_SCALES.includes(s?.hudScale as HudScale) ? (s!.hudScale as HudScale) : d.hudScale,
+    motion: s?.motion === 'auto' || s?.motion === 'reduced' || s?.motion === 'full' ? s.motion : d.motion,
   };
 }
 
