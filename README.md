@@ -105,6 +105,21 @@ The solo game runs with no configuration, while the online, account and holder f
 - **Wallet and chain:** Sign-In with Ethereum verified with `@noble/curves` and `@noble/hashes`, and plain JSON-RPC reads of Monad mainnet, with no wallet library.
 - **Tests:** Vitest unit and simulation tests, including duel-balance tests for every power.
 
+### Architecture
+
+```mermaid
+flowchart LR
+    Client["Browser client<br/>TypeScript, Vite, PixiJS<br/>deterministic sim in src/sim"]
+    WS["Game server (server/)<br/>Node.js WebSocket, Render"]
+    API["Vercel functions (api/)<br/>sign-in, tickets, settlement, leaderboard"]
+    DB[("Neon Postgres")]
+    Chain["Monad mainnet<br/>JSON-RPC reads"]
+    Client <-->|"online matches"| WS
+    Client -->|"HTTPS"| API
+    API --> DB
+    API -->|"CHOG ownership and traits"| Chain
+```
+
 ## Notes and honest limitations
 
 - The superpower numbers are proposals that still need tuning from more real playtests, and a real holder playing hosted 5v5 has not been tested yet, while the holder flow is tested against a simulated chain and the live chain path is checked by the read-only `/api/game/chain` endpoint.
