@@ -113,3 +113,7 @@ The solo game runs with no configuration, while the online, account and holder f
 - Desktop with keyboard and mouse is the most tested way to play, and phones and tablets work in landscape with touch controls, while wallet sign-in on a phone needs a wallet's in-app browser because WalletConnect is not included.
 - Online play uses a free Render instance, so the first connection after a quiet period can take a little while to wake the server.
 - Guests can play every mode except 5v5, but only signed-in players keep progression, and solo bests and medals for a guest last only for the session.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
