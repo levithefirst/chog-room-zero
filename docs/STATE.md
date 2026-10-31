@@ -65,6 +65,7 @@ Core Feel Gate: BLOCKED on owner playtests. G10: automated PASS; playtest not ru
 | UIX2+QA | claude | same | see H40-H43 | Owner 2026-10-21 final QA | live (H43) |
 | SHARDS/MAP | grokbot | same | see H44/H45 | Owner 2026-10-21 | live (a1d5c4b) |
 | UP | claude | same | see H46 | Owner 2026-10-23 | H46; Hoarder/Pack Rat reach unproven |
+| LIC | grokbot | grokbot/add-license | LICENSE, README.md, docs/STATE.md | Owner 2026-10-31 (add MIT license) | PR open |
 | RC-8 | claude | PR #10 | see H16 | Owner RC-8 mandate | PR #10 not merged (owner decides) |
 
 ## Handoffs
