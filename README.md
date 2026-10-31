@@ -1,73 +1,115 @@
-# Chog: Room Zero
+# CHOG: Room Zero
 
-A dark top-down tactical shooter for the Chogathon. One basement, five bots, about 90 seconds a run. You see only what your lamp touches; everyone hears everything.
+CHOG: Room Zero is a dark, top-down tactical multiplayer shooter built for the Chogathon, with five maps and online 1v1, 3v3 and 5v5 modes plus a solo game against bots, where the real traits of a CHOG NFT change how you play by turning into a superpower that both sides can read and counter.
 
-Plays in the browser on desktops and laptops (keyboard and mouse), and on phones and tablets in landscape (touch). No wallet or account is needed to play.
+You see only what your light touches, everyone hears everything, bullets travel and walls stop them, so every fight is about information, position and timing rather than reflexes alone.
 
-## How to test it (5 minutes)
+**Live demo:** https://chogroomzero.xyz (the game) and https://chogroomzero.xyz/library (the official game library with every rule, map and number).
 
-1. Open the game link. On a phone the game is always landscape: if you open it upright, it is already drawn sideways, so turn the phone and play. Your first tap also asks for full screen in landscape (Android Chrome; iPhone Safari cannot do this, so there you just hold the phone sideways). If you leave full screen, the run pauses and **Full screen** on the pause card brings it back. Turning the phone mid-run pauses the same run (nothing is lost), then Resume.
-2. First launch shows **How to play** with a controls diagram. Press **Got it**. The main menu has **Play**, your player card (tap the chip top-left to pick a callsign), **Medals**, **How to play**, **Chog DEMO** and **Settings**.
-3. Optional: **Chog DEMO** and pick a token number (#1 to #4). This shows how a Chog changes play. It is a demo: no wallet and no ownership check.
-4. **Enter**, pick a hero (keys 1 to 4, or tap a card), then **Deploy**.
-5. Clear the room: down all five hostiles. If you die, the summary waits 0.75 s before any input counts, then **Again** restarts.
-6. The results screen shows time, rooms cleared, kills, accuracy, damage dealt and taken, pickups and abilities, any medals earned, and your best for that hero. Bests, medals and the player card are saved on this device only (personal records, not a leaderboard).
-7. In your first runs, short tips explain a mechanic the first time you meet it (a pickup you need, a low magazine, being hit, a shot stopped by a crate, your ability). Settings turns them off or replays them.
+## Why the CHOG NFT matters
 
-### Controls
+A verified CHOG's real on-chain traits give it one superpower, which takes the single ability slot of your operator, so a holder plays a different kit, makes different decisions and is read differently by opponents, while a player without a CHOG keeps the whole game with the operator's own ability.
 
-| | PC | Phone / tablet (landscape) |
+| Trait (exact metadata) | Superpower | What it does |
 |---|---|---|
-| Move | WASD | Left thumb |
-| Creep (quiet) | Hold Shift | Half push on the left stick |
-| Aim | Mouse | Right thumb (when it is idle, you face the way you walk) |
-| Fire | Hold left click | Push the right thumb past the ring |
-| Ability | Space | Ability button |
+| Eyes: Purple, fire, Green or cyan laser; Head: Blue Laser | Laser Eyes | A charged beam that burns along a line, stopped by walls and cover; you walk slowly while it charges and fires |
+| Eyes: Gradient, Sunset or Plasma visor | Visor | Always on: hostiles inside its radius appear as dots on your tracker, through walls, position only and no damage |
+| Mouth: Bubblegum | Bubble | A slow glowing bubble that cages the player it catches for a few seconds |
+| Mouth: Drooling | Drool Web | A glob that glues the target and drags it towards a nearby wall |
+| Aura: any of its 22 values | Aura | A few seconds of immunity, during which you cannot shoot or throw |
+
+The token's rarity ranks its power from Common to Epic, and the rank only changes the power's duration, reach or radius and cooldown, never your health, armour or weapon damage, and beam damage per second is the same at every rank.
+
+Every power has a visible tell and a written counter: the match intro names each opponent's power, a coloured diamond next to a visible player's health bar shows it, each power has its own sound, beams show a charge line before they fire, and a player caught by a Visor sees TRACKED, so you can step off a laser line, sidestep a slow bubble, stay away from walls against Drool Web, or stop shooting and reload while an Aura is up.
+
+Of the 1,969 CHOG Genesis tokens, 1,351 carry at least one power trait; a holder whose CHOG carries several picks one, the ten 1:1 CHOGs keep their own named signature abilities instead, and a verified CHOG with no power trait starts at 200 health instead of 150 as its only edge, while grenade capacity also rises with tier (3 for free players, up to 13).
+
+X-Ray Eyes, a slow beam that passes through walls without revealing anyone, has no trait in the collection yet, so it exists only in DEMO and CHOG Training, together with the Legendary rank.
+
+5v5 is for verified CHOG holders only and is enforced on the game server for every player and every squad member, while the solo game, 1v1 and 3v3 are open to everyone with the same seven operators, no wallet and no NFT.
+
+Ownership is checked on the server and never trusted from the browser: you sign a free Sign-In with Ethereum message (no transaction, no approval) with MetaMask, Rabby or Zerion, the site reads the CHOG Genesis contract `0xc96d31F8626c6D03Fae5dCD3d61e3FB9F4a73763` on Monad mainnet (chain 143) with `tokensOfOwner` and `metadataId` over public RPCs, and then signs a single-use 10 minute ticket that the game server checks with the site before any power or 5v5 access applies, and any failure simply leaves you playing as a free player.
+
+Each CHOG also keeps its own match history, which stays with the token if it is sold, while XP, shards, upgrades and rating belong to the account, so removing the CHOG removes 5v5, the superpower or signature, its Training drill and the token's history.
+
+## How to play
+
+In the solo game (Vs bots) you and two AI teammates face five hostile bots and your side wins when every hostile is down, while online the last side with anyone standing wins, with a time limit after which the side with more health standing wins, although the danger zone usually ends the match first.
+
+| Action | Keyboard and mouse (rebindable in Settings) | Touch (landscape) |
+|---|---|---|
+| Move | W A S D | Left thumb |
+| Creep (quiet) | Hold Shift | Push the left stick less than 60% |
+| Aim | Mouse | Right thumb |
+| Fire | Hold left click | Push the right thumb past the inner ring |
+| Ability or superpower | Space or Q | Ability button |
 | Reload | R | Reload button |
+| Grenade | Hold G and release, or right click (lands at the cursor) | Grenade button, tap or drag to aim |
+| Tactical map | M (M or Esc closes it) | MAP button |
 | Pause | Esc or P | Pause button, top right |
 
-### What to look for
+You see only inside your light cone, running is loud and creeping is quiet, and bots hear you by the same rules, so pale rings and "last known" marks show noises and positions you heard but did not see, while crates and barriers are half cover that stops bullets.
 
-- **Bullets travel and walls stop them.** Waist-high crates and slabs stop shots unless the shooter leans over from right behind them (no weapon shoots through a box, Wick's marksman included, since RC-8). A blocked shot sparks, clanks, and the cover outline flashes.
-- **Sound is information.** Pale rings mark a noise you heard but did not see. Running is loud, creeping is quiet, and bots hear you the same way.
-- **Nothing hides past the edge.** A hostile you can see (in your light, by its muzzle flash, or by Ping) but that sits past the screen edge gets a red arrow at the edge, pointing at it.
-- **Fair fights.** A bot only shoots you from inside your own sight range with line of sight, and the shooter is ringed whenever it hits you.
-- **Four heroes, four weapons:** Kettle (rifle, Patch heal), Mop (SMG, Slip dash), Brick (shotgun, Slab cover), Wick (marksman, Ping sonar). Each is drawn at its true hitbox size as an original CHOG-inspired operator (`docs/BRAND.md`).
-- **Pickups on touch.** Walk into health, armour or ammo and it is yours that step, no button. Full? It says so and stays for later.
-- **The danger zone.** After 45 s a red zone closes in three warned stages (words, countdown, a dashed ring for the next circle). Outside it you lose health, faster each stage. `docs/design/zone.md`.
-- **Online (RC-8, server not deployed yet).** 1v1, 3v3 and 5v5 against real players on an authoritative server, built and tested locally. `docs/MULTIPLAYER.md`.
-- **Colours are PROVISIONAL.** The palette comes from a proposed brand guide; there is no official CHOG colour system (`docs/BRAND.md`).
+The tactical map (M) is a full-screen view of the current location with its areas, the danger zone and its next circle, stocked supplies, your side and every living hostile at its current spot, while the game view itself still hides hostiles behind walls; the match keeps running and your operator stands still while it is open.
 
-## Player card, medals, settings, sign-in
+There are seven operators (Benja, Toad, Ray, Tabsu, Tonashiro, Yot and Bill), each with one weapon and one ability, all starting at 150 health and differing in armour, speed, sight and weapon, and Benja's Ping is a sonar ability that reveals hostiles around you for a moment.
 
-- **Player card:** callsign, profile id, favourite operator, three pinned medals, career stats on this device, per-operator stats, and the real loadout numbers.
-- **Medals:** 12, earned only from tracked play (first kill, first clear, clear untouched, clear under 60 s, 50% accuracy, ...). No rewards or currency.
-- **Settings:** volume, sound, touch stick size, vibration (where the browser has it), tips, replay tutorial, graphics quality, full screen, reset progress, build id.
-- **Sign-in (optional):** Google, MetaMask, Rabby or Zerion prove who you are and link that to your card. Progress stays on the device; there is no cloud save yet. It never checks Chog ownership. Setup: `docs/AUTH.md`.
-- The Bullet Echo screenshots used as a reference, and what was built, adapted or left out: `docs/REFERENCE-MAP.md`.
+The five locations are Room Zero (the balanced baseline), Office (rooms and corridors), Supermarket (long aisles), Metro Station (chokepoints and tunnels) and Construction Site (high ground), all open to everyone, and online you are matched with players who picked the same location.
 
-## Why the Chog matters (and its current limit)
+In 1v1 there are no revives, in 3v3 and 5v5 a downed player can be revived by a teammate, and friends can queue together as a squad with a squad code.
 
-A Chog token number maps to one of four tactical sidegrades (Lamp, Wide, Steady, Spray) plus a marking colour. Each trades one strength for a weakness and has a stated counterplay. None changes health, armour, damage or speed. A bound Chog also keeps its own run history on the device.
+Signed-in players earn XP, levels, shards and an Elo-style rating on their account, and shards buy upgrades that are the same for everyone, with nothing for sale and no loot boxes:
 
-**Today this is a labelled DEMO.** Chain, contract, ownership method and metadata are not verified, so nothing reads a wallet. The game plays fully without a Chog. See `docs/RELEASE.md` for the known limitations and the deferred plan.
+- **Online match:** 10 shards for playing, 30 for a win, 10 per kill (up to five) and a small damage bonus, for matches of at least 20 seconds, up to 20 rewarded matches a day, and private rooms and DEMO play earn nothing.
+- **Solo practice:** the same 10 for a run, 10 per kill and 30 for a clear, with less XP and a smaller damage bonus, up to 1,000 practice shards and 25 rewarded runs per rolling 24 hours.
+
+Rewards are settled on the server: an online result is pulled from the game server, and a practice run only pays with a signed session and a server-issued run start.
+
+## Quick test for judges
+
+1. Open https://chogroomzero.xyz on a desktop browser, read the first-run How to play screen and press Got it.
+2. Play as a guest with no sign-in, or press Sign in for Google or a wallet (MetaMask, Rabby or Zerion) if you want rewards saved to an account.
+3. On the hub pick an operator, the Vs bots mode and a location, then press Play to start a solo game, and press M during the match to open the tactical map.
+4. To try a CHOG power without owning one, open the DEMO button on the main menu, pick a CHOG number or one of the sample tokens per tier, and play solo with its real catalogue tier and traits, all clearly labelled DEMO.
+5. On the same DEMO screen, CHOG Training lets you pick any of the six powers (X-Ray included) at any rank and play its short drill against dummies, which records nothing.
+6. For online play, choose 1v1 or 3v3 on the hub; a guest sees the 5v5 button locked to verified holders, and two people can meet as DEMO CHOGs by both opening https://chogroomzero.xyz/?mockChog=53&online=1v1&demo=1&code=JUDGE1 (change 53 to any number from 1 to 1969).
+7. Open https://chogroomzero.xyz/library for the rules, controls, maps, superpowers, rewards and FAQ, and https://chogroomzero.xyz/api/game/chain for a read-only live check of the Monad ownership path.
 
 ## Run it locally
 
-Needs Node `^22.12.0 || ^24.0.0 || >=26.0.0`.
+You need Node `^22.12.0 || ^24.0.0 || >=26.0.0` (production runs on Node 22) and npm.
 
 ```
-npm ci
-npm run dev        # http://localhost:5173
-npm test           # unit and simulation tests
-npm run build      # typecheck + production build in dist/
-npm run preview    # serve dist/ at http://localhost:4173
+npm ci                  # install the locked dependencies
+npm run dev             # game at http://localhost:5173
+npm test                # unit and simulation tests (Vitest)
+npm run typecheck       # TypeScript check
+npm run build           # typecheck, game build and library build into dist/
+npm run preview         # serve dist/ at http://localhost:4173
+npm run build:server    # build the multiplayer game server
+npm run server          # start it (port 8787 by default)
 ```
 
-More commands (browser checks, scripted victory runs, duel tables) are in `docs/DEV.md`.
+The solo game runs with no configuration, while the online, account and holder features need these environment variables (names only):
 
-## Tech
+- **Browser build:** `VITE_GAME_SERVER_URL` (the game server's `ws://` or `wss://` address).
+- **Site API (Vercel functions):** `AUTH_SECRET`, `AUTH_ORIGIN`, `AUTH_ALLOWED_HOSTS` (optional), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `DATABASE_URL`, `GAME_SERVER_URL`, `NFT_COMBAT` (set to `0` to switch CHOG powers off).
+- **Game server:** `PORT`, `ALLOWED_ORIGINS`, `TICKET_CHECK_URL`, `FRIENDLY_FIRE` (optional).
 
-TypeScript, Vite, PixiJS 8, Vitest. A deterministic simulation in `src/sim` (no DOM or clock), rendering in `src/render`, input in `src/input`, sound synthesized with WebAudio in `src/audio`. Fonts: Barlow Condensed and IBM Plex Mono (OFL, in `public/fonts`). No paid services and no backend.
+## Tech stack
 
-Built during the hackathon with AI coding agents (Claude Code and GrokBot) under the owner's direction. Agent rules and the shared state live in `docs/`.
+- **Game client:** TypeScript, Vite and PixiJS 8, with a deterministic simulation in `src/sim` that has no DOM or clock, and sound synthesized with WebAudio.
+- **Multiplayer:** an authoritative Node.js WebSocket server (`ws`) in `server/`, hosted on Render.
+- **Site and API:** Vercel, serving the game, the prerendered library and serverless functions for sign-in, tickets, settlement and the leaderboard.
+- **Data:** Neon Postgres (`@neondatabase/serverless`), with PGlite for database tests.
+- **Wallet and chain:** Sign-In with Ethereum verified with `@noble/curves` and `@noble/hashes`, and plain JSON-RPC reads of Monad mainnet, with no wallet library.
+- **Tests:** Vitest unit and simulation tests, including duel-balance tests for every power.
+
+## Notes and honest limitations
+
+- The superpower numbers are proposals that still need tuning from more real playtests, and a real holder playing hosted 5v5 has not been tested yet, while the holder flow is tested against a simulated chain and the live chain path is checked by the read-only `/api/game/chain` endpoint.
+- DEMO is always labelled on screen ("DEMO: no wallet is connected and no ownership is checked."), never counts as verified, earns nothing and only meets other DEMO players online.
+- No CHOG artwork is shown because the art rights are not confirmed, so the game uses its own original operators and shows tokens as "Chog #N" with their tier.
+- Desktop with keyboard and mouse is the most tested way to play, and phones and tablets work in landscape with touch controls, while wallet sign-in on a phone needs a wallet's in-app browser because WalletConnect is not included.
+- Online play uses a free Render instance, so the first connection after a quiet period can take a little while to wake the server.
+- Guests can play every mode except 5v5, but only signed-in players keep progression, and solo bests and medals for a guest last only for the session.
