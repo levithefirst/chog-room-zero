@@ -1,13 +1,14 @@
-// Combat consistency (P1F phase 4): snagging, Brick slab navigation, cover rules, pickups vs firing.
+// Combat consistency (P1F phase 4): snagging, Yot slab navigation, cover rules, pickups vs firing.
 import { describe, expect, it } from 'vitest';
 import { createWorld, stepWorld, IDLE_INPUT, type World } from '../src/sim/world';
 import { findPath, shotClear, sightClear, parseLevel, markDynamic } from '../src/sim/level';
 import { COVER_RULES, coverStops } from '../src/sim/cover';
 import { TUNING } from '../src/config/tuning';
+import { WEAPONS } from '../src/config/weapons';
 import type { Brain } from '../src/sim/bots';
 
 const M = TUNING.movement;
-function solo(hero = 'kettle', seed = 1): World {
+function solo(hero = 'benja', seed = 1): World {
   const w = createWorld({ seed, hero });
   w.actors[0].hp = 1e9;
   for (const b of w.actors.slice(1)) { b.alive = false; b.x = b.y = -50; }
@@ -19,7 +20,7 @@ const walk = (w: World, mx: number, my: number, ticks: number, extra = {}) => {
 
 describe('snagging (CHOG-MAP-001, ADE repro: spawn crates between spawn and the south door)', () => {
   // Room Zero: spawn (3.5,2.5); crates x2..4,y4..5 (P1FT moved them 1 tile west); south door tile x4,y6.
-  for (const hero of ['kettle', 'brick']) {
+  for (const hero of ['benja', 'toad']) {
     it(`${hero}: holding straight down from spawn slides past the crate instead of stopping dead`, () => {
       const w = solo(hero);
       const p = w.actors[0];
@@ -56,7 +57,7 @@ describe('snagging (CHOG-MAP-001, ADE repro: spawn crates between spawn and the 
   });
 });
 
-describe('Brick slab: dynamic obstacle in nav', () => {
+describe('Yot slab: dynamic obstacle in nav', () => {
   const MAP = [
     '##########',
     '#........#',
@@ -77,7 +78,7 @@ describe('Brick slab: dynamic obstacle in nav', () => {
     expect(findPath(l, 1.5, 1.5, 8.5, 1.5)).toEqual(direct);
   });
   it('a bot with a path re-plans when a slab drops on it (paths invalidated) and does not walk into it', () => {
-    const w = createWorld({ seed: 4, hero: 'brick' });
+    const w = createWorld({ seed: 4, hero: 'yot' });
     const p = w.actors[0];
     p.hp = 1e9;
     // Face east toward the corridor and drop the slab.
@@ -106,13 +107,17 @@ describe('cover rules (src/sim/cover.ts is the single source)', () => {
     expect(COVER_RULES.crate.blocksSight).toBe(false);
     expect(sightClear(l, 1.5, 2.5, 7.5, 2.5)).toBe(true);
   });
-  it('a crate stops a rifle bullet from range, not from a shooter leaning on it, not a marksman', () => {
+  // RC-8 (owner 2026-10-13, "solid boxes block sniper shots"): the marksman no longer pierces crates or slabs.
+  // Before RC-8 this test asserted the opposite (pierce passes); the rule changed, the check is as strict.
+  it('a crate stops a rifle bullet from range, not from a shooter leaning on it; it stops the marksman too', () => {
     expect(shotClear(l, 1.5, 2.5, 7.5, 2.5, false, TUNING.combat.coverLean)).toBe(false);
     expect(shotClear(l, 3.2, 2.5, 7.5, 2.5, false, TUNING.combat.coverLean)).toBe(true);
-    expect(shotClear(l, 1.5, 2.5, 7.5, 2.5, true, TUNING.combat.coverLean)).toBe(true);
+    expect(shotClear(l, 1.5, 2.5, 7.5, 2.5, WEAPONS.marksman.piercesCover, TUNING.combat.coverLean)).toBe(false);
+    expect(Object.values(WEAPONS).some((w) => w.piercesCover)).toBe(false);
     expect(coverStops('crate', false, 5)).toBe(true);
     expect(coverStops('crate', false, 1)).toBe(false);
-    expect(coverStops('slab', true, 5)).toBe(false);
+    expect(coverStops('slab', true, 5)).toBe(true);
+    expect(coverStops('crate', true, 5)).toBe(true);
     expect(coverStops('wall', true, 0)).toBe(true);
   });
   it("a bullet stopped by a crate emits a 'blocked' impact (client shows the blocked spark)", () => {

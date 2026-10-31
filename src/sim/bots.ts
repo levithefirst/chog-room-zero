@@ -1,11 +1,15 @@
 // Bot decisions. Bots only know what they see in their own cone (walls block it) and what they hear
-// on the shared sound bus. They never read the player's position or input directly.
+// on the shared sound bus. They never read a hostile's position or input directly.
+// The same brain drives the hostile bots and the solo player's AI teammates (Actor.ai on team 'player', the default
+// game: you + 2). A bot's target is the hostile it actually perceives, never "the player" by identity.
 import { TUNING } from '../config/tuning';
 import type { BotSpawn } from '../config/map';
 import { angleDiff } from './geom';
-import { findPath, shotClear, sightClear } from './level';
+import { findPath, shotClear, sightClear, tileAt, walkable } from './level';
 import { canSee, muzzleFlashSeen } from './vision';
-import { hears, player, playerSightRange, rand, revealed, viewOf, type Actor, type ActorInput, type World } from './world';
+import { safeSpot, zoneAt, zoneGoal } from './zone';
+import { ammoCeiling, downLeft, hears, lootTake, wallFactorOf, player, rand, revealed, standing, viewOf, wants, type Actor, type ActorInput, type CommsEvent, type CommsKind, type Loot, type Pickup, type SoundType, type World } from './world';
+import { LAB } from '../config/lab';
 
 const DEG = Math.PI / 180;
 
@@ -44,9 +48,63 @@ export interface Brain {
   reaction: number;
   /** Last path request time (s of sim time) for repath throttling. */
   pathAt: number;
+  /** Heading into the danger zone (RC-8), which overrides its state until it is inside. */
+  zoneRun: boolean;
+  /** Sim time (s) before which it will not throw another grenade. */
+  nadeAt: number;
+  /** AI teammates: seconds until it picks a new spot near the player (loose follow, not a shadow). */
+  anchorLeft: number;
+  /** Flankers: strafe direction (+1 / -1) while trading shots, flipped now and then. */
+  strafe: number;
+  /** CF-D: seconds to stand at this patrol point (drawn on arrival), and seconds left of a listen stop. */
+  pause: number;
+  listen: number;
+  /** What it heard last (the type and who made it), for its call-outs (SB). */
+  heardType: SoundType | null;
+  heardFrom: number;
+  /** SB comms (AI teammates): the hostile it sees now (-1 none), when it last saw each one, a contact it has not
+   * called yet, the one it was tracking (for "lost him"), when it last made each kind of call, and the spot a
+   * teammate's call asked it to cover. */
+  seenId: number;
+  seenAt: Map<number, number>;
+  pendingContact: number;
+  track: { id: number; x: number; y: number; heading: number; at: number; called: boolean } | null;
+  rest: Partial<Record<CommsKind, number>>;
+  watch: { x: number; y: number; until: number } | null;
+  /** SB death insight: the signal that started its current hunt (how it found its target), or null. */
+  foundBy: PerceptionSource | null;
+  /** Owner 2026-10-17: the hostile squad's current job between fights (TUNING.bots.squad), or null. */
+  task: SquadTask | null;
+  /** GP AI teammates: the pickup or loot bag it is going for (re-judged every TUNING.bots.supply.thinkSeconds), the
+   * downed teammate it is reviving, and what it still has to say about either (one call each). */
+  supply: { kind: 'pickup' | 'loot'; id: number; x: number; y: number; what: string; at: number } | null;
+  supplyAt: number;
+  rescuing: number;
+  /** V2: the teammate it is guarding (standing between them and a known threat), or -1. */
+  guarding: number;
+  /** The downing it last announced a revive for ("id:tick"), so a revive it pauses and resumes is said once. */
+  reviveCalled: string;
+  say: { kind: 'reviving' | 'supply'; target: number; x: number; y: number; what?: string } | null;
 }
 
-export type PerceptionSource = 'seen' | 'flash' | 'heard' | 'shot' | 'sonar' | 'memory';
+export type SquadTaskKind = 'hunt' | 'resupply' | 'search' | 'hold' | 'regroup' | 'patrol';
+/** x, y: where it goes; rx, ry: for a hunt, the spot the squadmate saw (a flanker's x, y is its way round). */
+export interface SquadTask { kind: SquadTaskKind; x: number; y: number; rx: number; ry: number; until: number; point: number; pickup: number; arrived: number }
+
+/** What one hostile team knows together: when each tactical point was last checked, and squadmates' sightings. */
+interface Squad { checked: number[]; reports: { x: number; y: number; at: number; by: number }[] }
+const squads = new WeakMap<World, Map<string, Squad>>();
+function squadOf(w: World, team: string): Squad {
+  let m = squads.get(w);
+  if (!m) { m = new Map(); squads.set(w, m); }
+  let s = m.get(team);
+  if (!s) { s = { checked: w.squadPoints.map(() => -1e9), reports: [] }; m.set(team, s); }
+  return s;
+}
+
+/** callout (SB): a teammate's call-out, itself backed by that teammate's own signal. */
+/** radio (FS): a hostile squadmate saw you there; the squad knows that spot and when, never more. */
+export type PerceptionSource = 'seen' | 'flash' | 'heard' | 'shot' | 'sonar' | 'callout' | 'radio' | 'memory';
 
 /** One acquisition: a bot updated its belief about the player from a signal. Logged for the omniscience test. */
 export interface PerceptionEvent {
@@ -59,6 +117,9 @@ export interface PerceptionEvent {
   ox: number;
   oy: number;
   ofacing: number;
+  /** The observer's view at that moment (its gait reshapes the lamp every step, CF-E). */
+  orange: number;
+  ocone: number;
   px: number;
   py: number;
 }
@@ -69,11 +130,14 @@ export function createBrain(spawn: BotSpawn): Brain {
     patrol: spawn.patrol.map(([x, y]) => ({ x: x + 0.5, y: y + 0.5 })),
     patrolIndex: 0, flanker: spawn.flanker, timer: 0, seenFor: 0, engagedFor: 0, aimOffset: 0, aimTimer: 0,
     lastKnown: null, goal: null, path: [], stuckTimer: 0, stuckRepaths: 0, avoid: [], stuckFrom: { x: 0, y: 0 }, lookBase: 0, sawPlayer: false, heardAt: null,
-    source: null, suspicion: 0, reaction: TUNING.perception.reactionMax, pathAt: -1e9,
+    source: null, suspicion: 0, reaction: TUNING.perception.reactionMax, pathAt: -1e9, zoneRun: false,
+    nadeAt: 0, anchorLeft: 0, strafe: 1, pause: TUNING.bots.patrolPause, listen: 0,
+    heardType: null, heardFrom: -1, seenId: -1, seenAt: new Map(), pendingContact: -1, track: null, rest: {}, watch: null, foundBy: null,
+    task: null, supply: null, supplyAt: -1e9, rescuing: -1, guarding: -1, reviveCalled: '', say: null,
   };
 }
 
-const out: ActorInput = { moveX: 0, moveY: 0, quiet: false, aim: 0, firing: false, reload: false, ability: false };
+const out: ActorInput = { moveX: 0, moveY: 0, quiet: false, aim: 0, firing: false, reload: false, ability: false, grenade: false };
 
 function setGoal(w: World, a: Actor, br: Brain, gx: number, gy: number): void {
   if (br.goal && Math.floor(br.goal.x) === Math.floor(gx) && Math.floor(br.goal.y) === Math.floor(gy) && br.path.length) return;
@@ -90,18 +154,30 @@ function setGoal(w: World, a: Actor, br: Brain, gx: number, gy: number): void {
 }
 
 /** Record a belief update with its signal. */
-function learn(w: World, a: Actor, br: Brain, source: PerceptionEvent['source'], x: number, y: number, suspicion: number): void {
+function learn(w: World, a: Actor, br: Brain, source: PerceptionEvent['source'], x: number, y: number, suspicion: number, truth: Actor = player(w)): void {
+  // A hunt starts when it had nothing (or had forgotten): remember what started it (SB death insight).
+  if (!br.lastKnown || br.suspicion < 0.05) br.foundBy = source;
   br.lastKnown = { x, y };
   br.source = source;
   br.suspicion = Math.max(br.suspicion, suspicion);
-  if (w.perceptionLog) {
-    const p = player(w);
-    w.perceptionLog.push({ tick: w.tick, bot: a.id, source, x, y, ox: a.x, oy: a.y, ofacing: a.facing, px: p.x, py: p.y });
+  if (w.perceptionLog) w.perceptionLog.push({ tick: w.tick, bot: a.id, source, x, y, ox: a.x, oy: a.y, ofacing: a.facing, orange: a.view.range, ocone: a.view.coneRad, px: truth.x, py: truth.y });
+}
+
+/** The hostile this bot sees best right now: nearest standing one in its cone with a clear line; a downed one last. */
+function seenTarget(w: World, a: Actor): Actor | null {
+  let best: Actor | null = null, bd = Infinity;
+  for (const t of w.actors) {
+    if (!t.alive || t.team === a.team || !canSee(w.level, a.x, a.y, a.facing, viewOf(a), t.x, t.y)) continue;
+    const d = Math.hypot(t.x - a.x, t.y - a.y) + (t.downed ? 100 : 0);
+    if (d < bd) { bd = d; best = t; }
   }
+  return best;
 }
 
 /** Release or take an attack token. Returns whether this bot may shoot the player now. */
 function token(w: World, a: Actor, want: boolean): boolean {
+  // Tokens limit how many hostile bots fire at the player's side at once; the player's own AI teammates never wait.
+  if (a.team !== 'bot') return want;
   const i = w.attackTokens.indexOf(a.id);
   if (!want) {
     if (i >= 0) w.attackTokens.splice(i, 1);
@@ -184,45 +260,189 @@ function pickFlank(w: World, a: Actor, target: { x: number; y: number }): { x: n
   return best;
 }
 
+/**
+ * One bot's input this step: the state machine below (perception, states, department style), then two reflexes that
+ * apply in every state: step out of a live hostile grenade's ring, and throw one of its own when it has a reason.
+ */
 export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput {
+  if (a.downed) return downedThink(w, a, br, dt);
+  think(w, a, br, dt);
+  dodgeGrenades(w, a);
+  maybeThrow(w, a, br);
+  if (a.team !== 'bot') callOut(w, a, br);
+  return out;
+}
+
+const STEPS = new Set<SoundType>(['step', 'quietStep']);
+
+/**
+ * SB: an AI teammate says what it perceives, in one short call, when it matters (TUNING.comms). One voice at a time
+ * for the whole squad, and each teammate rests each kind of call. Every call is its own belief: a sighting it has
+ * (exact), a sound it heard (with its own error), a hostile it just lost (where, and which way it was going).
+ */
+function callOut(w: World, a: Actor, br: Brain): void {
+  if (!a.alive || a.downed) return;
+  const C = TUNING.comms, now = w.tick * TUNING.simStepSeconds, lead = player(w);
+  const seen = br.seenId >= 0 ? w.actors[br.seenId] : null;
+  if (seen) {
+    if (now - (br.seenAt.get(seen.id) ?? -1e9) > C.recontactSeconds) br.pendingContact = seen.id;
+    br.seenAt.set(seen.id, now);
+    br.track = { id: seen.id, x: seen.x, y: seen.y, heading: Math.atan2(seen.vy, seen.vx), at: now, called: br.track?.id === seen.id ? br.track.called : false };
+  } else if (br.pendingContact >= 0) br.pendingContact = -1;
+  if (now - w.commsAt < C.gap) return;
+  const can = (k: CommsKind) => now - (br.rest[k] ?? -1e9) >= (C.rest[k] ?? 5);
+  const say = (e: Omit<CommsEvent, 'from' | 'tick'>) => {
+    w.comms.push({ ...e, from: a.id, tick: w.tick });
+    w.commsAt = now;
+    br.rest[e.kind] = now;
+  };
+  // GP: what it is doing for the squad, said once (a revive matters more than a pickup).
+  if (br.say && can(br.say.kind)) { say({ kind: br.say.kind, target: br.say.target, x: br.say.x, y: br.say.y, r: 0, what: br.say.what }); br.say = null; return; }
+  if (seen && br.pendingContact === seen.id) {
+    // Behind us: well off where YOU face (the player's back is what nobody else is watching).
+    const off = Math.abs(angleDiff(lead.facing, Math.atan2(seen.y - lead.y, seen.x - lead.x)));
+    const kind: CommsKind = off > C.behindDeg * DEG ? 'behind' : 'contact';
+    if (can(kind)) { say({ kind, target: seen.id, x: seen.x, y: seen.y, r: 0 }); br.pendingContact = -1; br.track!.called = false; return; }
+  }
+  if (a.hp < a.maxHp * 0.35 && a.lastHitTick >= w.tick - 2 && can('hurt')) { say({ kind: 'hurt', target: -1, x: a.x, y: a.y, r: 0 }); return; }
+  const t = br.track;
+  if (!seen && t && !t.called && now - t.at >= C.lostAfter) {
+    const tgt = w.actors[t.id];
+    // Only worth saying if it is still a threat and the player is not looking at the spot (judged from the spot it
+    // reports, never from where the hostile really is).
+    if (!tgt?.alive || now - t.at > 3 || canSee(w.level, lead.x, lead.y, lead.facing, lead.view, t.x, t.y)) t.called = true;
+    else if (can('lost')) { say({ kind: 'lost', target: t.id, x: t.x, y: t.y, heading: t.heading, r: 0.5 }); t.called = true; return; }
+  }
+  if (!seen && br.heardAt && br.heardType && br.heardFrom >= 0 && w.actors[br.heardFrom]?.team !== a.team) {
+    const kind: CommsKind | null = STEPS.has(br.heardType) ? 'steps' : br.heardType === 'shot' ? 'shots' : null;
+    const src = w.actors[br.heardFrom];
+    const d = Math.hypot(br.heardAt.x - a.x, br.heardAt.y - a.y);
+    // Said only when the player is not standing beside the caller (then they heard it too), judged from the two of them.
+    const together = Math.hypot(lead.x - a.x, lead.y - a.y) < TUNING.comms.nearPlayer;
+    if (kind && can(kind) && src.alive && !together && !canSee(w.level, lead.x, lead.y, lead.facing, lead.view, br.heardAt.x, br.heardAt.y)) {
+      say({ kind, target: br.heardFrom, x: br.heardAt.x, y: br.heardAt.y, r: d * TUNING.perception.hearErrorShare });
+      return;
+    }
+  }
+  if (out.reload && a.reloadLeft === 0 && a.ammo < a.weapon.magazine && br.suspicion > 0.5 && can('reloading')) say({ kind: 'reloading', target: -1, x: a.x, y: a.y, r: 0 });
+}
+
+/** SB: a teammate heard a squad call: it covers that way, and a heard call becomes its own (weaker) belief. */
+function hearCalls(w: World, a: Actor, br: Brain): void {
+  const C = TUNING.comms, now = w.tick * TUNING.simStepSeconds;
+  for (const c of w.prevComms) {
+    if (c.from === a.id || w.actors[c.from]?.team !== a.team || c.target < 0) continue;
+    // Cover only what nobody is watching (a heard call, a lost contact). A seen contact is the caller's: everyone else
+    // keeps their own arc, so the squad never all stares at one hostile while another walks in behind.
+    const unwatched = c.kind === 'steps' || c.kind === 'shots' || c.kind === 'lost';
+    if (!br.sawPlayer && unwatched) br.watch = { x: c.x, y: c.y, until: now + C.watchSeconds };
+    if (!br.sawPlayer && br.suspicion < C.conf && w.actors[c.target]?.alive) learn(w, a, br, 'callout', c.x, c.y, C.conf, w.actors[c.target]);
+  }
+}
+
+/** A grenade it can see (or that landed within a step of it) whose ring it stands in: move straight out of it. */
+function dodgeGrenades(w: World, a: Actor): void {
+  const R = TUNING.grenade.radius + 0.6;
+  for (const g of w.grenades) {
+    if (!g.alive || (g.team === a.team && g.owner !== a.id)) continue;
+    const d = Math.hypot(a.x - g.x, a.y - g.y);
+    if (d > R || (d > 1.5 && !canSee(w.level, a.x, a.y, a.facing, viewOf(a), g.x, g.y))) continue;
+    const ux = d > 0.01 ? (a.x - g.x) / d : Math.cos(a.facing + Math.PI), uy = d > 0.01 ? (a.y - g.y) / d : Math.sin(a.facing + Math.PI);
+    out.moveX = ux;
+    out.moveY = uy;
+    out.quiet = false;
+    return;
+  }
+}
+
+/**
+ * Grenade use (TUNING.grenade bot*): at a believed position 4-9 u away, never inside its own blast, when the target
+ * hugs cover it cannot shoot through, two hostiles stand together, or it only heard them (flush them out).
+ */
+function maybeThrow(w: World, a: Actor, br: Brain): void {
+  const G = TUNING.grenade;
+  const now = w.tick * TUNING.simStepSeconds;
+  if (a.grenades <= 0 || a.nadeCd > 0 || now < br.nadeAt || a.downed || a.shieldLeft > 0 || a.auraLeft > 0) return;
+  const seen = br.sawPlayer ? seenTarget(w, a) : null;
+  const spot = seen ?? (br.lastKnown && br.suspicion > 0.55 && br.source !== 'memory' ? br.lastKnown : null);
+  if (!spot) return;
+  const d = Math.hypot(spot.x - a.x, spot.y - a.y);
+  if (d < Math.max(G.botMin, G.radius + 0.8) || d > G.botMax || !sightClear(w.level, a.x, a.y, spot.x, spot.y)) return;
+  const covered = !!seen && !shotClear(w.level, a.x, a.y, spot.x, spot.y, a.weapon.piercesCover, TUNING.combat.coverLean);
+  const pair = w.actors.filter((t) => t.alive && t.team !== a.team && Math.hypot(t.x - spot.x, t.y - spot.y) <= G.radius * 0.8
+    && canSee(w.level, a.x, a.y, a.facing, viewOf(a), t.x, t.y)).length >= 2;
+  // Hostiles flush out what they only heard; AI teammates never spend a grenade on a guess (CF: they threw 91% of
+  // their grenades, mostly at heard spots, before).
+  const unseen = !seen && a.team === 'bot' && (br.source === 'heard' || br.source === 'shot' || br.source === 'flash');
+  if (!covered && !pair && !unseen) return;
+  out.grenade = true;
+  out.throwDist = d;
+  out.aim = Math.atan2(spot.y - a.y, spot.x - a.x);
+  out.firing = false;
+  br.nadeAt = now + G.botCooldown;
+}
+
+function think(w: World, a: Actor, br: Brain, dt: number): void {
   const B = TUNING.bots;
-  const p = player(w);
+  const seen = seenTarget(w, a);
+  // Only read when br.sawPlayer is true (then it is the seen hostile); `a` is a harmless stand-in otherwise.
+  const p = seen ?? a;
   out.firing = false;
   out.reload = false;
   out.ability = false;
+  out.grenade = false;
+  out.throwDist = undefined;
   out.quiet = false;
   out.aim = a.facing;
   out.moveX = out.moveY = 0;
 
   // Perception (docs/design/bots.md). Every belief about the player comes from a signal, logged by learn().
   const P = TUNING.perception;
-  br.sawPlayer = p.alive && canSee(w.level, a.x, a.y, a.facing, viewOf(a), p.x, p.y);
+  br.sawPlayer = !!seen;
+  br.seenId = seen?.id ?? -1;
+  if (a.team !== 'bot') hearCalls(w, a, br);
   br.heardAt = null;
   br.suspicion = Math.max(0, br.suspicion - dt / P.memorySeconds);
   if (br.sawPlayer) {
-    if (br.seenFor === 0 && br.state !== 'engage') br.reaction = P.reactionMin + rand(w) * (P.reactionMax - P.reactionMin);
+    if (br.seenFor === 0 && br.state !== 'engage') {
+      br.reaction = P.reactionMin + rand(w) * (P.reactionMax - P.reactionMin);
+      // Caught on the move (a squad rotation, a walk to a pickup): it was looking where it walks, so it is a beat late.
+      // A bot holding an angle is not (rotating is the risk; holding the reward).
+      const t = br.task;
+      if (a.team === 'bot' && br.state === 'patrol' && t && t.kind !== 'hold' && !t.arrived) br.reaction += TUNING.bots.squad.walkingReaction;
+    }
     br.seenFor += dt;
-    learn(w, a, br, 'seen', p.x, p.y, 1);
+    learn(w, a, br, 'seen', p.x, p.y, 1, p);
+    // The hostile squad radio: a sighting goes to the squad (the spot it saw, when). Nothing it did not see.
+    if (a.team === 'bot' && w.squadAI) {
+      const sq = squadOf(w, a.team), now = w.tick * TUNING.simStepSeconds;
+      sq.reports = sq.reports.filter((r) => now - r.at <= TUNING.bots.squad.reportSeconds && r.by !== a.id);
+      sq.reports.push({ x: p.x, y: p.y, at: now, by: a.id });
+    }
   } else {
     br.seenFor = Math.max(0, br.seenFor - dt * 2);
     if (br.source === 'seen') br.source = 'memory';
   }
   let flashed = false;
   for (const s of w.prevSounds) {
-    if (s.team !== 'player') continue;
+    if (s.team === a.team) continue;
     // Muzzle flash: same rule as the player's (vision.ts muzzleFlashSeen), any range with wall line of sight.
     if (s.type === 'shot' && !br.sawPlayer && muzzleFlashSeen(w.level, a.x, a.y, s.x, s.y)) {
       learn(w, a, br, 'flash', s.x, s.y, 0.9);
       flashed = true;
       continue;
     }
-    if (!hears(w.level, a.x, a.y, s)) continue;
+    if (!hears(w.level, a.x, a.y, s, wallFactorOf(a))) continue;
     // Heard positions are uncertain: further away means a wider guess.
     const d = Math.hypot(s.x - a.x, s.y - a.y);
     const err = d * P.hearErrorShare;
     br.heardAt = { x: s.x + (rand(w) * 2 - 1) * err, y: s.y + (rand(w) * 2 - 1) * err };
+    br.heardType = s.type;
+    br.heardFrom = s.sourceId;
   }
-  if (br.heardAt && !br.sawPlayer && !flashed) learn(w, a, br, 'heard', br.heardAt.x, br.heardAt.y, 0.6);
+  // A flash (exact) beats a heard guess the same step: the weaker one is dropped, never acted on or called out.
+  if (flashed) br.heardAt = null;
+  if (br.heardAt && !br.sawPlayer) learn(w, a, br, 'heard', br.heardAt.x, br.heardAt.y, 0.6);
   if (br.suspicion === 0 && !br.sawPlayer && br.lastKnown && (br.state === 'patrol')) {
     br.lastKnown = null;
     br.source = null;
@@ -261,14 +481,17 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
     }
   }
   if (br.heardAt && (br.state === 'patrol' || br.state === 'investigate' || br.state === 'search')) {
+    // CF-D: a fresh noise stops it to listen (turned toward it) before it creeps over; a repeat keeps it moving.
+    if (LAB.enemySound && br.state !== 'investigate') br.listen = B.listenSeconds;
     br.state = 'investigate';
     br.lastKnown = br.heardAt;
     br.goal = null;
     br.timer = 0;
   }
 
-  // Hurt and not under fire right now: go for the nearest health pickup if one is up.
-  if (hurt && !br.sawPlayer && br.state !== 'heal' && br.state !== 'alert') {
+  // Hurt, not under fire and not hit for healCalmSeconds: go for the nearest health pickup if one is up. (Owner
+  // 2026-10-17: health must not make damage meaningless. A bot no longer breaks off mid-fight to reset at a pickup.)
+  if (hurt && !br.sawPlayer && br.state !== 'heal' && br.state !== 'alert' && w.tick - a.lastHitTick > B.healCalmSeconds / TUNING.simStepSeconds) {
     const hp = nearestHealth(w, a);
     if (hp) {
       br.state = 'heal';
@@ -277,22 +500,65 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
   }
   // Abilities, used for a readable reason.
   if (a.abilityCd === 0) {
-    const k = a.hero.ability.kind;
+    const k = a.ability.kind;
     if (k === 'mend' && a.hp < a.maxHp * 0.6) out.ability = true;
     if (k === 'dash' && br.state === 'cover' && br.path.length > 2) out.ability = true;
     if (k === 'sonar' && (br.state === 'investigate' || br.state === 'search') && br.timer > 0.5) out.ability = true;
     if (k === 'barrier' && br.state === 'engage' && (justHit || a.hp < a.maxHp * 0.7)) out.ability = true;
+    // Snare when the hostile it sees is inside its reach; Shell when hit and hurt (it cannot shoot inside it); Rush
+    // when it is trading shots within its weapon's range.
+    const dSeen = br.sawPlayer ? Math.hypot(p.x - a.x, p.y - a.y) : Infinity;
+    if (k === 'scream' && dSeen <= (a.ability.radius ?? 0)) out.ability = true;
+    if (k === 'shield' && justHit && a.hp < a.maxHp * 0.55) out.ability = true;
+    if (k === 'frenzy' && br.state === 'engage' && dSeen <= a.weapon.falloffEnd) out.ability = true;
   }
   // Its own sonar shows the player like it shows bots to the player: a fair, telegraphed reveal.
-  if (a.revealLeft > 0 && revealed(w, a).length) {
-    learn(w, a, br, 'sonar', p.x, p.y, 1);
+  const pinged = a.revealLeft > 0 ? revealed(w, a) : [];
+  if (pinged.length) {
+    learn(w, a, br, 'sonar', pinged[0].x, pinged[0].y, 1, pinged[0]);
     if (br.state === 'investigate' || br.state === 'search' || br.state === 'patrol') {
       br.state = 'pursue';
       br.goal = null;
     }
   }
 
+  // AI teammates: revive a downed teammate when it is sensible (allyRescue), then go for what the squad needs.
+  if (a.team !== 'bot') {
+    if (allyRescue(w, a, br, seen, dt)) return;
+    br.rescuing = -1;
+    if (!seen && allyGuard(w, a, br, dt)) return;
+    br.guarding = -1;
+  }
+
+  // Danger zone (RC-8): outside, or near the edge of, the circle that is closing, getting in comes first. On the way
+  // it still shoots what it sees, under the same token, range and cover rules as when it holds an angle.
+  const zv = w.zone ? zoneAt(w.zone, w.tick * TUNING.simStepSeconds) : null;
+  const zg = zv ? zoneGoal(zv) : null;
+  if (zg && Math.hypot(a.x - zg.x, a.y - zg.y) > zg.r - TUNING.zone.moveInMargin) {
+    if (!br.zoneRun) { br.zoneRun = true; br.goal = null; }
+    const spot = safeSpot(w.level, zg, a.x, a.y, TUNING.zone.moveInMargin + 1.5);
+    setGoal(w, a, br, spot.x, spot.y);
+    follow(w, a, br, dt);
+    const toP = Math.atan2(p.y - a.y, p.x - a.x);
+    const range = Math.min(a.weapon.falloffEnd + 2, p.baseView.range - 0.25);
+    if (br.sawPlayer && br.seenFor >= br.reaction && token(w, a, true)) {
+      out.aim = toP;
+      out.firing = Math.abs(angleDiff(a.facing, toP)) < B.fireToleranceDeg * DEG && Math.hypot(p.x - a.x, p.y - a.y) <= range
+        && shotClear(w.level, a.x, a.y, p.x, p.y, a.weapon.piercesCover, TUNING.combat.coverLean);
+    } else token(w, a, false);
+    return;
+  }
+  if (br.zoneRun) { br.zoneRun = false; br.goal = null; br.path.length = 0; }
+
+  // AI teammates hunt what they hear, but on a leash: more than 12 u from the player with nothing in sight, regroup.
+  if (a.team !== 'bot' && !br.sawPlayer && (br.state === 'investigate' || br.state === 'search' || br.state === 'pursue')
+    && Math.hypot(player(w).x - a.x, player(w).y - a.y) > 12) {
+    br.state = 'patrol';
+    br.goal = null;
+  }
   if (br.state !== 'engage' || !a.alive) token(w, a, false);
+  if (a.team !== 'bot' && (br.state === 'patrol' || br.state === 'heal') && allySupply(w, a, br, seen, dt)) return;
+  if (a.team !== 'bot' && br.state === 'heal') { br.state = 'patrol'; br.goal = null; }
   switch (br.state) {
     case 'heal': {
       const hp = nearestHealth(w, a);
@@ -307,23 +573,70 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
     }
     case 'patrol': {
       out.quiet = B.patrolQuiet;
+      if (a.team !== 'bot') {
+        // Nothing to chase: move with the squad, not on top of the player. Every few seconds pick a fresh spot 2.5-6 u
+        // from the player, mostly ahead of where it faces, that the player can see (no wandering off behind walls);
+        // walk there, then watch the flanks. Too far behind (over 9 u) and it regroups at once.
+        const lead = player(w);
+        br.anchorLeft -= dt;
+        const far = Math.hypot(lead.x - a.x, lead.y - a.y) > 9;
+        if (br.anchorLeft <= 0 || far || !br.goal) {
+          br.anchorLeft = 2.5 + rand(w) * 2.5;
+          // Roles (CF): the first teammate covers the arc behind you, the second a side, so between you three the room
+          // is watched all round instead of everyone looking where you look.
+          const mates = w.actors.filter((m) => m.ai && m.team === a.team);
+          const role = mates.indexOf(a) % 2 === 0 ? Math.PI : (a.id % 2 ? 1 : -1) * Math.PI / 2;
+          for (let i = 0; i < 8; i++) {
+            const ang = lead.facing + role + (rand(w) - 0.5) * Math.PI * 0.8, r = 2.5 + rand(w) * 3;
+            const gx = Math.floor(lead.x + Math.cos(ang) * r) + 0.5, gy = Math.floor(lead.y + Math.sin(ang) * r) + 0.5;
+            if (!walkable(tileAt(w.level, gx, gy)) || !sightClear(w.level, lead.x, lead.y, gx, gy)) continue;
+            br.goal = null;
+            setGoal(w, a, br, gx, gy);
+            break;
+          }
+        }
+        const covering = br.watch && w.tick * TUNING.simStepSeconds < br.watch.until ? br.watch : null;
+        if (follow(w, a, br, dt)) {
+          br.timer += dt;
+          const mates = w.actors.filter((m) => m.ai && m.team === a.team);
+          const role = mates.indexOf(a) % 2 === 0 ? Math.PI : (a.id % 2 ? 1 : -1) * Math.PI / 2;
+          out.aim = lead.facing + role + Math.sin(br.timer * 1.3) * 0.6;
+        } else br.lookBase = out.aim;
+        // SB: a teammate called something: point the lamp at it, a slow sweep across the spot (cover, do not chase).
+        if (covering) out.aim = Math.atan2(covering.y - a.y, covering.x - a.x) + Math.sin(br.timer * 1.7) * 0.25;
+        out.quiet = !far;
+        break;
+      }
+      if (a.team === 'bot' && w.squadAI) { squadPatrol(w, a, br, dt); break; }
       const target = br.patrol[br.patrolIndex];
       setGoal(w, a, br, target.x, target.y);
       if (follow(w, a, br, dt)) {
         br.timer += dt;
         out.aim = br.lookBase + Math.sin(br.timer * 1.5) * 0.6;
-        if (br.timer > 1.2) {
+        if (br.timer > (LAB.enemySound ? br.pause : 1.2)) {
           br.timer = 0;
           br.patrolIndex = (br.patrolIndex + 1) % br.patrol.length;
           br.goal = null;
+          br.pause = B.patrolPause + rand(w) * B.patrolPauseJitter;
         }
-      } else br.lookBase = out.aim;
+      } else {
+        br.lookBase = out.aim;
+        // CF-D: walking its rounds, not creeping: its steps carry ~6 u, so a patrol is heard before it is seen.
+        if (LAB.enemySound) { out.quiet = false; out.moveX *= B.patrolSpeed; out.moveY *= B.patrolSpeed; }
+      }
       break;
     }
     case 'investigate':
     case 'search': {
       const t = br.lastKnown!;
+      if (br.listen > 0) {
+        // Listening: stand still, turned toward the noise. Silent, and the steady lamp reaches further.
+        br.listen -= dt;
+        out.aim = Math.atan2(t.y - a.y, t.x - a.x);
+        break;
+      }
       setGoal(w, a, br, t.x, t.y);
+      const close = Math.hypot(t.x - a.x, t.y - a.y) < B.creepWithin;
       if (follow(w, a, br, dt)) {
         if (br.timer === 0) br.lookBase = a.facing;
         br.timer += dt;
@@ -335,6 +648,11 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
           br.goal = null;
           br.lastKnown = null;
         }
+      } else if (LAB.enemySound) {
+        // Going to check a noise: it walks over (heard ~6 u) and creeps the last few metres, so what it heard can hear
+        // it coming, but not right on top of it.
+        out.quiet = close;
+        if (!close) { out.moveX *= B.patrolSpeed; out.moveY *= B.patrolSpeed; }
       }
       break;
     }
@@ -371,7 +689,7 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
       out.aim = toP + br.aimOffset * err;
       // Hold the angle: stand still and shoot, only when the shot is not blocked by cover.
       // Fire gate (fairness rule): never beyond the player's own sight distance, whatever this bot can see.
-      const range = Math.min(a.weapon.falloffEnd + 2, playerSightRange(w) - 0.25);
+      const range = Math.min(a.weapon.falloffEnd + 2, p.baseView.range - 0.25);
       // Attack tokens: at most N bots shoot at once; the rest flank (flankers) or hold the angle.
       if (!token(w, a, true)) {
         if (br.flanker) {
@@ -386,11 +704,12 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
         && Math.hypot(p.x - a.x, p.y - a.y) <= range
         && shotClear(w.level, a.x, a.y, p.x, p.y, a.weapon.piercesCover, TUNING.combat.coverLean);
       // Out of range: close in along the path instead of wasting shots.
-      if (Math.hypot(p.x - a.x, p.y - a.y) > range) {
+      const dist = Math.hypot(p.x - a.x, p.y - a.y);
+      if (dist > range) {
         setGoal(w, a, br, p.x, p.y);
         follow(w, a, br, dt);
         out.aim = toP;
-      }
+      } else fightStyle(w, a, br, p, dist, toP, dt);
       if (!out.firing && a.ammo < a.weapon.magazine / 2) out.reload = true;
       break;
     }
@@ -434,7 +753,171 @@ export function botThink(w: World, a: Actor, br: Brain, dt: number): ActorInput 
       break;
     }
   }
-  return out;
+}
+
+/**
+ * The hostile squad between fights (owner 2026-10-17: "enemy teams must be active"): information -> decision ->
+ * movement -> reassessment. Every job comes from what the squad legitimately knows (its own sightings, which points
+ * it has checked, the map and its pickups, its own health), never from where you are. It walks (its steps are heard
+ * ~6 u).
+ */
+function squadPatrol(w: World, a: Actor, br: Brain, dt: number): void {
+  const B = TUNING.bots, S = B.squad, now = w.tick * TUNING.simStepSeconds;
+  const sq = squadOf(w, a.team);
+  // Mark the points this bot is standing at as checked by the squad.
+  w.squadPoints.forEach((pt, i) => { if (Math.hypot(pt.x - a.x, pt.y - a.y) <= S.visitRadius && sightClear(w.level, a.x, a.y, pt.x, pt.y)) sq.checked[i] = now; });
+  const t = br.task;
+  const done = !t || now >= t.until
+    || (t.kind === 'resupply' && (!w.pickups[t.pickup]?.active || !wants(a, w.pickups[t.pickup].kind)))
+    || (t.kind !== 'hunt' && freshReport(w, a, sq, now) !== null);
+  if (done) { br.task = squadTask(w, a, br, sq, now); br.goal = null; }
+  const task = br.task!;
+  if (task.kind === 'patrol') {
+    const target = br.patrol[br.patrolIndex];
+    task.x = target.x; task.y = target.y;
+  }
+  setGoal(w, a, br, task.x, task.y);
+  if (follow(w, a, br, dt)) {
+    if (!task.arrived) { task.arrived = now; br.lookBase = a.facing; br.timer = 0; }
+    br.timer += dt;
+    if (task.kind === 'hunt') {
+      // At the spot a squadmate saw: it is gone or close by. It looks round from here as a squad search (it stands
+      // and sweeps, then walks on audibly), not the creeping search of a bot that heard something itself: a hunter
+      // that crept in made more contacts with nothing heard first (tests/sb-lab warned share 0.62 without hunts).
+      task.kind = 'search';
+      task.until = now + B.investigateLookSeconds + 1;
+      task.arrived = now;
+      br.lookBase = a.facing;
+      br.timer = 0;
+      return;
+    }
+    if (task.kind === 'hold') {
+      // Watch the way in: toward the middle of the map, sweeping.
+      const mid = Math.atan2(w.level.h / 2 - a.y, w.level.w / 2 - a.x);
+      out.aim = mid + Math.sin(br.timer * 1.1) * 0.9;
+      if (now - task.arrived > S.holdSeconds) task.until = now;
+    } else if (task.kind === 'search') {
+      out.aim = br.lookBase + Math.sin(br.timer * 2.2) * 1.4;
+      if (now - task.arrived > B.investigateLookSeconds) task.until = now;
+    } else if (task.kind === 'patrol') {
+      out.aim = br.lookBase + Math.sin(br.timer * 1.5) * 0.6;
+      if (br.timer > br.pause) {
+        br.timer = 0;
+        br.patrolIndex = (br.patrolIndex + 1) % br.patrol.length;
+        br.goal = null;
+        br.pause = B.patrolPause + rand(w) * B.patrolPauseJitter;
+        task.arrived = 0;
+      }
+    } else task.until = now;
+  } else {
+    br.lookBase = out.aim;
+    // It never creeps a job: walking, its steps are heard ~6 u off; on a long rotation (a hunt, or a spot more than
+    // jogDistance away) it jogs, faster and louder (~8 u). The squad coming is information you can earn. (Creeping the
+    // last metres of a hunt cut contacts announced before sight from 0.6+ to 0.50, tests/sb-lab.)
+    out.quiet = false;
+    const far = task.kind === 'hunt' || Math.hypot(task.x - a.x, task.y - a.y) > S.jogDistance;
+    if (LAB.enemySound && !far) { out.moveX *= B.patrolSpeed; out.moveY *= B.patrolSpeed; }
+  }
+}
+
+/** The freshest squadmate sighting this bot should answer (it is among the nearest responders), or null. */
+function freshReport(w: World, a: Actor, sq: Squad, now: number): { x: number; y: number } | null {
+  const S = TUNING.bots.squad;
+  // A call takes a moment to land (radioDelay), and only a few squadmates leave their jobs for calls at once.
+  const r = sq.reports.filter((x) => x.by !== a.id && now - x.at >= S.radioDelay && now - x.at <= S.reportSeconds).sort((p, q) => q.at - p.at)[0];
+  if (!r) return null;
+  const hunting = w.actors.filter((b) => b.alive && b.team === a.team && b.id !== a.id && w.brains.get(b.id)?.task?.kind === 'hunt').length;
+  if (hunting >= S.maxHunters) return null;
+  // Only the nearest free squadmates answer; the rest keep their jobs (no one-call stampede).
+  const free = w.actors.filter((b) => b.alive && !b.downed && b.team === a.team && b.id !== r.by && w.brains.get(b.id)?.state === 'patrol');
+  const rank = free.sort((p, q) => Math.hypot(p.x - r.x, p.y - r.y) - Math.hypot(q.x - r.x, q.y - r.y)).indexOf(a);
+  return rank >= 0 && rank < S.huntResponders ? r : null;
+}
+
+function squadTask(w: World, a: Actor, br: Brain, sq: Squad, now: number): SquadTask {
+  const B = TUNING.bots, S = B.squad;
+  const task = (kind: SquadTaskKind, x: number, y: number, point = -1, pickup = -1, hold: number = S.decideSeconds): SquadTask =>
+    ({ kind, x, y, rx: x, ry: y, until: now + hold, point, pickup, arrived: 0 });
+  // 1. A squadmate saw something: go there (flankers come round the side).
+  const r = freshReport(w, a, sq, now);
+  if (r) {
+    const g = br.flanker ? pickFlank(w, a, r) : r;
+    // What it now knows: the spot the squadmate saw (logged, so the omniscience test can trace it), nothing more.
+    learn(w, a, br, 'radio', r.x, r.y, 0);
+    return { ...task('hunt', g.x, g.y, -1, -1, S.reportSeconds + 6), rx: r.x, ry: r.y };
+  }
+  // 2. It needs something and one is up nearby: go and take it.
+  let best = -1, bd: number = S.resupplyRange;
+  w.pickups.forEach((k, i) => {
+    if (!k.active) return;
+    const need = k.kind === 'health' ? a.hp < a.maxHp * S.needHpShare
+      // Armour: below a share of what it starts with (its hero's armour), not of the cap every actor shares (50):
+      // a 15-armour hero is not "missing" 35 at spawn, so the squad does not tour the armour before it fights.
+      : k.kind === 'armor' ? a.armor < (a.hero.maxArmor + a.power.armor) * S.needArmorShare
+      : k.kind === 'ammo' ? a.reserve < a.weapon.magazine
+      // Grenades only when out (a squad that tops up every throw turns the map into a grenade rain).
+      : k.kind === 'grenade' ? a.grenades === 0 && wants(a, k.kind) : wants(a, k.kind);
+    const d = Math.hypot(k.x - a.x, k.y - a.y);
+    if (need && d < bd) { bd = d; best = i; }
+  });
+  if (best >= 0) return task('resupply', w.pickups[best].x, w.pickups[best].y, -1, best);
+  // 3. Otherwise a job by weight: search the stalest point, hold one, regroup, or walk its beat.
+  const mates = w.actors.filter((b) => b.alive && b.team === a.team && b.id !== a.id);
+  const nearest = mates.reduce((m, b) => Math.min(m, Math.hypot(b.x - a.x, b.y - a.y)), Infinity);
+  const W8 = S.weights;
+  const opts: [SquadTaskKind, number][] = [['search', W8.search], ['hold', W8.hold], ['patrol', W8.patrol], ['regroup', nearest > S.regroupDistance ? W8.regroup * 3 : 0]];
+  const total = opts.reduce((s, [, v]) => s + v, 0);
+  let roll = rand(w) * total, kind: SquadTaskKind = 'patrol';
+  for (const [k, v] of opts) { if ((roll -= v) < 0) { kind = k; break; } }
+  const pts = w.squadPoints;
+  if (!pts.length || kind === 'patrol') return task('patrol', br.patrol[br.patrolIndex].x, br.patrol[br.patrolIndex].y);
+  if (kind === 'regroup') {
+    const m = mates.sort((p, q) => Math.hypot(p.x - a.x, p.y - a.y) - Math.hypot(q.x - a.x, q.y - a.y))[0];
+    return m ? task('regroup', m.x, m.y) : task('patrol', br.patrol[br.patrolIndex].x, br.patrol[br.patrolIndex].y);
+  }
+  // Claimed by a squadmate already: skip it (two bots do not search the same room).
+  const claimed = new Set(mates.map((b) => w.brains.get(b.id)?.task?.point ?? -1));
+  let pick = -1, score = -Infinity;
+  pts.forEach((pt, i) => {
+    if (claimed.has(i) || Math.hypot(pt.x - a.x, pt.y - a.y) < S.visitRadius) return;
+    const stale = Math.min(60, now - sq.checked[i]);
+    const d = Math.hypot(pt.x - a.x, pt.y - a.y);
+    // Search: the longest unchecked, not too far; hold: a near point, a little randomness so it is not a clockwork.
+    // Early on it pushes toward the other side's spawn (map knowledge every player has, not where you are).
+    const push = S.pushBonus * Math.max(0, 1 - now / S.pushSeconds) * Math.max(0, 1 - Math.hypot(pt.x - w.level.playerSpawn.x, pt.y - w.level.playerSpawn.y) / w.level.w);
+    const s = kind === 'search' ? stale - d * 0.5 + push + rand(w) * 6 : -d + rand(w) * 8;
+    if (s > score) { score = s; pick = i; }
+  });
+  if (pick < 0) return task('patrol', br.patrol[br.patrolIndex].x, br.patrol[br.patrolIndex].y);
+  return task(kind, pts[pick].x, pts[pick].y, pick);
+}
+
+/**
+ * How a department fights once it is trading shots (owner 2026-10-14). Moving costs accuracy (spread grows with
+ * speed), so each style pays for what it gains: assault and bruiser (while healthy) close in, the sniper backs off
+ * from anyone inside 6 u, the flanker side-steps across the line at creeping speed, the tank holds its ground.
+ */
+function fightStyle(w: World, a: Actor, br: Brain, p: Actor, dist: number, toP: number, dt: number): void {
+  const style = a.hero.dept;
+  if ((style === 'bruiser' && dist > 3.2 && a.hp > a.maxHp * 0.6) || (style === 'assault' && dist > 6)) {
+    setGoal(w, a, br, p.x, p.y);
+    follow(w, a, br, dt);
+    out.aim = toP;
+  } else if (style === 'sniper' && dist < 6) {
+    out.moveX = -Math.cos(toP);
+    out.moveY = -Math.sin(toP);
+  } else if (style === 'flanker') {
+    // Strafe across the line of fire; pick a new side about every 1.2 s.
+    br.timer += dt;
+    if (br.timer > 1.2) { br.timer = 0; br.strafe = rand(w) < 0.5 ? -1 : 1; }
+    // Only side-step to where it still sees the target (fairness: whoever hits you stays visible), else the other way.
+    const open = (dir: number) => sightClear(w.level, a.x - Math.sin(toP) * dir * 0.8, a.y + Math.cos(toP) * dir * 0.8, p.x, p.y);
+    if (!open(br.strafe)) br.strafe = -br.strafe;
+    if (!open(br.strafe)) return;
+    out.moveX = -Math.sin(toP) * br.strafe;
+    out.moveY = Math.cos(toP) * br.strafe;
+    out.quiet = true; // a creeping side-step, not a sprint: it stays hittable
+  }
 }
 
 function nearestHealth(w: World, a: Actor): { x: number; y: number } | null {
@@ -449,4 +932,200 @@ function nearestHealth(w: World, a: Actor): { x: number; y: number } | null {
     }
   }
   return best;
+}
+
+/**
+ * GP AI teammate revive (owner 2026-10-17: "AI teammates must revive", weighing distance, danger, who else is closer and
+ * whether it is sensible). Uses what any squadmate knows: where its own downed teammates are, what it sees itself,
+ * when it was last hit. Goes only when nothing it sees is close (TUNING.revive.dangerSeen), it is not under fire, it
+ * is the nearest standing teammate who is free (a person already beside them does it), and it can get there inside the
+ * window. Beside them it holds fire (the revive rule) and watches the last threat it knows of.
+ */
+function allyRescue(w: World, a: Actor, br: Brain, seen: Actor | null, dt: number): boolean {
+  const R = TUNING.revive;
+  if (seen && Math.hypot(seen.x - a.x, seen.y - a.y) < R.dangerSeen) return false;
+  if (w.tick - a.lastHitTick < R.calmSeconds / TUNING.simStepSeconds) return false;
+  const speed = TUNING.movement.maxSpeed * a.hero.speed;
+  let pick: Actor | null = null, pd = Infinity;
+  for (const t of w.actors) {
+    if (t === a || t.team !== a.team || !t.alive || !t.downed) continue;
+    const d = Math.hypot(t.x - a.x, t.y - a.y);
+    if (d > R.reachRange || d >= pd) continue;
+    // Too far to make it in time (paths bend: 1.35x the straight line).
+    if ((d * 1.35) / speed + R.marginSeconds > downLeft(t) && t.reviveProgress === 0) continue;
+    // Someone nearer is already on it or free to do it: a person within range, or a nearer calm AI teammate.
+    const other = w.actors.some((m) => m !== a && m !== t && m.team === a.team && standing(m)
+      && (isPerson(m) ? Math.hypot(m.x - t.x, m.y - t.y) <= R.range
+        : w.brains.get(m.id)?.rescuing === t.id && (Math.hypot(m.x - t.x, m.y - t.y) <= R.range || Math.hypot(m.x - t.x, m.y - t.y) < d - 0.5)));
+    if (other) continue;
+    pick = t; pd = d;
+  }
+  if (!pick) return false;
+  if (br.rescuing !== pick.id) {
+    br.rescuing = pick.id;
+    // Said once per downing, and only when you are the one down (you cannot see who is coming; a teammate's revive near
+    // you shows on the downed card).
+    const key = `${pick.id}:${pick.downInfo?.tick ?? 0}`, lead = player(w);
+    if (br.reviveCalled !== key && pick === lead) {
+      br.reviveCalled = key;
+      br.say = { kind: 'reviving', target: pick.id, x: pick.x, y: pick.y };
+    }
+  }
+  token(w, a, false);
+  if (pd > R.range * 0.6) { setGoal(w, a, br, pick.x, pick.y); follow(w, a, br, dt); }
+  else { out.moveX = out.moveY = 0; }
+  // Watch where the danger was (its own belief), else the way the downed teammate was facing.
+  const th = br.lastKnown && br.suspicion > 0.2 ? br.lastKnown : null;
+  out.aim = th ? Math.atan2(th.y - a.y, th.x - a.x) : pd > R.range * 0.6 ? out.aim : pick.facing;
+  out.firing = false;
+  out.quiet = false;
+  return true;
+}
+
+const isPerson = (m: Actor) => !m.ai;
+
+/**
+ * V2 AI teammate guard (owner V2 §10: "protect weak teammates", "avoid duplicate tasks"). You are hurt and standing,
+ * and it believes a threat is near you (its OWN belief: heard, seen or told, never the threat's true position): the
+ * nearest free teammate stands between you and that spot and watches it, so you can get to a pickup or a bag. One
+ * guard at a time; it says so once.
+ */
+function allyGuard(w: World, a: Actor, br: Brain, dt: number): boolean {
+  const G = TUNING.bots.guard;
+  const lead = player(w);
+  if (!standing(lead) || lead.team !== a.team || lead.hp >= lead.maxHp * G.hpBelow) return false;
+  const th = br.lastKnown && br.suspicion > G.suspicion ? br.lastKnown : null;
+  if (!th || Math.hypot(th.x - lead.x, th.y - lead.y) > G.threatRange) return false;
+  // One guard: a teammate already on it, or a nearer free one, takes it.
+  const d = Math.hypot(lead.x - a.x, lead.y - a.y);
+  const other = w.actors.some((m) => {
+    const mb = w.brains.get(m.id);
+    if (m === a || m === lead || !m.ai || m.team !== a.team || !standing(m) || !mb) return false;
+    if (mb.guarding === lead.id) return true;
+    const free = mb.rescuing < 0 && !!mb.lastKnown && mb.suspicion > G.suspicion;
+    return free && Math.hypot(lead.x - m.x, lead.y - m.y) < d - 0.5;
+  });
+  if (other) return false;
+  // Shown on your HUD (status line), not called on the radio: a spoken line pushed the squad over its calls-a-minute
+  // bar (tests/sb-comms), and the guard stepping in beside you is the cue.
+  br.guarding = lead.id;
+  const ang = Math.atan2(th.y - lead.y, th.x - lead.x);
+  let gx = lead.x + Math.cos(ang) * G.distance, gy = lead.y + Math.sin(ang) * G.distance;
+  for (const off of [0, 0.5, -0.5, 1, -1]) {
+    const x = lead.x + Math.cos(ang + off) * G.distance, y = lead.y + Math.sin(ang + off) * G.distance;
+    if (walkable(tileAt(w.level, x, y)) && sightClear(w.level, lead.x, lead.y, x, y)) { gx = x; gy = y; break; }
+  }
+  token(w, a, false);
+  if (Math.hypot(gx - a.x, gy - a.y) > 0.6) { setGoal(w, a, br, gx, gy); follow(w, a, br, dt); }
+  else { out.moveX = out.moveY = 0; }
+  out.aim = Math.atan2(th.y - a.y, th.x - a.x);
+  out.firing = false;
+  out.quiet = false;
+  return true;
+}
+
+/**
+ * GP: a downed AI teammate. Someone is coming (an AI teammate on its way, or a person beside it): it keeps still so the
+ * revive is not dragged along. Nobody is: it crawls toward the nearest standing teammate it knows of. It cannot fight.
+ */
+function downedThink(w: World, a: Actor, br: Brain, dt: number): ActorInput {
+  out.firing = out.reload = out.ability = out.grenade = out.quiet = false;
+  out.throwDist = undefined;
+  out.moveX = out.moveY = 0;
+  out.aim = a.facing;
+  const R = TUNING.revive;
+  const coming = w.actors.some((m) => m !== a && m.team === a.team && standing(m)
+    && (w.brains.get(m.id)?.rescuing === a.id || (isPerson(m) && Math.hypot(m.x - a.x, m.y - a.y) <= R.range * 1.5)));
+  if (coming) return out;
+  let near: Actor | null = null, nd = 14;
+  for (const m of w.actors) {
+    if (m === a || m.team !== a.team || !standing(m)) continue;
+    const d = Math.hypot(m.x - a.x, m.y - a.y);
+    if (d < nd) { nd = d; near = m; }
+  }
+  if (near && nd > R.range * 0.8) { setGoal(w, a, br, near.x, near.y); follow(w, a, br, dt); }
+  return out;
+}
+
+/** How much `a` needs a kind of resource right now, 0..~1.6 (0: it would not take it). */
+export function needOf(a: Actor, kind: 'health' | 'armor' | 'ammo' | 'grenade'): number {
+  const S = TUNING.bots.supply;
+  if (kind === 'health') { const sh = a.hp / a.maxHp; return sh < S.healthBelow ? (1 - sh) * S.healthWeight : 0; }
+  // Armour against what this hero starts with (at least 25), not the cap every actor shares (50): a 15-armour hero is
+  // not "missing" 35 at spawn (the hostile squad had the same bug, FS).
+  if (kind === 'armor') { const sh = a.armor / Math.max(25, a.hero.maxArmor + a.power.armor); return sh < S.armorBelow ? Math.min(1, 1 - sh) * S.armorWeight : 0; }
+  if (kind === 'ammo') { const full = a.weapon.magazine * 2; return a.reserve < full && a.reserve < ammoCeiling(a) ? (1 - a.reserve / full) * S.ammoWeight : 0; }
+  return a.grenades < a.maxGrenades ? (1 - a.grenades / a.maxGrenades) * S.grenadeWeight : 0;
+}
+
+/**
+ * GP AI teammate resources (owner 2026-10-17: "utility-based decisions, not blindly vacuum every pickup"). Calm (no
+ * hostile in sight, not hit for TUNING.bots.supply.calmSeconds) it weighs every pickup that is up and every loot bag its
+ * team knows about: what it needs most, minus the walk, skipping anything near the last threat it knows of, anything a
+ * teammate (you first) needs more and is about as close to, and anything that would take it far from you. Then it
+ * walks there and the touch rule takes it. Never reads anything it could not know: pickups are part of the map
+ * everyone sees; a bag only once its team has seen it (Loot.known).
+ */
+function allySupply(w: World, a: Actor, br: Brain, seen: Actor | null, dt: number): boolean {
+  const S = TUNING.bots.supply, now = w.tick * TUNING.simStepSeconds;
+  if (seen || w.tick - a.lastHitTick < S.calmSeconds / TUNING.simStepSeconds) { br.supply = null; return false; }
+  // A squadmate asked it to cover a spot: that comes first (it is watching for you, not shopping).
+  if (br.watch && now < br.watch.until) return false;
+  const lead = player(w);
+  if (!br.supply || now - br.supplyAt >= S.thinkSeconds) {
+    br.supplyAt = now;
+    const prev = br.supply;
+    let chosen: Brain['supply'] = null;
+    let best: number = S.minScore;
+    const consider = (kind: 'pickup' | 'loot', id: number, x: number, y: number, value: number, what: string, shared: Partial<Record<'health' | 'armor', number>>) => {
+      if (value <= 0) return;
+      const d = Math.hypot(x - a.x, y - a.y);
+      const leash = value >= S.critical ? S.leashCritical : S.leash;
+      if (d > S.range || Math.hypot(x - lead.x, y - lead.y) > leash) return;
+      // Near the last threat it knows of: not worth walking into.
+      if (br.lastKnown && br.suspicion > 0.3 && Math.hypot(x - br.lastKnown.x, y - br.lastKnown.y) < S.dangerRadius) return;
+      // A teammate needs this health or armour more and is not much further from it: leave it for them.
+      for (const k of Object.keys(shared) as ('health' | 'armor')[]) {
+        const mine = shared[k]!;
+        const needier = w.actors.some((m) => m !== a && m.team === a.team && standing(m) && needOf(m, k) > mine + 0.05 && Math.hypot(m.x - x, m.y - y) < d + S.yieldExtra);
+        if (needier) return;
+      }
+      const score = value - d / S.distancePerPoint;
+      if (score > best) { best = score; chosen = { kind, id, x, y, what, at: now }; }
+    };
+    w.pickups.forEach((k: Pickup, i) => {
+      if (!k.active || !wants(a, k.kind)) return;
+      const n = needOf(a, k.kind);
+      consider('pickup', i, k.x, k.y, n, k.kind, k.kind === 'health' || k.kind === 'armor' ? { [k.kind]: n } : {});
+    });
+    for (const l of w.loot) {
+      if (!l.known.includes(a.team)) continue;
+      const g = lootTake(a, l);
+      if (!g) continue;
+      let v = 0;
+      if (g.health > 0) v += needOf(a, 'health') * Math.min(1, g.health / 25);
+      if (g.armor > 0) v += needOf(a, 'armor') * Math.min(1, g.armor / 25);
+      if (g.rounds > 0) v += needOf(a, 'ammo') * Math.min(1, g.mags);
+      if (g.grenades > 0) v += needOf(a, 'grenade');
+      // V2: an empty perk slot makes any perk worth a short detour.
+      if (g.perk) v += S.perkValue;
+      consider('loot', l.id, l.x, l.y, v + (v > 0 ? S.lootBonus : 0), 'loot', g.health > 0 ? { health: needOf(a, 'health') } : {});
+    }
+    br.supply = chosen;
+    const c = chosen as Brain['supply'];
+    // A bag you cannot see from where you stand is worth a word; one in your light is not.
+    if (c && (!prev || prev.kind !== c.kind || prev.id !== c.id) && c.kind === 'loot' && !canSee(w.level, lead.x, lead.y, lead.facing, lead.view, c.x, c.y)) br.say = { kind: 'supply', target: -1, x: c.x, y: c.y, what: 'loot' };
+  }
+  const t = br.supply;
+  if (!t) return false;
+  // Still there?
+  const there = t.kind === 'pickup' ? w.pickups[t.id]?.active && wants(a, w.pickups[t.id].kind) : w.loot.some((l: Loot) => l.id === t.id && !!lootTake(a, l));
+  // Still safe? (re-checked every step: a threat it learns of near the spot calls the trip off at once)
+  const risky = br.lastKnown && br.suspicion > 0.3 && Math.hypot(t.x - br.lastKnown.x, t.y - br.lastKnown.y) < S.dangerRadius;
+  if (!there || risky) { br.supply = null; return false; }
+  setGoal(w, a, br, t.x, t.y);
+  follow(w, a, br, dt);
+  out.firing = false;
+  out.quiet = false;
+  return true;
 }

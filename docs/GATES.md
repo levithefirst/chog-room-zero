@@ -12,9 +12,9 @@ How to use:
 Playtest record format (copy into STATE, Manual playtest results):
 `date | device | build hash | tester | gate | questions asked | answers | verdict`
 
-## Core Feel Gate (blocks all NFT, wallet, and database work)
+## Core Feel Gate (tunes the class numbers; owner 2026-10-14 switched NFT combat power on before it)
 
-Passes only when G1, G2, G3, G4, G6, G7 are PASS, the G8 baseline is recorded, and the owner has played the combat prototype on BOTH the Pixel 7 and the iPhone 13. Until then, no NFT, wallet, or database code is written (owner rule).
+Passes only when G1, G2, G3, G4, G6, G7 are PASS, the G8 baseline is recorded, and the owner has played the combat prototype on BOTH the Pixel 7 and the iPhone 13. Owner 2026-10-14 (master integration pass): verified holders get their tier's power now (`NFT_COMBAT` defaults on, `=0` turns it off); this gate's playtest decides whether the numbers stay. Accounts, the database and ownership verification may be built before the gate (owner 2026-10-13). Agents never mark the human half passed.
 
 ## G1 Movement. Human playtest: YES (phones + PC)
 
@@ -103,17 +103,17 @@ Automated:
 Playtest: give the build to 3 to 5 people who have not seen it and say nothing. Record how many move, aim, and shoot correctly within 30 seconds, and how many retry after dying.
 Pass: most new players play correctly within 30 seconds and retry willingly.
 
-## G10 NFT integration. Human playtest: YES. Blocked until the Core Feel Gate passes.
+## G10 NFT integration and class system. Human playtest: YES. Combat power for real holders stays off until the Core Feel Gate passes.
 
 Automated:
 - Removal test table is complete for every NFT-linked mechanic (`docs/design/nft.md`).
-- Every operator has the same base damage, health, and movement speed (property test over all operator definitions).
-- A guest run writes nothing to persistent storage (test: row count unchanged after a guest run).
-- A bound run writes exactly one result row at match end, keyed to the token (test).
-- Ownership is verified on the server with the verified method (record which method, chain, and contract, from evidence).
-- With the RPC down, guest play still works.
-Playtest questions: Does your Chog play differently in a way you can feel and explain? Does the default operator still feel complete?
-Pass: automated pass and the owner can describe how two different tokens play differently.
+- Every tier, upgrade and 1:1 signature profile matches `src/config/power.ts`, is ordered free < Common < Uncommon < Rare < Epic < Legendary, and stays inside the caps in `docs/design/power.md` (property test). Movement speed is never changed by tier.
+- Measured duel win shares for each tier against a free player sit inside the bands in `power.md` (seeded sim test).
+- A guest run writes nothing (test). A settled match writes exactly one result per player and one token-history row per bound token, and settling twice changes nothing (test).
+- Ownership is verified on the server with `tokensOfOwner` / `metadataId` on Monad 143 (record evidence). A forged, expired, replayed or demo ticket cannot enter the verified 5v5 queue (server test).
+- With the RPC or database down, solo, 1v1 and 3v3 still work and NFT benefits fail closed.
+Playtest questions: Can you tell at a glance which operators are stronger and why? Is a fight against a higher tier still worth taking? Does a 1:1 signature read clearly before it hits?
+Pass: automated pass and the owner answers yes to all three after playing.
 
 ## G11 Visual consistency. Human playtest: YES
 

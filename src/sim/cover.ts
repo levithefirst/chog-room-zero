@@ -17,8 +17,10 @@ export interface CoverRule {
 }
 export const COVER_RULES: Record<CoverKind, CoverRule> = {
   wall: { kind: 'wall', blocksSight: true, blocksMovement: true, stopsBullets: true, lean: 0, piercedByMarksman: false },
-  crate: { kind: 'crate', blocksSight: false, blocksMovement: true, stopsBullets: true, lean: TUNING.combat.coverLean, piercedByMarksman: true },
-  slab: { kind: 'slab', blocksSight: false, blocksMovement: true, stopsBullets: true, lean: TUNING.combat.coverLean, piercedByMarksman: true },
+  // RC-8 (owner, 2026-10-13): solid boxes stop sniper shots. Until P1F-RC-7 the marksman passed through crates and
+  // slabs; that rule is reversed here, so no bullet goes through any box. The only way over cover is the lean rule.
+  crate: { kind: 'crate', blocksSight: false, blocksMovement: true, stopsBullets: true, lean: TUNING.combat.coverLean, piercedByMarksman: false },
+  slab: { kind: 'slab', blocksSight: false, blocksMovement: true, stopsBullets: true, lean: TUNING.combat.coverLean, piercedByMarksman: false },
 };
 /** Does a bullet stop on this cover? `shooterDist` = distance from the bullet's origin to the box. */
 export function coverStops(kind: CoverKind, pierce: boolean, shooterDist: number): boolean {

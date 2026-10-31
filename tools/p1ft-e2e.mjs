@@ -3,15 +3,24 @@
 import { spawn } from 'node:child_process'; import fs from 'node:fs';
 const [base, outFile] = process.argv.slice(2);
 const port = 9400 + Math.floor(Math.random() * 50);
-const chrome = spawn('google-chrome', ['--headless=new', '--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', `--remote-debugging-port=${port}`, 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(process.env.CHROME_BIN ?? 'google-chrome', ['--headless=new', '--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', `--remote-debugging-port=${port}`, 'about:blank'], { stdio: 'ignore' });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms)); let t;
 for (let i = 0; i < 50 && !t; i++) { await sleep(200); try { t = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find((x) => x.type === 'page'); } catch {} }
-const ws = new WebSocket(t.webSocketDebuggerUrl); await new Promise((r) => (ws.onopen = r));
-let id = 0; const P = new Map(); const errors = [];
-ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.id && P.has(m.id)) { P.get(m.id)(m.result ?? m.error); P.delete(m.id); }
-  if (m.method === 'Runtime.exceptionThrown') errors.push(m.params.exceptionDetails.exception?.description ?? m.params.exceptionDetails.text);
-  if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') errors.push(m.params.args.map((a) => a.value ?? a.description).join(' ')); };
+let ws; let id = 0; const P = new Map(); const errors = [];
+async function attach(target) {
+  ws = new WebSocket(target.webSocketDebuggerUrl); await new Promise((r) => (ws.onopen = r));
+  ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.id && P.has(m.id)) { P.get(m.id)(m.result ?? m.error); P.delete(m.id); }
+    if (m.method === 'Runtime.exceptionThrown') errors.push(m.params.exceptionDetails.exception?.description ?? m.params.exceptionDetails.text);
+    if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') errors.push(m.params.args.map((a) => a.value ?? a.description).join(' ')); };
+}
+await attach(t);
 const cmd = (method, params = {}) => new Promise((r) => { const i = ++id; P.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
+// A new tab. Touch emulation, once on, keeps (pointer: coarse) true for the life of a tab whatever CDP resets
+// (RC-3, measured): the game then boots in touch mode. Sections that need a desktop pointer start here.
+async function freshTab() {
+  const nt = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' })).json();
+  ws.close(); await attach(nt); await cmd('Runtime.enable');
+}
 const ev = async (e) => { const r = await cmd('Runtime.evaluate', { expression: e, returnByValue: true, awaitPromise: true }); return r.result?.value; };
 await cmd('Runtime.enable');
 const results = []; const check = (name, pass, data) => { results.push({ name, pass: !!pass, data }); console.log((pass ? 'PASS ' : 'FAIL ') + name, JSON.stringify(data)); };
@@ -75,12 +84,16 @@ await cmd('Page.captureScreenshot', { format: 'png' }).then((s) => fs.writeFileS
 // Setup (RC-2, ADE rc1-code-check.md section 5): step 3 left 844x390 touch emulation on, so input.ts ran in touch mode and
 // rewrote the aim to 0 (east) every tick, overriding p.facing=PI and putting the bot in the cone (seen, so no ring).
 // Reset to a desktop pointer and aim west with a real mouse move, so the player faces away from the bot.
-await view(1280, 720, false); await open(); await play();
+// RC-3: view(..., false) alone left (pointer: coarse) true, so the game still booted in touch mode and pinned the aim
+// east (the bot then sat near the cone edge: pass or fail by timing). A fresh tab really is desktop; the precondition
+// below proves it (desktop input mode, player facing west when the ring setup starts). Assertion unchanged.
+await freshTab(); await view(1280, 720, false); await open(); await play();
 const faceWest = () => cmd('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 20, y: 360 });
 await faceWest();
 const pill1 = await ev(`getComputedStyle(document.getElementById('hint')).opacity`);
 await sleep(7500);
 const pill2 = await ev(`getComputedStyle(document.getElementById('hint')).opacity`);
+const ringPre = await ev(`({coarse:matchMedia('(pointer: coarse)').matches,touchMode:document.body.classList.contains('touch'),facing:+__chog.world.actors[0].facing.toFixed(2)})`);
 const ringSet = await ev(`(async()=>{const w=__chog.world,p=w.actors[0];p.hp=1e9;p.x=8.5;p.y=2.5;p.facing=Math.PI;
   for(const o of w.actors.slice(2)){o.x=o.y=-40} const b=w.actors[1];b.x=11.5;b.y=4.5; const br=w.brains.get(1); br.state='investigate'; br.lastKnown={x:11.5,y:1.5};br.goal=null;br.timer=0;
   const t0=w.tick; for(let i=0;i<300&&w.tick-t0<600&&localStorage.getItem('chog.hint.rings')!=='1';i++)await new Promise(r=>setTimeout(r,100));
@@ -89,7 +102,9 @@ await open('&nooverlay', false); await play(); await faceWest(); await sleep(750
 const ring2 = await ev(`(async()=>{const w=__chog.world,p=w.actors[0];p.hp=1e9;p.x=8.5;p.y=2.5;p.facing=Math.PI;for(const o of w.actors.slice(2)){o.x=o.y=-40} const b=w.actors[1];b.x=11.5;b.y=4.5;const br=w.brains.get(1); br.state='investigate'; br.lastKnown={x:11.5,y:1.5};br.goal=null;br.timer=0;
   const t1=w.tick; for(let i=0;i<300&&w.tick-t1<240;i++)await new Promise(r=>setTimeout(r,100));return {text:document.getElementById('hint').textContent.slice(0,40),opacity:getComputedStyle(document.getElementById('hint')).opacity}})()`);
 check('Tutorial pill shows on the first run, fades by ~6 s; second run no tutorial', +pill1 > 0.9 && +pill2 < 0.1, { atStart: pill1, after7_5s: pill2 });
-check('Ring hint shows once on the first heard ring, persisted; not shown again after reload', ringSet.persisted === '1' && /Gold rings/.test(ringSet.hint) && !(+ring2.opacity > 0.5 && /Gold rings/.test(ring2.text)), { first: ringSet, afterReload: ring2 });
+check('Ring hint setup precondition: desktop pointer, PC input mode, player facing west (away from the bot)', !ringPre.coarse && !ringPre.touchMode && Math.abs(Math.abs(ringPre.facing) - Math.PI) < 0.3, ringPre);
+// RC-8: sound rings are cream since the PROVISIONAL palette, so the copy says "Pale rings" (was "Gold rings").
+check('Ring hint shows once on the first heard ring, persisted; not shown again after reload', ringSet.persisted === '1' && /Pale rings/.test(ringSet.hint) && !(+ring2.opacity > 0.5 && /Pale rings/.test(ring2.text)), { first: ringSet, afterReload: ring2 });
 
 // 5. HUD layout at 844x390 and 667x375 (with the tutorial pill visible): no panel overlaps, all inside the viewport.
 for (const [W, H] of [[844, 390], [667, 375]]) {
@@ -111,7 +126,8 @@ await T('touchMove', [{ x: 150, y: 330, id: 1 }]); await sleep(60);
 await T('touchStart', [{ x: 150, y: 330, id: 1 }, { x: 650, y: 200, id: 2 }]); await sleep(60);
 await T('touchMove', [{ x: 150, y: 330, id: 1 }, { x: 590, y: 140, id: 2 }]); await sleep(300);
 await T('touchStart', [{ x: 150, y: 330, id: 1 }, { x: 590, y: 140, id: 2 }, { x: ab[0], y: ab[1], id: 3 }]); await sleep(120);
-await T('touchEnd', [{ x: 150, y: 330, id: 1 }, { x: 590, y: 140, id: 2 }]); await sleep(900);
+// Lift only the ability finger: CDP releases a point by omitting it from a touchMove (touchEnd must carry no points).
+await T('touchMove', [{ x: 150, y: 330, id: 1 }, { x: 590, y: 140, id: 2 }]); await sleep(900);
 const st1 = await ev(`(()=>{const p=__chog.world.actors[0];return {x:p.x,y:p.y,f:p.facing,cd:p.abilityCd,shots:p.shots}})()`);
 await T('touchEnd', []); await sleep(600);
 const st2 = await ev(`(()=>{const p=__chog.world.actors[0];return {x:p.x,y:p.y,vx:p.vx,vy:p.vy,shots:p.shots}})()`);
@@ -120,15 +136,23 @@ const st3 = await ev(`(()=>{const p=__chog.world.actors[0];return {x:p.x,y:p.y,s
 const moved = Math.hypot(st1.x - st0.x, st1.y - st0.y);
 check('3 simultaneous touches: moves, aims, fires and uses the ability; nothing sticks after release', moved > 0.5 && st1.cd > 0 && st1.shots > st0.shots && Math.hypot(st3.x - st2.x, st3.y - st2.y) < 0.05 && st3.shots === st2.shots, { moved: +moved.toFixed(2), facing: [st0.f, st1.f], abilityCd: st1.cd, shots: [st0.shots, st1.shots, st2.shots, st3.shots], driftAfterRelease: +Math.hypot(st3.x - st2.x, st3.y - st2.y).toFixed(3) });
 
-// 7. Rotation: landscape -> portrait shows the rotate prompt and pauses; back to landscape, resume works.
-const rot0 = await ev(`__chog.phase`);
+// 7. Rotation (RC-6, landscape game; was RC-5 portrait play, and before that a rotate prompt): landscape -> portrait
+// pauses the same run with no prompt; the stage stays landscape (844x390 canvas, turned 90 deg to fill the upright
+// screen) and the run resumes there; back to landscape likewise, unturned.
+const rot0 = await ev(`({phase:__chog.phase,w:__chog.world.tick>=0&&(window.__rw=__chog.world,1)})`);
+const canv = `(()=>{const c=document.querySelector('canvas');return [c.clientWidth,c.clientHeight]})()`;
 await view(390, 844, true); await sleep(800);
-const rot1 = await ev(`({phase:__chog.phase,rotate:getComputedStyle(document.getElementById('rotate')).display})`);
-await view(844, 390, true); await sleep(800);
-const rot2 = await ev(`({phase:__chog.phase,rotate:getComputedStyle(document.getElementById('rotate')).display,canvas:(()=>{const c=document.querySelector('canvas');return [c.clientWidth,c.clientHeight]})()})`);
+const rot1 = await ev(`({phase:__chog.phase,prompt:!!document.getElementById('rotate'),canvas:${canv},rotated:__chog.stage().rotated})`);
 await ev(`__chog.go('resume')`); await sleep(400);
-const rot3 = await ev(`__chog.phase`);
-check('Rotation: portrait shows the rotate prompt (game paused); landscape again resizes the canvas and resumes', rot1.rotate !== 'none' && rot1.phase !== 'play' && rot2.rotate === 'none' && rot2.canvas[0] === 844 && rot3 === 'play', { before: rot0, portrait: rot1, landscape: rot2, afterResume: rot3 });
+const rot1b = await ev(`({phase:__chog.phase,sameRun:__chog.world===window.__rw})`);
+await view(844, 390, true); await sleep(800);
+const rot2 = await ev(`({phase:__chog.phase,prompt:!!document.getElementById('rotate'),canvas:${canv},rotated:__chog.stage().rotated})`);
+await ev(`__chog.go('resume')`); await sleep(400);
+const rot3 = await ev(`({phase:__chog.phase,sameRun:__chog.world===window.__rw})`);
+check('Rotation: no prompt; each flip pauses the same run; upright the stage stays landscape (turned), and it resumes both ways',
+  !rot1.prompt && rot1.phase === 'pause' && rot1.rotated && rot1.canvas[0] === 844 && rot1.canvas[1] === 390 && rot1b.phase === 'play' && rot1b.sameRun
+  && !rot2.prompt && rot2.phase === 'pause' && !rot2.rotated && rot2.canvas[0] === 844 && rot2.canvas[1] === 390 && rot3.phase === 'play' && rot3.sameRun,
+  { before: rot0, portrait: rot1, portraitResumed: rot1b, landscape: rot2, afterResume: rot3 });
 
 // 8. Background/resume: hidden tab pauses with no sim steps; resume does not burst-step.
 const bg = await ev(`(async()=>{const w=__chog.world,p=w.actors[0];p.hp=1e9;

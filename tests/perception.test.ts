@@ -1,6 +1,6 @@
 // Bot perception rules (docs/design/bots.md). Deterministic.
 import { describe, expect, it } from 'vitest';
-import { createWorld, stepWorld, IDLE_INPUT, hears, viewOf, type World, type SoundEvent, type HitEvent } from '../src/sim/world';
+import { createWorld, stepWorld, IDLE_INPUT, hears, viewOf, wallFactorOf, type World, type SoundEvent, type HitEvent } from '../src/sim/world';
 import { canSee, muzzleFlashSeen } from '../src/sim/vision';
 import { TUNING } from '../src/config/tuning';
 
@@ -172,18 +172,26 @@ describe('no omniscience across seeded matches', () => {
           counts[e.source] = (counts[e.source] ?? 0) + 1;
           switch (e.source) {
             case 'seen':
-              expect(canSee(w.level, e.ox, e.oy, e.ofacing, viewOf(bot), e.px, e.py)).toBe(true);
+              expect(canSee(w.level, e.ox, e.oy, e.ofacing, { ...viewOf(bot), range: e.orange, coneRad: e.ocone }, e.px, e.py)).toBe(true);
               expect(Math.hypot(e.x - e.px, e.y - e.py)).toBeLessThan(1e-9);
               break;
             case 'flash':
               expect(sounds.some((s) => s.team === 'player' && s.type === 'shot' && s.x === e.x && s.y === e.y && muzzleFlashSeen(w.level, e.ox, e.oy, s.x, s.y))).toBe(true);
               break;
             case 'heard':
-              expect(sounds.some((s) => s.team === 'player' && hears(w.level, e.ox, e.oy, s))).toBe(true);
+              // V2: with the listener's own wall factor (Keen Ears hears through walls as in the open; it is a rule, not a leak).
+              expect(sounds.some((s) => s.team === 'player' && hears(w.level, e.ox, e.oy, s, wallFactorOf(bot)))).toBe(true);
               break;
             case 'shot':
               expect(hits.some((h) => h.target === e.bot)).toBe(true);
               break;
+            case 'radio': {
+              // The hostile squad radio: a squadmate's own sighting at exactly that spot, within the report window.
+              // Never the player's live position.
+              const radio = w.perceptionLog!.some((o) => o.bot !== e.bot && w.actors[o.bot].team === bot.team && o.source === 'seen' && o.x === e.x && o.y === e.y && o.tick <= e.tick && (e.tick - o.tick) * TUNING.simStepSeconds <= TUNING.bots.squad.reportSeconds * 2 + 6);
+              expect(radio, `radio at ${e.x},${e.y} by ${e.bot} tick ${e.tick}`).toBe(true);
+              break;
+            }
             case 'sonar':
               expect(bot.hero.ability.kind).toBe('sonar');
               expect(Math.hypot(e.px - e.ox, e.py - e.oy)).toBeLessThanOrEqual(TUNING.abilities.sonarRadius + 1e-9);

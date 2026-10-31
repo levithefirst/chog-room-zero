@@ -17,9 +17,20 @@ function wilson(k: number, n: number): [number, number] {
   return [+((c - m) / den).toFixed(3), +((c + m) / den).toFixed(3)];
 }
 
+// These duels measure the WEAPONS. Each weapon keeps the reference body its design intent was tuned on (the
+// pre-roster carriers: shotgun 120/50 at 0.9 speed, marksman 85/15 at 0.95, rifle 100/25 at 1), so a roster body
+// change cannot hide a weapon regression. Roster bodies are measured in tests/gr-roster.test.ts.
+const REF: Record<string, { hp: number; armor: number; speed: number }> = { shotgun: { hp: 120, armor: 50, speed: 0.9 }, marksman: { hp: 85, armor: 15, speed: 0.95 }, rifle: { hp: 100, armor: 25, speed: 1 } };
+function refBody(a: Actor) {
+  const r = REF[a.weapon.id];
+  if (!r) return;
+  a.hp = a.maxHp = r.hp; a.armor = r.armor; a.maxArmor = Math.max(r.armor, 50); a.hero = { ...a.hero, speed: r.speed };
+}
+
 export function duel(heroA: string, heroB: string, d: number, strafe: boolean, seed: number) {
   const w = createWorld({ seed, hero: heroA, map: HALL, bots: [{ name: 'B', hero: heroB, patrol: [[1, 4]], flanker: false }] });
   const A = w.actors[0], B = w.actors[1];
+  refBody(A); refBody(B);
   const x0 = 15 - d / 2;
   A.x = x0; A.y = 4.5; B.x = x0 + d; B.y = 4.5; A.facing = 0; B.facing = Math.PI;
   let dirA = 1, dirB = -1, tA = 0, tB = 0, firedA = 0, firedB = 0, hitsA = 0, hitsB = 0;
@@ -65,27 +76,27 @@ afterAll(() => { (T_DUEL.bots as { damageMul: number }).damageMul = savedMul; })
 
 describe('weapon duels (real sim, N=200 per cell, Wilson 95% CI)', () => {
   it("ADE 4 u test: Brick shotgun vs Wick marksman at 4 u, stationary: shotgun wins (CI lower bound > 50%)", () => {
-    const c = cell('brick', 'wick', 4, false, N);
+    const c = cell('tonashiro', 'ray', 4, false, N);
     expect(c.ciA[0]).toBeGreaterThan(0.5);
   });
   it('design intent: the shotgun wins vs the rifle at <=4 u (stationary and strafing; CI lower bound > 50%)', () => {
-    for (const [d, st] of [[2, false], [2, true], [4, false], [4, true]] as const) expect(cell('brick', 'kettle', d, st, N).ciA[0]).toBeGreaterThan(0.5);
+    for (const [d, st] of [[2, false], [2, true], [4, false], [4, true]] as const) expect(cell('tonashiro', 'benja', d, st, N).ciA[0]).toBeGreaterThan(0.5);
   });
   it('design intent: the rifle owns 6 u and 9 u vs the shotgun, the marksman owns 9 u', () => {
     for (const st of [false, true]) {
-      expect(cell('brick', 'kettle', 6, st, N).ciA[1]).toBeLessThan(0.5);
-      expect(cell('brick', 'kettle', 9, st, N).ciA[1]).toBeLessThan(0.5);
+      expect(cell('tonashiro', 'benja', 6, st, N).ciA[1]).toBeLessThan(0.5);
+      expect(cell('tonashiro', 'benja', 9, st, N).ciA[1]).toBeLessThan(0.5);
     }
-    expect(cell('brick', 'wick', 9, false, N).ciA[1]).toBeLessThan(0.5);
+    expect(cell('tonashiro', 'ray', 9, false, N).ciA[1]).toBeLessThan(0.5);
   });
   it('is deterministic (same seeds, same result)', () => {
-    expect(cell('brick', 'kettle', 4, true, 20)).toEqual(cell('brick', 'kettle', 4, true, 20));
+    expect(cell('tonashiro', 'benja', 4, true, 20)).toEqual(cell('tonashiro', 'benja', 4, true, 20));
   });
   it('tables (DUEL_OUT)', async () => {
     const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
     if (!env.DUEL_OUT) return;
     const rows: Cell[] = [];
-    for (const b of ['wick', 'kettle']) for (const strafe of [false, true]) for (const d of [2, 4, 6, 9]) rows.push(cell('brick', b, d, strafe, N));
+    for (const b of ['ray', 'benja']) for (const strafe of [false, true]) for (const d of [2, 4, 6, 9]) rows.push(cell('tonashiro', b, d, strafe, N));
     (await import('node:fs' as string)).writeFileSync(env.DUEL_OUT, JSON.stringify(rows));
   }, 600000);
 });

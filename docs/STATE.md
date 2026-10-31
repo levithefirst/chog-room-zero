@@ -1,72 +1,71 @@
 # Chog: Room Zero - shared state
 
-Source of truth for every agent. Rules: `docs/RULES.md`. Edit only in a handoff commit. Keep under 8,000 characters; move old rows to `docs/HANDOFFS.md`.
-Last verified: 2026-10-12 by grokbot (P2).
+Source of truth. Rules: `docs/RULES.md`. Edit only in a handoff commit. Under 8,000 characters.
+Last verified: 2026-10-23 by claude (H46: upgrades, medal goals; HANDOFFS H46).
 
 ## Snapshot (EVIDENCE)
-- Repo `levithefirst/chog-room-zero` (private). Default/base branch `setup/skill-system` (LOCKED, owner 2026-10-11: no `main`). Never merge without the owner.
-- Open PRs, stacked: #1 S2; #2 P0-1; #3 P0-2; #4 P1 MVP; P2 benchmark overhaul (base `grokbot/p1-mvp`). Merge in order.
-- Vercel project `chog-room-zero`: preview deploys only by grokbot (protection off, owner 2026-10-12). One accidental production deploy from P1 exists; untouched.
-- Project start date, deadline, hackathon rules: UNKNOWN.
+- Repo `levithefirst/chog-room-zero`. Base branch `setup/skill-system` (LOCKED 2026-10-11: no `main`); never merge without owner. PR #10 = ccr-e7fadb8f-qtochk (live; claude/h34-maps holds H34-H36). Client and server ship from one commit.
+- Vercel project `chog-room-zero`. Production `chogroomzero.xyz`: H46 commit (HANDOFFS H46). Rollback: `dpl_GPrDAbJkaji568GEE5UKY1p7N5Es` (a1d5c4b, H45) with Render on a1d5c4b; no migration since H33. No `NFT_COMBAT` (power on). Game server: Render Free `https://room-zero-game.onrender.com` (redeploys on every push to the branch; origins in render.yaml).
+- Chog Genesis (NFT-R1, EVIDENCE): Monad 143, contract `0xc96d31F8626c6D03Fae5dCD3d61e3FB9F4a73763` (ChogMint, Sourcify), ERC-721, supply 1,969, catalogue in `data/chog-genesis/`; token id is NOT the displayed number. `/api/game/chain` checks it live.
+- Chogathon 2026 (`docs/SUBMISSION.md`): "the Chog NFT must be essential".
 
-## LOCKED (owner; 2026-10-07, 2026-10-11, 2026-10-12)
-1. Dark top-down tactical survival shooter, ~90 s rooms, mobile and PC, original IP. Bullet Echo is a benchmark only (P2 mandate): nothing copied.
+## LOCKED (owner; 2026-10-07, 2026-10-11, 2026-10-12, 2026-10-13)
+1. Dark top-down tactical survival shooter, ~90 s rooms, mobile and PC, original IP. Bullet Echo is a benchmark only.
 2. 14 days. Playable by Day 7. Freeze after Day 11. Days 12-14 fixes, QA, submission.
-3. $0 target, $20 hard cap, owner approval per spend.
-4. Controls: mobile landscape, left thumb move, right thumb aim and fire outside deadzone, ability in right-thumb reach, no auto-fire. PC: WASD, mouse aim, left click fire, Space ability.
+3. $0 target, $20 cap, owner approves each spend.
+4. Controls: mobile LANDSCAPE (upright turned 90 deg); left thumb move, right thumb aim+fire outside deadzone, ability in right-thumb reach, no auto-fire. PC: WASD, mouse, click, Space.
 5. Test devices: Pixel 7, iPhone 13.
 6. Projectiles travel visibly, no hitscan. Walls block bullets and vision via real occlusion.
-7. Movement has deliberate acceleration, turning, stopping.
-8. Bots: patrol, investigate, detect, pursue, attack, reposition, disengage, lose target; cover, angles, break LOS; never just rush.
-9. Anyone can play. Guest runs save nothing. Bound Genesis NFT = identity + token history. NFT sidegrades only, never flat damage, health, armour, or speed. (Heroes differ in speed/HP/armour; heroes are not NFT traits.)
-10. NFT layer: interface + labelled mock only; no wallet, chain, or DB code (mandates 2026-10-12 02:56 and 04:09 WAT).
-11. Bots, no multiplayer, no custom contract, no $CHOG dependency, wallet never required.
-12. Out of scope: Railway worker, multiplayer, custom contract, paid inference, $CHOG economy, loot chests, gear grid, clans, season pass. Changed by P2 mandate (04:09 WAT): the map was replaced (still one map), 3-4 heroes with one ability each, pickups.
+7. Movement has deliberate acceleration, turning, stopping. Humans turn at a cap too.
+8. Bots: patrol, investigate, pursue, attack, reposition, disengage; cover, angles, break LOS; never just rush.
+9. Class system. CHANGED by the owner 2026-10-18 (CHOG SUPERPOWER SYSTEM, rule 6: "Do not use NFT rarity for generic health/damage stat inflation"): no tier adds health, armour or damage; a verified Chog's real traits give one superpower (Laser Eyes, Visor, Bubble, Drool Web, Aura; X-Ray Eyes has no trait, DEMO/Training only) in the single ability slot, ranked by its tier; owner 2026-10-18 IDENTITY pass: 150 health for every operator and free player, 200 for a verified Chog with no mapped power (no other edge), armour cap 65; the ten 1:1s keep their names and signatures; same upgrades for all; nothing sold. `src/config/superpowers.ts`, `docs/design/superpowers.md`. NFT power ON (`NFT_COMBAT=0` off).
+10. Solo, 1v1, 3v3 open to all; 5v5 verified holders only, server-enforced (every squad member). Ownership verified server-side (SIWE, Monad); fails closed. Demo mode labelled, isolated, no rewards. 1:1 names used (owner 2026-10-14); art rights pending.
+11. Accounts (GP 2026-10-17: Solo board beside Online; medals on the server): XP, levels, shards, upgrades, rating from validated online matches (server pull, idempotent) and, owner 2026-10-17 ("earn progression even when they lose"), capped ticketed solo practice (no rating). All progression on the account (callsign, medals, career too); localStorage keeps preferences only (owner 2026-10-14). Account progression separate from token history; transfers move no XP or currency. Reuse the owner's Neon; additive migrations in schema `room_zero`. No payments this phase. No custom contract, no $CHOG dependency, wallet never required for solo/1v1/3v3. Online on an authoritative server (RC-8); no paid host without the owner's yes.
+12. Out of scope: Railway worker, custom contract, paid inference, $CHOG economy, real-money purchases, second simultaneous ability, loot chests, gear grid, clans, season pass. Exactly five locations open to all (Room Zero, Office, Supermarket, Metro Station, Construction Site; owner 2026-10-19 H34, was three), different in topology, tiles and light; pickups back 4 s after taken (owner 2026-10-18). Free roster of 7 (Benja, Toad, Ray, Tabsu, Tonashiro, Yot, Bill; 5 departments) with one ability each, and grenades for everyone (capacity 3/5/7/9/11/13 by verified tier, never upgrades, server-set) (owner 2026-10-14; `docs/design/roster-grenades.md`).
 13. Every added system names an equal or larger cut.
 14. No scheduled or background jobs without owner approval.
-15. Stack: TypeScript, Vite, PixiJS v8, Vitest.
-16. Win condition: eliminate all bots.
+15. TypeScript, Vite, PixiJS v8, Vitest.
+16. Win condition: eliminate all bots. RC-8 (owner): a shrinking danger zone can end a run (zone death = loss; every interval 20% longer, owner 2026-10-18); online, the last side standing wins.
+17. Owner 2026-10-14: default game is YOU + 2 AI TEAMMATES vs bots; "Sign in" opens Google / Wallet sheet; minimal UI copy.
 
 ## PROPOSALS (not approved)
-- Neon, viem: not installed. Vercel: preview hosting only.
-- All tuning numbers, heroes, weapons, armour and lean rules (`docs/design/benchmark.md`), art direction, the map, the four sidegrades, the fonts.
+- All tuning numbers, art direction, maps, fonts, CHOG palette (`docs/BRAND.md`), NFT-R1 layers. Deps: @neondatabase/serverless, @electric-sql/pglite (dev), @noble/*.
+- V2 (H31) perks, AI guard, challenges, telemetry; H32-H34 power numbers, Visor radii, drills, layouts, rail/deck rules, medal thresholds; H37 map look, 1v1 opponent rule.
+- H36: location is a preference: after 10 s anyone in the mode meets on the longest waiter's pick (`anyMapAfterSec`; Infinity = strict per-location queues as H33).
+- Owner decisions open: H36 location rule; server plan for 400 players (estimates: HANDOFFS H36); Supermarket solo hard; powers #5/#6; X-Ray trait; Squad/Breach drill; grenade capacity; bot backfill online.
 
 ## UNKNOWN (never guess)
-- Chog Genesis chain, contract, standard, ownership method, metadata, art rights.
-- Owner access to Pixel 7 / iPhone 13. Hackathon name, deadline, rules.
+- Chog Genesis art and name rights; `baseURI`, totalSupply from chain; metadata hash (`docs/research/chog-genesis/`).
+- Owner's Pixel 7 / iPhone 13. Chogathon deadline.
+- Whether a real holder can play 5v5 (fake-chain holder passes locally).
 
-## Implemented (EVIDENCE: branch `grokbot/p2-benchmark-overhaul`, see H5 for SHA)
-- Benchmark doc with cited facts vs assumptions, checklist, gap audit.
-- Rendering: map baked once (procedural tile/concrete/metal/dock, grime, shadows, lit wall rims, doors, crates, barriers). Dim desaturated map always visible, fog on unexplored, lit map through soft + sharp cones with falloff and glow. Actors and bullets drawn only when the sim LOS says so; Ping shows outlines.
-- 4 heroes (`src/config/heroes.ts`): Kettle rifle/Patch heal, Mop SMG/Slip dash, Brick shotgun/Slab barrier, Wick marksman/Ping sonar. Bots use the same table.
-- Weapons (`src/config/weapons.ts`): damage, pellets, falloff, rate, spread, magazine + reserve, reload, armour-pen, cover pierce, own sound/tracer/muzzle.
-- Armour soak rule, lean rule for half cover, health/armour/ammo pickups with respawn timers and labels.
-- Bots: + health seeking, abilities, range-aware engage, fair sonar.
-- Match flow table (`src/sim/match.ts`): title, hero select, loading, play, pause (freezes sim; auto on tab hide), recap, results.
-- HUD: health/armour bars + numbers, weapon, ammo/reserve, reload ring, ability cooldown button, hostiles + pips, persisted mute, pause, safe-area insets, portrait prompt. Damage arc, hurt flash, low-HP vignette, hit/kill marks, toasts.
-- Fonts: Barlow Condensed + IBM Plex Mono (OFL) in `public/fonts/`.
+## Implemented (EVIDENCE)
+- H34/H35 (live): five locations, 40 medals, protocol 2 (`docs/design/maps.md`).
+- H37 (live): tactical map (MAP, M): live level, areas, zone, supplies, your side, intel traces, Visor dots (H44: plus every living hostile). `docs/design/tactical-map.md`.
+- H36 1v1 fix, H40/H41 hub + loading: `docs/MULTIPLAYER.md`, `docs/design/ui-audit.md`.
+- UIX + Library (H38, H39, live): UI pass (`docs/design/ui-audit.md`); Library at /library (20 pages, search).
+- H44/H45 (grokbot): shards 10 play/10 kill/30 win online and practice; practice limit 1,000/day; map shows every living hostile, red (online `mh`, readable by a modified client).
+- H46 (owner 2026-10-23): upgrades Vitality +10 health x12, Plating +5 armour x12, Firepower +35% damage x7, Focus -8% cooldown x8; prices +25% (Firepower x2); caps = maxed, online too; old ranks kept (`docs/design/power.md`). Medal goals in `src/ui/medals.ts`.
 
-## Automated tests (EVIDENCE, Node 22)
-See H5: ci, typecheck, 97 tests in 9 files, build. Headless Chrome 1280x720 + 844x390 touch + portrait: all states reached, console errors none. Sim 0.07 ms/step with 21 actors (Node).
+## Automated tests (EVIDENCE, Node 22.22)
+H46: vitest 1196/1196, tsc, qa-rewards 13/13. Older: HANDOFFS.
 
 ## Not performed (needs the owner)
-- Pixel 7 / iPhone 13 run, real-GPU FPS, feel, fairness, audio by ear.
+- Human play (all five locations), real phones (BLOCKED), real-GPU FPS, audio by ear, a real wallet, hosted 5v5 with a holder, art rights, demo video.
 
 ## Gates
-Core Feel Gate: BLOCKED on owner playtests. G10 interface + mock only (BLOCKER: verified chain, contract, ownership method).
+Core Feel Gate: BLOCKED on owner playtests. G10: automated PASS; playtest not run.
 
 ## Current task
 | Id | Owner | Branch | Files | Done when | Status |
 |---|---|---|---|---|---|
-| P1 | grokbot | grokbot/p1-mvp | see H4 | MVP | done, awaiting owner review |
-| P2 | grokbot | grokbot/p2-benchmark-overhaul (base `grokbot/p1-mvp`) | `src/**`, `tests/**`, `index.html`, `public/fonts/**`, `docs/design/{benchmark,art-direction}.md`, `docs/DEV.md`, `tools/browser-run.mjs`, `docs/STATE.md`, `docs/HANDOFFS.md` | benchmark overhaul phases A-F per owner mandate "COMPLETE BULLET ECHO BENCHMARK OVERHAUL" (chat, 2026-10-12 04:09 WAT); Node 22 ci/typecheck/test/build; browser run; preview deploy | done, awaiting owner review and playtest |
-| P0F | grokbot | grokbot/p0-bugfix-sprint (base `grokbot/p2-benchmark-overhaul`) | `src/main.ts`, `src/input/{input,gate}.ts`, `src/render/{render,visibility}.ts`, `tests/p0fix*.test.ts`, `tools/p0fix-run.mjs`, `docs/STATE.md`, `docs/HANDOFFS.md` | P0 bug-fix sprint per owner task (chat, 2026-10-12 05:28 WAT) on ADE QA report: CHOG-VIS-001, FLOW-001, INPUT-001, HUD-001, FLOW-002 (+blur); rifle investigation; preview deploy | done, awaiting owner review |
-| P1F | grokbot | grokbot/p1-fairness-readability (base `grokbot/p0-bugfix-sprint`) | `src/sim/{bots,world,level,vision,geom,cover}.ts`, `src/render/{render,lightmesh,bake,visibility}.ts`, `src/config/{tuning,weapons}.ts`, `src/main.ts`, `index.html`, `tests/{perception,p1f-combat,ttk,world}.test.ts`, `tools/p1f-shots.mjs`, `docs/design/{bots,cover,weapons-ttk}.md`, `docs/STATE.md`, `docs/HANDOFFS.md` | P1 fairness and readability sprint (owner task, chat 2026-10-12 05:50 WAT): one reveal rule, perception spec + tests, readability, snag/slab/cover/TTK, perf, preview | done, awaiting owner review |
-| P1FT | grokbot | grokbot/p1-follow-through (base `grokbot/p1-fairness-readability`) | `src/main.ts`, `src/ui/{heroKeys,orientation}.ts`, `src/render/{labels,camera,render}.ts`, `src/sim/{world,bots,cover}.ts`, `src/config/{map,tuning,weapons}.ts`, `src/audio/audio.ts`, `tests/p1ft-*.test.ts`, `tools/p1ft-{e2e,shots}.mjs`, `docs/design/{bots,cover,weapons-ttk}.md`, `docs/{DEV,STATE,HANDOFFS}.md` | P1 follow-through (owner task, chat 2026-10-12 07:29 WAT): UI-001, AI-002, AI-001, HUD-002, DES-001, debug labels, MAP-001, shotgun duels, blocked feedback, rotation | done, awaiting owner review |
-| RC-1 | grokbot | grokbot/rc-1 (base `grokbot/p1-follow-through`) | `src/sim/{world,bots,geom}.ts`, `src/config/{map,tuning}.ts`, `src/input/{gate,input}.ts`, `src/main.ts`, `index.html`, `src/ui/records.ts`, `src/nft/{traits,identity}.ts`, `src/audio/audio.ts`, `tests/rc-*.test.ts`, `tests/helpers/autopilot.ts`, `tools/rc-e2e.mjs`, `docs/design/{bots,nft}.md`, `docs/{DEV,RELEASE,STATE,HANDOFFS}.md` | Chogathon release candidate (owner task, chat 2026-10-12 08:47 WAT): fairness range rule, death-screen gate, snags, difficulty, onboarding, results, personal bests, NFT DEMO | done, awaiting owner + ADE review |
-
-P2-F1: owner plays the preview on PC, Pixel 7, iPhone 13; grokbot fixes the top 3 reported issues.
+| TM | claude | ccr-e7fadb8f-qtochk | see H37 | Owner 2026-10-20 TACTICAL MAP | live; owner plays it on a phone |
+| MP, H34/ID/SP | claude | same | see H32-H36 | Owner 2026-10-18/19 | live; owner: 1v1s, server plan |
+| UIX | claude (from grokbot) | same | see H38/H39 | Owner 2026-10-20 UI release | live (PR #12 head in branch) |
+| UIX2+QA | claude | same | see H40-H43 | Owner 2026-10-21 final QA | live (H43) |
+| SHARDS/MAP | grokbot | same | see H44/H45 | Owner 2026-10-21 | live (a1d5c4b) |
+| UP | claude | same | see H46 | Owner 2026-10-23 | H46; Hoarder/Pack Rat reach unproven |
+| RC-8 | claude | PR #10 | see H16 | Owner RC-8 mandate | PR #10 not merged (owner decides) |
 
 ## Handoffs
-Latest: H7 (2026-10-12, grokbot -> owner, P1 fairness and readability sprint). History: `docs/HANDOFFS.md`.
-| RC-2 | grokbot | grokbot/rc-1 (PR #9) | `src/input/input.ts`, `src/main.ts`, `src/debug/autopilot.ts`, `tests/rc2-resume.test.ts`, `tests/perception.test.ts`, `tests/helpers/autopilot.ts`, `tools/{rc-e2e,p1ft-e2e,p1ft-ring-repeat,rc-autoplay,rc2-preview-checks}.mjs`, `docs/{DEV,RELEASE,STATE,HANDOFFS}.md` | Targeted RC-1 follow-up (owner task 2026-10-12 12:53 WAT): resume click fire, ring e2e setup, suite timing, preview checks, scripted victory, Wick vs Brick | done, awaiting owner + ADE retest (/workspace/reports/rc2-ade-retest.md) |
+Latest: H46 (claude; upgrades, medals). History: `docs/HANDOFFS.md`.

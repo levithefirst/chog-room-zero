@@ -3,7 +3,7 @@
 import { spawn } from 'node:child_process'; import fs from 'node:fs';
 const [base, outFile] = process.argv.slice(2);
 const port = 9400 + Math.floor(Math.random() * 50);
-const chrome = spawn('google-chrome', ['--headless=new', '--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', `--remote-debugging-port=${port}`, 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(process.env.CHROME_BIN ?? 'google-chrome', ['--headless=new', '--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', `--remote-debugging-port=${port}`, 'about:blank'], { stdio: 'ignore' });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms)); let t;
 for (let i = 0; i < 50 && !t; i++) { await sleep(200); try { t = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find((x) => x.type === 'page'); } catch {} }
 const ws = new WebSocket(t.webSocketDebuggerUrl); await new Promise((r) => (ws.onopen = r));
@@ -38,7 +38,8 @@ const ob3 = await ev(`document.querySelector('#overlay h2')?.textContent ?? 'tit
 await click('[data-act="howto"]'); await sleep(300);
 const ob4 = await ev(`document.querySelector('#overlay h2')?.textContent`);
 const obRows = await ev(`[...document.querySelectorAll('table.howto td:first-child')].map(e=>e.textContent)`);
-check('Onboarding: first launch only, dismissible, re-openable from title, covers move/aim/shoot/creep/ability/rings', ob1 === 'Clear Room Zero' && ob2 && ob3 === 'title' && ob4 === 'Clear Room Zero' && ['Move', 'Aim / shoot', 'Creep (quiet)', 'Ability', 'Gold rings'].every((x) => obRows.includes(x)), { first: ob1, dismissed: ob2, afterReload: ob3, reopened: ob4, rows: obRows });
+// RC-8: sound rings are cream since the PROVISIONAL palette, so the copy says "Pale rings" (was "Gold rings").
+check('Onboarding: first launch only, dismissible, re-openable from title, covers move/aim/shoot/creep/ability/rings', ob1 === 'Clear Room Zero' && ob2 && ob3 === 'title' && ob4 === 'Clear Room Zero' && ['Move', 'Aim / shoot', 'Creep (quiet)', 'Ability', 'Pale rings'].every((x) => obRows.includes(x)), { first: ob1, dismissed: ob2, afterReload: ob3, reopened: ob4, rows: obRows });
 await click('[data-act="howto-close"]'); await sleep(200);
 
 // 1b. RC-2: clicking Resume never fires; fire works after release + a fresh press.
@@ -157,7 +158,7 @@ await cmd('Page.navigate', { url: `${base}/?debug&nooverlay` }); await sleep(300
 const titlePb = await ev(`document.getElementById('titlepb')?.textContent`);
 const recs = await ev(`JSON.parse(localStorage.getItem('chog-room-zero:records:v1'))`);
 check('Victory: Room cleared; results show Chog, time, kills, accuracy, damage dealt/taken; personal best NEW, saved on this device only, persists on the title after reload (guest)',
-  res.h2 === 'Room cleared' && ['Chog', 'Time', 'Hostiles down', 'Hits / shots', 'Damage dealt / taken'].every((x) => res.rows.includes(x)) && /NEW/.test(res.pb) && /saved on this device only/.test(res.pb) && /Best clear \d+:\d\d/.test(titlePb) && recs?.overall?.wins === 1,
+  res.h2 === 'Room cleared' && ['Chog', 'Time', 'Hostiles down', 'Hits / bullets', 'Damage dealt / taken'].every((x) => res.rows.includes(x)) && /NEW/.test(res.pb) && /saved on this device only/.test(res.pb) && /Best clear \d+:\d\d/.test(titlePb) && recs?.overall?.wins === 1,
   { res, titlePb, recs: recs?.overall });
 
 // 6. Fairness in the browser: a Wick bot 11 m away in clear line of sight never damages a Brick player (sight 7.5 m).

@@ -35,7 +35,7 @@ Dev flags: `?mockChog=1234` binds a mock Chog (not a real ownership check). `?de
 
 ## Owner playtest: phone (BLOCKED until done on Pixel 7 and iPhone 13)
 1. On the dev machine: `npm run dev -- --host`; note the `Network:` URL (http://<LAN-IP>:5173).
-2. Phone on the same Wi-Fi, open that URL, turn to landscape, tap to enter. Tap the speaker icon to check audio (the choice is remembered).
+2. Phone on the same Wi-Fi, open that URL, tap to enter (the game is landscape; the first tap asks for fullscreen + landscape where the browser allows it). Tap the speaker icon to check audio (the choice is remembered).
 3. Left thumb anywhere on the left half: move (half push creeps). Right thumb on the right half: aim; push past the inner ring to fire. Ability and Reload buttons sit at the right edge; pause and mute top-right.
 4. Report: device, browser, smooth or stuttering, sticks comfortable, sound works after the first tap, text readable, anything cut off by the notch.
 
@@ -74,3 +74,49 @@ Known limitations: see docs/RELEASE.md.
   bundled sim (`__chog.lab`), C1 is Wick vs Brick on the bundled sim, B is the live blocked-shot flash/spark/cue (screenshot next to the JSON),
   and C2 is a live Brick match audit (every hit from within sight range, shooter revealed).
 - **Ring hint repeat:** `node tools/p1ft-ring-repeat.mjs <baseUrl> 20 <out.json>` runs p1ft-e2e section 4 verbatim N times from the leaked touch state.
+
+## RC-4: cross-device matrix
+- `node tools/rc4-matrix.mjs <baseUrl> <out.json> [shotDir]` (`ONLY=tablet,phone-portrait` to pick): 12 viewports (desktop 1920x1080,
+  1440x900, 1280x720, 1024x768, 2560x1080; tablet 1180x820, 820x1180, 1024x768; phone 844x390, 667x375, 390x844, 375x667), each in a
+  fresh tab with the input that size would use (mouse+keyboard or emulated touch). Real UI flow (How to play, Enter, Deploy), layout
+  (canvas = viewport, HUD panels inside and not overlapping, player on screen), move, aim, fire, reload, ability, pause, resume (no
+  shot), restart; desktop window resizes and focus loss; touch rotation x3 mid-run with a finger held. Console errors and failed requests.
+- Scripted full loop at a touch size: `VIEWPORT=820x1180 TOUCH=1 node tools/rc-autoplay.mjs <baseUrl> <out.json> 30 kettle,mop` (menus by tap).
+- Orientation rule (RC-6): touch devices always play on a landscape stage; an upright browser gets it turned 90 deg (`src/ui/stage.ts`).
+  An orientation flip mid-run pauses the same run and releases held input. The matrix writes every touch in stage coordinates.
+
+## RC-7: menus, profile, medals, settings, tips
+- `node tools/rc7-menus.mjs <baseUrl> <out.json> [shotDir]` (`ONLY=desktop,phone-portrait` to pick): 7 viewports (1440x900, 1280x720,
+  1180x820 touch, 844x390, 667x375, upright 390x844 and 375x667 on the turned stage). Boot screen, How to play diagram, menu, player
+  card, callsign validation + save, favourite, medals tab, loadout, settings applied live and saved (volume, stick size, quality,
+  tips), reset confirm, operator select, a forced clear with medals on the results screen, Menu, persistence after reload, pinning;
+  on desktop and 844x390 also an in-match tip for a needed pickup in the lamp and the named pickup toast. Screenshots per screen.
+- Build id: `BUILD_SHA=$(git rev-parse --short HEAD) npm run build` locally (Vercel uses `VERCEL_GIT_COMMIT_SHA`); shown in Settings > About.
+- Sign-in functions live in `api/` (Vercel). A plain `vite preview` has no `/api`, so Settings says sign-in is not available there.
+  Unit tests call the handlers directly: `npx vitest run tests/rc7-auth.test.ts`.
+
+## RC-6: landscape launch flow
+- `node tools/rc6-launch.mjs <baseUrl> <out.json> [shotDir]` (`VARIANTS=android:390x844,iphone:375x667,...`): opens upright, checks the
+  turned landscape stage (drawn, no prompt), the first tap's fullscreen + `lock('landscape')` (and that both ran inside the tap's user
+  gesture), the turn to landscape, play controls, pause/resume, leaving fullscreen mid-run and coming back via Full screen, an
+  orientation flip mid-run and back with a finger held. Browser behaviour per variant: `android` (fullscreen real, lock stubbed to
+  succeed, then the viewport turns), `denied` (headless refuses the lock), `iphone` (no Fullscreen API, no lock). Emulation only.
+
+## RC-5: touch play (since RC-6 on the landscape stage)
+- `node tools/rc5-touchplay.mjs <baseUrl> <out.json> [WxH=390x844] [hero] [maxSimSeconds] [shotDir]` (an upright size plays on the turned stage): a full match through REAL touch
+  events only (menu taps, left stick, right stick aim + fire, Reload/Ability buttons), with decisions from the debug-only
+  `__chog.suggest()` (the autopilot's intended input, not applied). Then results, Again, and the saved record. SCRIPTED, emulated touch.
+- CDP touch rule: `Input.dispatchTouchEvent` `touchEnd` must carry no points (it ends all). To lift one finger and keep others, send a
+  `touchMove` listing only the fingers that stay.
+
+## RC-8: combat, zone, brand, online
+- Unit tests: `tests/rc8-{cover,pickups,zone,brand,operators,online}.test.ts` (in `npx vitest run`).
+- `node tools/rc8-shots.mjs <baseUrl> <out.json> [shotDir]` (`ONLY=desktop,phone`): CSS tokens in the browser, the drawn operator
+  measured against its hitbox from canvas pixels, pickup taken on the contact step, every zone phase in the HUD, outside-zone
+  state, a zone death through recap to results. Screenshots `rc8-*.png`.
+- Game server: `npm run build:server` then `PORT=8787 npm run server` (env `ALLOWED_ORIGINS`, `FRIENDLY_FIRE=1`). Point a client at
+  it with `?server=ws://127.0.0.1:8787/ws`, or build the client with `VITE_GAME_SERVER_URL`.
+- `node tools/rc8-online.mjs <baseUrl> <out.json> [shotDir]` (`MODES=1v1,3v3,5v5`; needs `dist-server`): starts the server and one
+  separate headless Chrome process per player, all driven by real key and mouse events, and checks one room, even teams, a
+  mid-match reload resuming (1v1), the server's result on every client. Loopback, one machine, scripted players.
+- Kill helpers with a self-safe pattern (`pkill -f "[d]ist-server/index.js"`): a plain pattern also matches the shell running it.

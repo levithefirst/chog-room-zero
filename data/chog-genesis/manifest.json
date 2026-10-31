@@ -1,0 +1,61 @@
+{
+ "generatedBy": "tools/nft/build-catalogue.ts",
+ "files": {
+  "raw/ipfs-metadata.json": {
+   "bytes": 1266818,
+   "sha256": "7d1725630293481b7f64cd88400b2533802677060fe9dcfe1af0e3b544ed0b7c"
+  },
+  "third-party/opensea-sample.json": {
+   "bytes": 4753,
+   "sha256": "60dc29b4325c2050fe88577bda982554a95c66a6c1e9e7b13a5179f5e133474b"
+  },
+  "contract/ChogMint.sol": {
+   "bytes": 21602,
+   "sha256": "0adafb3ca411b9296611307d74cdfe448e0a576c4192fe692312146ccf6620d3"
+  },
+  "contract/sourcify-summary.json": {
+   "bytes": 35210,
+   "sha256": "1e066be0dabcbc1b8a8c335a1503dda857f349e9acebc23b8ee5d4858886ebc4"
+  },
+  "catalogue.json": {
+   "bytes": 1208628,
+   "sha256": "45bd732bc32a9e90d88cc1b369f05e65a406f522d86cf6f7188e9b13013c04b9"
+  },
+  "catalogue.csv": {
+   "bytes": 566570,
+   "sha256": "751e090031fbf12cd2b285640fe311d3cd068070b70997d256b3c1e5b75e7cbf"
+  },
+  "trait-dictionary.json": {
+   "bytes": 33287,
+   "sha256": "6795aaf69ab0f96e9bbc0ed8ae11225e03733d6cbf5eb206e783eb470b97e7da"
+  },
+  "rarity.json": {
+   "bytes": 521657,
+   "sha256": "40765d648e89042ab5fecc0cf29b7c6470ee399198294087e6e2d5458233e932"
+  },
+  "issues.json": {
+   "bytes": 16336,
+   "sha256": "806bb2512c7cbe7242c286ae19d6503aa2c755440057c282c31f9dd04de5f094"
+  },
+  "analysis.json": {
+   "bytes": 32285,
+   "sha256": "141b5324ae77a173c26340f97ef0f9a5c6ddf9825ca5af29ddfcc7e620b6b3d2"
+  }
+ },
+ "categories": [
+  "Background",
+  "Aura",
+  "Base",
+  "Skin",
+  "Side",
+  "Body",
+  "Mouth",
+  "Eyes",
+  "Head",
+  "Accessory",
+  "Form",
+  "Tier",
+  "Naked"
+ ],
+ "tokens": 1969
+}

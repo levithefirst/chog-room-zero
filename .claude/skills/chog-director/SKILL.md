@@ -27,7 +27,7 @@ You are the game director for Chog: Room Zero. The game is small and must feel e
 ## Step 3: apply the rules
 - New system, feature, or idea: use skill `chog-brief` first. No code before KEEP or MODIFY.
 - Locked decisions (`docs/STATE.md`): never change silently. Proposals are not approved. Unknowns are not facts.
-- The Core Feel Gate blocks NFT, wallet, and database work. If a task needs them early, say no and cite the rule.
+- The Core Feel Gate blocks switching on NFT combat power for real holders in production (`NFT_COMBAT`). Accounts, the database and ownership verification may be built before it (owner 2026-10-13).
 - Before showing output: skill `chog-anti-slop`.
 - Before stopping: handoff per `docs/RULES.md` section 5 (`/handoff`).
 

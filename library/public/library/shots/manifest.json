@@ -1,0 +1,257 @@
+{
+ "deploy": {
+  "w": 1280,
+  "h": 720,
+  "alt": "The deploy briefing before a solo match: the location, its map, the squad and the operator's ability, shown while the room loads.",
+  "callouts": []
+ },
+ "hud-desktop": {
+  "w": 1280,
+  "h": 720,
+  "alt": "A solo match on Office at the start: the operator in a lit room with the vision cone ahead, the HUD around the edges.",
+  "callouts": [
+   {
+    "x": 9,
+    "y": 5,
+    "w": 221,
+    "h": 112,
+    "t": "Health (green) and armour (blue)"
+   },
+   {
+    "x": 9,
+    "y": 114,
+    "w": 97,
+    "h": 48,
+    "t": "Tactical map (M)"
+   },
+   {
+    "x": 494,
+    "y": 5,
+    "w": 292,
+    "h": 40,
+    "t": "Hostiles left and the danger-zone timer"
+   },
+   {
+    "x": 929,
+    "y": 645,
+    "w": 66,
+    "h": 66,
+    "t": "Grenades left (G)"
+   },
+   {
+    "x": 997,
+    "y": 641,
+    "w": 74,
+    "h": 74,
+    "t": "Ability and its cooldown (Space or Q)"
+   },
+   {
+    "x": 1114,
+    "y": 647,
+    "w": 156,
+    "h": 68,
+    "t": "Weapon, magazine and reserve, reload ring"
+   }
+  ]
+ },
+ "sound-rings": {
+  "w": 1280,
+  "h": 720,
+  "alt": "Running and firing: the dashed ring around the operator shows how far that noise carries.",
+  "callouts": []
+ },
+ "reload": {
+  "w": 1280,
+  "h": 720,
+  "alt": "Reloading: the ring around the weapon icon fills while the magazine reloads.",
+  "callouts": [
+   {
+    "x": 1073,
+    "y": 647,
+    "w": 197,
+    "h": 68,
+    "t": "Reload ring and ammo count"
+   }
+  ],
+  "staged": true
+ },
+ "ability-cd": {
+  "w": 1280,
+  "h": 720,
+  "alt": "Benja's Ping just used: the sonar ring spreads out and the ability button shows its cooldown.",
+  "callouts": [
+   {
+    "x": 997,
+    "y": 641,
+    "w": 74,
+    "h": 74,
+    "t": "Ability on cooldown"
+   }
+  ]
+ },
+ "armour-break": {
+  "w": 1280,
+  "h": 720,
+  "alt": "Armour gone: the armour bar is empty and the vitals panel flashes.",
+  "callouts": [
+   {
+    "x": 9,
+    "y": 5,
+    "w": 221,
+    "h": 112,
+    "t": "Armour bar empty: every hit now goes to health"
+   }
+  ],
+  "staged": true
+ },
+ "low-health": {
+  "w": 1280,
+  "h": 720,
+  "alt": "Low health: the health bar is short and the screen edges warn.",
+  "callouts": [
+   {
+    "x": 9,
+    "y": 5,
+    "w": 221,
+    "h": 129,
+    "t": "Health low"
+   }
+  ],
+  "staged": true
+ },
+ "tactical-map": {
+  "w": 1280,
+  "h": 720,
+  "alt": "The tactical map open over a match on Office: the whole floor with area names, your squad and every living hostile at its live position, zoom buttons on the right.",
+  "callouts": [
+   {
+    "x": 22,
+    "y": 35,
+    "w": 112,
+    "h": 34,
+    "t": "Location"
+   },
+   {
+    "x": 1213,
+    "y": 545,
+    "w": 58,
+    "h": 58,
+    "t": "Zoom in"
+   },
+   {
+    "x": 1213,
+    "y": 657,
+    "w": 58,
+    "h": 58,
+    "t": "Fit the whole map"
+   },
+   {
+    "x": 1127,
+    "y": 5,
+    "w": 144,
+    "h": 58,
+    "t": "Return to the match (M)"
+   }
+  ]
+ },
+ "death": {
+  "w": 1280,
+  "h": 720,
+  "alt": "RUN OVER: the results screen after losing a solo match, with time, hostiles downed, kills and accuracy.",
+  "callouts": [],
+  "staged": true
+ },
+ "victory": {
+  "w": 1280,
+  "h": 720,
+  "alt": "ROOM CLEARED: the results screen after winning a solo match, with the medals earned listed.",
+  "callouts": [],
+  "staged": true
+ },
+ "tmap-room-zero": {
+  "w": 1280,
+  "h": 720,
+  "alt": "The in-game tactical map of this location, opened at the start of a solo match: the floor plan with area names, the squad's position and every hostile's live position.",
+  "callouts": []
+ },
+ "tmap-office": {
+  "w": 1280,
+  "h": 720,
+  "alt": "The in-game tactical map of this location, opened at the start of a solo match: the floor plan with area names, the squad's position and every hostile's live position.",
+  "callouts": []
+ },
+ "tmap-supermarket": {
+  "w": 1280,
+  "h": 720,
+  "alt": "The in-game tactical map of this location, opened at the start of a solo match: the floor plan with area names, the squad's position and every hostile's live position.",
+  "callouts": []
+ },
+ "tmap-metro": {
+  "w": 1280,
+  "h": 720,
+  "alt": "The in-game tactical map of this location, opened at the start of a solo match: the floor plan with area names, the squad's position and every hostile's live position.",
+  "callouts": []
+ },
+ "tmap-construction": {
+  "w": 1280,
+  "h": 720,
+  "alt": "The in-game tactical map of this location, opened at the start of a solo match: the floor plan with area names, the squad's position and every hostile's live position.",
+  "callouts": []
+ },
+ "touch-hud": {
+  "w": 844,
+  "h": 390,
+  "alt": "The touch HUD in phone landscape (emulated 844 by 390): vitals top left, buttons on the right, the left half of the screen is the move stick and the right half aims and fires.",
+  "callouts": [
+   {
+    "x": 8,
+    "y": 4,
+    "w": 190,
+    "h": 110,
+    "t": "Health and armour"
+   },
+   {
+    "x": 8,
+    "y": 108,
+    "w": 90,
+    "h": 52,
+    "t": "Map"
+   },
+   {
+    "x": 780,
+    "y": 4,
+    "w": 56,
+    "h": 52,
+    "t": "Pause"
+   },
+   {
+    "x": 602,
+    "y": 228,
+    "w": 74,
+    "h": 74,
+    "t": "Grenade"
+   },
+   {
+    "x": 674,
+    "y": 226,
+    "w": 84,
+    "h": 84,
+    "t": "Ability"
+   },
+   {
+    "x": 758,
+    "y": 240,
+    "w": 70,
+    "h": 70,
+    "t": "Reload"
+   },
+   {
+    "x": 352,
+    "y": 328,
+    "w": 140,
+    "h": 58,
+    "t": "Weapon and ammo"
+   }
+  ]
+ }
+}

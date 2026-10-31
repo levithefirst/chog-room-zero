@@ -1,0 +1,108 @@
+# Class system: tiers, upgrades, signatures, caps
+
+**Owner 2026-10-18 ("CHOG SUPERPOWER SYSTEM", rule 6: "Do not use NFT rarity for generic health/damage stat inflation") replaced the tier stat power below.** Every tier now starts at base health, armour and damage, the 1:1s included. A verified Chog's rarity is the rank of the superpower its real traits carry (`docs/design/superpowers.md`). The ten 1:1s keep their signatures. Upgrades, caps and grenade capacity are unchanged. The tier table and duel table that follow are kept as the record of what shipped before (H31 and earlier).
+
+**Owner 2026-10-18 (IDENTITY + MAPS pass), base health and armour:** every operator and every free player starts at 150 health. A verified Chog with no mapped power (618 tokens, the 1:1s among them) starts at 200 health and nothing else; a Chog with a power plays at 150 with the power. Armour capacity is 65 for everyone. `BASE_HP` in `src/config/power.ts`, `TUNING.combat.armorCap`. Upgrades multiply that base inside the caps below.
+
+Status: the direction is LOCKED (owner 2026-10-13 master build prompt; owner 2026-10-14 master integration pass: "NFT holders start with power, free players start lower and catch up. This is not cosmetic", the ten 1:1s are "legendary, God-tier and intentionally dominant", a fully progressed free player must be competitive with the lower NFT tiers). The numbers below are PROPOSALS chosen from measured duels; a person must judge them (playtest questions at the end).
+
+Code: `src/config/power.ts` (every number), `src/nft/tier-table.ts` (generated from the verified catalogue), `src/sim/world.ts` (applies them). Tests: `tests/power.test.ts`.
+
+NFT combat power is ON for verified holders (`NFT_COMBAT` unset or anything but `0`; `NFT_COMBAT=0` turns it off). Demo tokens show it, labelled, in practice and in demo-only online rooms.
+
+## Tiers
+
+Tier is the token's `Tier` trait from the verified catalogue, looked up by the metadata id the contract itself returns (`metadataId(tokenId)`). Never a hash or anything the browser says.
+
+Before 2026-10-18 (removed):
+
+| Tier | Tokens | Health | Armour | Damage | Grenades | Ability |
+|---|---|---|---|---|---|---|
+| Free | everyone | x1.00 | +0 | x1.00 | 3 | character ability |
+| Common | 1,279 | x1.15 | +8 | x1.00 | 5 | character ability |
+| Uncommon | 590 | x1.22 | +12 | x1.02 | 7 | character ability |
+| Rare | 60 | x1.32 | +18 | x1.04 | 9 | character ability |
+| Epic | 30 | x1.42 | +24 | x1.06 | 11 | character ability |
+| 1:1 | 10 | x1.75 | +35 | x1.12 | 13 | its own signature (replaces the character ability) |
+
+Speed never changes with tier or upgrade. Armour is added to both the starting armour and the armour cap. Grenade capacity (owner 2026-10-14, `docs/design/roster-grenades.md`) is a tier advantage only: upgrades never raise it, and online the server sets it from the verified ticket.
+
+## Upgrades (shards, earned only in saved online matches; never sold)
+
+**Owner 2026-10-23: bigger steps, 4 more ranks each, prices x1.25 (Firepower x2 instead), caps raised to the new maxima.** Ranks already bought stay as they are (an account at Vitality 6/8 is at 6/12). Source of truth: `UPGRADES`, `UPGRADE_STEP`, `CAPS` in `src/config/power.ts`.
+
+| Upgrade | Per rank | Ranks | Costs |
+|---|---|---|---|
+| Vitality | +10 health | 12 | 15, 50, 90, 125, 175, 225, 290, 365, 440, 525, 625, 740 |
+| Plating | +5 armour | 12 | 15, 50, 90, 125, 175, 225, 290, 365, 440, 525, 625, 740 |
+| Firepower | +35% weapon damage | 7 | 300, 500, 700, 900, 1100, 1300, 1500 |
+| Focus | -8% ability cooldown | 8 | 40, 75, 140, 225, 340, 475, 640, 825 |
+
+Prices: the earlier price per rank (with the same curve continued for the 4 new ranks) x1.25, Firepower x2 instead, rounded to the nearest 5. Everything costs 16,390 shards (was 3,250): a player who only loses in practice (one kill a run, at the daily cap) maxes out in about 94 days; the first rank (15) comes with one online win, two online matches, or five practice runs. A maxed profile has +120 health (free: 270), +60 armour, x3.45 damage and x0.36 ability cooldown, online too. Holders buy the same upgrades; "my NFT decides my starting class, my account decides how far I developed it".
+
+Before 2026-10-23: Vitality +3% health x8, Plating +2 armour x8, Firepower +1% damage x3, Focus -5% cooldown x4; 3,250 shards in all.
+
+## Caps (an automatic CUT outside them, `docs/RULES.md` section 6)
+
+Owner 2026-10-23 raised them to exactly the maxed upgrades (were x2.00 / +52 / x1.15 / x0.80).
+
+| | Cap |
+|---|---|
+| Health multiplier | 2.00 (maxed Vitality is +120: x1.80 on 150, x1.60 on 200) |
+| Armour bonus | +60 |
+| Damage multiplier | 3.45 |
+| Cooldown multiplier | 0.36 |
+| Speed | never changed |
+
+## Measured duels (before 2026-10-18; the tier stats are gone, see superpowers.md for the current bands)
+
+Harness `tests/helpers/duel.ts`: two copies of the same hero in a 28 x 7 hall, strafing and firing with perfect aim, 12 seeds x 2 slot orders, at 3 / 6 m. Share = wins of the first side over decided duels. Measured 2026-10-14 on the committed values.
+
+| Matchup | Kettle | Mop | Wick | Brick |
+|---|---|---|---|---|
+| Common vs free | 0.79 / 0.67 | 0.81 / 0.63 | 0.95 / 0.79 | 0.92 / 0.92 |
+| Uncommon vs free | 0.79 / 0.67 | 0.92 / 0.78 | 0.95 / 0.79 | 1.00 / 1.00 |
+| Rare vs free | 0.88 / 0.79 | 0.96 / 0.88 | 0.95 / 0.79 | 1.00 / 1.00 |
+| Epic vs free | 0.88 / 0.91 | 1.00 / 1.00 | 0.95 / 0.79 | 1.00 / 1.00 |
+| 1:1 (no signature) vs free | 0.96 / 1.00 | 1.00 / 1.00 | 1.00 / 1.00 | 1.00 / 1.00 |
+| Maxed free vs Common | 0.82 / 0.74 | 0.63 / 0.67 | 0.50 / 0.50 | 0.96 / 0.92 |
+| Maxed free vs Uncommon | 0.50 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 | 0.80 / 0.75 |
+| Maxed free vs Rare | 0.35 / 0.41 | 0.42 / 0.33 | 0.50 / 0.50 | 0.20 / 0.16 |
+| Maxed free vs 1:1 | 0.14 / 0.08 | 0.00 / 0.00 | 0.05 / 0.30 | 0.00 / 0.00 |
+
+Reading it honestly:
+- These are upper bounds: perfect-aim mirror duels turn any extra hit point into a win. Misses, cover, positioning, team fights and revives narrow every edge.
+- A fresh free player still wins about 3 in 10 against a Common holder with the rifle; a maxed free player beats Common and is even with Uncommon (tested bands in `tests/power.test.ts`).
+- The 1:1 dominates a single opponent by design. It is beaten by numbers (3v3, 5v5), cover, its signature's counter and focus fire.
+- The marksman (Wick) is quantised: one more shot to kill flips most duels. First thing to tune after a playtest.
+
+## The ten 1:1s (single ability slot, real names since 2026-10-14)
+
+Each has its own colour (rings, telegraphs, a slow identity ring around the body seen by both sides) and its own voice layered over the ability cue (`src/audio/audio.ts`), carried to every client by the sound event's token id.
+
+| Chog | Name | Signature | Effect | Telegraph | Counter |
+|---|---|---|---|---|---|
+| #53 | Blaze | Flashfire (12 s) | 0.45 s wind-up, then 35 to every hostile within 3.2 m in sight | orange ring of the true radius filling, crackle | step out or break sight before it fills |
+| #392 | Burning Skully | Hellfire (16 s) | 0.8 s wind-up, then 40 straight to health within 3.5 m in sight | red ring, deep roar | longest wind-up: back off |
+| #434 | Chog Scream | Howl (15 s) | hostiles within 6.5 m in sight at 55% speed for 3 s | ice-blue shock ring, shriek | fight from beyond 6.5 m or behind cover |
+| #494 | Chogbomination | Bulwark (16 s) | 3 m slab for 14 s | the slab, double slam | walk around it |
+| #973 | Frogger | Leap (6 s) | 0.3 s leap, about 4 m | green ring, croak | it cannot shoot mid-leap; aim where it lands |
+| #1006 | Grim | Deadsight (14 s) | shows hostiles within 18 m for 4 s; they hear it at 18 m | violet 18 m ring, toll | move when you hear the toll |
+| #1159 | Halo | Halo (18 s) | +40 health to her and allies within 4.5 m | white-gold ring of the true radius, choir chord | spread out, burst one target |
+| #1290 | Krown | Crown Guard (16 s) | +40 armour, +20 health | purple crown ring, plate clank | armour-piercing weapons |
+| #1373 | Midas | Gold Shell (18 s) | untouchable 1.5 s, cannot shoot | gold shell, coin shimmer | stop firing and reload |
+| #1376 | Redd | Red Rush (16 s) | +30% damage for 4.5 s | red outline, growl | break line of sight for 4.5 s |
+
+Measured against a 1:1 with the plain hero ability (mean of 3 and 6 m, perfect-aim harness that fires abilities inside 5 m): every signature between 0.30 and 0.85 (tested). Howl 0.73 and Bulwark 0.75 are the strongest because the scripted players cannot step out of a slow or around a slab.
+
+## Rating is separate from power
+
+`src/config/progression.ts`: Elo, K 24, with a power offset per tier (free 0 to 1:1 +120). The leaderboard ranks by kills, never by tier.
+
+## Playtest questions for the owner (Core Feel Gate)
+
+1. Common vs free, both Kettle, five duels each way: does the free side feel it can win sometimes?
+2. A maxed free player vs an Uncommon holder: does it feel even?
+3. A 1:1 in 3v3: does it feel dominant but beatable by a coordinated team?
+4. Each signature from the receiving side: did the telegraph give you time to react, and was the counter clear?
+5. Downed and revive (3v3): is 3 s to revive and 15 s to bleed out right?

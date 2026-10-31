@@ -1,6 +1,6 @@
 // Match flow as a small table, so every transition is tested and the UI cannot reach an odd state.
 export type Phase = 'title' | 'select' | 'loading' | 'play' | 'pause' | 'recap' | 'results';
-export type MatchEvent = 'start' | 'pick' | 'loaded' | 'pause' | 'resume' | 'died' | 'won' | 'recapDone' | 'restart' | 'quit';
+export type MatchEvent = 'start' | 'pick' | 'loaded' | 'pause' | 'resume' | 'died' | 'won' | 'recapDone' | 'restart' | 'quit' | 'menu';
 
 const TABLE: Record<Phase, Partial<Record<MatchEvent, Phase>>> = {
   title: { start: 'select' },
@@ -9,7 +9,7 @@ const TABLE: Record<Phase, Partial<Record<MatchEvent, Phase>>> = {
   play: { pause: 'pause', died: 'recap', won: 'results' },
   pause: { resume: 'play', restart: 'loading', quit: 'title' },
   recap: { recapDone: 'results' },
-  results: { restart: 'loading', quit: 'select' },
+  results: { restart: 'loading', quit: 'select', menu: 'title' },
 };
 
 /** Next phase, or the same phase when the event does not apply. */

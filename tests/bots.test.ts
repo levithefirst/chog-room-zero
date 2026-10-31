@@ -5,6 +5,9 @@ import { findPath } from '../src/sim/level';
 
 // Headless batch: a scripted dummy player walks a route through every band of the room, firing bursts
 // toward where it walks. It cannot die (test only), so we observe bot behaviour for the whole run.
+// Bursts of 15 steps every 3 s (was 10 while bots had 85-120 health; owner 2026-10-18 gave everyone 150, so the same
+// damage share needs 1.5x the fire). With 10, no bot fell under half health in 8 seeds; in autopilot fights bots took
+// cover in 18 of 18 runs across the three locations (measured 2026-10-19).
 const ROUTE = [[3, 8], [15, 8], [27, 10], [38, 12], [36, 4], [26, 4], [15, 4], [4, 4], [3, 18], [15, 18], [24, 20], [38, 18], [30, 24], [10, 24], [27, 12]];
 function batch(seed: number, seconds: number) {
   const w = createWorld({ seed });
@@ -25,7 +28,7 @@ function batch(seed: number, seconds: number) {
     }
     const n = path[0] ?? p;
     const d = Math.hypot(n.x - p.x, n.y - p.y) || 1;
-    const inp: ActorInput = { ...IDLE_INPUT, moveX: (n.x - p.x) / d, moveY: (n.y - p.y) / d, aim: Math.atan2(n.y - p.y, n.x - p.x), firing: i % 180 < 10 };
+    const inp: ActorInput = { ...IDLE_INPUT, moveX: (n.x - p.x) / d, moveY: (n.y - p.y) / d, aim: Math.atan2(n.y - p.y, n.x - p.x), firing: i % 180 < 15 };
     p.hp = 1e9;
     p.reserve = 999;
     stepWorld(w, inp);

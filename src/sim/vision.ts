@@ -2,6 +2,7 @@
 import { angleDiff, raySegment } from './geom';
 import type { Level } from './level';
 import { sightClear } from './level';
+import { TUNING } from '../config/tuning';
 
 export interface ViewShape {
   range: number;
@@ -9,11 +10,22 @@ export interface ViewShape {
   nearRadius: number;
 }
 
-/** Exact test: is point (px,py) visible to a viewer at (x,y) facing `facing`? */
+/** H34: is (px,py) inside one of the location's lit areas? */
+export function litAt(l: Level, px: number, py: number): boolean {
+  for (const b of l.lights ?? []) if (px >= b.x0 && px <= b.x1 && py >= b.y0 && py <= b.y1) return true;
+  return false;
+}
+
+/**
+ * Exact test: is point (px,py) visible to a viewer at (x,y) facing `facing`? Inside the lamp's cone and range, or
+ * (H34) inside the cone, within TUNING.vision.litRange and standing in a lit area: light exposes you, dark hides you.
+ * Walls always block it. The ONE sight rule: the bots, the server's snapshot privacy and the screen all use it.
+ */
 export function canSee(l: Level, x: number, y: number, facing: number, v: ViewShape, px: number, py: number): boolean {
   const dx = px - x, dy = py - y;
   const d = Math.hypot(dx, dy);
-  const inShape = d <= v.nearRadius || (d <= v.range && Math.abs(angleDiff(facing, Math.atan2(dy, dx))) <= v.coneRad / 2);
+  const reach = d <= v.range || (d <= TUNING.vision.litRange && litAt(l, px, py));
+  const inShape = d <= v.nearRadius || (reach && Math.abs(angleDiff(facing, Math.atan2(dy, dx))) <= v.coneRad / 2);
   return inShape && sightClear(l, x, y, px, py);
 }
 

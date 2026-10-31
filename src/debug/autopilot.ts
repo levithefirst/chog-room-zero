@@ -6,6 +6,8 @@
 import { IDLE_INPUT, type ActorInput, type World } from '../sim/world';
 import { canSee } from '../sim/vision';
 import { findPath, shotClear, sightClear } from '../sim/level';
+import { safeSpot, zoneAt, zoneGoal } from '../sim/zone';
+import { TUNING } from '../config/tuning';
 
 export interface Autopilot { next(w: World): ActorInput }
 
@@ -28,6 +30,10 @@ export function createAutopilot(seed: number, aimErrDeg = 3): Autopilot {
       // Shot at from somewhere I can see along: turn toward it (the damage arc says where).
       const hitBy = p.lastHitFrom && sightClear(w.level, p.x, p.y, p.lastHitFrom.x, p.lastHitFrom.y) ? p.lastHitFrom : null;
       if (i % 18 === 0) aimNoise = (rnd() * 2 - 1) * errRad;
+      // Danger zone (RC-8): like a player reading the countdown and the circle, it walks in before the edge reaches it.
+      const zv = w.zone ? zoneAt(w.zone, w.tick * TUNING.simStepSeconds) : null;
+      const zg = zv ? zoneGoal(zv) : null;
+      const zoneSpot = zg && Math.hypot(p.x - zg.x, p.y - zg.y) > zg.r - TUNING.zone.moveInMargin ? safeSpot(w.level, zg, p.x, p.y, TUNING.zone.moveInMargin + 1.5) : null;
       if (seen) {
         inp.aim = Math.atan2(seen.y - p.y, seen.x - p.x) + aimNoise;
         const d = Math.hypot(seen.x - p.x, seen.y - p.y);
@@ -39,16 +45,32 @@ export function createAutopilot(seed: number, aimErrDeg = 3): Autopilot {
         else if (d > want) { inp.moveX = (seen.x - p.x) / d; inp.moveY = (seen.y - p.y) / d; inp.quiet = false; }
         inp.firing = clear && d <= want + 0.5 && p.ammo > 0 && p.reloadLeft <= 0;
         if (p.ammo === 0) inp.reload = true;
-        if (p.hero.ability.kind !== 'mend' && p.abilityCd === 0) inp.ability = true;
+        // Abilities for a reason, like a player: Shell when hurt under fire (it stops your own shots), Snare inside its
+        // radius, Slip to close in or to get away when hurt, the rest on contact. Patch is below.
+        const k = p.ability.kind;
+        // Slip goes where you move: to close in when the gun wants it closer, or away when hurt (never into a shotgun).
+        const hurt = p.hp < p.maxHp * 0.5;
+        const want2 = k === 'shield' ? hurt && p.lastHitTick >= w.tick - 2 : k === 'scream' ? d <= (p.ability.radius ?? 0)
+          : k === 'dash' ? d > want + 1 || hurt : k !== 'mend';
+        if (k === 'dash' && hurt && p.abilityCd === 0) { inp.moveX = -(seen.x - p.x) / d; inp.moveY = -(seen.y - p.y) / d; }
+        if (want2 && p.abilityCd === 0) inp.ability = true;
+        if (zoneSpot) {
+          // Fight on the way in: keep shooting what it sees, but the feet go to the zone.
+          if (--repath <= 0 || path.length === 0) { path = findPath(w.level, p.x, p.y, zoneSpot.x, zoneSpot.y); repath = 30; }
+          while (path.length && Math.hypot(path[0].x - p.x, path[0].y - p.y) < 0.35) path.shift();
+          if (path.length) { const n = path[0], dn = Math.hypot(n.x - p.x, n.y - p.y); inp.moveX = (n.x - p.x) / dn; inp.moveY = (n.y - p.y) / dn; }
+        }
       } else {
         if (hitBy) inp.aim = Math.atan2(hitBy.y - p.y, hitBy.x - p.x);
-        if (p.ammo < p.weapon.magazine && p.reserve > 0) inp.reload = true;
+        // Tops up between fights like a player: below half a magazine, never a near-full drum (an LMG reload is
+        // 2.5 s; reloading 59 of 60 every time a target left the cone kept Toad reloading through its fights).
+        if (p.ammo < p.weapon.magazine * 0.5 && p.reserve > 0) inp.reload = true;
         const near = (o: { x: number; y: number }) => Math.hypot(o.x - p.x, o.y - p.y);
         const nearestBot = live.sort((a, b) => near(a) - near(b))[0];
         // Patch up first: health when below 60%, armour when low and close.
         const heal = p.hp < p.maxHp * 0.6 ? w.pickups.filter((k) => k.active && k.kind === 'health').sort((a, b) => near(a) - near(b))[0] : undefined;
         const arm = !heal && p.maxArmor > 0 && p.armor < p.maxArmor * 0.4 ? w.pickups.filter((k) => k.active && k.kind === 'armor' && near(k) < 12)[0] : undefined;
-        const target = heal ?? arm ?? nearestBot;
+        const target = zoneSpot ?? heal ?? arm ?? nearestBot;
         // Creep when a hostile is close and unseen: they hear running at 8 m.
         inp.quiet = !!nearestBot && near(nearestBot) < 10;
         if (target && (--repath <= 0 || path.length === 0)) { path = findPath(w.level, p.x, p.y, target.x, target.y); repath = 30; }
@@ -60,7 +82,15 @@ export function createAutopilot(seed: number, aimErrDeg = 3): Autopilot {
           if (!hitBy) inp.aim = Math.atan2(inp.moveY, inp.moveX);
         }
       }
-      if (p.hero.ability.kind === 'mend' && p.hp < p.maxHp * 0.55 && p.abilityCd === 0) inp.ability = true;
+      if (p.ability.kind === 'mend' && p.hp < p.maxHp * 0.55 && p.abilityCd === 0) inp.ability = true;
+      // A hostile grenade ring it stands in (drawn for anyone within radius + 1.5 u): step straight out, like a player.
+      const nade = w.grenades.find((g) => g.team !== p.team && Math.hypot(g.x - p.x, g.y - p.y) <= TUNING.grenade.radius + 0.4);
+      if (nade) {
+        const d = Math.max(0.01, Math.hypot(p.x - nade.x, p.y - nade.y));
+        inp.moveX = (p.x - nade.x) / d;
+        inp.moveY = (p.y - nade.y) / d;
+        inp.quiet = false;
+      }
       return inp;
     },
   };

@@ -7,3 +7,6 @@ coverage/
 .vite/
 *.tsbuildinfo
 .DS_Store
+dist-server
+dist-local
+__pycache__/

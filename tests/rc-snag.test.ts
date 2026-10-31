@@ -16,7 +16,8 @@ export function sweep(hero: string) {
   const worst: { door: string; stall: number }[] = [];
   let maxStall = 0;
   for (const d of doors) for (const dir of [1, -1]) for (const off of [-0.4, -0.25, -0.1, 0, 0.1, 0.25, 0.4]) for (const lean of [null, 0, 0.2, -0.2]) {
-    const w = createWorld({ hero, bots: [], seed: 1 });
+    // No pickups: the sweep is about walls and door frames (and the 68 x 42 venue lays out 26 zones per world).
+    const w = createWorld({ hero, bots: [], seed: 1, pickupZones: [] });
     const p = w.actors[0];
     const cx = d.x + 0.5, cy = d.y + 0.5;
     // Start 2 u before the door, offset sideways; stick held across the door (plus a diagonal lean).
@@ -47,16 +48,16 @@ describe('RC-1 doorway / corner snag sweep (every hero)', () => {
   for (const h of HEROES) it(`${h.name}: no stall over 0.3 s at any door, offset or diagonal`, () => {
     const r = sweep(h.id);
     expect(r.worst.slice(0, 8)).toEqual([]);
-  });
+  }, 120000);
 });
 
 describe('RC-1 vertex wedge (pushing straight into a door-frame corner)', () => {
-  it('slides off the corner instead of stopping dead (door 10,3 frame)', () => {
+  it('slides off the corner instead of stopping dead (door 6,3 frame: the spawn office door)', () => {
     const w = createWorld({ hero: 'kettle', bots: [], seed: 1 });
     const p = w.actors[0];
-    p.x = 8.5; p.y = 3.25;
+    p.x = 4.5; p.y = 3.25;
     const n = Math.hypot(1, 0.5);
     for (let i = 0; i < 120; i++) stepWorld(w, { ...IDLE_INPUT, moveX: 1 / n, moveY: 0.5 / n });
-    expect(p.x).toBeGreaterThan(10.5); // through the door
+    expect(p.x).toBeGreaterThan(6.5); // through the door
   });
 });

@@ -30,6 +30,9 @@ describe('CHOG-INPUT-001 tap fire', () => {
     const w = createWorld({ bots: [], seed: 2, hero: 'kettle' });
     const p = w.actors[0];
     p.reserve = 999;
+    // The cursor sits at the page origin: face that way first (GP: a pull waits for the body to turn; the tap that
+    // lands mid-turn is covered in tests/gp-combat.test.ts).
+    p.facing = Math.atan2(-360, -640);
     const framesBetween = Math.ceil(WEAPONS.rifle.fireInterval * 60) + 2;
     for (let tap = 0; tap < 20; tap++) {
       el.dispatchEvent(ev('pointerdown', {}));
@@ -43,6 +46,29 @@ describe('CHOG-INPUT-001 tap fire', () => {
       }
     }
     expect(p.shots).toBe(20);
+    inp.dispose();
+  });
+  it('a held Space stays held through a long frame: an Aura is not dropped by its own held key', async () => {
+    const { createInput } = await import('../src/input/input');
+    const { superAbility } = await import('../src/config/superpowers');
+    const el = new EventTarget() as unknown as HTMLElement;
+    const inp = createInput(el);
+    const w = createWorld({ bots: [], seed: 2, power: { ...(await import('../src/config/power')).BASE_POWER, tier: 'common', superpower: superAbility('aura', 'common') } });
+    const key = (type: string) => (window as unknown as EventTarget).dispatchEvent(Object.assign(new Event(type), { code: 'Space', key: ' ', repeat: false, preventDefault() {} }));
+    key('keydown');
+    // Mirror main.ts on a slow device: frames of 6 steps while the key is held for 3 frames.
+    for (let f = 0; f < 3; f++) {
+      const i = inp.read(640, 360);
+      for (let s = 0; s < 6; s++) { stepWorld(w, i); i.ability = inp.abilityHeld(); }
+    }
+    expect(w.actors[0].auraLeft).toBeGreaterThan(0);
+    key('keyup');
+    for (let f = 0; f < 3; f++) { const i = inp.read(640, 360); for (let s = 0; s < 6; s++) { stepWorld(w, i); i.ability = inp.abilityHeld(); } }
+    expect(w.actors[0].auraLeft).toBeGreaterThan(0);
+    // A fresh press after a real release still drops it early.
+    key('keydown');
+    { const i = inp.read(640, 360); stepWorld(w, i); }
+    expect(w.actors[0].auraLeft).toBe(0);
     inp.dispose();
   });
   it('R never restarts (only Enter confirms)', async () => {

@@ -59,5 +59,5 @@ Sources: [AS] App Store listing https://apps.apple.com/us/app/bullet-echo-pvp-sh
 
 ## Rules we wrote (documented here so tests can hold them)
 - **Armour**: each hit, armour soaks 60% x (1 - weapon armour-pen) of the damage until the armour pool is empty; the rest hits health. Max armour 50 for everyone.
-- **Half cover (lean rule)**: crates and barriers stop bullets unless the bullet was fired within 1.25 u of that piece of cover (the shooter is leaning over it). A target hugging cover stays protected from far shooters. The marksman rifle pierces half cover; nothing pierces walls. Cover never blocks sight.
+- **Half cover (lean rule)**: crates and barriers stop bullets unless the bullet was fired within 1.25 u of that piece of cover (the shooter is leaning over it). A target hugging cover stays protected from far shooters. Nothing pierces cover or walls (RC-8; the marksman used to pierce half cover). Cover never blocks sight.
 - **Falloff**: linear from falloffStart to falloffEnd down to minDamageMul (`src/config/weapons.ts`).

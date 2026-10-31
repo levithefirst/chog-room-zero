@@ -12,9 +12,12 @@ const R = TUNING.movement.radius, DEG = Math.PI / 180;
 function lcg(seed: number) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32); }
 
 interface Side { w: WeaponDef; hp: number; armor: number; speed: number; cd: number; ammo: number; reload: number }
+// Weapon model: each weapon on the reference body its design gate was tuned on (pre-roster Brick 120/50 at 0.9,
+// Wick 85/15 at 0.95). Roster bodies are measured separately (tests/gr-roster.test.ts).
+const REF: Record<string, { hp: number; armor: number; speed: number }> = { shotgun: { hp: 120, armor: 50, speed: 0.9 }, marksman: { hp: 85, armor: 15, speed: 0.95 } };
 function side(heroId: string): Side {
-  const h = heroById(heroId); const w = WEAPONS[h.weapon];
-  return { w, hp: h.maxHp, armor: h.maxArmor, speed: TUNING.movement.maxSpeed * h.speed, cd: 0, ammo: w.magazine, reload: 0 };
+  const w = WEAPONS[heroById(heroId).weapon], r = REF[w.id];
+  return { w, hp: r.hp, armor: r.armor, speed: TUNING.movement.maxSpeed * r.speed, cd: 0, ammo: w.magazine, reload: 0 };
 }
 /** One trigger pull from `a` at range d; target strafes at `tv` u/s perpendicular (both strafe when strafing). */
 function fire(a: Side, t: Side, d: number, strafing: boolean, rnd: () => number) {
@@ -33,7 +36,7 @@ function fire(a: Side, t: Side, d: number, strafing: boolean, rnd: () => number)
   }
 }
 function duel(d: number, strafing: boolean, seed: number) {
-  const rnd = lcg(seed), A = side('brick'), B = side('wick'), dt = 1 / 120;
+  const rnd = lcg(seed), A = side('tonashiro'), B = side('ray'), dt = 1 / 120;
   for (let time = 0; time < 12; time += dt) {
     for (const [s, o] of [[A, B], [B, A]] as const) {
       s.cd -= dt;
