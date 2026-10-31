@@ -1,9 +1,11 @@
 import { createRenderer, createFx } from './render/render';
 import { createInput } from './input/input';
+import { createSummaryGate } from './input/gate';
 import { createAudio } from './audio/audio';
 import { fixedSteps } from './sim/sim';
 import { createWorld, hears, player, stepWorld, type World } from './sim/world';
-import { sightClear } from './sim/level';
+import { sightClear, walkable } from './sim/level';
+import { clampMarker, THREAT_HIT_SECONDS, THREAT_SHOT_RANGE, THREAT_SHOT_SECONDS } from './render/visibility';
 import { canSee } from './sim/vision';
 import { nextPhase, simRuns, type MatchEvent, type Phase } from './sim/match';
 import { TUNING } from './config/tuning';
@@ -91,10 +93,24 @@ async function start() {
   }
 
   // ---- Flow ----
+  // Restart from the summary needs a fresh press after a short lock (CHOG-FLOW-001).
+  const summaryGate = createSummaryGate();
+  let resumeSkip = false;
   function go(e: MatchEvent) {
+    if (phase === 'results' && e === 'restart' && !summaryGate.canRestart()) return;
     const next = nextPhase(phase, e);
     if (next === phase) return;
+    const from = phase;
     phase = next;
+    if (next === 'results') {
+      summaryGate.open(performance.now());
+      input.takeAction();
+    }
+    // Resuming never replays the paused time: no catch-up burst of sim steps.
+    if (from === 'pause' && next === 'play') {
+      acc = 0;
+      resumeSkip = true;
+    }
     audio.play('ui', 0, 0, 1, false, true);
     render();
   }
@@ -241,6 +257,15 @@ async function start() {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && phase === 'play') go('pause');
   });
+  // Losing window focus (alt-tab, notification shade, another window) pauses too.
+  window.addEventListener('blur', () => {
+    if (phase === 'play') go('pause');
+  });
+  // Fresh presses for the summary gate (auto-repeat does not count).
+  window.addEventListener('pointerdown', () => summaryGate.press(performance.now()), { capture: true });
+  window.addEventListener('keydown', (e) => {
+    if (!e.repeat) summaryGate.press(performance.now());
+  }, { capture: true });
 
   function spark(x: number, y: number, n: number, hostile: boolean) {
     for (const s of fx.sparks) {
@@ -270,9 +295,13 @@ async function start() {
       if (own && s.type === 'pickup') toast('Picked up');
       if (own || s.team !== 'bot') continue;
       const src = world.actors[s.sourceId];
+      // A bot firing with a clear line close by shows itself for a moment (muzzle flash), even outside the cone.
+      if (s.type === 'shot' && src.alive && Math.hypot(dx, dy) <= THREAT_SHOT_RANGE && sightClear(world.level, p.x, p.y, src.x, src.y))
+        fx.threats[src.id] = Math.max(fx.threats[src.id] ?? 0, THREAT_SHOT_SECONDS);
       if (src.alive && canSee(world.level, p.x, p.y, p.facing, view, src.x, src.y)) continue;
       const err = Math.hypot(dx, dy) * 0.08;
-      fx.markers.push({ x: s.x + (Math.random() * 2 - 1) * err, y: s.y + (Math.random() * 2 - 1) * err, age: 0, life: TUNING.sound.markerLife, big: s.type === 'shot' || s.type === 'death' || s.type === 'sonar' });
+      const m = clampMarker(world.level, s.x + (Math.random() * 2 - 1) * err, s.y + (Math.random() * 2 - 1) * err, src.x, src.y, walkable);
+      fx.markers.push({ x: m.x, y: m.y, age: 0, life: TUNING.sound.markerLife, big: s.type === 'shot' || s.type === 'death' || s.type === 'sonar' });
     }
     for (const h of world.hits) {
       if (h.by === 0) {
@@ -282,6 +311,7 @@ async function start() {
       }
       if (h.target === 0) {
         fx.shake = TUNING.render.shakeSeconds;
+        fx.threats[h.by] = THREAT_HIT_SECONDS;
         fx.damageArcs.push({ ang: Math.atan2(h.fromY - p.y, h.fromX - p.x), age: 0 });
         audio.play('hurt', 0, 0, 1, false, true);
         ($('hurt') as HTMLElement).style.opacity = '1';
@@ -323,13 +353,17 @@ async function start() {
     if (simRuns(phase)) {
       const p = player(world);
       const ps = renderer.toScreen(p.x, p.y);
-      const inp = input.read(ps.x, ps.y);
-      const r = fixedSteps(acc, dt, TUNING.simStepSeconds, TUNING.maxStepsPerFrame);
+      const r = fixedSteps(acc, resumeSkip ? 0 : dt, TUNING.simStepSeconds, TUNING.maxStepsPerFrame);
+      resumeSkip = false;
       acc = r.remainder;
-      for (let i = 0; i < r.steps && world.outcome === 'playing'; i++) {
+      // Only consume input on frames that step the sim, so a latched tap is never lost on a 0-step frame.
+      const inp = r.steps > 0 ? input.read(ps.x, ps.y) : null;
+      for (let i = 0; inp && i < r.steps && world.outcome === 'playing'; i++) {
         stepWorld(world, inp);
         inp.reload = false;
         inp.ability = false;
+        // A tap fires exactly once: after the first step, firing follows the real button state.
+        if (!input.fireHeld()) inp.firing = false;
         afterStep();
         playTime += TUNING.simStepSeconds;
       }
@@ -358,6 +392,7 @@ async function start() {
     for (const m of fx.hitMarks) m.age += dt;
     for (const m of fx.damageArcs) m.age += dt;
     for (const m of fx.pings) m.age += dt;
+    for (let i = 0; i < fx.threats.length; i++) if (fx.threats[i] > 0) fx.threats[i] -= dt;
     for (const s of fx.sparks) {
       if (s.age >= 1) continue;
       s.age += dt * 3;

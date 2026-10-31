@@ -66,3 +66,15 @@ Not verified    : feel, fairness, balance, run length, audio by ear, phone perfo
 Locked decisions touched : LOCKED 1 and 12 amended by the P2 mandate (benchmark allowed, nothing copied; replaced map, heroes with one ability each, pickups). LOCKED 9 clarified: heroes may differ in speed/HP/armour, NFT sidegrades never do. No dependency added
 Next smallest task : P2-F1 owner plays the preview on PC, Pixel 7, iPhone 13; grokbot fixes the top 3 reported issues
 H5 addendum      : after preview verification, src/main.ts unlocks audio on pointerup/touchend/click/keydown (touch pointerdown is not a user activation, so phone audio could stay blocked; also present in P1). Re-verified: typecheck 0, 97/97, build 0, phone suite console errors none. Final commit = the one carrying this line
+
+HANDOFF H6  2026-10-12  grokbot -> owner
+Branch @ commit : grokbot/p0-bugfix-sprint (from 52acef6; PR base grokbot/p2-benchmark-overhaul); SHA in the PR   pushed: yes
+Task            : P0 bug-fix sprint (owner task, chat 2026-10-12 05:28 WAT) on ADE's QA report (/workspace/qa/bug-ledger.md, release-report.md)
+Files changed   : src/main.ts, src/input/input.ts, src/input/gate.ts (new), src/render/render.ts, src/render/visibility.ts (new), tests/p0fix.test.ts (new), tests/p0fix-input.test.ts (new), tools/p0fix-run.mjs (new), docs/STATE.md, docs/HANDOFFS.md
+Fixes           : CHOG-VIS-001 root cause = 70% of bot hits on the player come from outside the view cone (median 4 u); renderer and LOS were correct (live and branch draw an in-cone bot: visibleBots 1). Fix: a shooter with a clear line is drawn ringed for 0.9 s after hitting / 0.5 s after firing within 8 u (never through walls). FLOW-001: 0.75 s summary lock + fresh press required, R no longer restarts. INPUT-001: tap latch + input consumed only on stepped frames, one shot per tap. HUD-001: sound rings and killer marker clamped to walkable map tiles. FLOW-002: blur also pauses; accumulator reset and first-frame skip on resume
+Tests run       : Node 22: npm ci 0; typecheck 0; npm test 114/114 (11 files); build 0; node tools/p0fix-run.mjs (headless Chrome 1280x720 + 844x390 touch) 9/9 checks, console errors none, /workspace/shots/p0fix-*.png
+Rifle (WPN-001/002): held cadence matches fireInterval; no collision bug. "No damage at 4-6 u" = the documented lean rule (half cover blocks unless the shooter is within 1.25 u of it) while half cover does not block sight. No change (balance/design out of scope)
+Not fixed (scope) : MAP-001, UI-001 (key 3), AI-001 slab nav, HUD-002, VIS-002, BAL-001, AI-002, DES-001
+Not verified    : real phones, feel, audio by ear
+Locked decisions touched : none. No dependency added
+Next smallest task : owner playtest of the preview; then P3-1 (light mesh + DPR cap) from /workspace/reports/chog-p3-research.md

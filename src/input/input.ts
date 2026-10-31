@@ -50,6 +50,8 @@ export interface Input {
   /** Touch ability button. */
   ability(): void;
   /** Escape / P pressed since last call. */
+  /** Is fire physically held right now (vs a latched tap)? */
+  fireHeld(): boolean;
   takePause(): boolean;
   dispose(): void;
 }
@@ -59,6 +61,9 @@ const MOVE_CODES = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ShiftLeft', 'ShiftR
 export function createInput(el: HTMLElement): Input {
   const held = new Set<string>();
   let firing = false;
+  // Tap latch: a press that starts and ends between two reads still fires once (CHOG-INPUT-001).
+  let fireLatched = false;
+  let latchAim = 0;
   let reloadQueued = false;
   let abilityQueued = false;
   let action = false;
@@ -80,7 +85,8 @@ export function createInput(el: HTMLElement): Input {
         out.moveY = m.y;
         out.quiet = held.has('ShiftLeft') || held.has('ShiftRight');
         lastAim = out.aim = Math.atan2(inp.mouseY - ay, inp.mouseX - ax);
-        out.firing = firing;
+        out.firing = firing || fireLatched;
+        fireLatched = false;
       } else {
         const m = stickVector(left, STICK_RADIUS);
         out.moveX = m.x;
@@ -91,7 +97,11 @@ export function createInput(el: HTMLElement): Input {
         if (Math.hypot(a.x, a.y) > AIM_DEADZONE) {
           lastAim = out.aim = Math.atan2(a.y, a.x);
           out.firing = true;
+        } else if (fireLatched) {
+          lastAim = out.aim = latchAim;
+          out.firing = true;
         }
+        fireLatched = false;
       }
       return out;
     },
@@ -100,6 +110,11 @@ export function createInput(el: HTMLElement): Input {
     },
     ability() {
       abilityQueued = true;
+    },
+    fireHeld() {
+      if (inp.mode === 'pc') return firing;
+      const a = stickVector(right, STICK_RADIUS);
+      return right.active && Math.hypot(a.x, a.y) > AIM_DEADZONE;
     },
     takePause() {
       const p = pauseQueued;
@@ -126,7 +141,8 @@ export function createInput(el: HTMLElement): Input {
   const down = (e: KeyboardEvent) => {
     if (MOVE_CODES.has(e.code)) held.add(e.code);
     if (e.code === 'KeyR') reloadQueued = true;
-    if (e.code === 'KeyR' || e.code === 'Enter') action = true;
+    // R is reload only; it never restarts a run (CHOG-FLOW-001). Enter confirms menus.
+    if (e.code === 'Enter' && !e.repeat) action = true;
     if (e.code === 'Escape' || e.code === 'KeyP') pauseQueued = true;
     if (e.code === 'Space' || e.code === 'KeyQ') {
       e.preventDefault();
@@ -152,7 +168,7 @@ export function createInput(el: HTMLElement): Input {
       Object.assign(s, { active: true, id: e.pointerId, baseX: e.clientX, baseY: e.clientY, x: e.clientX, y: e.clientY });
     } else {
       inp.mode = 'pc';
-      if (e.button === 0) firing = true;
+      if (e.button === 0) firing = fireLatched = true;
     }
     e.preventDefault();
   };
@@ -171,6 +187,13 @@ export function createInput(el: HTMLElement): Input {
       if (d > STICK_RADIUS * 1.4) {
         s.baseX = s.x - (dx / d) * STICK_RADIUS * 1.4;
         s.baseY = s.y - (dy / d) * STICK_RADIUS * 1.4;
+      }
+      if (s === right) {
+        const a = stickVector(right, STICK_RADIUS);
+        if (Math.hypot(a.x, a.y) > AIM_DEADZONE) {
+          fireLatched = true;
+          latchAim = Math.atan2(a.y, a.x);
+        }
       }
     }
   };
