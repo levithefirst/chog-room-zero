@@ -760,3 +760,31 @@ Not verified    : Hoarder 20 / Pack Rat 30 reachable in one run (84 autopilot ru
 Locked decisions touched : power caps (docs/design/power.md) raised, approved by the owner 2026-10-23.
 Next smallest task : owner plays a pickup-heavy run to judge Hoarder 20 / Pack Rat 30; files: none (src/ui/medals.ts if lowered).
 ```
+
+```
+HANDOFF H47  2026-11-15  claude -> owner
+Branch @ commit : ccr-b6143158-sfobsl @ ec0d51949b44d3e53a896feedf64ecc71ca8cfaf   pushed: no (owner: "do not push or deploy until I confirm")
+Task            : HM  Hard mode (Vs bots) and five Impossible locations (owner 2026-11-15)
+Files changed   : src/config/{maps,map,tuning}.ts, src/config/layouts-impossible.ts (new, generated), tools/maps/impossible.py (new),
+                  src/sim/{world,bots,level}.ts, src/render/bake.ts, src/ui/{hub,tactical,docs}.ts, src/main.ts, src/net/protocol.ts (3),
+                  src/library/{mapdata,pages-maps}.ts, src/library/library.css, index.html; tests: impossible-maps (new), id-maps,
+                  h34-maps, library-data, library-pages, tm-tactical; docs/design/maps.md, docs/RULES.md, STATE, HANDOFFS.
+Tests run       : npx tsc --noEmit clean; env -u DATABASE_URL npx vitest run 1271/1271 (111 files); npm run build and
+                  build:server OK; library build: 25 pages (10 map pages). Headless Chromium (emulated 1440x900 and 844x390):
+                  hub with HARD on, Location sheet with the Impossible group, a Hard solo run on Abyss started (zone 0:39), no page errors.
+Balance         : scripted autopilot (you + 2 AI, aim 3 deg, 24 runs over six locations): Normal 12/24 wins; Hard 0/24
+                  (1.8 kills of 7, ~33 s). One knob at a time from Normal (Room Zero + Office, 12 runs, 9/12): +1 hostile 6/12,
+                  +2 hostiles 2/12, +3 hostiles 0/12, 90% damage 6/12, reaction 0.2-0.3 s 7/12, the rest 7-10/12. The owner's
+                  first numbers (8 hostiles, 90%, 0.2-0.3 s, 4 shooters) 0/24 in ~26 s, so TUNING.hard ships the gentlest values
+                  inside the owner's ranges. Normal on the Impossible maps: Abyss 6/8, Echo 6/8, Killing Field 4/8, Flooded 5/8,
+                  Vertigo 3/8 (Room Zero 6/8).
+Known failures  : none.
+Blockers        : none.
+Not verified    : human play of Hard or any Impossible map; whether Hard is beatable by a person; audio of the new floors by ear;
+                  real phones; online matches on the new maps against a deployed server (built and unit-tested only).
+Not done (optional in the brief): medals for clearing Impossible maps (medals live on the account, server-side;
+                  needs its own brief); reduced starting ammo or grenades on Hard.
+Locked decisions touched : "exactly five locations" -> ten (five + five Impossible) and Hard mode for Vs bots, approved by the owner 2026-11-15.
+Next smallest task : owner plays Hard on Room Zero and one Impossible map; if Hard is a wall, decide 6 hostiles or a third AI
+                  teammate on Hard (TUNING.hard.reinforcements; files: src/config/tuning.ts, tests/impossible-maps.test.ts).
+```
