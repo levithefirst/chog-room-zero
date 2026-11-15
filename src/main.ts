@@ -222,6 +222,9 @@ async function start() {
   // The location for the next match (a preference on this device; owner 2026-10-18: chosen before the match).
   const MAP_KEY = 'chog.map';
   let mapId: MapId = (() => { try { const m = localStorage.getItem(MAP_KEY); return isMapId(m) ? m : 'room-zero'; } catch { return 'room-zero'; } })();
+  // Hard mode for Vs bots (owner 2026-11-15): a preference on this device, like the location.
+  const HARD_KEY = 'chog.hard';
+  let hardMode = (() => { try { return localStorage.getItem(HARD_KEY) === '1'; } catch { return false; } })();
   let confirmReset = false;
   let nickError = '';
   let nickSaved = false;
@@ -634,7 +637,7 @@ async function start() {
       touch: input.mode === 'touch', profile: curProfile(), settings, records: curRecords(), medals: curMedals(), heroId, demoChip: demoChip(), marking: identity.marking,
       muted: audio.muted, canFs: canFs && !isFullscreen(), canVibrate, build: __BUILD_SHA__, auth,
       acct, netProfile: net?.profile ?? null, demoToken: identity.kind === 'bound' ? identity.tokenId : null,
-      mode: playMode, map: mapId, net: nv,
+      mode: playMode, map: mapId, hard: hardMode, net: nv,
     };
   }
 
@@ -746,7 +749,7 @@ async function start() {
     // UIX: the pause card says where the run stands (only numbers the game tracks) and, on PC, the controls.
     const p = player(world);
     const foes = world.actors.filter((a) => a.team === 'bot');
-    const where = training ? 'CHOG Training' : MAPS[mapId].name;
+    const where = training ? 'CHOG Training' : `${MAPS[mapId].name}${world.hard ? ' · Hard' : ''}`;
     const stat = (k: string, v: string) => `<div class="rw"><span>${k}</span><b class="num">${v}</b></div>`;
     const keys = input.mode === 'touch' ? '' : `<ul class="keys">${[[moveKeys(), 'Move'], [allKeys('creep'), 'Creep'], ['Mouse', 'Aim'], [allKeys('fire'), 'Fire'], [allKeys('reload'), 'Reload'], [allKeys('ability'), 'Ability'], [allKeys('grenade'), 'Grenade'], [allKeys('map'), 'Map'], ['Esc', 'Resume']].map(([k, v]) => `<li><kbd>${esc(k)}</kbd>${v}</li>`).join('')}</ul>`;
     card(`<div class="kicker">${training ? 'Training' : 'Vs bots'} · ${esc(where)}</div><h2>Paused</h2>
@@ -1013,6 +1016,8 @@ async function start() {
     }
     const md = t.closest('[data-mode]') as HTMLElement | null;
     if (md) { e.preventDefault(); setMode(md.dataset.mode as PlayMode); render(); return; }
+    const df = t.closest('[data-diff]') as HTMLElement | null;
+    if (df) { e.preventDefault(); hardMode = df.dataset.diff === 'hard'; try { localStorage.setItem(HARD_KEY, hardMode ? '1' : '0'); } catch { /* ignore */ } render(); return; }
     const mp = t.closest('[data-map]') as HTMLElement | null;
     if (mp) { e.preventDefault(); if (isMapId(mp.dataset.map)) setMap(mp.dataset.map); if (titleView === 'maps') titleView = 'main'; render(); return; }
     const tk = t.closest('[data-token]') as HTMLElement | null;
@@ -1237,7 +1242,7 @@ async function start() {
     runIndex++;
     // The default game: you + 2 AI teammates (other operators than yours) against the five hostile bots.
     if (training) { const tr = createTraining(training.id, training.power, heroId); world = tr.world; training.run = tr.run; }
-    else world = createWorld({ seed: TUNING.seed + runIndex, hero: heroId, sidegrade: identity.sidegrade, zone: true, power: soloPower(), allies: squadmates(), mapId });
+    else world = createWorld({ seed: TUNING.seed + runIndex, hero: heroId, sidegrade: identity.sidegrade, zone: true, power: soloPower(), allies: squadmates(), mapId, hard: hardMode });
     practiceTicket = null;
     if (signedIn() && !LAB_ON && !training) {
       const run = runIndex;

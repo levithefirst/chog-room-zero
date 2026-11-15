@@ -17,6 +17,10 @@ export const MAT = {
   carpet: { base: 0x4a5560, alt: 0x47525d, grout: 0x3a434c },
   tunnel: { base: 0x4c4f4c, alt: 0x484b48, grout: 0x363936 },
   ballast: { base: 0x2f2d29, alt: 0x2b2925, grout: 0x1d1c19 },
+  // Impossible locations: Abyss silt (near black, ashy), Echo cistern stone (cold blocks), Flooded standing water.
+  silt: { base: 0x2a2826, alt: 0x272523, grout: 0x1a1918 },
+  stone: { base: 0x55585e, alt: 0x50535a, grout: 0x34363b },
+  water: { base: 0x34484f, alt: 0x31444b, grout: 0x22333a },
   deck: 0x7d6a4c,
   deckEdge: 0x2a2116,
   rail: 0xb8b0a0,
@@ -92,6 +96,15 @@ function drawMap(g: Graphics, l: Level): void {
         if (y % 2 === 0) g.rect(x, y, 1, 0.02).fill({ color: m.grout, alpha: 0.5 });
       } else if (mat === 'ballast') {
         for (let k = 0; k < 9; k++) g.circle(x + rnd(), y + rnd(), 0.04 + rnd() * 0.04).fill({ color: rnd() < 0.5 ? 0x5a5650 : 0x161512, alpha: 0.6 });
+      } else if (mat === 'water') {
+        // Standing water: soft ripples, no grout lines (the floor under it is lost).
+        for (let k = 0; k < 3; k++) g.ellipse(x + rnd(), y + rnd(), 0.22 + rnd() * 0.2, 0.06).fill({ color: 0xbfe0e8, alpha: 0.07 });
+      } else if (mat === 'stone') {
+        // Cistern blocks: large courses, offset every other row.
+        if (y % 2 === 0) g.rect(x, y, 1, 0.03).fill({ color: m.grout, alpha: 0.8 });
+        if ((x + (y >> 1)) % 3 === 0) g.rect(x, y, 0.03, 1).fill({ color: m.grout, alpha: 0.8 });
+      } else if (mat === 'silt') {
+        for (let k = 0; k < 8; k++) g.circle(x + rnd(), y + rnd(), 0.02 + rnd() * 0.03).fill({ color: rnd() < 0.5 ? 0x4a4642 : 0x0e0d0c, alpha: 0.5 });
       } else if (mat === 'tunnel') {
         for (let k = 0; k < 6; k++) g.rect(x + rnd(), y + rnd(), 0.05, 0.05).fill({ color: 0x000000, alpha: 0.12 });
         if (x % 4 === 0) g.rect(x, y, 0.03, 1).fill({ color: m.grout, alpha: 0.7 });

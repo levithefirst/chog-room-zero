@@ -29,6 +29,8 @@ export interface Level {
   lights?: readonly Box[];
   /** Floor materials of a location (drawn only; src/config/maps.ts). Absent: Room Zero's. */
   materials?: readonly { x0: number; y0: number; x1: number; y1: number; mat: Material }[];
+  /** Speed share on stairs here, when the location's stairs are steeper than usual (Vertigo). Absent: TUNING.movement.stairsMul. */
+  stairsMul?: number;
   // Floor tiles next to a wall or cover piece: candidate spots for bots to hold or hide.
   coverSpots: { x: number; y: number }[];
   pickupSpawns: { kind: 'health' | 'armor' | 'ammo' | 'grenade'; x: number; y: number }[];
@@ -144,10 +146,12 @@ export function parseLevel(rows: readonly string[]): Level {
  */
 export function stepSurface(l: Level, x: number, y: number): number {
   const S = TUNING.sound.surface, t = tileAt(l, x, y);
-  if (t === DECK || t === STAIRS) return S.deck;
   let m: Material | null = null;
   const tx = Math.floor(x), ty = Math.floor(y);
   for (const z of l.materials ?? []) if (tx >= z.x0 && tx <= z.x1 && ty >= z.y0 && ty <= z.y1) m = z.mat;
+  // An Impossible location's floor sets the sound everywhere it lies, on its decks and stairs too.
+  if (m === 'silt' || m === 'stone' || m === 'water') return S[m];
+  if (t === DECK || t === STAIRS) return S.deck;
   return m === 'carpet' ? S.carpet : m === 'tunnel' ? S.tunnel : 1;
 }
 

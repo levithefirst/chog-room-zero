@@ -1,7 +1,7 @@
 // Map guide geometry: everything is read from the level the game plays on (MAPS[id].rows through the sim's own
 // parseLevel), the location's named areas (its pickup zones, the same names the in-game tactical map prints), spawns,
 // lit areas, floor materials and danger-zone centres. Build time only. Numbers are measured on the tile grid.
-import { parseLevel, WALL, COVER, BARRIER, DOOR, RAIL, DECK, STAIRS, FLOOR, walkable, type Level } from '../sim/level';
+import { parseLevel, stepSurface, WALL, COVER, BARRIER, DOOR, RAIL, DECK, STAIRS, FLOOR, walkable, type Level } from '../sim/level';
 import { MAPS, type MapId, type MapDef } from '../config/maps';
 import { TUNING } from '../config/tuning';
 
@@ -25,6 +25,8 @@ export interface MapStats {
   w: number; h: number; floor: number; walls: number; crates: number; barriers: number; doors: number;
   rails: number; decks: number; stairs: number; litShare: number; longestLane: number; meanOpen: number;
   carpet: number; tunnel: number; pickupZones: number; hostiles: number; zoneCentres: number;
+  /** Walkable tiles by footstep share (src/sim/level.ts stepSurface): e.g. { 1.9: 1904 } for Echo Labyrinth. */
+  footsteps: Record<string, number>;
 }
 
 const lvlCache = new Map<MapId, Level>();
@@ -57,18 +59,22 @@ export function stats(id: MapId): MapStats {
   }
   const inBox = (x: number, y: number, b: { x0: number; y0: number; x1: number; y1: number }) => x + 0.5 >= b.x0 && x + 0.5 <= b.x1 && y + 0.5 >= b.y0 && y + 0.5 <= b.y1;
   let lit = 0, carpet = 0, tunnel = 0;
+  const footsteps: Record<string, number> = {};
+  const sl = { ...l, materials: def.materials };
   for (let y = 0; y < l.h; y++) for (let x = 0; x < l.w; x++) {
     if (!walkable(T[y * l.w + x])) continue;
     if (def.lights.some((b) => inBox(x, y, b))) lit++;
     let m: string | null = null;
     for (const z of def.materials) if (x >= z.x0 && x <= z.x1 && y >= z.y0 && y <= z.y1) m = z.mat;
     if (m === 'carpet') carpet++; if (m === 'tunnel') tunnel++;
+    const fs = String(stepSurface(sl, x + 0.5, y + 0.5));
+    footsteps[fs] = (footsteps[fs] ?? 0) + 1;
   }
   return {
     w: l.w, h: l.h, floor, walls: count(WALL), crates: count(COVER), barriers: count(BARRIER), doors: count(DOOR),
     rails: count(RAIL), decks: count(DECK), stairs: count(STAIRS), litShare: floor ? lit / floor : 0,
     longestLane: longest, meanOpen: n ? sum / n : 0, carpet, tunnel, pickupZones: def.pickupZones.length,
-    hostiles: def.botSpawns.length, zoneCentres: def.zoneCentres.length,
+    hostiles: def.botSpawns.length, zoneCentres: def.zoneCentres.length, footsteps,
   };
 }
 

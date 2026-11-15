@@ -139,8 +139,9 @@ export const ROOM_ZERO_RC8 = [
 ];
 
 // H34: 'carpet' (Office floors: footsteps carry 0.7x), 'tunnel' (Metro service tunnels: they echo, 1.3x), 'ballast'
-// (track beds under the rails; never walked on). TUNING.sound.surface.
-export type Material = 'tile' | 'concrete' | 'metal' | 'dock' | 'carpet' | 'tunnel' | 'ballast';
+// (track beds under the rails; never walked on). Impossible locations: 'silt' (Abyss: 0.6x), 'stone' (Echo Labyrinth:
+// 1.9x, decks and stairs too), 'water' (Flooded: 1.6x, everywhere). TUNING.sound.surface.
+export type Material = 'tile' | 'concrete' | 'metal' | 'dock' | 'carpet' | 'tunnel' | 'ballast' | 'silt' | 'stone' | 'water';
 
 // Floor material zones, painted in order (later wins). Anything not covered is concrete.
 export const ZONES: { x0: number; y0: number; x1: number; y1: number; mat: Material }[] = [

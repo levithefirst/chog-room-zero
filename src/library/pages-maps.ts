@@ -1,6 +1,7 @@
 // Maps index and one page per location. Geometry, areas, spawns, lit areas and materials are measured from the game's
 // own level (src/library/mapdata.ts); the hand-written notes only describe features that exist in that data.
 import { MAPS, MAP_IDS, TUNING, type MapId } from './facts';
+import { NORMAL_MAP_IDS, IMPOSSIBLE_MAP_IDS } from '../config/maps';
 import type { Page } from './types';
 import { esc, n, table, facts, note, ul, link, href, shot } from './html';
 import { mapSvg, stats, areas, LAYERS } from './mapdata';
@@ -9,7 +10,7 @@ const S = TUNING.sound;
 const KIND: Record<string, string> = { health: 'health', armor: 'armour', ammo: 'ammo', grenade: 'grenades' };
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-interface Notes { identity: string; locations: string; entrances: string; sightlines: string; cover: string; positions: string[]; sound: string; tactics: string[]; mistakes: string[] }
+interface Notes { identity: string; locations: string; entrances: string; sightlines: string; cover: string; positions: string[]; sound: string; tactics: string[]; mistakes: string[]; why?: string }
 
 const NOTES: Record<MapId, Notes> = {
   'room-zero': {
@@ -67,7 +68,77 @@ const NOTES: Record<MapId, Notes> = {
     tactics: ['Take a deck when the stairs are clear, then fight from it over the crates below.', 'From the ground, hold the bottom of the stairs instead of contesting a deck.', 'Expect to be heard on a deck: creep, or move only when you want to be found.'],
     mistakes: ['Hiding behind a crate from someone on a deck: their shots clear it.', 'Standing still on open scaffolding with no cover.'],
   },
+  abyss: {
+    identity: 'A drowned archive in total darkness. A warren of small cells with doorways in every wall, offset so no doorway looks through the next. The shortest lines in the game and the quietest floor: an ambush map.',
+    locations: 'A spawn hall at each end. Cells fill most of the floor (north cells, west warren, mid and inner cells, south cells), with a vault in each quarter and the crypt in the middle, reached along the spine.',
+    entrances: 'Hundreds of doorways: every cell has several ways in, so there is no safe side to a room.',
+    sightlines: 'No line runs far: the average is under 4 m, shorter than your own light. Nothing is lit, so your light is all you see by.',
+    cover: 'Crates and barriers sit in the gaps inside cells; walls do most of the hiding.',
+    positions: ['Strong: a cell corner beside a doorway, where anyone coming in is inside your light before you are in theirs.', 'Dangerous: the middle of a cell with three doorways around you.', 'Open: the crypt and the vaults, the only rooms wider than a lamp.'],
+    sound: 'Silt and ash on every floor: a run carries only 60% as far (4.8 m), so footsteps tell you someone is close, not where they are coming from.',
+    tactics: ['Move one cell at a time and stop at each doorway to listen.', 'Clear a cell from its doorway with your light, never by walking into the middle.', 'Fight in a vault or the crypt only when you have to: the zone ends there.'],
+    mistakes: ['Running: at 4.8 m nobody hears you coming, and you hear nobody either until they are in reach.', 'Trusting one doorway: every cell has more than one.'],
+    why: 'No light anywhere, lines shorter than your lamp, and footsteps that carry 60%: you meet hostiles at arm\'s length, usually from the side.',
+  },
+  echo: {
+    identity: 'A cistern of long stone corridors, each with a gallery over it behind a rail. Corridors meet only through one-wide shafts. The loudest floor in the game: everyone hears everyone.',
+    locations: 'A spawn hall at each end opening on the west hall and the middle hall, with the cistern heart in the middle. North, upper, lower and south corridors run end to end, each beside its gallery.',
+    entrances: 'The shafts between corridors are one tile wide, with a doorway at each end: the chokepoints. Stairs climb from each corridor to its gallery all along it.',
+    sightlines: 'The corridors and the middle hall run the full length of the map. Only the cistern heart is lit; the rest is dark.',
+    cover: 'A little rubble in the corridors and the hall. The galleries have none, and a gallery shooter clears what there is below.',
+    positions: ['Strong: a gallery over a corridor: your shots clear the rubble below, and you see along the corridor.', 'Dangerous: inside a shaft, one wide with a doorway at each end.', 'Open: the middle hall, long and crossed by everything.'],
+    sound: 'Stone everywhere: a run carries 190% as far (15.2 m), on the galleries and stairs too. A creep is heard further here than a run is anywhere else.',
+    tactics: ['Creep everywhere: even a creep echoes.', 'Let them come through a shaft to you; hold the doorway at your end.', 'Take the gallery over the corridor you expect them in.'],
+    mistakes: ['Running down a corridor: the whole level hears it.', 'Standing in a shaft.'],
+    why: 'Footsteps carry 190% (a run is heard 15 m off, on the galleries too) and every way between corridors is a one-wide shaft.',
+  },
+  'killing-field': {
+    identity: 'A floodlit freight yard: the longest straight lines in the game, almost no cover, and watchtowers over every lane. A long-range map.',
+    locations: 'A dark spawn bunker at each end. The yard: north-west and south-west yards, the west and mid field, north and south lanes, a tower over each, and the middle between the sandbags.',
+    entrances: 'Earth berms cut the yard into lanes; their gaps are wide. A watchtower is reached only by its one stair.',
+    sightlines: 'Lines run over 100 m end to end. Almost the whole yard is lit, so a body standing in it is seen from far by anyone facing it.',
+    cover: 'Sandbags and a few crates: the least cover per square metre of any location. Container stacks and berms block sight, not much else.',
+    positions: ['Strong: a watchtower: it sees over every sandbag.', 'Dangerous: the open yard between cover, lit and in every tower\'s line.', 'Strong: behind a container stack or a berm, out of the light\'s line.'],
+    sound: 'Dock and concrete floors: footsteps carry the standard distance (decks and stairs 130%). Here you are seen long before you are heard.',
+    tactics: ['Take a long-range weapon (Ray, Yot) and a tower.', 'Cross from berm to container to berm; never stop in the open.', 'From the ground, rush a tower\'s stair from its blind side.'],
+    mistakes: ['Walking across the lit yard.', 'Taking a shotgun into the open.'],
+    why: 'Lit end to end, lines over 100 m, a tower over every lane and almost no cover: crossing open ground is how you die.',
+  },
+  flooded: {
+    identity: 'A pumping station under a foot of water. Narrow walkways between settling tanks, every one a dogleg, and the loudest walking in the game after the Echo Labyrinth.',
+    locations: 'A spawn chamber at each end, the north and south walkways, the upper and lower walkways, the outer, mid and inner channels, the centre channel, and the flooded pump hall across the middle with its gantry.',
+    entrances: 'The walkways are two wide, with sluice doorways and pump housings that turn them into doglegs. The tanks are deep water: rails you can see and shoot across, never wade.',
+    sightlines: 'Short along the walkways (the housings stagger them), longer across the open tanks. The pump hall is lit; the walkways and channels are dark.',
+    cover: 'Machinery crates and barriers on the walkways and in the hall.',
+    positions: ['Strong: a walkway corner looking across a tank: you see and shoot, they cannot reach you without going round.', 'Dangerous: the lit pump hall, open from both channels.', 'Strong: the gantry in the hall, the only high ground.'],
+    sound: 'Every floor is wet: a run carries 160% as far (12.8 m), and a creep as far as a walk anywhere else. You cannot move quietly here.',
+    tactics: ['Use sound both ways: you are heard, but so are they.', 'Shoot across the tanks instead of walking round them into a held corner.', 'Move only when you mean to be found.'],
+    mistakes: ['Assuming a creep is quiet.', 'Walking a dogleg without checking the far side of the tank.'],
+    why: 'Every floor is wet: footsteps carry 160%, a creep is as loud as a walk anywhere else, and the walkways are one route wide.',
+  },
+  vertigo: {
+    identity: 'A tower frame opened up: scaffold decks along every facade and a crown over the middle, joined by long stairs that run slower than anywhere else. The high ground is a third of the map.',
+    locations: 'A yard at each end. North and south facade decks, a lane under each, the north and south decks, the core floor, and the crown in the middle.',
+    entrances: 'Five-step stair runs are the only ways up, at 45% speed (Metro and Construction: 65%). Rails along the decks block movement only.',
+    sightlines: 'The decks run the length of the building. Every deck and the crown is floodlit; the lanes, the yard and the core floor under them are dark.',
+    cover: 'Columns on the decks, a few crates and barriers on the ground. A shot from a deck clears every crate below.',
+    positions: ['Strong: the crown or a deck over a stair.', 'Dangerous: on a stair, slow and in a deck\'s line.', 'Dangerous: a lit deck you are shot on, with only columns for cover.'],
+    sound: 'Decks and stairs ring out: a run on them carries 130% as far (10.4 m). Ground floors carry the standard distance.',
+    tactics: ['Pick one stair and commit: at 45% you cannot change your mind halfway.', 'Hold the top of a stair from a column.', 'Use the dark lanes to move under a fight on the decks.'],
+    mistakes: ['Climbing a stair a deck is watching.', 'Standing on a lit deck in the open.'],
+    why: 'A third of the floor is scaffold, every stair runs at 45% speed, and wherever you walk on the ground someone above can see you.',
+  },
 };
+
+/** Footstep carry on this location's floor, measured per tile: "100% everywhere" or "60% everywhere" or a mix. */
+function footsteps(s: ReturnType<typeof stats>): string {
+  const all = Object.values(s.footsteps).reduce((a, b) => a + b, 0);
+  const parts = Object.entries(s.footsteps).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ pct: Math.round(Number(k) * 100), share: v / all }));
+  if (parts.length === 1) return `${parts[0].pct}% everywhere (a run ${n(TUNING.sound.runStep * parts[0].pct / 100)} m)`;
+  return parts.map((p) => `${p.pct}% on ${Math.round(p.share * 100)}% of the floor`).join(', ');
+}
+
+const IMPOSSIBLE_TAG = '<span class="tag-impossible">IMPOSSIBLE</span>';
 
 function viewer(id: MapId): string {
   const toggles = LAYERS.map((l) => `<label><input type="checkbox" data-layer-toggle="${l.id}" checked> ${esc(l.label)}</label>`).join('');
@@ -85,13 +156,16 @@ function mapPage(id: MapId): Page {
   for (const ar of a) { const k = supplies.get(ar.label) ?? new Set(); ar.kinds.forEach((x) => k.add(KIND[x])); supplies.set(ar.label, k); }
   const shotName = `tmap-${id}`;
   return {
-    slug: `maps/${id}`, title: def.name, group: 'Maps', summary: `${def.tag}. ${def.blurb}`,
-    keywords: [def.name, def.tag, id, 'map', 'location'],
+    slug: `maps/${id}`, title: def.name, group: 'Maps', summary: `${def.impossible ? 'Impossible. ' : ''}${def.tag}. ${def.blurb}`,
+    keywords: [def.name, def.tag, id, 'map', 'location', ...(def.impossible ? ['impossible'] : [])],
     sections: [
-      { id: 'identity', title: 'Identity', html: `<p class="kicker">${esc(def.tag)}</p><p>${esc(N.identity)}</p>${facts([
+      { id: 'identity', title: 'Identity', html: `<p class="kicker">${def.impossible ? `${IMPOSSIBLE_TAG} ` : ''}${esc(def.tag)}</p>${def.impossible ? note(esc(def.impossible), 'warn') : ''}<p>${esc(N.identity)}</p>${facts([
         ['Size', `${s.w} x ${s.h} m`], ['Walkable floor', `${s.floor} m&sup2;`], ['Lit floor', `${Math.round(s.litShare * 100)}%`],
         ['Doorways', `${s.doors} tiles`], ['Crates / barriers', `${s.crates} / ${s.barriers} tiles`], ['Rails / decks / stairs', `${s.rails} / ${s.decks} / ${s.stairs} tiles`],
-        ['Solo hostiles', `${s.hostiles}`], ['Supply areas', `${s.pickupZones}`]])}` },
+        ['Longest / average line', `${s.longestLane} m / ${n(s.meanOpen)} m`], ['Footsteps carry', footsteps(s)],
+        ...(def.steepStairs ? [['Stairs', `${Math.round(TUNING.movement.steepStairsMul * 100)}% speed (usually ${Math.round(TUNING.movement.stairsMul * 100)}%)`] as [string, string]] : []),
+        ['Solo hostiles', `${s.hostiles} (Hard: ${s.hostiles + TUNING.hard.reinforcements.length})`], ['Supply areas', `${s.pickupZones}`]])}` },
+      ...(N.why ? [{ id: 'why', title: 'Why this is Impossible', keywords: ['impossible', 'hard', 'extreme'], html: `<p>${esc(N.why)}</p><p class="small">The same rules, supplies and danger zone as every location, with its own final centres. Each Impossible location takes one thing the game is built on (light, sound, range, footing, height) to its extreme.</p>` }] : []),
       { id: 'viewer', title: 'Map guide', keywords: ['viewer', 'layout', 'zoom'], html: viewer(id) },
       { id: 'locations', title: 'Key locations', html: `<p>${esc(N.locations)}</p>${table(['Area', 'Supplies that appear there'], [...supplies.entries()].map(([k, v]) => [esc(cap(k)), [...v].join(', ')]), `${def.name} areas`)}` },
       { id: 'entrances', title: 'Entrances and chokepoints', keywords: ['chokepoint', 'doors', 'stairs'], html: `<p>${esc(N.entrances)}</p>` },
@@ -104,19 +178,22 @@ function mapPage(id: MapId): Page {
       { id: 'mistakes', title: 'Common mistakes', html: ul(N.mistakes.map(esc)) },
       ...(shot(shotName, '') ? [{ id: 'in-game', title: 'In the game', html: shot(shotName, `${esc(def.name)} on the in-game tactical map.`) }] : []),
     ],
-    related: ['maps', ...MAP_IDS.filter((x) => x !== id).slice(0, 2).map((x) => `maps/${x}`), 'movement-sound'],
+    related: ['maps', ...(def.impossible ? IMPOSSIBLE_MAP_IDS : NORMAL_MAP_IDS).filter((x) => x !== id).slice(0, 2).map((x) => `maps/${x}`), 'movement-sound'],
   };
 }
 
+const card = (id: MapId) => { const d = MAPS[id]; return `<a class="card${d.impossible ? ' impossible' : ''}" href="${href(`maps/${id}`)}"><span class="card-img map-mini" aria-hidden="true">${mapSvg(id, { mini: true, idPrefix: `idx-${id}` })}</span><span class="card-t">${esc(d.name)}</span><span class="card-k">${d.impossible ? `${IMPOSSIBLE_TAG} ` : ''}${esc(d.tag)}</span><span class="card-d">${esc(d.blurb)}</span></a>`; };
+
 export const mapsIndex: Page = {
-  slug: 'maps', title: 'Maps', group: 'Maps', summary: 'Five locations, open to everyone, each different in layout, light and sound.',
-  keywords: ['maps', 'locations', 'levels', 'arena'],
+  slug: 'maps', title: 'Maps', group: 'Maps', summary: `${MAP_IDS.length} locations, open to everyone: ${NORMAL_MAP_IDS.length} locations and ${IMPOSSIBLE_MAP_IDS.length} Impossible ones, each different in layout, light and sound.`,
+  keywords: ['maps', 'locations', 'levels', 'arena', 'impossible'],
   sections: [
-    { id: 'all', title: 'The five locations', html: `<div class="cards maps">${MAP_IDS.map((id) => { const d = MAPS[id]; return `<a class="card" href="${href(`maps/${id}`)}"><span class="card-img map-mini" aria-hidden="true">${mapSvg(id, { mini: true, idPrefix: `idx-${id}` })}</span><span class="card-t">${esc(d.name)}</span><span class="card-k">${esc(d.tag)}</span><span class="card-d">${esc(d.blurb)}</span></a>`; }).join('')}</div>` },
-    { id: 'compare', title: 'Compare', html: table(['Location', 'Size (m)', 'Lit floor', 'Longest line', 'Average line', 'Doorways', 'Cover tiles', 'Decks / stairs'], MAP_IDS.map((id) => { const s = stats(id); return [link(`maps/${id}`, esc(MAPS[id].name)), `${s.w} x ${s.h}`, `${Math.round(s.litShare * 100)}%`, `${s.longestLane} m`, `${n(s.meanOpen)} m`, s.doors, s.crates + s.barriers, `${s.decks} / ${s.stairs}`]; }), 'Locations compared (measured on the tiles)') },
-    { id: 'shared', title: 'Rules on every map', html: ul([`Supplies come back ${TUNING.pickups.health.respawn} s after they are taken, on another tile of their area, never next to someone standing.`, 'Each layout is mirrored so both online sides get the same map.', `Floors change sound: carpet ${Math.round(S.surface.carpet * 100)}%, decks, stairs and tunnels ${Math.round(S.surface.deck * 100)}% of the usual footstep radius.`, 'The danger zone runs the same schedule everywhere, with each location\'s own final centres.']) },
+    { id: 'all', title: 'The five locations', html: `<div class="cards maps">${NORMAL_MAP_IDS.map(card).join('')}</div>` },
+    { id: 'impossible', title: 'Impossible locations', keywords: ['impossible', 'extreme', 'hard'], html: `${note('Each takes one thing the game is built on (light, sound, range, footing, height) to its extreme. Same rules, supplies and danger zone; expect to lose here before you win.', 'warn')}<div class="cards maps">${IMPOSSIBLE_MAP_IDS.map(card).join('')}</div>` },
+    { id: 'compare', title: 'Compare', html: table(['Location', 'Size (m)', 'Lit floor', 'Longest line', 'Average line', 'Doorways', 'Cover tiles', 'Decks / stairs', 'Footsteps'], MAP_IDS.map((id) => { const s = stats(id); return [`${link(`maps/${id}`, esc(MAPS[id].name))}${MAPS[id].impossible ? ` ${IMPOSSIBLE_TAG}` : ''}`, `${s.w} x ${s.h}`, `${Math.round(s.litShare * 100)}%`, `${s.longestLane} m`, `${n(s.meanOpen)} m`, s.doors, s.crates + s.barriers, `${s.decks} / ${s.stairs}`, footsteps(s)]; }), 'Locations compared (measured on the tiles)') },
+    { id: 'shared', title: 'Rules on every map', html: ul([`Supplies come back ${TUNING.pickups.health.respawn} s after they are taken (${TUNING.pickups.health.respawn * TUNING.hard.respawnMul} s in Hard mode), on another tile of their area, never next to someone standing.`, 'Each layout is mirrored so both online sides get the same map.', `Floors change sound: carpet ${Math.round(S.surface.carpet * 100)}%, decks, stairs and tunnels ${Math.round(S.surface.deck * 100)}% of the usual footstep radius; on the Impossible floors silt ${Math.round(S.surface.silt * 100)}%, wet floors ${Math.round(S.surface.water * 100)}%, cistern stone ${Math.round(S.surface.stone * 100)}%.`, 'The danger zone runs the same schedule everywhere, with each location\'s own final centres (Hard mode: a shorter one).']) },
   ],
-  related: ['maps/room-zero', 'movement-sound', 'combat'],
+  related: ['maps/room-zero', 'maps/abyss', 'movement-sound', 'combat'],
 };
 
 export const MAP_PAGES = MAP_IDS.map(mapPage);

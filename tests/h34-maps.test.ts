@@ -2,7 +2,10 @@
 // different tactical experience in its collision, topology and light, not its furniture. These tests pin the rules
 // the new tiles add (rail, deck, stairs, surfaces, lit areas) and each location's identity, measured on its tiles.
 import { describe, expect, it } from 'vitest';
-import { MAPS, MAP_IDS, type MapId } from '../src/config/maps';
+import { MAPS, MAP_IDS as ALL_MAP_IDS, NORMAL_MAP_IDS, type MapId } from '../src/config/maps';
+// H34 pins the five open locations; the Impossible ones have their own identity tests (tests/impossible-maps.test.ts).
+// The tile rules (decks only by stairs, mirrored lights) run on all ten.
+const MAP_IDS = NORMAL_MAP_IDS;
 import { DECK, RAIL, STAIRS, bulletBlockT, findPath, parseLevel, shotClear, sightClear, stepSurface, tileAt, walkable, type Level } from '../src/sim/level';
 import { canSee, litAt } from '../src/sim/vision';
 import { createWorld, moveBody, stepWorld, IDLE_INPUT } from '../src/sim/world';
@@ -120,7 +123,7 @@ describe('the new tiles (H34)', () => {
 });
 
 describe('every location: decks only by stairs, mirrored lights', () => {
-  for (const id of MAP_IDS) {
+  for (const id of ALL_MAP_IDS) {
     it(`${id}: no deck tile can be stepped onto except from stairs; lights mirrored and on floor`, () => {
       const l = lv(id);
       for (let y = 1; y < l.h - 1; y++) for (let x = 1; x < l.w - 1; x++) {

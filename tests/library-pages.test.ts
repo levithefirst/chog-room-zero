@@ -6,6 +6,7 @@ import { PAGES } from '../src/library/pages';
 import { renderBody, pageTitle } from '../src/library/render';
 
 const ROUTES = ['', 'start-here', 'how-to-play', 'combat', 'chog-traits', 'maps', 'maps/room-zero', 'maps/office', 'maps/supermarket', 'maps/metro', 'maps/construction',
+  'maps/abyss', 'maps/echo', 'maps/killing-field', 'maps/flooded', 'maps/vertigo',
   'game-modes', 'multiplayer', 'weapons', 'movement-sound', 'progression', 'rewards', 'medals', 'controls', 'faq'];
 const rendered = new Map(PAGES.map((p) => [p.slug, renderBody(p)]));
 const idsOf = (h: string) => new Set([...h.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
@@ -14,7 +15,7 @@ const shotDir = 'library/public/library/shots';
 describe('library pages', () => {
   it('has every route the brief lists', () => {
     for (const r of ROUTES) expect(rendered.has(r), r).toBe(true);
-    expect(PAGES.length).toBe(20); // home + 19 (the maps index and 5 map pages included)
+    expect(PAGES.length).toBe(25); // home + 24 (the maps index and 10 map pages included; 5 Impossible since 2026-11-15)
   });
   for (const p of PAGES) {
     it(`/library/${p.slug} renders`, () => {
