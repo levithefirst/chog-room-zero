@@ -179,6 +179,35 @@ across the line between the sides.
     - Drool Web is weak on the slab (no wall near).
 12. **Unique decision:** take the exposed fast route or the slow covered one, and whether to climb. High ground beats cover, but you are lit and loud getting there.
 
+## Impossible locations and Hard mode (owner 2026-11-15)
+
+Five more locations, tagged IMPOSSIBLE in the hub (one IMPOSSIBLE button on the desktop row, a group with a warning on
+the Location sheet), the in-game docs and the library. Each takes one pillar to its extreme; the rules, supplies (30
+zones each, back after 4 s), danger zone and mirroring are the same as the five above. Drawn by
+`tools/maps/impossible.py` (same tiles and checks as `build.py`) into `src/config/layouts-impossible.ts`; entries in
+`src/config/maps.ts`. Measured with the library's own numbers (`src/library/mapdata.ts`), pinned in
+`tests/impossible-maps.test.ts`:
+
+| Location | Size | Lit | Longest / avg line | Doors | Cover | Decks / stairs | Footsteps |
+|---|---|---|---|---|---|---|---|
+| Abyss | 84 x 56 | 0% | 42 / 3.8 m | 400 | 112 | 0 / 0 | 60% (silt) |
+| Echo Labyrinth | 80 x 52 | 5% | 78 / 12.3 m | 52 | 56 | 400 / 112 | 190% (stone, decks too) |
+| Killing Field | 112 x 60 | 88% | 110 / 25.5 m | 12 | 80 | 234 / 52 | 100% (decks 130%) |
+| Flooded | 80 x 50 | 26% | 62 / 11.5 m | 54 | 56 | 40 / 4 | 160% (water, everywhere) |
+| Vertigo | 72 x 52 | 35% | 70 / 20.2 m | 24 | 72 | 1016 / 200 | 100% (decks 130%); stairs 45% speed |
+
+New floors: `silt`, `stone`, `water` (`TUNING.sound.surface`; on these a material sets the sound on decks and stairs
+too). Vertigo's stairs: `TUNING.movement.steepStairsMul` 0.45 via `MapDef.steepStairs`. Online protocol 3 (new ids).
+Location queues work as before (H36 `anyMapAfterSec`: after 10 s a waiter can be matched on any location, Impossible
+or not).
+
+Hard mode (Vs bots only; the NORMAL / HARD switch above PLAY; `TUNING.hard`; a device preference): 7 hostiles (two
+reinforcements on the beats of the first two), reaction 0.25-0.3 s, aim 10 deg settling in 1.6 s, 3 shooters at once
+and every hostile without a turn flanks, 80% damage, 2 hunters answer a call, abilities used sooner, zone 45 s open,
+intervals 20% shorter, 1.5x damage outside, supplies back in 8 s. Your AI teammates and online play are unchanged.
+Balance (scripted autopilot, you + 2 AI, 24 runs over six locations): Normal 12/24, Hard 0/24 (1.8 kills of 7, ~33 s).
+The hostile count is the lever (one extra: 9/12 -> 6/12; two: 2/12). PROPOSAL until the owner plays it.
+
 ## Shared rules (all locations)
 
 - **Pickups** come back 4 s after they are taken, chosen by the server:

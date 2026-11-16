@@ -184,7 +184,7 @@ function token(w: World, a: Actor, want: boolean): boolean {
     return false;
   }
   if (i >= 0) return true;
-  if (w.attackTokens.length < TUNING.perception.attackTokens) {
+  if (w.attackTokens.length < (w.hard ? TUNING.hard.attackTokens : TUNING.perception.attackTokens)) {
     w.attackTokens.push(a.id);
     return true;
   }
@@ -405,7 +405,8 @@ function think(w: World, a: Actor, br: Brain, dt: number): void {
   br.suspicion = Math.max(0, br.suspicion - dt / P.memorySeconds);
   if (br.sawPlayer) {
     if (br.seenFor === 0 && br.state !== 'engage') {
-      br.reaction = P.reactionMin + rand(w) * (P.reactionMax - P.reactionMin);
+      const R = w.hard && a.team === 'bot' ? TUNING.hard : P;
+      br.reaction = R.reactionMin + rand(w) * (R.reactionMax - R.reactionMin);
       // Caught on the move (a squad rotation, a walk to a pickup): it was looking where it walks, so it is a beat late.
       // A bot holding an angle is not (rotating is the risk; holding the reward).
       const t = br.task;
@@ -501,15 +502,17 @@ function think(w: World, a: Actor, br: Brain, dt: number): void {
   // Abilities, used for a readable reason.
   if (a.abilityCd === 0) {
     const k = a.ability.kind;
-    if (k === 'mend' && a.hp < a.maxHp * 0.6) out.ability = true;
+    // Hard mode's hostiles reach for their abilities sooner (TUNING.hard.abilityEager).
+    const eager = w.hard && a.team === 'bot' ? TUNING.hard.abilityEager : 1;
+    if (k === 'mend' && a.hp < a.maxHp * 0.6 * eager) out.ability = true;
     if (k === 'dash' && br.state === 'cover' && br.path.length > 2) out.ability = true;
     if (k === 'sonar' && (br.state === 'investigate' || br.state === 'search') && br.timer > 0.5) out.ability = true;
-    if (k === 'barrier' && br.state === 'engage' && (justHit || a.hp < a.maxHp * 0.7)) out.ability = true;
+    if (k === 'barrier' && br.state === 'engage' && (justHit || a.hp < a.maxHp * 0.7 * eager)) out.ability = true;
     // Snare when the hostile it sees is inside its reach; Shell when hit and hurt (it cannot shoot inside it); Rush
     // when it is trading shots within its weapon's range.
     const dSeen = br.sawPlayer ? Math.hypot(p.x - a.x, p.y - a.y) : Infinity;
     if (k === 'scream' && dSeen <= (a.ability.radius ?? 0)) out.ability = true;
-    if (k === 'shield' && justHit && a.hp < a.maxHp * 0.55) out.ability = true;
+    if (k === 'shield' && justHit && a.hp < a.maxHp * 0.55 * eager) out.ability = true;
     if (k === 'frenzy' && br.state === 'engage' && dSeen <= a.weapon.falloffEnd) out.ability = true;
   }
   // Its own sonar shows the player like it shows bots to the player: a fair, telegraphed reveal.
@@ -684,7 +687,8 @@ function think(w: World, a: Actor, br: Brain, dt: number): void {
         br.aimTimer = 0.3;
         br.aimOffset = rand(w) * 2 - 1;
       }
-      const err = B.aimErrorDeg * Math.max(0.25, 1 - br.engagedFor / B.aimSettleSeconds) * DEG;
+      const AIM = w.hard && a.team === 'bot' ? TUNING.hard : B;
+      const err = AIM.aimErrorDeg * Math.max(0.25, 1 - br.engagedFor / AIM.aimSettleSeconds) * DEG;
       const toP = Math.atan2(p.y - a.y, p.x - a.x);
       out.aim = toP + br.aimOffset * err;
       // Hold the angle: stand still and shoot, only when the shot is not blocked by cover.
@@ -692,7 +696,8 @@ function think(w: World, a: Actor, br: Brain, dt: number): void {
       const range = Math.min(a.weapon.falloffEnd + 2, p.baseView.range - 0.25);
       // Attack tokens: at most N bots shoot at once; the rest flank (flankers) or hold the angle.
       if (!token(w, a, true)) {
-        if (br.flanker) {
+        // Hard mode: every hostile without a token flanks (Normal: only the flankers; the rest hold the angle).
+        if (br.flanker || (w.hard && a.team === 'bot' && TUNING.hard.flankAll)) {
           const f = pickFlank(w, a, { x: p.x, y: p.y });
           setGoal(w, a, br, f.x, f.y);
           follow(w, a, br, dt);
@@ -827,11 +832,11 @@ function freshReport(w: World, a: Actor, sq: Squad, now: number): { x: number; y
   const r = sq.reports.filter((x) => x.by !== a.id && now - x.at >= S.radioDelay && now - x.at <= S.reportSeconds).sort((p, q) => q.at - p.at)[0];
   if (!r) return null;
   const hunting = w.actors.filter((b) => b.alive && b.team === a.team && b.id !== a.id && w.brains.get(b.id)?.task?.kind === 'hunt').length;
-  if (hunting >= S.maxHunters) return null;
+  if (hunting >= (w.hard ? TUNING.hard.maxHunters : S.maxHunters)) return null;
   // Only the nearest free squadmates answer; the rest keep their jobs (no one-call stampede).
   const free = w.actors.filter((b) => b.alive && !b.downed && b.team === a.team && b.id !== r.by && w.brains.get(b.id)?.state === 'patrol');
   const rank = free.sort((p, q) => Math.hypot(p.x - r.x, p.y - r.y) - Math.hypot(q.x - r.x, q.y - r.y)).indexOf(a);
-  return rank >= 0 && rank < S.huntResponders ? r : null;
+  return rank >= 0 && rank < (w.hard ? TUNING.hard.huntResponders : S.huntResponders) ? r : null;
 }
 
 function squadTask(w: World, a: Actor, br: Brain, sq: Squad, now: number): SquadTask {

@@ -1,7 +1,7 @@
 // Locations (owner 2026-10-18 IDENTITY + MAPS pass): Room Zero kept, Office and Supermarket added, every one a real
 // layout (not a reskin) that the sim, the danger zone, the pickups, the hostile squad and online play all run on.
 import { describe, expect, it } from 'vitest';
-import { MAPS, MAP_IDS, isMapId } from '../src/config/maps';
+import { MAPS, MAP_IDS, NORMAL_MAP_IDS, IMPOSSIBLE_MAP_IDS, isMapId } from '../src/config/maps';
 import { ROOM_ZERO } from '../src/config/map';
 import { parseLevel, walkable, findPath, type Level } from '../src/sim/level';
 import { openSpot } from '../src/sim/zone';
@@ -24,10 +24,14 @@ function reach(l: Level, from: { x: number; y: number }): Set<number> {
 
 describe('the location registry', () => {
   it('keeps Room Zero and adds Office, Supermarket, Metro Station and Construction Site (H34), each a different layout', () => {
-    expect(MAP_IDS).toEqual(['room-zero', 'office', 'supermarket', 'metro', 'construction']);
+    // Owner 2026-11-15: the five plus five Impossible locations, every one its own layout.
+    expect(NORMAL_MAP_IDS).toEqual(['room-zero', 'office', 'supermarket', 'metro', 'construction']);
+    expect(IMPOSSIBLE_MAP_IDS).toEqual(['abyss', 'echo', 'killing-field', 'flooded', 'vertigo']);
+    expect(MAP_IDS).toEqual([...NORMAL_MAP_IDS, ...IMPOSSIBLE_MAP_IDS]);
     expect(MAPS['room-zero'].rows).toBe(ROOM_ZERO);
     const keys = MAP_IDS.map((id) => MAPS[id].rows.join(''));
-    expect(new Set(keys).size).toBe(5);
+    expect(new Set(keys).size).toBe(10);
+    for (const id of MAP_IDS) expect(!!MAPS[id].impossible, id).toBe(IMPOSSIBLE_MAP_IDS.includes(id));
     expect(isMapId('office')).toBe(true);
     expect(isMapId('moon')).toBe(false);
   });

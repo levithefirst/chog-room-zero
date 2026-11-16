@@ -41,7 +41,7 @@ describe('library data matches the game', () => {
   it('counts', () => {
     expect(MEDALS.length).toBe(40);
     expect(HEROES.length).toBe(7);
-    expect(MAP_IDS.length).toBe(5);
+    expect(MAP_IDS.length).toBe(10);
   });
   it('pages print the config values', () => {
     const combat = html('combat'), weapons = html('weapons'), ms = html('movement-sound');

@@ -6,9 +6,10 @@
 // or the config files, never from the browser's own guess.
 import { HEROES, heroById } from '../config/heroes';
 import { SUPERPOWERS, powersOf, rankLine, type Rank } from '../config/superpowers';
-import { MAPS, MAP_IDS, type MapId } from '../config/maps';
+import { MAPS, NORMAL_MAP_IDS, IMPOSSIBLE_MAP_IDS, type MapId } from '../config/maps';
 import { powerTraitOf, traitsOf } from '../nft/chog-traits';
 import { WEAPONS } from '../config/weapons';
+import { TUNING } from '../config/tuning';
 import { levelOf, type RewardBreakdown } from '../config/progression';
 import { rewardHtml } from './rewards';
 import {
@@ -42,8 +43,12 @@ export interface HubCtx extends ScreenCtx {
   mode: PlayMode;
   /** The location picked for the next match (owner 2026-10-18: chosen before the match, open to everyone). */
   map: MapId;
+  /** Hard mode for Vs bots (owner 2026-11-15; a preference on this device). Online plays Normal. */
+  hard?: boolean;
   net: NetView;
 }
+
+const IMP = '<em class="imp-tag">IMPOSSIBLE</em>';
 
 const ICON = {
   gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M10.4 2.5h3.2l.5 2.6 1.9.8 2.2-1.5 2.3 2.3-1.5 2.2.8 1.9 2.6.5v3.2l-2.6.5-.8 1.9 1.5 2.2-2.3 2.3-2.2-1.5-1.9.8-.5 2.6h-3.2l-.5-2.6-1.9-.8-2.2 1.5-2.3-2.3 1.5-2.2-.8-1.9-2.6-.5v-3.2l2.6-.5.8-1.9-1.5-2.2 2.3-2.3 2.2 1.5 1.9-.8z"/></svg>',
@@ -266,11 +271,18 @@ function playBar(c: HubCtx): string {
   if (warn) status += `<p class="status warn small">${esc(warn)}</p>`;
   // Five locations (H34): name and tactical tag on each card; on a phone (compact) one LOCATION button that opens the
   // sheet with all five (src/main.ts 'maps' view), so nothing is squeezed into tiny buttons.
-  const maps = MAP_IDS.map((id) => `<button class="mode-btn map-btn${c.map === id ? ' on' : ''}" data-map="${id}"${busy ? ' disabled' : ''} aria-pressed="${c.map === id}" title="${esc(MAPS[id].blurb)}"><b>${esc(MAPS[id].name)}</b><small>${esc(MAPS[id].tag)}</small></button>`).join('');
-  const pick = `<button class="map-pick" data-act="maps"${busy ? ' disabled' : ''} aria-haspopup="dialog"><small>Location</small><b>${esc(MAPS[c.map].name)}</b><i>${esc(MAPS[c.map].tag)}</i><span class="chev" aria-hidden="true">▴</span></button>`;
-  return `<div class="pickers"><div class="maps5" role="group" aria-label="Location">${maps}</div>${pick}
+  // Owner 2026-11-15: the five Impossible locations sit behind one IMPOSSIBLE button that opens the sheet (where they
+  // are grouped with their warning); when one is picked, that button shows its name.
+  const maps = NORMAL_MAP_IDS.map((id) => `<button class="mode-btn map-btn${c.map === id ? ' on' : ''}" data-map="${id}"${busy ? ' disabled' : ''} aria-pressed="${c.map === id}" title="${esc(MAPS[id].blurb)}"><b>${esc(MAPS[id].name)}</b><small>${esc(MAPS[id].tag)}</small></button>`).join('');
+  const impOn = !!MAPS[c.map].impossible;
+  const imp = `<button class="mode-btn map-btn imp${impOn ? ' on' : ''}" data-act="maps"${busy ? ' disabled' : ''} aria-haspopup="dialog" aria-pressed="${impOn}" title="Five Impossible locations"><b>${impOn ? esc(MAPS[c.map].name) : 'Impossible'}</b><small>${impOn ? 'Impossible' : `${IMPOSSIBLE_MAP_IDS.length} locations`}</small></button>`;
+  const pick = `<button class="map-pick${impOn ? ' imp' : ''}" data-act="maps"${busy ? ' disabled' : ''} aria-haspopup="dialog"><small>Location</small><b>${esc(MAPS[c.map].name)}</b><i>${impOn ? 'Impossible · ' : ''}${esc(MAPS[c.map].tag)}</i><span class="chev" aria-hidden="true">▴</span></button>`;
+  // Hard mode: Vs bots only (online matches are player against player: no bots to make harder).
+  const diff = sel === 'solo' ? `<div class="diff2" role="group" aria-label="Difficulty">${(['normal', 'hard'] as const).map((d) => `<button class="mode-btn diff-btn${(d === 'hard') === !!c.hard ? ' on' : ''}${d === 'hard' ? ' hard' : ''}" data-diff="${d}"${busy ? ' disabled' : ''} aria-pressed="${(d === 'hard') === !!c.hard}"><b>${d === 'hard' ? 'Hard' : 'Normal'}</b></button>`).join('')}</div>` : '';
+  const hardOn = sel === 'solo' && !!c.hard;
+  return `<div class="pickers"><div class="maps5" role="group" aria-label="Location">${maps}${imp}</div>${pick}
 <div class="modes4" role="group" aria-label="Mode">${modes}</div></div>
-<div class="play-wrap"><button class="play-cta${state}" ${playAttr}${disabled ? ' disabled' : ''} id="playbtn"><span class="pl">${esc(playLabel)}</span><small>${busy ? '' : esc(`${MAPS[c.map].name} · ${MODE_INFO[sel].label} · ${MODE_INFO[sel].sub}`)}</small></button>${status}</div>`;
+<div class="play-wrap">${diff}<button class="play-cta${state}${hardOn ? ' hard' : ''}" ${playAttr}${disabled ? ' disabled' : ''} id="playbtn"><span class="pl">${esc(playLabel)}</span><small>${busy ? '' : esc(`${MAPS[c.map].name} · ${MODE_INFO[sel].label} · ${hardOn ? `Hard · ${MAPS[c.map].botSpawns.length + TUNING.hard.reinforcements.length} hostiles` : MODE_INFO[sel].sub}`)}</small></button>${status}</div>`;
 }
 
 /** V2 daily challenges: three a day, the same for everyone; done ones are paid once by the site. Shown on the Career
@@ -328,9 +340,11 @@ export function mapPlanSvg(id: MapId): string {
 }
 
 export function mapsSheetHtml(c: ScreenCtx & { map: MapId }): string {
-  const cards = MAP_IDS.map((id) => `<button class="map-card${c.map === id ? ' on' : ''}" data-map="${id}" aria-pressed="${c.map === id}">${mapPlanSvg(id)}
-<span class="mc-txt"><b>${esc(MAPS[id].name)}</b><i>${esc(MAPS[id].tag)}</i><small>${esc(MAPS[id].blurb)}</small></span></button>`).join('');
-  return `<div class="screen maps-sheet">${topbar('Location')}<div class="map-cards" role="group" aria-label="Location">${cards}</div></div>`;
+  const card = (id: MapId) => `<button class="map-card${c.map === id ? ' on' : ''}${MAPS[id].impossible ? ' imp' : ''}" data-map="${id}" aria-pressed="${c.map === id}">${mapPlanSvg(id)}
+<span class="mc-txt"><b>${esc(MAPS[id].name)}</b><i>${MAPS[id].impossible ? `${IMP} ` : ''}${esc(MAPS[id].tag)}</i><small>${esc(MAPS[id].impossible ?? MAPS[id].blurb)}</small></span></button>`;
+  return `<div class="screen maps-sheet">${topbar('Location')}<div class="scroll-body"><div class="map-cards" role="group" aria-label="Location">${NORMAL_MAP_IDS.map(card).join('')}</div>
+<h3 class="sheet-h imp-h">${IMP} Impossible locations</h3><p class="note small imp-warn">Each pushes one thing (light, sound, range, footing, height) to its extreme. Same rules, supplies and zone.</p>
+<div class="map-cards" role="group" aria-label="Impossible locations">${IMPOSSIBLE_MAP_IDS.map(card).join('')}</div></div></div>`;
 }
 
 // ---- the hub (CF): the live room is the background; the operator stands in it; one PLAY ----

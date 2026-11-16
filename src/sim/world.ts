@@ -12,7 +12,7 @@ import { stepVelocity, type Vec2 } from './sim';
 import { NO_SIDEGRADE, type Sidegrade } from './operators';
 import type { ViewShape } from './vision';
 import { botThink, createBrain, type Brain, type PerceptionEvent } from './bots';
-import { outsideCircle, planZone, zoneAt, type ZoneState } from './zone';
+import { outsideCircle, planZone, zoneAt, type ZoneConfig, type ZoneState } from './zone';
 import { LAB } from '../config/lab';
 import { MAPS, type MapDef, type MapId } from '../config/maps';
 import { BEAM, ORB } from '../config/superpowers';
@@ -393,6 +393,8 @@ export interface World {
   zone: ZoneState | null;
   /** The location (src/config/maps.ts), or null for a test's own map. */
   mapId: MapId | null;
+  /** Hard mode (Vs bots, TUNING.hard): more and sharper hostiles, a faster zone, slower supplies. Off online. */
+  hard: boolean;
 }
 
 /** Mulberry32. Returns [0,1) and advances world.rng. */
@@ -468,6 +470,26 @@ export interface WorldOptions {
   /** Which location (src/config/maps.ts): its tiles, pickups, hostile squad, zone centres and online spawns. Default:
    * Room Zero. Ignored when a test passes its own `map` rows. */
   mapId?: MapId;
+  /** Hard mode (solo only; TUNING.hard). Ignored online. */
+  hard?: boolean;
+}
+
+/** The solo hostile squad: the test's own bots, the location's five, plus Hard mode's reinforcements on the beats of
+ * the first ones (the same patrol, started two points on, so they never spawn stacked). */
+function hostileSpawns(opts: WorldOptions, def: MapDef | null): readonly BotSpawn[] {
+  const base = opts.bots ?? def?.botSpawns ?? (LAB.pacing ? BOT_SPAWNS : BOT_SPAWNS_RC8);
+  if (!opts.hard || opts.bots) return base;
+  return [...base, ...TUNING.hard.reinforcements.map((r) => {
+    const p = base[r.from % base.length].patrol;
+    return { name: r.name, hero: r.hero, flanker: r.flanker, patrol: p.map((_, i) => p[(i + 2) % p.length]) };
+  })];
+}
+
+/** Hard mode's danger zone: less open play, every interval shorter, more damage outside (TUNING.hard.zone). */
+export function hardZone(cfg: ZoneConfig = TUNING.zone): ZoneConfig {
+  const H = TUNING.hard.zone;
+  return { ...cfg, safeSeconds: H.safeSeconds, finalDps: cfg.finalDps * H.dpsMul,
+    stages: cfg.stages.map((s) => ({ ...s, warn: s.warn * H.timeMul, shrink: s.shrink * H.timeMul, dps: s.dps * H.dpsMul })) };
 }
 
 /** The location a world is built on, or null for a test's own map (or the lab's RC-8 baseline). */
@@ -480,7 +502,7 @@ function mapDefOf(opts: WorldOptions): MapDef | null {
 export function createWorld(opts: WorldOptions = {}): World {
   const def = mapDefOf(opts);
   const level = parseLevel(opts.map ?? def?.rows ?? ROOM_ZERO_RC8);
-  if (def) { level.materials = def.materials; level.lights = def.lights; }
+  if (def) { level.materials = def.materials; level.lights = def.lights; if (def.steepStairs) level.stairsMul = TUNING.movement.steepStairsMul; }
   const mapId = def?.id ?? null;
   const seed = (opts.seed ?? TUNING.seed) | 0;
   const brains = new Map<number, Brain>();
@@ -497,7 +519,7 @@ export function createWorld(opts: WorldOptions = {}): World {
       brains, attackTokens: [], squadAI: false, squadPoints: [], perceptionLog: null, outcome: 'playing', playerKill: null,
       mode: 'versus', winner: null, friendlyFire: !!opts.friendlyFire,
       zone: opts.zone === false ? null : planZone(level, seed, def?.zoneCentres ?? ZONE_CENTRES, TUNING.zone, spawns),
-      mapId,
+      mapId, hard: false,
     };
   }
   const actors: Actor[] = [makeActor(0, 'player', 'You', heroById(opts.hero ?? 'benja'), opts.sidegrade ?? NO_SIDEGRADE, level.playerSpawn.x, level.playerSpawn.y, 0, opts.power)];
@@ -512,7 +534,7 @@ export function createWorld(opts: WorldOptions = {}): World {
     actors.push(a);
     brains.set(a.id, createBrain({ name: m.name, hero: m.hero, patrol: [[Math.floor(q.x), Math.floor(q.y)]], flanker: a.hero.dept === 'flanker' }));
   });
-  (opts.bots ?? def?.botSpawns ?? (LAB.pacing ? BOT_SPAWNS : BOT_SPAWNS_RC8)).forEach((b) => {
+  hostileSpawns(opts, def).forEach((b) => {
     const [tx, ty] = b.patrol[0];
     const a = makeActor(actors.length, 'bot', b.name, heroById(b.hero), NO_SIDEGRADE, tx + 0.5, ty + 0.5, Math.PI);
     if (opts.perks ?? opts.bots === undefined) a.perk = spawnPerk(seed, a.id);
@@ -527,8 +549,8 @@ export function createWorld(opts: WorldOptions = {}): World {
     squadAI: opts.squadAI ?? (opts.bots === undefined && LAB.pacing),
     squadPoints: def?.tacticalPoints ? [...def.tacticalPoints] : derivePoints(level),
     mode: 'solo', winner: null, friendlyFire: !!opts.friendlyFire,
-    zone: opts.zone ? planZone(level, seed, def?.zoneCentres ?? ZONE_CENTRES) : null,
-    mapId,
+    zone: opts.zone ? planZone(level, seed, def?.zoneCentres ?? ZONE_CENTRES, opts.hard ? hardZone() : TUNING.zone) : null,
+    mapId, hard: !!opts.hard,
   };
 }
 
@@ -557,7 +579,7 @@ function initPickups(level: Level, seed: number, opts: WorldOptions): Pick<World
   // Online: both sides' spawns. Solo: yours (your teammates start beside you) and every bot's.
   const vs = def?.versusSpawns ?? VERSUS_SPAWNS;
   const spawns: Spot[] = opts.versus ? [...vs.alpha, ...vs.bravo]
-    : [level.playerSpawn, ...(opts.bots ?? def?.botSpawns ?? (LAB.pacing ? BOT_SPAWNS : BOT_SPAWNS_RC8)).map((b) => ({ x: b.patrol[0][0] + 0.5, y: b.patrol[0][1] + 0.5 }))];
+    : [level.playerSpawn, ...hostileSpawns(opts, def).map((b) => ({ x: b.patrol[0][0] + 0.5, y: b.patrol[0][1] + 0.5 }))];
   // Online rooms on a registry location always get the same fields and candidate spots (fixed spawns and zones), and
   // the game server builds one room per match while every other match waits: computed once per location (read only).
   const cached = opts.versus && def && !opts.pickupZones ? VERSUS_SPOTS.get(def.id) : undefined;
@@ -571,6 +593,9 @@ function initPickups(level: Level, seed: number, opts: WorldOptions): Pick<World
   const zoned: Pickup[] = keep.map((zi, i) => ({ kind: zones[zi].kind, x: at[i].x, y: at[i].y, active: true, respawnLeft: 0, zone: i, moves: 0 }));
   return { pickups: [...fixed, ...zoned], pickupSpots: spots, pickupSeed: seed, pickupRev: 0, pickupFields: fields };
 }
+
+/** What an AI's hits are worth: 60% (TUNING.bots.damageMul); Hard mode's hostiles 90% (your AI teammates stay at 60%). */
+const botDamageMul = (w: World, by: Actor): number => (w.hard && by.team === 'bot' ? TUNING.hard.damageMul : TUNING.bots.damageMul);
 
 export function player(w: World): Actor {
   return w.actors[0];
@@ -1080,7 +1105,7 @@ export function moveBody(level: Level, a: Actor, inp: ActorInput, dt: number): v
     return;
   }
   const speedMul = a.hero.speed * (a.slowLeft > 0 ? a.slowMul : 1) * (a.chargeLeft > 0 || a.beamLeft > 0 ? BEAM.moveMul : 1)
-    * (tileAt(level, a.x, a.y) === STAIRS ? M.stairsMul : 1);
+    * (tileAt(level, a.x, a.y) === STAIRS ? level.stairsMul ?? M.stairsMul : 1);
   if (a.dashLeft > 0) {
     a.dashLeft = Math.max(0, a.dashLeft - dt);
     a.vx = a.dashX * TUNING.abilities.dashSpeed;
@@ -1259,7 +1284,7 @@ function explode(w: World, g: Grenade): void {
     const d = Math.hypot(t.x - g.x, t.y - g.y);
     if (d > G.radius || !sightClear(w.level, g.x, g.y, t.x, t.y)) continue;
     const cover = shotClear(w.level, g.x, g.y, t.x, t.y, false, 0) ? 1 : G.coverMul;
-    const raw = untouchable(t) ? 0 : (G.damage + (G.edgeDamage - G.damage) * (d / G.radius)) * cover * (by.ai ? TUNING.bots.damageMul : 1);
+    const raw = untouchable(t) ? 0 : (G.damage + (G.edgeDamage - G.damage) * (d / G.radius)) * cover * (by.ai ? botDamageMul(w, by) : 1);
     const m = mitigate(t.armor, raw, G.armorPen);
     if (t.team !== by.team) by.damageDealt += lost(t, m);
     t.armor -= m.armor;
@@ -1335,7 +1360,7 @@ function damage(w: World, t: Actor, by: Actor, b: Bullet, hx: number, hy: number
     emit(w, 'hit', hx, hy, TUNING.sound.impact, by);
     return;
   }
-  const raw = damageAt(b.weapon, Math.hypot(hx - b.ox, hy - b.oy)) * (by.ai ? TUNING.bots.damageMul : 1) * by.power.damageMul * (b.mul ?? 1);
+  const raw = damageAt(b.weapon, Math.hypot(hx - b.ox, hy - b.oy)) * (by.ai ? botDamageMul(w, by) : 1) * by.power.damageMul * (b.mul ?? 1);
   const m = mitigate(t.armor, raw, b.weapon.armorPen);
   // Damage dealt counts opponents only and only what they lost (it pays shards: friendly fire and overkill never farm them).
   if (t.team !== by.team) by.damageDealt += lost(t, m);
@@ -1566,7 +1591,7 @@ function stepPickups(w: World, dt: number): void {
       else if (p.kind === 'grenade') a.grenades = Math.min(a.maxGrenades, a.grenades + P.grenade.amount);
       else a.reserve = Math.min(ammoCeiling(a), a.reserve + a.weapon.magazine * P.ammo.mags);
       p.active = false;
-      p.respawnLeft = P[p.kind].respawn;
+      p.respawnLeft = P[p.kind].respawn * (w.hard ? TUNING.hard.respawnMul : 1);
       emit(w, 'pickup', p.x, p.y, TUNING.sound.pickup, a);
     }
   }

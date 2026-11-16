@@ -19,6 +19,9 @@ export const TUNING = {
     // H34 stairs (Metro, Construction): 65% speed while on a stair tile, so climbing onto a deck takes about a second
     // longer than the same walk on the flat: long enough to be caught on the stairs, short enough not to be a chore.
     stairsMul: 0.65,
+    // Vertigo (Impossible): its five-step stair towers run at 45%: a climb takes about 1.4 s longer than the walk on the
+    // flat, long enough that a stair under a held deck is where you die.
+    steepStairsMul: 0.45,
     // Full speed in ~80 ms, stop in ~60 ms, reversals 1.5x: snappy, planted, deliberate. (P0-2, unchanged.)
     acceleration: 52.5,
     deceleration: 70,
@@ -219,7 +222,10 @@ export const TUNING = {
     // H34 footstep surfaces (src/sim/level.ts stepSurface): carpet muffles a run to 5.6 u, so the Office rewards
     // creeping room to room; a deck or a stair rings out to 10.4 u, so the high ground is never taken quietly; a Metro
     // service tunnel echoes to 10.4 u, so its ambushes are heard coming both ways.
-    surface: { carpet: 0.7, deck: 1.3, tunnel: 1.3 },
+    // Impossible locations: silt and ash (Abyss) smother a run to 4.8 u, so you are on top of someone before you hear
+    // them; cistern stone (Echo Labyrinth) carries it 15.2 u, decks and stairs included; a flooded floor splashes it to
+    // 12.8 u everywhere, so a creep there sounds like a walk anywhere else.
+    surface: { carpet: 0.7, deck: 1.3, tunnel: 1.3, silt: 0.6, stone: 1.9, water: 1.6 },
     // A wall in between shrinks the radius to this share: muffled, not silenced. CF-D: 0.6 -> 0.8 (tests/cf-lab.test.ts
     // D: contacts heard or spotted before they are seen 40% -> 70%; at 0.6 the CF map's pillars left it at 47%). The same
     // rule for bots, so they hear you through a wall sooner too.
@@ -525,6 +531,45 @@ export const TUNING = {
     clearance: 1.5,
     // Bots (and the test autopilot) head in once they are within this many u of the closing circle's edge.
     moveInMargin: 1,
+  },
+
+  // Hard mode (owner 2026-11-15 HARD MODE): Vs bots only, picked on the hub (Normal / Hard). Normal reads none of this.
+  // Only the hostile squad changes: your AI teammates keep the Normal numbers. Every number sits at the gentle end of
+  // the owner's ranges, because the hostile count alone is the big lever. Measured with the scripted autopilot (you + 2
+  // AI, 24 runs over six locations): Normal 12/24 wins; this Hard 0/24 (squad kills 1.8 of 7, dead in ~33 s); the
+  // owner's first numbers (8 hostiles, 0.2-0.3 s, 90%, 4 shooters) 0/24 in ~26 s. One knob at a time from Normal (12
+  // Room Zero + Office runs, 9/12 wins): +1 hostile 6/12, +2 hostiles 2/12, +3 hostiles 0/12; damage 90% 6/12;
+  // reaction 0.2-0.3 s 7/12; aim, tokens, flanking, hunters, zone and supplies 7-10/12 each. PROPOSAL: the owner's
+  // playtest decides; if Hard is a wall for a human too, the next lever is the count (outside the brief).
+  hard: {
+    // 7 hostiles, not 5: two reinforcements walk the beats of the first two (src/sim/world.ts hostileSpawns): Bill
+    // (sawn-off, a flanker) and Toad (LMG), the close and the suppressing weapons the base five lack.
+    reinforcements: [
+      { name: 'Hound', hero: 'bill', from: 0, flanker: true },
+      { name: 'Anvil', hero: 'toad', from: 1, flanker: false },
+    ],
+    // Commits in 0.25-0.3 s of sight (Normal 0.40-0.65): an edge you slip past on Normal is a hit on Hard.
+    reactionMin: 0.25,
+    reactionMax: 0.3,
+    // Aim error starts at 10 deg and settles in 1.6 s (Normal 12 deg over 2 s).
+    aimErrorDeg: 10,
+    aimSettleSeconds: 1.6,
+    // Up to 3 shoot at your side at once (Normal 2) ...
+    attackTokens: 3,
+    // ... and every hostile without a token flanks instead of holding the angle (Normal: only the flankers).
+    flankAll: true,
+    // 80% of a hero's damage (Normal 60%).
+    damageMul: 0.8,
+    // Squad calls: 2 answer a sighting and up to 2 hunt at once (Normal 1 and 1).
+    huntResponders: 2,
+    maxHunters: 2,
+    // Abilities: health thresholds for Mend, Barrier and Shell raised by this share (used sooner, in more fights).
+    abilityEager: 1.25,
+    // Zone: 45 s of open play (Normal 60), every warning and shrink 20% shorter, damage outside 1.5x (final 30/s).
+    // The whole schedule ends in ~95 s (Normal ~122 s).
+    zone: { safeSeconds: 45, timeMul: 0.8, dpsMul: 1.5 },
+    // Supplies come back in 8 s, not 4.
+    respawnMul: 2,
   },
 
   render: {

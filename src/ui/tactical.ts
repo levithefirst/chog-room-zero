@@ -145,6 +145,7 @@ export const toMap = (v: MapView, x: number, y: number) => ({ x: v.ox + x * v.k,
 // ---- drawing ----
 const FLOOR: Record<Material, string> = {
   concrete: '#191326', tile: '#1d1730', metal: '#1a1b2c', dock: '#201a1c', carpet: '#22142e', tunnel: '#120e1a', ballast: '#1b1714',
+  silt: '#100c14', stone: '#1a1828', water: '#122030',
 };
 const C = {
   bg: '#0b0716', wall: '#c9c1e0', wallFill: '#2b2240', cover: '#6b5a8f', barrier: '#8a6f3a', door: '#ff6b9d', rail: '#d9c95a',

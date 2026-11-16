@@ -86,9 +86,9 @@ describe('geometry: one source of truth per location', () => {
     expect(count('construction', 6)).toBeGreaterThan(20); // decks (high ground)
     expect(count('construction', 7)).toBeGreaterThan(2); // stair towers
     expect(count('office', 4)).toBeGreaterThan(count('supermarket', 4)); // rooms and doors
-    // Five different drawings.
+    // A different drawing for every location (ten since the Impossible five).
     const sig = MAP_IDS.map((id) => { const w = createWorld({ mapId: id, seed: 1 }); const r = recorder(); drawTactical(r.g, { w, def: MAPS[id], markers: [], view: fitView(w.level.w, w.level.h, 0, 0, 1280, 720), vw: 1280, vh: 720, dpr: 1 }); return r.ops.join(';'); });
-    expect(new Set(sig).size).toBe(5);
+    expect(new Set(sig).size).toBe(MAP_IDS.length);
   });
 });
 

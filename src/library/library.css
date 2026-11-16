@@ -289,3 +289,7 @@ polyline.fo0, polyline.fo1, polyline.fo2, polyline.fo3, polyline.fo4, polyline.f
 @media (min-width: 1800px) { body { font-size: 17px; } .layout { max-width: 1680px; } .page { max-width: 960px; } .page.home { max-width: 1200px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; } .card:hover { transform: none; } }
 @media print { .top, .side, .prevnext, .related, .search-dlg, .mg-bar, .mg-layers { display: none !important; } .layout { display: block; } body { background: #fff; color: #000; } }
+
+/* Impossible locations: a red tag in the kicker, the card list and the compare table. */
+.tag-impossible { display: inline-block; font: 700 11px/1.5 var(--mono); letter-spacing: .14em; color: var(--bg, #0b0716); background: var(--accent); padding: 0 6px; border-radius: 3px; vertical-align: 1px; }
+.card.impossible { border-color: var(--accent); }

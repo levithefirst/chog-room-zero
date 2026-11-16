@@ -117,11 +117,12 @@ ${li([
     `CHOG Training (the TRAINING button on YOUR CHOG, for a verified Chog with a power; or DEMO, labelled): one drill per power (${SUPERPOWER_IDS.map((id) => `${esc(SUPERPOWERS[id].name)}: ${esc(DRILLS[id].name)}, ${DRILLS[id].seconds} s`).join('; ')}), its real numbers with a shorter cooldown. Training earns and records nothing.`,
   ])}` },
   { id: 'locations', title: 'Locations', html: () => `<p>Pick one of the ${MAP_IDS.length} locations on the hub before you press Play (on a phone: the LOCATION button), for the default game and for 1v1, 3v3 and 5v5. Every location is open to everyone; online you only meet players who picked the same one. Each one fights differently:</p>
-${li(MAP_IDS.map((id) => `<b>${esc(MAPS[id].name)}</b> (${esc(MAPS[id].tag)}): ${esc(MAPS[id].blurb)}`))}
+${li(MAP_IDS.map((id) => `<b>${esc(MAPS[id].name)}</b> (${MAPS[id].impossible ? 'IMPOSSIBLE · ' : ''}${esc(MAPS[id].tag)}): ${esc(MAPS[id].impossible ?? MAPS[id].blurb)}`))}
+<p>Hard (Vs bots, the NORMAL / HARD switch under the modes): ${TUNING.hard.reinforcements.length} more hostiles, quicker and more accurate, ${Math.round(TUNING.hard.damageMul * 100)}% of a hero's damage (Normal ${Math.round(TUNING.bots.damageMul * 100)}%), a faster zone and supplies back in ${TUNING.pickups.health.respawn * TUNING.hard.respawnMul} s. Online matches are always Normal.</p>
 ${li([
     'Rails (railings, track edges, open window frames): you see and shoot across them, you cannot walk through them.',
     'Decks (scaffolding, the slab): high ground. A shot fired from a deck clears the crates and barriers below it, and a deck has no cover of its own but its columns.',
-    `Stairs: the only way onto a deck, at ${Math.round(TUNING.movement.stairsMul * 100)}% speed, and loud. Hold the top, or get caught on them.`,
+    `Stairs: the only way onto a deck, at ${Math.round(TUNING.movement.stairsMul * 100)}% speed (Vertigo ${Math.round(TUNING.movement.steepStairsMul * 100)}%), and loud. Hold the top, or get caught on them.`,
   ])}` },
   { id: 'medals', title: 'Medals', html: () => `<p>${MEDALS.length} medals: ${rarityCount('common')} common, ${rarityCount('uncommon')} uncommon, ${rarityCount('rare')} rare, ${rarityCount('epic')} epic.
 Commons come from playing; rare and epic ones need runs most players rarely have (a clear in under 25 seconds, a last stand, a run without a scratch).</p>
